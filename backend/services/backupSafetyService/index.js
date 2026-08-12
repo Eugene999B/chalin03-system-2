@@ -97,29 +97,30 @@ function isCrossEnvironmentRecovery(
 
   if (!signedV2Backup || allowAdditiveSchemaDrift !== true) return false;
 
+  // The explicit override is only supplied by the protected staging recovery
+  // router after its staging-only request gate, authentication, permission and
+  // protected-action checks. Honor it before interpreting Railway's sometimes
+  // misleading environment label so the router cannot be forced back into the
+  // strict production validator merely because RAILWAY_ENVIRONMENT_NAME says
+  // "production" on the dedicated staging service.
+  if (
+    allowCrossEnvironmentRecovery === true &&
+    requireSignature === false
+  ) {
+    return true;
+  }
+
   const confirmedRailwayStaging = isConfirmedRailwayStaging(env);
   const railwayEnvironment = railwayEnvironmentName(env);
 
   // An explicitly identified Railway production environment is an immutable
   // boundary unless the same server identity also proves it is the dedicated
-  // CHALIN ONE staging service (environment id/public domain/Git branch). This
-  // protects production from accidental opt-in while allowing Railway's
-  // production-like Node runtime settings on staging.
+  // CHALIN ONE staging service (environment id/public domain/Git branch).
   if (railwayEnvironment === "production" && !confirmedRailwayStaging) {
     return false;
   }
 
-  // A positively identified Railway staging service may validate a production-
-  // signed v2 package even when target-side HMAC enforcement would normally be
-  // enabled by NODE_ENV=production.
   if (confirmedRailwayStaging) return true;
-
-  // This explicit flag is server-only and is supplied only by the protected
-  // staging recovery router after its staging request gate. It lets that route
-  // work when NODE_ENV is production but Railway identity metadata is absent.
-  if (allowCrossEnvironmentRecovery === true) {
-    return requireSignature === false;
-  }
 
   // Generic local/non-production recovery remains available only when target-
   // side signature enforcement has been deliberately disabled.
