@@ -159,6 +159,35 @@
   line-height: 1.45;
 }
 
+/* The Command Gate intentionally keeps its credential panel light even when the
+   surrounding staff application uses dark mode. Override the global dark input
+   rule here so typed credentials, browser autofill and the caret never become
+   white-on-white. */
+html[data-theme="dark"] .group-login .gate4__field input,
+html[data-theme="dark"] .group-login .gate4__field select {
+  color-scheme: light;
+  background: #ffffff !important;
+  border-color: #cfd8e4 !important;
+  color: #10223a !important;
+  -webkit-text-fill-color: #10223a !important;
+  caret-color: #10223a;
+}
+
+html[data-theme="dark"] .group-login .gate4__field input::placeholder {
+  color: #8d99aa !important;
+  -webkit-text-fill-color: #8d99aa !important;
+  opacity: 1;
+}
+
+html[data-theme="dark"] .group-login .gate4__field input:-webkit-autofill,
+html[data-theme="dark"] .group-login .gate4__field input:-webkit-autofill:hover,
+html[data-theme="dark"] .group-login .gate4__field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #10223a !important;
+  caret-color: #10223a;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
 @media (max-width: 980px) {
   .group-operations-map {
     width: min(380px, 96%);
