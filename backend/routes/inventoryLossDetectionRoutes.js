@@ -1,5 +1,6 @@
 const express = require("express");
 
+const { pool } = require("../config/db");
 const { requireRole } = require("../middleware/roleMiddleware");
 const {
   closeCustodyHandover,
@@ -30,6 +31,99 @@ function branchId(req) {
 
 function roleOf(req) {
   return String(req.user?.role || "").trim().toLowerCase();
+}
+
+function lossRouteError(message, statusCode, code) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
+}
+
+function positiveUserId(value, fieldName) {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw lossRouteError(`${fieldName} must be a valid active user.`, 400, "HANDOVER_USER_REQUIRED");
+  }
+  return id;
+}
+
+async function assertCustodyUsersAuthorizedForStore(storeId, outgoingUserId, incomingUserId) {
+  const outgoing = positiveUserId(outgoingUserId, "Outgoing custodian");
+  const incoming = positiveUserId(incomingUserId, "Incoming custodian");
+  if (outgoing === incoming) {
+    throw lossRouteError(
+      "Outgoing and incoming custodians must be different people.",
+      400,
+      "HANDOVER_INDEPENDENT_CUSTODIANS_REQUIRED"
+    );
+  }
+
+  const [users] = await pool.query(
+    `SELECT
+       u.id,
+       u.is_active,
+       u.default_branch_id,
+       u.can_access_all_branches,
+       EXISTS (
+         SELECT 1
+         FROM user_branch_access uba
+         WHERE uba.user_id = u.id
+           AND uba.branch_id = ?
+           AND uba.can_access = TRUE
+       ) AS has_explicit_access
+     FROM users u
+     WHERE u.id IN (?, ?)`,
+    [storeId, outgoing, incoming]
+  );
+
+  if (users.length !== 2 || users.some((user) => Number(user.is_active || 0) !== 1)) {
+    throw lossRouteError(
+      "Both custody users must be active accounts.",
+      409,
+      "HANDOVER_USER_NOT_ACTIVE"
+    );
+  }
+
+  const unauthorized = users.find(
+    (user) =>
+      Number(user.can_access_all_branches || 0) !== 1 &&
+      Number(user.default_branch_id || 0) !== Number(storeId) &&
+      Number(user.has_explicit_access || 0) !== 1
+  );
+  if (unauthorized) {
+    throw lossRouteError(
+      "Both custodians must be authorized for the selected store before custody can be transferred.",
+      403,
+      "HANDOVER_USER_STORE_ACCESS_REQUIRED"
+    );
+  }
+}
+
+async function assertIncomingCustodian(storeId, handoverId, userId) {
+  const cleanHandoverId = Number(handoverId);
+  if (!Number.isInteger(cleanHandoverId) || cleanHandoverId <= 0) {
+    throw lossRouteError("Custody handover was not found.", 404, "HANDOVER_NOT_FOUND");
+  }
+
+  const [rows] = await pool.query(
+    `SELECT incoming_user_id
+     FROM inventory_custody_handovers
+     WHERE id = ? AND branch_id = ?
+     LIMIT 1`,
+    [cleanHandoverId, storeId]
+  );
+  const handover = rows[0];
+  if (!handover) {
+    throw lossRouteError("Custody handover was not found.", 404, "HANDOVER_NOT_FOUND");
+  }
+  if (Number(handover.incoming_user_id) !== Number(userId)) {
+    throw lossRouteError(
+      "Only the nominated incoming custodian can physically verify units for this handover.",
+      403,
+      "HANDOVER_INCOMING_CUSTODIAN_REQUIRED"
+    );
+  }
 }
 
 function sendError(res, error, fallback) {
@@ -202,8 +296,14 @@ router.post("/investigations/:investigationId/resolve", requireRole("admin", "ma
 
 router.post("/handovers", requireRole("admin", "manager"), async (req, res) => {
   try {
+    const storeId = branchId(req);
+    await assertCustodyUsersAuthorizedForStore(
+      storeId,
+      req.body.outgoing_user_id,
+      req.body.incoming_user_id
+    );
     const handover = await createCustodyHandover({
-      branchId: branchId(req),
+      branchId: storeId,
       outgoingUserId: req.body.outgoing_user_id,
       incomingUserId: req.body.incoming_user_id,
       unitCodes: req.body.unit_codes,
@@ -214,7 +314,7 @@ router.post("/handovers", requireRole("admin", "manager"), async (req, res) => {
     return res.status(201).json({
       status: "success",
       message:
-        "Custody handover opened. Incoming custody will not change until every expected physical unit is independently verified.",
+        "Custody handover opened. Incoming custody will not change until every expected physical unit is independently verified by the nominated incoming custodian.",
       handover,
     });
   } catch (error) {
@@ -227,8 +327,10 @@ router.post(
   requireRole("admin", "manager", "cashier"),
   async (req, res) => {
     try {
+      const storeId = branchId(req);
+      await assertIncomingCustodian(storeId, req.params.handoverId, req.user.id);
       const result = await verifyCustodyHandoverUnit({
-        branchId: branchId(req),
+        branchId: storeId,
         handoverId: req.params.handoverId,
         value: req.body.value,
         verifiedBy: req.user.id,
