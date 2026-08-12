@@ -1,0 +1,48 @@
+name: CHALIN ONE Main Sync Diagnostic
+
+on:
+  push:
+    branches:
+      - integration/chalin-one-main-sync-20260812
+
+permissions:
+  contents: read
+
+jobs:
+  merge-diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out integration branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Inspect current main merge without changing repository
+        shell: bash
+        run: |
+          set +e
+          git fetch origin main
+          git merge --no-commit --no-ff origin/main > merge-output.txt 2>&1
+          merge_status=$?
+          git diff --name-only --diff-filter=U > conflicts.txt
+          git status --porcelain=v1 > status.txt
+          git diff --cc > conflict-diff.patch
+          printf 'merge_status=%s\n' "$merge_status" > diagnostic-summary.txt
+          printf 'conflict_count=%s\n' "$(wc -l < conflicts.txt | tr -d ' ')" >> diagnostic-summary.txt
+          printf 'base_head=%s\n' "$(git rev-parse HEAD)" >> diagnostic-summary.txt
+          printf 'main_head=%s\n' "$(git rev-parse origin/main)" >> diagnostic-summary.txt
+          cat diagnostic-summary.txt
+          cat conflicts.txt
+          exit 0
+
+      - name: Upload merge diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalin-one-main-sync-diagnostic
+          if-no-files-found: error
+          path: |
+            merge-output.txt
+            conflicts.txt
+            status.txt
+            conflict-diff.patch
+            diagnostic-summary.txt
