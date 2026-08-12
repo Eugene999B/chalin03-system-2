@@ -29,15 +29,16 @@ test("progressive backup authenticates and preserves the signed v2 contract", ()
 });
 
 test("progressive backup sends headers and heartbeat before expensive snapshot generation", () => {
+  const heartbeatHelper = route.indexOf("function startHeartbeat(res)");
+  const flush = route.indexOf("flushHeaders", heartbeatHelper);
+  const heartbeatWrite = route.indexOf('res.write("\\n")', heartbeatHelper);
   const routeStart = route.indexOf('router.get(\n  "/download"');
-  const flush = route.indexOf("flushHeaders", routeStart);
-  const heartbeat = route.indexOf('res.write("\\n")', routeStart);
+  const heartbeatCall = route.indexOf("startHeartbeat(res)", routeStart);
   const connection = route.indexOf("pool.getConnection()", routeStart);
   const build = route.indexOf("buildFullSystemBackup(", connection);
-  assert.ok(routeStart >= 0);
-  assert.ok(flush > routeStart && flush < connection);
-  assert.ok(heartbeat > flush && heartbeat < connection);
-  assert.ok(connection > heartbeat && build > connection);
+  assert.ok(heartbeatHelper >= 0 && flush > heartbeatHelper && heartbeatWrite > flush);
+  assert.ok(routeStart >= 0 && heartbeatCall > routeStart && heartbeatCall < connection);
+  assert.ok(connection > heartbeatCall && build > connection);
   assert.match(route, /HEARTBEAT_INTERVAL_MS = 15_000/);
   assert.match(route, /X-Chalin03-Backup-Transport/);
 });
