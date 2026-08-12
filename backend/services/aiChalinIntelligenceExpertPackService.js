@@ -264,7 +264,7 @@ function isChalinIntelligenceExpertPrompt(value) {
   const explicit = /\b(?:chalin intelligence|chalin ai|chalin copilot|chalin executive|chalin guide|chalin system knowledge|chalin knowledge|chalin memory|chalin conversation|chalin provider|chalin tools?|chalin actions?|chalin document studio|intelligence exam|answer composer|response critic|working conversation state|cross-domain reasoning)\b/i;
   if (explicit.test(text)) return true;
   const chalinAnchor = /\bchalin(?:\s*03|\s*one)?\b/i.test(text);
-  const intelligenceTopic = /\b(?:ai|intelligence|copilot|executive|guide|memory|conversation|knowledge|provider|privacy|tool|tools|action|actions|risk[- ]?[1-5]|document|pdf|excel|word|reasoning|answer|system architecture|how (?:does|do|is|are))\b/i.test(text);
+  const intelligenceTopic = /\b(?:ai|intelligence|copilot|executive|guide|memory|conversation|knowledge|provider|privacy|tool|tools|action|actions|risk[- ]?[1-5]|document|pdf|excel|word|reasoning|answer|system architecture)\b/i;
   return chalinAnchor && intelligenceTopic;
 }
 
