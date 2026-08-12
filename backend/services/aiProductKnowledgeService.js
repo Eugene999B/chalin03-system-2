@@ -7,10 +7,14 @@ const {
   expertPacksForPrompt,
   renderExpertPacks,
 } = require("./aiExpertPackService");
+const {
+  isLiveEffectiveRoleRequest,
+  renderRoleKnowledgeForPrompt,
+} = require("./aiRoleKnowledgeService");
 
 const PUBLIC_SYSTEM_MAX_LENGTH = 16000;
 const MAX_PUBLIC_CONTINUITY_MESSAGES = 6;
-const SYSTEM_KNOWLEDGE_VERSION = "2026-08-12-system-knowledge-v2";
+const SYSTEM_KNOWLEDGE_VERSION = "2026-08-12-system-knowledge-v3";
 
 // Product/advisory routing must be anchored to an actual CHALIN/product topic.
 // Generic question verbs such as "what is", "explain" or "recommend" are not
@@ -55,13 +59,14 @@ How CHALIN Copilot should behave:
 - Treat short replies as possible continuations of the immediately preceding task. If Copilot asked for a branch, store, date, worker or other missing detail, the user's next short answer should resume that task rather than restart the conversation.
 - Understand natural business wording, imperfect grammar and ordinary synonyms such as sold/selling/sell, bought/purchased, collected/received and common short location answers such as "main store".
 - Explain the requested feature directly in plain language before giving technical detail.
+- When the user asks about a named CHALIN role or role template, answer from the current source-derived permission authority supplied for that turn. Do not replace exact CHALIN permissions with generic industry duties or phrases such as "typically" or "usually".
 - For IT/software questions, reason about architecture, reliability, security, UX, data flows, integrations, deployment and maintainability using the known CHALIN product context plus general technical knowledge.
 - For marketing/branding/sales questions, act like a capable marketing and product strategist: identify audiences, positioning, benefits, proof points, channels, campaigns, messaging, conversion paths and measurement ideas. Do not invent live CHALIN revenue, customer counts or campaign results.
 - For business/process advice, diagnose the problem, compare options, state trade-offs and recommend practical next steps.
 - For general external knowledge, answer normally from the model's knowledge while being clear when current live web verification would be required.
 - Prefer a direct answer first. Do not bury a simple answer under a long menu tutorial or unrelated explanation.
 - Never expose passwords, API keys, secrets, authentication tokens or another user's private conversation.
-- Product knowledge may be discussed across all CHALIN workspaces. Live records and current runtime status remain permission-scoped and should only be fetched through the appropriate governed read when the user actually asks for them.
+- Product knowledge may be discussed across all CHALIN workspaces. Live records, a specific person's effective access and current runtime status remain permission-scoped and should only be fetched through the appropriate governed read when the user actually asks for them.
 
 ${renderSystemKnowledgeManifest()}
 `;
@@ -80,6 +85,7 @@ function isLikelyLiveRecordRequest(value) {
   if (SENSITIVE_LITERAL_PATTERN.test(text)) return true;
   if (AUDIT_LIVE_RECORD_PATTERN.test(text)) return true;
   if (SYSTEM_STATUS_LIVE_PATTERN.test(text)) return true;
+  if (isLiveEffectiveRoleRequest(text)) return true;
   return LIVE_RECORD_REQUEST_PATTERN.test(text);
 }
 
@@ -104,9 +110,11 @@ function isSafePublicContinuityText(value) {
 function productKnowledgeInstruction(prompt = "") {
   const packs = expertPacksForPrompt(prompt);
   const renderedPacks = renderExpertPacks(packs);
+  const roleKnowledge = renderRoleKnowledgeForPrompt(prompt);
   return [
     "This is a CHALIN system/product/advisory reasoning turn. Use the static product context below and your general reasoning ability. Do not claim that static product context is a live database result. Answer naturally like a strong general-purpose AI assistant; interpret the user's intent instead of dumping fields or policy text. Preserve the immediately relevant safe conversation thread when supplied. Answer directly first, then add only the detail that helps.",
     CHALIN_PRODUCT_CONTEXT,
+    roleKnowledge,
     renderedPacks
       ? `Relevant source-derived expert knowledge for this question:\n${renderedPacks}`
       : "",
