@@ -79,7 +79,7 @@ test("accepts a complete signed backup with an exact schema contract", () => {
   assert.equal(report.totalRows, 2);
 });
 
-test("blocks a backup missing a current table", () => {
+test("blocks a backup missing a current table in strict mode", () => {
   const backup = makeBackup();
   delete backup.tables.products;
   backup.included_tables = ["users"];
@@ -132,7 +132,7 @@ test("blocks a valid checksum signed by the wrong server", () => {
   assert.match(report.errors.join(" "), /signature/i);
 });
 
-test("blocks schema and migration drift", () => {
+test("blocks schema and migration drift in strict mode", () => {
   const backup = makeBackup();
   const report = validateBackupContract({
     backup,
@@ -150,4 +150,95 @@ test("blocks schema and migration drift", () => {
   });
   assert.equal(report.valid, false);
   assert.match(report.errors.join(" "), /columns|migration history/i);
+});
+
+test("accepts an older signed backup across safe additive schema changes", () => {
+  const backup = makeBackup();
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: ["users", "products", "payroll_settings"],
+    currentTableColumns: {
+      users: ["id", "username", "token_version"],
+      products: ["id", "name", "barcode"],
+      payroll_settings: ["id", "branch_id"],
+    },
+    currentTableMetadata: {
+      users: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "username", nullable: false, hasDefault: false, extra: "" },
+        { name: "token_version", nullable: false, hasDefault: true, extra: "" },
+      ],
+      products: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "name", nullable: false, hasDefault: false, extra: "" },
+        { name: "barcode", nullable: true, hasDefault: false, extra: "" },
+      ],
+      payroll_settings: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "branch_id", nullable: false, hasDefault: false, extra: "" },
+      ],
+    },
+    currentSchemaMigrations: [
+      ...currentSchemaMigrations,
+      { migration_name: "payroll_foundation" },
+    ],
+    signingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, true, report.errors.join("\n"));
+  assert.deepEqual(report.currentOnlyTables, ["payroll_settings"]);
+  assert.equal(report.additiveSchemaCompatibilityApplied, true);
+  assert.match(report.warnings.join(" "), /preserved|predates|newer migrations/i);
+});
+
+test("blocks an older backup when a new current column cannot be safely omitted", () => {
+  const backup = makeBackup();
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: ["users", "products"],
+    currentTableColumns: {
+      ...currentTableColumns,
+      products: ["id", "name", "required_code"],
+    },
+    currentTableMetadata: {
+      products: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "name", nullable: false, hasDefault: false, extra: "" },
+        { name: "required_code", nullable: false, hasDefault: false, extra: "" },
+      ],
+    },
+    currentSchemaMigrations,
+    signingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, false);
+  assert.match(report.errors.join(" "), /cannot safely supply required columns/i);
+});
+
+test("blocks a backup migration unknown to the current runtime even in additive mode", () => {
+  const backup = makeBackup();
+  backup.schema_migrations.push({ migration_name: "future_runtime" });
+  backup.checksum_sha256 = checksumBackup(backup);
+  backup.signature_hmac_sha256 = signBackup(backup, signingSecret);
+
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: ["users", "products"],
+    currentTableColumns,
+    currentTableMetadata: {
+      users: currentTableColumns.users.map((name) => ({ name, nullable: true, hasDefault: false, extra: "" })),
+      products: currentTableColumns.products.map((name) => ({ name, nullable: true, hasDefault: false, extra: "" })),
+    },
+    currentSchemaMigrations,
+    signingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, false);
+  assert.match(report.errors.join(" "), /unknown backup migrations/i);
 });
