@@ -76,6 +76,8 @@ function withEnvironment(values, callback) {
     "RAILWAY_ENVIRONMENT_ID",
     "RAILWAY_PUBLIC_DOMAIN",
     "RAILWAY_GIT_BRANCH",
+    "FRONTEND_URL",
+    "FRONTEND_URL_ALT",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
@@ -93,7 +95,7 @@ function withEnvironment(values, callback) {
   }
 }
 
-function validateCurrentEnvironment() {
+function validateCurrentEnvironment(overrides = {}) {
   return validateBackupContract({
     backup: makeBackup(),
     currentIncludedTables: ["users", "products"],
@@ -103,6 +105,7 @@ function validateCurrentEnvironment() {
     signingSecret: "b".repeat(64),
     requireSignature: true,
     allowAdditiveSchemaDrift: true,
+    ...overrides,
   });
 }
 
@@ -165,13 +168,47 @@ test("Railway staging is recognized by its environment id when environment name 
   );
 });
 
-test("a non-staging Railway production branch remains strict", () => {
+test("known CHALIN ONE staging frontend identifies the staging runtime", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      FRONTEND_URL: "https://chalin-one-staging-preview.pages.dev",
+    },
+    () => {
+      assert.equal(isConfirmedRailwayStaging(), true);
+      assert.equal(isLiveProductionEnvironment(), false);
+    }
+  );
+});
+
+test("protected staging recovery override survives a misleading Railway production label", () => {
   withEnvironment(
     {
       NODE_ENV: "production",
       RAILWAY_ENVIRONMENT_NAME: "production",
       RAILWAY_GIT_BRANCH: "production",
       RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-production.up.railway.app",
+    },
+    () => {
+      const report = validateCurrentEnvironment({
+        requireSignature: false,
+        allowCrossEnvironmentRecovery: true,
+      });
+      assert.equal(report.valid, true, report.errors.join("\n"));
+      assert.equal(report.crossEnvironmentRecovery, true);
+      assert.deepEqual(report.sourceOnlyTables, ["future_table"]);
+    }
+  );
+});
+
+test("a non-staging Railway production branch remains strict without protected override", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+      RAILWAY_GIT_BRANCH: "production",
+      RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-production.up.railway.app",
+      FRONTEND_URL: "https://chalin03.com",
     },
     () => {
       assert.equal(isConfirmedRailwayStaging(), false);
