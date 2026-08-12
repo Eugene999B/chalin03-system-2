@@ -5,6 +5,7 @@ const {
   BACKUP_MANIFEST_VERSION,
   BACKUP_TYPE,
   CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+  CHALIN_ONE_STAGING_GIT_BRANCH,
   CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
   checksumBackup,
   isConfirmedRailwayStaging,
@@ -74,6 +75,7 @@ function withEnvironment(values, callback) {
     "RAILWAY_ENVIRONMENT_NAME",
     "RAILWAY_ENVIRONMENT_ID",
     "RAILWAY_PUBLIC_DOMAIN",
+    "RAILWAY_GIT_BRANCH",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 
@@ -103,6 +105,26 @@ function validateCurrentEnvironment() {
     allowAdditiveSchemaDrift: true,
   });
 }
+
+test("Railway staging is recognized by the chalin-one Git branch even when environment name says production", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+      RAILWAY_GIT_BRANCH: CHALIN_ONE_STAGING_GIT_BRANCH,
+    },
+    () => {
+      assert.equal(isConfirmedRailwayStaging(), true);
+      assert.equal(isLiveProductionEnvironment(), false);
+
+      const report = validateCurrentEnvironment();
+      assert.equal(report.valid, true, report.errors.join("\n"));
+      assert.equal(report.crossEnvironmentRecovery, true);
+      assert.equal(report.signatureVerified, false);
+      assert.deepEqual(report.sourceOnlyTables, ["future_table"]);
+    }
+  );
+});
 
 test("Railway staging is recognized by its public domain when environment name is unavailable", () => {
   withEnvironment(
@@ -143,10 +165,12 @@ test("Railway staging is recognized by its environment id when environment name 
   );
 });
 
-test("an unidentified production deployment remains strict", () => {
+test("a non-staging Railway production branch remains strict", () => {
   withEnvironment(
     {
       NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+      RAILWAY_GIT_BRANCH: "production",
       RAILWAY_PUBLIC_DOMAIN: "chalin03-system-2-production.up.railway.app",
     },
     () => {
