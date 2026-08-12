@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
+import InventoryUnitScanner from "../components/InventoryUnitScanner";
 import { useAuth } from "../context/AuthContext";
 
 export default function NewSalePage() {
@@ -360,7 +361,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setError("");
 
     try {
-      const response = await axiosClient.get("/products");
+      const response = await axiosClient.get("/inventory-traceability/sale-products");
       setProducts(response.data.products || []);
     } catch (error) {
       setError(getFriendlyApiError(error, "Failed to load products."));
@@ -650,6 +651,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         {
           ...product,
           quantity: requestedQuantity,
+          unit_ids: [],
         },
       ]);
     }
@@ -686,6 +688,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
           ? {
               ...item,
               quantity: cleanQuantity,
+              unit_ids: Array.isArray(item.unit_ids)
+                ? item.unit_ids.slice(0, cleanQuantity)
+                : [],
             }
           : item
       )
@@ -750,6 +755,18 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
     if (cart.length === 0) {
       setError("Add at least one item to the sale.");
+      return;
+    }
+
+    const incompleteSerializedItem = cart.find((item) => {
+      const serialized = String(item.inventory_tracking_mode || "quantity").toLowerCase() === "serialized";
+      const enforced = String(item.inventory_traceability_state || "off").toLowerCase() === "enforced";
+      return serialized && enforced && Number(item.quantity) !== (item.unit_ids || []).length;
+    });
+    if (incompleteSerializedItem) {
+      setError(
+        `${incompleteSerializedItem.name} requires exactly ${incompleteSerializedItem.quantity} verified physical unit ID${Number(incompleteSerializedItem.quantity) === 1 ? "" : "s"} before checkout.`
+      );
       return;
     }
 
@@ -862,6 +879,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
         items: cart.map((item) => ({
           product_id: item.id,
           quantity: item.quantity,
+          unit_ids: Array.isArray(item.unit_ids) ? item.unit_ids : [],
         })),
       });
 
@@ -1517,6 +1535,11 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 {cart.map((item) => {
                   const lineTotal =
                     Number(item.selling_price) * Number(item.quantity);
+                  const serializedItem =
+                    String(item.inventory_tracking_mode || "quantity").toLowerCase() === "serialized";
+                  const unitIdsRequired =
+                    serializedItem &&
+                    String(item.inventory_traceability_state || "off").toLowerCase() === "enforced";
 
                   return (
                     <div key={item.id} style={styles.cartItem}>
@@ -1552,6 +1575,26 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                       >
                         Remove
                       </button>
+
+                      {serializedItem ? (
+                        <div style={{ gridColumn: "1 / -1" }}>
+                          <InventoryUnitScanner
+                            product={item}
+                            requiredCount={item.quantity}
+                            selectedUnitCodes={item.unit_ids || []}
+                            required={unitIdsRequired}
+                            onChange={(unitIds) =>
+                              setCart((current) =>
+                                current.map((cartItem) =>
+                                  Number(cartItem.id) === Number(item.id)
+                                    ? { ...cartItem, unit_ids: unitIds }
+                                    : cartItem
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}

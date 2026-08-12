@@ -1,0 +1,67 @@
+name: Inventory Loss Prevention Feature Verification
+
+on:
+  push:
+    branches:
+      - feature/inventory-loss-prevention-traceability
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inventory-loss-prevention-feature-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Backend syntax
+        working-directory: backend
+        run: npm run syntax-check
+      - name: Backend tests and migration safety
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          npm test
+          git fetch origin main --no-tags
+          npm run migration-safety -- --base origin/main --head HEAD --repo-root "$GITHUB_WORKSPACE"
+
+  frontend-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Frontend production build
+        working-directory: frontend
+        run: npm run build

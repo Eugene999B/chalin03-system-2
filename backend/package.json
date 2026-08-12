@@ -61,7 +61,8 @@
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
     "test": "node --test tests/*.test.js",
-    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js"
+    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js",
+    "migrate:inventory-loss-prevention:production": "node scripts/runInventoryLossPreventionProductionMigrations.js"
   },
   "engines": {
     "node": ">=20"
