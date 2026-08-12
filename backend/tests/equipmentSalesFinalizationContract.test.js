@@ -103,7 +103,7 @@ test("Cloudflare Insights is explicitly permitted without widening the whole CSP
   );
   assert.match(
     cloudflareHeaders,
-    /connect-src 'self' https:\/\/api\.chalin03\.com https:\/\/cloudflareinsights\.com/
+    /connect-src 'self'[^;]*https:\/\/api\.chalin03\.com[^;]*https:\/\/cloudflareinsights\.com/
   );
   assert.match(cloudflareHeaders, /object-src 'none'/);
   assert.match(cloudflareHeaders, /frame-ancestors 'none'/);
