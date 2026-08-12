@@ -30,7 +30,7 @@ function signedV2Shape() {
   };
 }
 
-test("explicit trusted staging context works when NODE_ENV is production and Railway metadata is absent", () => {
+test("verified staging recovery context works even when the process itself uses production mode", () => {
   assert.equal(
     isCrossEnvironmentRecovery(
       {
@@ -39,19 +39,23 @@ test("explicit trusted staging context works when NODE_ENV is production and Rai
         allowAdditiveSchemaDrift: true,
         allowCrossEnvironmentRecovery: true,
       },
-      { NODE_ENV: "production" }
+      {
+        NODE_ENV: "production",
+        RAILWAY_ENVIRONMENT_NAME: "staging",
+      }
     ),
     true
   );
 });
 
-test("ordinary production-mode validation stays strict without the trusted staging flag", () => {
+test("an unverified production process cannot opt itself into staging recovery", () => {
   assert.equal(
     isCrossEnvironmentRecovery(
       {
         backup: signedV2Shape(),
         requireSignature: false,
         allowAdditiveSchemaDrift: true,
+        allowCrossEnvironmentRecovery: true,
       },
       { NODE_ENV: "production" }
     ),
@@ -77,19 +81,7 @@ test("confirmed Railway production refuses cross-environment mode even if a call
   );
 });
 
-test("trusted staging recovery still requires unsigned-target validation plus additive schema mode", () => {
-  assert.equal(
-    isCrossEnvironmentRecovery(
-      {
-        backup: signedV2Shape(),
-        requireSignature: true,
-        allowAdditiveSchemaDrift: true,
-        allowCrossEnvironmentRecovery: true,
-      },
-      { NODE_ENV: "production" }
-    ),
-    false
-  );
+test("verified staging recovery still requires additive schema mode", () => {
   assert.equal(
     isCrossEnvironmentRecovery(
       {
@@ -98,15 +90,18 @@ test("trusted staging recovery still requires unsigned-target validation plus ad
         allowAdditiveSchemaDrift: false,
         allowCrossEnvironmentRecovery: true,
       },
-      { NODE_ENV: "production" }
+      { RAILWAY_ENVIRONMENT_NAME: "staging" }
     ),
     false
   );
 });
 
-test("only the protected staging recovery router opts into trusted cross-environment recovery", () => {
+test("the protected staging router owns the recovery opt-in and delegated restore reuses its successful preflight", () => {
   assert.match(stagingRouteSource, /allowCrossEnvironmentRecovery:\s*true/);
-  assert.match(stagingRouteSource, /x-forwarded-host/);
+  assert.match(stagingRouteSource, /recoveryEnvironmentForRequest/);
+  assert.match(stagingRouteSource, /signedV2StagingRecoveryAuthorized/);
+  assert.match(stagingRouteSource, /stagingRecoveryValidation/);
   assert.doesNotMatch(canonicalRouteSource, /allowCrossEnvironmentRecovery/);
-  assert.doesNotMatch(delegatedRouteSource, /allowCrossEnvironmentRecovery/);
+  assert.doesNotMatch(delegatedRouteSource, /allowCrossEnvironmentRecovery:\s*true/);
+  assert.match(delegatedRouteSource, /req\.stagingRecoveryValidation/);
 });
