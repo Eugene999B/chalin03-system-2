@@ -1,4 +1,8 @@
 import axiosClient from "../../api/axiosClient";
+import {
+  generateAndDownloadAiDocument,
+  requestedAiDocumentFormat,
+} from "./aiDocumentClient";
 
 export const AI_PERSONAS = Object.freeze({
   copilot: "copilot",
@@ -175,6 +179,7 @@ export async function sendAiMessage(
   { conversationKey = null, message },
   { signal } = {}
 ) {
+  const requestedFormat = requestedAiDocumentFormat(message);
   const response = await axiosClient.post(
     `${personaPath(persona)}/chat`,
     {
@@ -192,6 +197,43 @@ export async function sendAiMessage(
       result?.conversation?.title || null
     );
   }
+
+  if (
+    requestedFormat &&
+    result?.conversation_key &&
+    result?.message_key &&
+    result?.reasoning?.intent !== "clarification" &&
+    result?.provider?.finish_reason !== "clarification"
+  ) {
+    try {
+      const artifact = await generateAndDownloadAiDocument({
+        conversationKey: result.conversation_key,
+        messageKey: result.message_key,
+        format: requestedFormat,
+        title: result?.conversation?.title || null,
+      });
+      return {
+        ...result,
+        document_export: Object.freeze({
+          status: "downloaded",
+          format: requestedFormat,
+          filename: artifact.filename,
+          sha256: artifact.sha256,
+          classification: artifact.classification,
+        }),
+      };
+    } catch (documentError) {
+      return {
+        ...result,
+        document_export: Object.freeze({
+          status: "failed",
+          format: requestedFormat,
+          message: aiErrorMessage(documentError),
+        }),
+      };
+    }
+  }
+
   return result;
 }
 
@@ -450,6 +492,9 @@ export function aiErrorMessage(error) {
   if (["AI_GEMINI_RESPONSE_FAILED", "AI_GEMINI_NETWORK_FAILED", "AI_PROVIDER_TIMEOUT"].includes(code)) {
     return `Gemini could not complete this request${details.length ? ` (${details.join(", ")})` : ""}. CHALIN preserved the conversation; retry when the provider connection is available.`;
   }
+  if (["AI_PROVIDER_ROUND_LIMIT_EXCEEDED", "AI_FINAL_SYNTHESIS_TOOL_CALL_BLOCKED"].includes(code)) {
+    return "I could not finish that task yet. Your conversation is intact, so continue with the missing detail or narrow the request and I’ll pick up from the same topic.";
+  }
   if (code === "AI_SCHEMA_NOT_READY") {
     return "The intelligence database foundation has not been prepared in this environment.";
   }
@@ -468,6 +513,6 @@ export function aiErrorMessage(error) {
   return (
     error?.response?.data?.message ||
     error?.message ||
-    "CHALIN ONE intelligence could not complete the request safely."
+    "I could not finish that request yet. Your conversation is intact, so you can continue from the same topic."
   );
 }
