@@ -18,8 +18,8 @@ const canonicalRouteSource = fs.readFileSync(
   path.join(repositoryRoot, "backend/routes/backupRoutes.js"),
   "utf8"
 );
-const ownerStreamingRouteSource = fs.readFileSync(
-  path.join(repositoryRoot, "backend/routes/backupOwnerStreamingRoutes.js"),
+const delegatedRouteSource = fs.readFileSync(
+  path.join(repositoryRoot, "backend/routes/delegatedBackupRoutes.js"),
   "utf8"
 );
 
@@ -108,5 +108,5 @@ test("only the protected staging recovery router opts into trusted cross-environ
   assert.match(stagingRouteSource, /allowCrossEnvironmentRecovery:\s*true/);
   assert.match(stagingRouteSource, /x-forwarded-host/);
   assert.doesNotMatch(canonicalRouteSource, /allowCrossEnvironmentRecovery/);
-  assert.doesNotMatch(ownerStreamingRouteSource, /allowCrossEnvironmentRecovery/);
+  assert.doesNotMatch(delegatedRouteSource, /allowCrossEnvironmentRecovery/);
 });
