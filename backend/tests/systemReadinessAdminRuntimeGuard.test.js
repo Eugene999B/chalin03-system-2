@@ -16,6 +16,7 @@ test("live readiness includes the admin outage dependency families", () => {
     "user_permission_overrides",
     "activity_log",
     "auth_sessions",
+    "password_recovery_otps",
     "protected_action_sessions",
     "privileged_action_ledger",
     "owner_break_glass_accounts",
@@ -37,6 +38,23 @@ test("live readiness includes the admin outage dependency families", () => {
     assert.ok(
       EXPECTED_TABLES.includes(tableName),
       `${tableName} must be checked by live readiness`
+    );
+  }
+
+  const requiredColumns = [
+    ["users", "is_login_locked"],
+    ["users", "login_locked_at"],
+    ["users", "login_lock_reason"],
+    ["users", "last_failed_login_at"],
+    ["users", "last_failed_login_ip"],
+  ];
+  for (const required of requiredColumns) {
+    assert.ok(
+      ADMIN_RUNTIME_COLUMNS.some(
+        ([tableName, columnName]) =>
+          tableName === required[0] && columnName === required[1]
+      ),
+      `${required.join(".")} must remain in the admin runtime contract`
     );
   }
 
@@ -64,14 +82,14 @@ test("schema evaluator detects missing admin columns as readiness failures", () 
   const columnRows = EXPECTED_COLUMNS
     .filter(
       ([tableName, columnName]) =>
-        !(tableName === "users" && columnName === "primary_workspace_code")
+        !(tableName === "users" && columnName === "is_login_locked")
     )
     .map(([TABLE_NAME, COLUMN_NAME]) => ({ TABLE_NAME, COLUMN_NAME }));
 
   const result = evaluateRuntimeSchema({ tableRows, columnRows });
 
   assert.equal(result.missing_tables.length, 0);
-  assert.deepEqual(result.missing_columns, ["users.primary_workspace_code"]);
+  assert.deepEqual(result.missing_columns, ["users.is_login_locked"]);
 });
 
 test("complete runtime inventory satisfies the shared readiness contract", () => {
