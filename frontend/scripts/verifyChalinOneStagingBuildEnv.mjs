@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 
+const DEFAULT_STAGING_API_URL =
+  "https://chalin03-system-2-staging.up.railway.app/api";
+
 function clean(value) {
   return String(value || "").trim();
 }
 
-const apiUrl = clean(process.env.VITE_API_URL);
-assert.ok(apiUrl, "VITE_API_URL is required for CHALIN ONE staging builds.");
+// The browser runtime also pins known CHALIN ONE staging hostnames to the
+// isolated Railway staging API. Keep VITE_API_URL as an override/check when
+// Cloudflare provides it, but do not make a safe staging build depend on the
+// project dashboard injecting that variable correctly.
+const apiUrl = clean(process.env.VITE_API_URL) || DEFAULT_STAGING_API_URL;
 
 const parsed = new URL(apiUrl);
 assert.equal(parsed.protocol, "https:", "Staging VITE_API_URL must use HTTPS.");
