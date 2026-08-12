@@ -1,5 +1,14 @@
 {
   "version": 1,
-  "include": ["/api/*"],
-  "exclude": []
+  "include": ["/*"],
+  "exclude": [
+    "/assets/*",
+    "/favicon.ico",
+    "/favicon-192x192.png",
+    "/favicon-512x512.png",
+    "/chalin03-logo.png",
+    "/browser-cache-recovery.js",
+    "/chalin-one-layout-polish.css",
+    "/site.webmanifest"
+  ]
 }
