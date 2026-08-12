@@ -1,0 +1,72 @@
+name: CHALIN ONE Staging Live Readiness
+
+on:
+  pull_request:
+    branches:
+      - chalin-one
+    paths:
+      - "backend/routes/systemRoutes.js"
+      - "backend/services/systemReadinessContract.js"
+      - "backend/scripts/checkChalinOneStagingLiveReadiness.js"
+      - "backend/tests/systemReadinessAdminRuntimeGuard.test.js"
+      - "backend/tests/chalinOneStagingLiveReadiness.test.js"
+      - ".github/workflows/chalin-one-staging-live-readiness.yml"
+  push:
+    branches:
+      - chalin-one
+    paths:
+      - "backend/**"
+      - "database/migrations/**"
+      - "package.json"
+      - "railway.json"
+      - ".github/workflows/chalin-one-staging-live-readiness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalin-one-staging-live-readiness
+  cancel-in-progress: true
+
+jobs:
+  validate-live-readiness-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Syntax-check live staging verifier
+        run: node --check backend/scripts/checkChalinOneStagingLiveReadiness.js
+
+      - name: Run readiness contract tests
+        run: |
+          node --test backend/tests/systemReadinessAdminRuntimeGuard.test.js
+          node --test backend/tests/chalinOneStagingLiveReadiness.test.js
+
+  live-staging-readiness:
+    if: github.event_name != 'pull_request'
+    needs: validate-live-readiness-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      STAGING_API_ORIGIN: https://chalin03-system-2-staging.up.railway.app
+      EXPECTED_COMMIT_SHA: ${{ github.sha }}
+      STAGING_READINESS_ATTEMPTS: "60"
+      STAGING_READINESS_DELAY_MS: "10000"
+    steps:
+      - name: Check out exact CHALIN ONE commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Wait for and verify exact Railway staging deployment
+        run: node backend/scripts/checkChalinOneStagingLiveReadiness.js

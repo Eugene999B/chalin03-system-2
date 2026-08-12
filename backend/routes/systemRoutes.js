@@ -11,6 +11,11 @@ const { getPublicPermissionCatalog } = require("../security/permissionCatalog");
 const { getSmsConfig } = require("../services/smsService");
 const { APP_VERSION, BACKUP_MANIFEST_VERSION } = require("../config/version");
 const {
+  EXPECTED_COLUMNS,
+  EXPECTED_TABLES,
+  evaluateRuntimeSchema,
+} = require("../services/systemReadinessContract");
+const {
   delegatedAuthorityCounts,
 } = require("../services/delegatedAdministrationService");
 const {
@@ -34,48 +39,19 @@ const publicRedirectRoutes = require("./publicRedirectRoutes");
 const router = express.Router();
 const startedAt = Date.now();
 
-const EXPECTED_TABLES = Object.freeze([
-  "branches",
-  "schema_migrations",
-  "users",
-  "user_branch_access",
-  "user_permission_overrides",
-  "business_units",
-  "business_locations",
-  "user_business_access",
-  "user_category_assignment_conflicts",
-  "worker_category_assignment_conflicts",
-  "worker_hr_letters",
-  "products",
-  "sales",
-  "sale_items",
-  "debts",
-  "activity_log",
-  "security_event_dismissals",
-  "settings",
-  "stock_transfers",
-  "fleet_assets",
-  "mining_sites",
-  "user_mining_site_access",
-  "user_hire_location_access",
-  "mining_daily_logs",
-  "mining_production_records",
-  "mining_equipment_logs",
-  "hire_customers",
-  "hire_enquiries",
-  "hire_quotations",
-  "hire_contracts",
-  "hire_dispatches",
-  "hire_work_logs",
-  "hire_invoices",
-  "hire_payments",
-  "hire_return_inspections",
-  "content_studio_roles",
-  "content_studio_role_permissions",
-  "content_studio_role_scopes",
-  "content_studio_user_access",
+// Keep historically protected route-level readiness dependencies explicit here
+// even though the shared systemReadinessContract is the runtime source of truth.
+// Existing release guards intentionally inspect this route file, and this
+// assertion also fails startup immediately if central readiness ever drops one.
+const ROUTE_LOCAL_READINESS_SENTINELS = Object.freeze([
   "public_redirect_rules",
+  "worker_hr_letters",
 ]);
+for (const tableName of ROUTE_LOCAL_READINESS_SENTINELS) {
+  if (!EXPECTED_TABLES.includes(tableName)) {
+    throw new Error(`System readiness contract omitted required table: ${tableName}`);
+  }
+}
 
 function appVersion() {
   return process.env.APP_VERSION || APP_VERSION;
@@ -89,24 +65,29 @@ function disableFeatureStatusCaching(res) {
 
 async function databaseStatus() {
   const started = Date.now();
-  const [dbRows] = await pool.query("SELECT DATABASE() AS database_name");
-  const [tableRows] = await pool.query(
-    `SELECT TABLE_NAME
-     FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()`
-  );
-  const existingTables = new Set(tableRows.map((row) => row.TABLE_NAME));
-  const missingTables = EXPECTED_TABLES.filter(
-    (table) => !existingTables.has(table)
-  );
+  const [dbResult, tableResult, columnResult] = await Promise.all([
+    pool.query("SELECT DATABASE() AS database_name"),
+    pool.query(
+      `SELECT TABLE_NAME
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()`
+    ),
+    pool.query(
+      `SELECT TABLE_NAME, COLUMN_NAME
+       FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()`
+    ),
+  ]);
+  const dbRows = dbResult[0] || [];
+  const tableRows = tableResult[0] || [];
+  const columnRows = columnResult[0] || [];
+  const schema = evaluateRuntimeSchema({ tableRows, columnRows });
 
   return {
     reachable: true,
     database_name: dbRows[0]?.database_name || null,
     query_latency_ms: Date.now() - started,
-    expected_table_count: EXPECTED_TABLES.length,
-    discovered_table_count: existingTables.size,
-    missing_tables: missingTables,
+    ...schema,
   };
 }
 
@@ -348,10 +329,10 @@ router.use(
 router.get("/readiness", async (req, res) => {
   try {
     const db = await databaseStatus();
+    const schemaReady =
+      db.missing_tables.length === 0 && db.missing_columns.length === 0;
     const ready =
-      db.reachable &&
-      db.missing_tables.length === 0 &&
-      missingConfigNames().length === 0;
+      db.reachable && schemaReady && missingConfigNames().length === 0;
 
     return res.status(ready ? 200 : 503).json({
       status: ready ? "success" : "degraded",
@@ -360,7 +341,7 @@ router.get("/readiness", async (req, res) => {
       deployment: deploymentStatus(),
       checks: {
         database: db.reachable ? "ready" : "degraded",
-        schema: db.missing_tables.length === 0 ? "ready" : "degraded",
+        schema: schemaReady ? "ready" : "degraded",
         configuration:
           missingConfigNames().length === 0 ? "ready" : "degraded",
       },
@@ -445,3 +426,6 @@ router.get(
 );
 
 module.exports = router;
+module.exports.EXPECTED_COLUMNS = EXPECTED_COLUMNS;
+module.exports.EXPECTED_TABLES = EXPECTED_TABLES;
+module.exports.databaseStatus = databaseStatus;
