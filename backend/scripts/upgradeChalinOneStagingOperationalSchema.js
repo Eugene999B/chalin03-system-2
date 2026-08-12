@@ -77,6 +77,18 @@ const STAGING_FOUNDATION_MIGRATIONS = Object.freeze([
     ]),
   }),
   Object.freeze({
+    record: "release2a2_account_lock_otp",
+    file: "20260716_release2a2_account_lock_otp.sql",
+    required_tables: Object.freeze(["password_recovery_otps"]),
+    required_columns: Object.freeze([
+      Object.freeze(["users", "is_login_locked"]),
+      Object.freeze(["users", "login_locked_at"]),
+      Object.freeze(["users", "login_lock_reason"]),
+      Object.freeze(["users", "last_failed_login_at"]),
+      Object.freeze(["users", "last_failed_login_ip"]),
+    ]),
+  }),
+  Object.freeze({
     record: "release3fa_authentication_sessions_ux",
     file: "20260718_release3fa_authentication_sessions_ux.sql",
     required_columns: Object.freeze([

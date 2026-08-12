@@ -48,6 +48,13 @@ jobs:
       DB_PASSWORD: operational-acceptance-root
       DB_NAME: chalin_one_operational_acceptance
       DB_SSL: "false"
+      JWT_SECRET: chalin-one-admin-smoke-ci-only-jwt-secret-000000000000000000000000000000000000
+      SMS_ENABLED: "false"
+      AI_PROVIDER: disabled
+      AI_ALLOW_MOCK_PROVIDER: "false"
+      FEATURE_AI_ENABLED: "false"
+      FEATURE_AI_ACTIONS: "false"
+      FEATURE_AI_SCHEDULED_JOBS: "false"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -62,5 +69,8 @@ jobs:
       - name: Install backend dependencies
         run: npm ci
 
-      - name: Rehearse exact Payroll and Inventory operational schema
+      - name: Rehearse exact Admin, Worker, Payroll and Inventory operational schema
         run: node scripts/rehearseChalinOneOperationalSchemaAcceptance.js
+
+      - name: Run authenticated Admin first-load API smoke matrix
+        run: node scripts/runChalinOneAdminAuthenticatedSmoke.js
