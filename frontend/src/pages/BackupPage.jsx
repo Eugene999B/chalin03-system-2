@@ -136,7 +136,7 @@ export default function BackupPage() {
     }
     setDownloading(true);
     setError("");
-    setMessage("");
+    setMessage("Preparing the signed full-system backup. Keep this page open while the database snapshot is streamed securely.");
     try {
       const response = await axiosClient.get(backupRequestUrl("/download"), {
         responseType: "blob",
@@ -152,11 +152,12 @@ export default function BackupPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(fileUrl);
+      window.setTimeout(() => window.URL.revokeObjectURL(fileUrl), 1000);
       setMessage(
         "Full-system backup downloaded successfully. Keep it private; it contains sensitive business records and password hashes."
       );
     } catch (requestError) {
+      setMessage("");
       setError((await readErrorBlob(requestError)) || "Backup download failed.");
     } finally {
       setDownloading(false);
@@ -317,7 +318,7 @@ export default function BackupPage() {
           <h2>Download Full-System Backup</h2>
           <p>Creates one private JSON recovery package containing every current canonical application table.</p>
           <ul style={{ lineHeight: 1.8, fontWeight: 700 }}><li>All three independent business workspaces</li><li>Users, permissions and location access</li><li>Sales, finance, mining and hire records</li><li>Audit, security, SMS and system evidence</li><li>SHA-256 integrity checksum</li></ul>
-          <button type="button" onClick={downloadBackup} disabled={!canDownload || !tokenReady || downloading}>{downloading ? "Downloading…" : "Download Full-System Backup"}</button>
+          <button type="button" onClick={downloadBackup} disabled={!canDownload || !tokenReady || downloading}>{downloading ? "Preparing & Downloading…" : "Download Full-System Backup"}</button>
         </div>
 
         <form className="section-card backup-card" onSubmit={restoreBackup}>
