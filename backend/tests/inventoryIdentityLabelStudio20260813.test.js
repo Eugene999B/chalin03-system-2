@@ -7,8 +7,9 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-const server = read("server.js");
 const traceability = read("routes/inventoryTraceabilityRoutes.js");
+const traceabilityService = read("services/inventoryTraceabilityService.js");
+const bootstrap = read("services/inventoryRouteSafetyBootstrap.js");
 const productGuard = read("routes/productRoutesInventoryHardened.js");
 const saleGuard = read("routes/saleRoutesInventoryHardened.js");
 const receiving = read("services/inventoryReceivingTraceabilityService.js");
@@ -16,9 +17,12 @@ const transfer = read("routes/inventoryTransferTraceabilityRoutes.js");
 const lossControl = read("routes/inventoryLossDetectionRoutes.js");
 const documentService = read("services/inventoryIdentityStudioDocumentService.js");
 
-test("Chalin One mounts the serialized product and sale hardening wrappers", () => {
-  assert.match(server, /productRoutesInventoryHardened/);
-  assert.match(server, /saleRoutesInventoryHardened/);
+test("Chalin One installs serialized product and sale hardening on the established routers", () => {
+  assert.match(traceabilityService, /installInventoryRouteSafety/);
+  assert.match(bootstrap, /productRoutes\.stack =/);
+  assert.match(bootstrap, /saleRoutes\.stack =/);
+  assert.match(bootstrap, /originalProductStack/);
+  assert.match(bootstrap, /originalSaleStack/);
   assert.match(productGuard, /SERIALIZED_RESTOCK_REQUIRES_CONTROLLED_RECEIVING/);
   assert.match(productGuard, /SERIALIZED_STOCK_ADJUSTMENT_REQUIRES_EXACT_IDS/);
   assert.match(saleGuard, /SERIALIZED_SALE_EDIT_REQUIRES_EXACT_RETURN/);
