@@ -8,6 +8,12 @@ const {
 const {
   resolveContextProfile,
 } = require("./aiContextProfileService");
+const {
+  isSocialConversationPrompt,
+} = require("./aiAnswerComposerService");
+
+const SOCIAL_CONTEXT_INSTRUCTION =
+  "This is ordinary social conversation. Reply naturally and briefly as CHALIN Copilot. Do not introduce, summarize, request or expose CHALIN business, customer, staff, payroll, financial, operational, security or other private facts. Do not use business evidence or tools for this turn.";
 
 class AiContextualProviderError extends Error {
   constructor(message, { code = "AI_CONTEXTUAL_PROVIDER_ERROR", statusCode = 400, details = [] } = {}) {
@@ -23,6 +29,16 @@ function offeredTool(tools = [], toolKey) {
   return (Array.isArray(tools) ? tools : []).find(
     (tool) => String(tool?.key || "").trim() === toolKey
   );
+}
+
+function latestUserContent(messages = []) {
+  for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
+    const item = messages[index];
+    if (String(item?.role || "").toLowerCase() !== "user") continue;
+    const content = String(item?.content || "").trim();
+    if (content) return content;
+  }
+  return "";
 }
 
 function contextProviderBrief(profile) {
@@ -50,6 +66,32 @@ class ContextualAiProvider {
     provider_context = {},
     signal = undefined,
   } = {}) {
+    const latestUser = latestUserContent(messages);
+    if (
+      this.profile.persona === "copilot" &&
+      isSocialConversationPrompt(latestUser)
+    ) {
+      return this.delegate.generate({
+        messages: [
+          { role: "system", content: SOCIAL_CONTEXT_INSTRUCTION },
+          { role: "user", content: latestUser },
+        ],
+        tools: [],
+        max_output_tokens: Math.min(Number(max_output_tokens) || 4000, 512),
+        provider_context: Object.freeze({
+          ...provider_context,
+          persona: "copilot",
+          data_classification: "public",
+          live_data_required: false,
+          public_safe_social_turn: true,
+          provider_model_override: this.selection.effective_model,
+          provider_selection_reason: this.selection.reason_code,
+          full_context_active: false,
+        }),
+        signal,
+      });
+    }
+
     const preload = offeredTool(tools, this.profile.preload_tool);
     if (!this.preloadIssued && preload) {
       this.preloadIssued = true;
@@ -130,7 +172,9 @@ async function createContextualAiProvider({
 module.exports = {
   AiContextualProviderError,
   ContextualAiProvider,
+  SOCIAL_CONTEXT_INSTRUCTION,
   contextProviderBrief,
   createContextualAiProvider,
+  latestUserContent,
   offeredTool,
 };
