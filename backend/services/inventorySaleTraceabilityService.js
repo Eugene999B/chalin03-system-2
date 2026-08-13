@@ -45,64 +45,15 @@ function productTracking(product) {
   };
 }
 
-async function lockSaleUnitSelection(
-  connection,
-  {
-    branchId,
-    product,
-    quantity,
-    unitCodes,
-    seenUnitCodes = new Set(),
-  }
-) {
-  const cleanBranchId = positiveInt(branchId, "branchId");
+async function loadExactActiveUnits(connection, {
+  branchId,
+  product,
+  selectedCodes,
+  seenUnitCodes,
+}) {
+  if (!selectedCodes.length) return [];
+
   const cleanProductId = positiveInt(product?.id, "productId");
-  const cleanQuantity = positiveInt(quantity, "quantity");
-  const selectedCodes = normalizeUnitSelection(unitCodes);
-  const tracking = productTracking(product);
-
-  if (tracking.mode !== TRACKING_MODES.SERIALIZED) {
-    if (selectedCodes.length > 0) {
-      throw traceabilityError(
-        `${product?.name || "This product"} is not unit-serialized and must not receive physical unit IDs in the sale request.`,
-        400,
-        "TRACEABILITY_UNIT_IDS_NOT_ALLOWED"
-      );
-    }
-    return {
-      required: false,
-      product_id: cleanProductId,
-      unit_codes: [],
-      units: [],
-    };
-  }
-
-  const required = tracking.state === TRACEABILITY_STATES.ENFORCED;
-  if (required && selectedCodes.length !== cleanQuantity) {
-    throw traceabilityError(
-      `${product?.name || "Serialized product"} requires exactly ${cleanQuantity} physical unit ID${cleanQuantity === 1 ? "" : "s"} before the sale can be completed.`,
-      409,
-      "TRACEABILITY_SALE_UNIT_COUNT_MISMATCH",
-      {
-        product_id: cleanProductId,
-        quantity: cleanQuantity,
-        selected_count: selectedCodes.length,
-      }
-    );
-  }
-
-  // During setup, unit IDs are optional so the owner can test the workflow before
-  // switching the product to enforced. When provided, they are still fully validated
-  // and committed to the exact sale.
-  if (selectedCodes.length === 0) {
-    return {
-      required,
-      product_id: cleanProductId,
-      unit_codes: [],
-      units: [],
-    };
-  }
-
   for (const code of selectedCodes) {
     if (seenUnitCodes.has(code)) {
       throw traceabilityError(
@@ -111,7 +62,6 @@ async function lockSaleUnitSelection(
         "TRACEABILITY_DUPLICATE_UNIT_IN_SALE"
       );
     }
-    seenUnitCodes.add(code);
   }
 
   const placeholders = selectedCodes.map(() => "?").join(", ");
@@ -152,7 +102,7 @@ async function lockSaleUnitSelection(
         { unit_code: code, expected_product_id: cleanProductId, actual_product_id: Number(unit.product_id) }
       );
     }
-    if (Number(unit.current_branch_id) !== cleanBranchId) {
+    if (Number(unit.current_branch_id) !== Number(branchId)) {
       throw traceabilityError(
         `Physical unit ${code} is not currently held by this store.`,
         409,
@@ -176,13 +126,142 @@ async function lockSaleUnitSelection(
         { unit_code: code, sale_id: unit.sale_id, sale_item_id: unit.sale_item_id }
       );
     }
+    seenUnitCodes.add(code);
   }
 
+  return selectedCodes.map((code) => byCode.get(code));
+}
+
+async function loadAutomaticPendingUnits(connection, {
+  branchId,
+  productId,
+  count,
+  seenUnitCodes,
+}) {
+  if (count <= 0) return [];
+  const [units] = await connection.query(
+    `SELECT id, unit_code, product_id, current_branch_id, status, sale_id, sale_item_id
+     FROM inventory_units
+     WHERE product_id = ?
+       AND current_branch_id = ?
+       AND status = 'label_pending'
+       AND sale_id IS NULL
+       AND sale_item_id IS NULL
+     ORDER BY id ASC
+     LIMIT ${Number(count)}
+     FOR UPDATE`,
+    [productId, branchId]
+  );
+
+  const available = units.filter((unit) => !seenUnitCodes.has(unit.unit_code));
+  return available.slice(0, count);
+}
+
+async function lockSaleUnitSelection(
+  connection,
+  {
+    branchId,
+    product,
+    quantity,
+    unitCodes,
+    seenUnitCodes = new Set(),
+  }
+) {
+  const cleanBranchId = positiveInt(branchId, "branchId");
+  const cleanProductId = positiveInt(product?.id, "productId");
+  const cleanQuantity = positiveInt(quantity, "quantity");
+  const selectedCodes = normalizeUnitSelection(unitCodes);
+  const tracking = productTracking(product);
+
+  if (tracking.mode !== TRACKING_MODES.SERIALIZED) {
+    if (selectedCodes.length > 0) {
+      throw traceabilityError(
+        `${product?.name || "This product"} is not unit-serialized and must not receive physical unit IDs in the sale request.`,
+        400,
+        "TRACEABILITY_UNIT_IDS_NOT_ALLOWED"
+      );
+    }
+    return {
+      required: false,
+      product_id: cleanProductId,
+      unit_codes: [],
+      automatic_unit_codes: [],
+      units: [],
+    };
+  }
+
+  if (selectedCodes.length > cleanQuantity) {
+    throw traceabilityError(
+      `${product?.name || "Serialized product"} has more exact IDs selected than the sale quantity.`,
+      400,
+      "TRACEABILITY_SALE_TOO_MANY_UNIT_IDS",
+      { product_id: cleanProductId, quantity: cleanQuantity, selected_count: selectedCodes.length }
+    );
+  }
+
+  const required = tracking.state === TRACEABILITY_STATES.ENFORCED;
+  if (required && selectedCodes.length !== cleanQuantity) {
+    throw traceabilityError(
+      `${product?.name || "Serialized product"} requires exactly ${cleanQuantity} physical unit ID${cleanQuantity === 1 ? "" : "s"} before the sale can be completed.`,
+      409,
+      "TRACEABILITY_SALE_UNIT_COUNT_MISMATCH",
+      {
+        product_id: cleanProductId,
+        quantity: cleanQuantity,
+        selected_count: selectedCodes.length,
+      }
+    );
+  }
+
+  const exactUnits = await loadExactActiveUnits(connection, {
+    branchId: cleanBranchId,
+    product,
+    selectedCodes,
+    seenUnitCodes,
+  });
+
+  if (required) {
+    return {
+      required: true,
+      product_id: cleanProductId,
+      unit_codes: selectedCodes,
+      automatic_unit_codes: [],
+      units: exactUnits,
+    };
+  }
+
+  const remaining = cleanQuantity - selectedCodes.length;
+  const automaticUnits = await loadAutomaticPendingUnits(connection, {
+    branchId: cleanBranchId,
+    productId: cleanProductId,
+    count: remaining,
+    seenUnitCodes,
+  });
+
+  if (automaticUnits.length !== remaining) {
+    throw traceabilityError(
+      `${product?.name || "This product"} has printed/labeled stock that Chalin One must not guess in Manual mode. Scan or enter ${remaining - automaticUnits.length} more exact physical ID${remaining - automaticUnits.length === 1 ? "" : "s"}, or switch to Autonomous Scan.`,
+      409,
+      "TRACEABILITY_MANUAL_SALE_NEEDS_EXACT_IDS",
+      {
+        product_id: cleanProductId,
+        quantity: cleanQuantity,
+        exact_selected: selectedCodes.length,
+        unprinted_ids_available: automaticUnits.length,
+        exact_ids_still_required: remaining - automaticUnits.length,
+      }
+    );
+  }
+
+  for (const unit of automaticUnits) seenUnitCodes.add(unit.unit_code);
+  const automaticCodes = automaticUnits.map((unit) => unit.unit_code);
+
   return {
-    required,
+    required: false,
     product_id: cleanProductId,
-    unit_codes: selectedCodes,
-    units: selectedCodes.map((code) => byCode.get(code)),
+    unit_codes: [...selectedCodes, ...automaticCodes],
+    automatic_unit_codes: automaticCodes,
+    units: [...exactUnits, ...automaticUnits],
   };
 }
 
@@ -241,14 +320,16 @@ async function markSaleUnitsSold(
 
   for (const code of selectedCodes) {
     const unit = byCode.get(code);
+    const originalStatus = unit?.status;
+    const sellableStatus = [UNIT_STATUSES.ACTIVE, UNIT_STATUSES.LABEL_PENDING].includes(originalStatus);
     if (
       !unit ||
       Number(unit.product_id) !== cleanProductId ||
       Number(unit.current_branch_id) !== cleanBranchId ||
-      unit.status !== UNIT_STATUSES.ACTIVE
+      !sellableStatus
     ) {
       throw traceabilityError(
-        `Physical unit ${code} changed state before sale completion. Refresh the item and scan it again.`,
+        `Inventory unit ${code} changed state before sale completion. Refresh the item and scan it again.`,
         409,
         "TRACEABILITY_SALE_UNIT_STATE_CHANGED",
         { unit_code: code }
@@ -271,31 +352,34 @@ async function markSaleUnitsSold(
         cleanSaleId,
         cleanSaleItemId,
         unit.id,
-        UNIT_STATUSES.ACTIVE,
+        originalStatus,
         cleanProductId,
         cleanBranchId,
       ]
     );
     if (Number(updateResult.affectedRows || 0) !== 1) {
       throw traceabilityError(
-        `Physical unit ${code} could not be locked to this sale.`,
+        `Inventory unit ${code} could not be locked to this sale.`,
         409,
         "TRACEABILITY_SALE_UNIT_COMMIT_CONFLICT",
         { unit_code: code }
       );
     }
 
+    const wasUnprintedAutomaticIdentity = originalStatus === UNIT_STATUSES.LABEL_PENDING;
     const event = await appendUnitEvent(connection, {
       unitId: unit.id,
       branchId: cleanBranchId,
       eventType: "sale_completed",
-      fromStatus: UNIT_STATUSES.ACTIVE,
+      fromStatus: originalStatus,
       toStatus: UNIT_STATUSES.SOLD,
       sourceType: "sale",
       sourceId: cleanSaleId,
       actorUserId: cleanActorUserId,
       requestId,
-      reason: `Sold on receipt ${receiptNumber || cleanSaleId}.`,
+      reason: wasUnprintedAutomaticIdentity
+        ? `Assigned automatically to unlabeled stock sold on receipt ${receiptNumber || cleanSaleId}.`
+        : `Sold on receipt ${receiptNumber || cleanSaleId}.`,
       metadata: {
         sale_id: cleanSaleId,
         sale_item_id: cleanSaleItemId,
@@ -303,6 +387,9 @@ async function markSaleUnitsSold(
         unit_code: code,
         receipt_number: receiptNumber || null,
         customer_name: customerName || null,
+        identity_assignment: wasUnprintedAutomaticIdentity
+          ? "automatic_unprinted_manual_sale"
+          : "exact_physical_id",
       },
     });
 
@@ -311,6 +398,7 @@ async function markSaleUnitsSold(
       unit_code: code,
       sale_id: cleanSaleId,
       sale_item_id: cleanSaleItemId,
+      automatic_unprinted_assignment: wasUnprintedAutomaticIdentity,
       event_hash: event.event_hash,
     });
   }
