@@ -96,7 +96,6 @@ async function createAutomaticIdentityBatches(connection, {
   });
 
   const batches = [];
-  const totalQuantity = remaining;
   let chunkIndex = 0;
   while (remaining > 0) {
     const chunk = Math.min(remaining, AUTOMATIC_ID_BATCH_LIMIT);
@@ -106,10 +105,7 @@ async function createAutomaticIdentityBatches(connection, {
       expectedQuantity: chunk,
       sourceType,
       sourceId,
-      sourceItemId:
-        totalQuantity <= AUTOMATIC_ID_BATCH_LIMIT && chunkIndex === 0
-          ? sourceItemId
-          : null,
+      sourceItemId: chunkIndex === 0 ? sourceItemId : null,
       createdBy: actorUserId,
       notes: [
         notes,
