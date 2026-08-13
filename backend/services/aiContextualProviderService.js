@@ -147,6 +147,11 @@ async function createContextualAiProvider({
   registry = aiProviderRegistry,
   selectionResolver = resolveAiProviderSelection,
 } = {}) {
+  const requestMessage = String(req?.body?.message || "").trim();
+  if (persona === "copilot" && isSocialConversationPrompt(requestMessage)) {
+    return null;
+  }
+
   const profile = resolveContextProfile({ contextKey, req, persona });
   const selection = await selectionResolver({
     providerContext: {
