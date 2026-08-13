@@ -54,7 +54,7 @@ assert.match(exactScanner, /next\.length >= count/);
 // creation + attachment. This prevents the old permission-granted black-screen
 // race where getUserMedia completed before the <video> element existed.
 assert.match(camera, /DECODER_URL/);
-assert.match(camera, /cdn\.jsdelivr\.net\/npm\/@zxing\/browser@0\.1\.5/);
+assert.match(camera, /cdn\.jsdelivr\.net\/npm\/@zxing\/browser@0\.2\.1/);
 assert.match(camera, /BrowserMultiFormatReader/);
 assert.match(camera, /decodeFromConstraints/);
 assert.match(camera, /facingMode/);
@@ -64,7 +64,7 @@ assert.match(camera, /display: visible \? "block" : "none"/);
 assert.match(camera, /NotAllowedError/);
 assert.match(camera, /NotReadableError/);
 assert.match(camera, /Move it away/);
-assert.match(camera, /1200/);
+assert.match(camera, /700/);
 assert.match(camera, /callbackRef/);
 assert.match(camera, /modeRef/);
 
