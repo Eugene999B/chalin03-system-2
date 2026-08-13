@@ -6,6 +6,7 @@ const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
 async function runChalinOneFullTrialSeedIfStaging({
   env = process.env,
   seed = null,
+  verify = null,
 } = {}) {
   const environmentId = String(env.RAILWAY_ENVIRONMENT_ID || "").trim();
   if (environmentId !== CHALIN_ONE_STAGING_ENVIRONMENT_ID) {
@@ -18,7 +19,20 @@ async function runChalinOneFullTrialSeedIfStaging({
 
   const seedFunction =
     seed || require("./seedChalinOneFullTrialData").seedChalinOneFullTrialData;
-  return seedFunction();
+  const seedResult = await seedFunction();
+
+  // Preserve dependency-injected unit-test behavior unless a verifier is also
+  // explicitly supplied. Runtime calls always verify the live staging data.
+  if (seed && !verify) return seedResult;
+
+  const verifyFunction =
+    verify || require("./verifyChalinOneFullTrialData").verifyChalinOneFullTrialData;
+  const verification = await verifyFunction({ env });
+
+  return Object.freeze({
+    ...seedResult,
+    verification,
+  });
 }
 
 if (require.main === module) {
