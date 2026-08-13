@@ -1,5 +1,6 @@
 const express = require("express");
 
+const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
@@ -37,8 +38,7 @@ function canAccessAllBranches(req) {
   );
 }
 
-function assertTransferAccess(req, plan) {
-  if (canAccessAllBranches(req)) return;
+function assertTransferAccess(req, plan, phase = "view") {
   const branchId = selectedBranchId(req);
   if (!branchId) {
     const error = new Error("Select a store before managing serialized stock transfers.");
@@ -46,13 +46,39 @@ function assertTransferAccess(req, plan) {
     error.code = "TRANSFER_TRACEABILITY_BRANCH_REQUIRED";
     throw error;
   }
-  const allowed = [
-    Number(plan.transfer.from_branch_id),
-    Number(plan.transfer.to_branch_id),
-  ].includes(branchId);
-  if (!allowed) {
+
+  const fromBranchId = Number(plan.transfer.from_branch_id);
+  const toBranchId = Number(plan.transfer.to_branch_id);
+
+  if (phase === "dispatch") {
+    if (branchId !== fromBranchId) {
+      const error = new Error(
+        "Dispatch must be performed while signed into the transfer source store. Select the source store before scanning or dispatching these physical units."
+      );
+      error.statusCode = 403;
+      error.code = "TRANSFER_DISPATCH_SOURCE_STORE_REQUIRED";
+      throw error;
+    }
+    return;
+  }
+
+  if (phase === "receive") {
+    if (branchId !== toBranchId) {
+      const error = new Error(
+        "Receiving must be performed while signed into the transfer destination store. Select the destination store before scanning or receiving these physical units."
+      );
+      error.statusCode = 403;
+      error.code = "TRANSFER_RECEIVE_DESTINATION_STORE_REQUIRED";
+      throw error;
+    }
+    return;
+  }
+
+  if (canAccessAllBranches(req)) return;
+
+  if (![fromBranchId, toBranchId].includes(branchId)) {
     const error = new Error(
-      "You can only manage serialized transfers connected to your selected store."
+      "You can only view serialized transfers connected to your selected store."
     );
     error.statusCode = 403;
     error.code = "TRANSFER_TRACEABILITY_BRANCH_FORBIDDEN";
@@ -83,13 +109,40 @@ async function writeSecondaryAudit(event) {
   }
 }
 
+async function bindTransferShortagesToDestinationProducts({ transferId, destinationBranchId }) {
+  const cleanTransferId = Number(transferId);
+  const cleanDestinationBranchId = Number(destinationBranchId);
+  if (
+    !Number.isInteger(cleanTransferId) || cleanTransferId <= 0 ||
+    !Number.isInteger(cleanDestinationBranchId) || cleanDestinationBranchId <= 0
+  ) {
+    throw new Error("Invalid transfer identity while binding shortage investigation products.");
+  }
+
+  await pool.query(
+    `UPDATE inventory_loss_investigations i
+     INNER JOIN inventory_transfer_units itu
+       ON itu.unit_id = i.unit_id
+      AND itu.transfer_id = ?
+     INNER JOIN stock_transfer_items sti
+       ON sti.id = itu.transfer_item_id
+      AND sti.transfer_id = itu.transfer_id
+     SET i.product_id = sti.destination_product_id
+     WHERE i.branch_id = ?
+       AND i.investigation_type = 'transfer_shortage'
+       AND sti.destination_product_id IS NOT NULL
+       AND i.product_id <> sti.destination_product_id`,
+    [cleanTransferId, cleanDestinationBranchId]
+  );
+}
+
 router.use(requireAuth);
 router.use(requireRole("admin", "manager"));
 
 router.get("/:transferId/plan", async (req, res) => {
   try {
     const plan = await getTransferIdentityPlan({ transferId: req.params.transferId });
-    assertTransferAccess(req, plan);
+    assertTransferAccess(req, plan, "view");
     return res.json({ status: "success", ...plan });
   } catch (error) {
     return sendError(res, error, "Unable to load serialized transfer identity controls.");
@@ -98,12 +151,20 @@ router.get("/:transferId/plan", async (req, res) => {
 
 router.post("/:transferId/items/:transferItemId/scan", async (req, res) => {
   try {
+    const phase = String(req.body?.phase || "").trim().toLowerCase();
+    if (!["dispatch", "receive"].includes(phase)) {
+      return res.status(400).json({
+        status: "error",
+        code: "TRANSFER_SCAN_PHASE_REQUIRED",
+        message: "Transfer scan phase must be dispatch or receive.",
+      });
+    }
     const plan = await getTransferIdentityPlan({ transferId: req.params.transferId });
-    assertTransferAccess(req, plan);
+    assertTransferAccess(req, plan, phase);
     const result = await verifyTransferUnitScan({
       transferId: req.params.transferId,
       transferItemId: req.params.transferItemId,
-      phase: req.body?.phase,
+      phase,
       value: req.body?.value,
     });
     return res.json({
@@ -122,7 +183,7 @@ router.post("/:transferId/items/:transferItemId/scan", async (req, res) => {
 router.post("/:transferId/dispatch", async (req, res) => {
   try {
     const plan = await getTransferIdentityPlan({ transferId: req.params.transferId });
-    assertTransferAccess(req, plan);
+    assertTransferAccess(req, plan, "dispatch");
     const result = await dispatchTransferWithIdentities({
       transferId: req.params.transferId,
       actorUserId: req.user.id,
@@ -167,13 +228,18 @@ router.post("/:transferId/dispatch", async (req, res) => {
 router.post("/:transferId/receive", async (req, res) => {
   try {
     const plan = await getTransferIdentityPlan({ transferId: req.params.transferId });
-    assertTransferAccess(req, plan);
+    assertTransferAccess(req, plan, "receive");
     const result = await receiveTransferWithIdentities({
       transferId: req.params.transferId,
       actorUserId: req.user.id,
       items: req.body?.items,
       receiveNote: req.body?.receive_note,
       requestId: req.requestId || req.id || null,
+    });
+
+    await bindTransferShortagesToDestinationProducts({
+      transferId: result.transfer_id,
+      destinationBranchId: plan.transfer.to_branch_id,
     });
 
     const secondaryAuditRecorded = await writeSecondaryAudit({
@@ -198,6 +264,7 @@ router.post("/:transferId/receive", async (req, res) => {
         newly_received_identity_count: result.newly_received_identity_count,
         newly_missing_identity_count: result.newly_missing_identity_count,
         destination_stock_increased_only_for_observed_units: true,
+        shortage_product_scope: "destination_product",
       },
     });
 
