@@ -9,24 +9,66 @@ const read = (relativePath) =>
 
 const traceability = read("routes/inventoryTraceabilityRoutes.js");
 const traceabilityService = read("services/inventoryTraceabilityService.js");
+const automaticIdentity = read("services/inventoryIdentityStudioConstants.js");
 const bootstrap = read("services/inventoryRouteSafetyBootstrap.js");
 const productGuard = read("routes/productRoutesInventoryHardened.js");
 const saleGuard = read("routes/saleRoutesInventoryHardened.js");
+const saleIdentity = read("services/inventorySaleTraceabilityService.js");
+const saleScan = read("routes/inventorySaleScanRoutes.js");
 const receiving = read("services/inventoryReceivingTraceabilityService.js");
 const transfer = read("routes/inventoryTransferTraceabilityRoutes.js");
 const lossControl = read("routes/inventoryLossDetectionRoutes.js");
 const documentService = read("services/inventoryIdentityStudioDocumentService.js");
 
-test("Chalin One installs serialized product and sale hardening on the established routers", () => {
+test("Chalin One installs automatic product, purchase and sale inventory safety on established routers", () => {
   assert.match(traceabilityService, /installInventoryRouteSafety/);
   assert.match(bootstrap, /productRoutes\.stack =/);
+  assert.match(bootstrap, /purchaseRoutes\.stack =/);
   assert.match(bootstrap, /saleRoutes\.stack =/);
   assert.match(bootstrap, /originalProductStack/);
+  assert.match(bootstrap, /originalPurchaseStack/);
   assert.match(bootstrap, /originalSaleStack/);
-  assert.match(productGuard, /SERIALIZED_RESTOCK_REQUIRES_CONTROLLED_RECEIVING/);
+  assert.match(bootstrap, /buildAutomaticPurchaseRouter/);
+  assert.match(bootstrap, /AUTOMATIC_PURCHASE_IDENTITY_ERROR/);
+  assert.match(productGuard, /reconcileAutomaticIdentityCoverage/);
+  assert.match(productGuard, /createAutomaticIdentityBatches/);
+  assert.match(productGuard, /Automatic IDs created with product opening stock/);
+  assert.match(productGuard, /new_automatic_ids_created/);
   assert.match(productGuard, /SERIALIZED_STOCK_ADJUSTMENT_REQUIRES_EXACT_IDS/);
+  assert.doesNotMatch(productGuard, /SERIALIZED_RESTOCK_REQUIRES_CONTROLLED_RECEIVING/);
   assert.match(saleGuard, /SERIALIZED_SALE_EDIT_REQUIRES_EXACT_RETURN/);
   assert.match(saleGuard, /SERIALIZED_SALE_VOID_REQUIRES_EXACT_RETURN/);
+});
+
+test("automatic identity service derives codes, fills stock gaps and creates new received identities", () => {
+  assert.match(automaticIdentity, /automaticProductCode/);
+  assert.match(automaticIdentity, /ensureAutomaticIdentityProfile/);
+  assert.match(automaticIdentity, /createAutomaticIdentityBatches/);
+  assert.match(automaticIdentity, /reconcileAutomaticIdentityCoverage/);
+  assert.match(automaticIdentity, /TRACKING_MODES\.SERIALIZED/);
+  assert.match(automaticIdentity, /TRACEABILITY_STATES\.SETUP/);
+  assert.match(automaticIdentity, /opening_reconciliation/);
+  assert.match(automaticIdentity, /AUTOMATIC_ID_BATCH_LIMIT = 2000/);
+});
+
+test("manual setup sales consume only safe unprinted identities while printed stock still needs exact IDs", () => {
+  assert.match(saleIdentity, /loadAutomaticPendingUnits/);
+  assert.match(saleIdentity, /status = 'label_pending'/);
+  assert.match(saleIdentity, /TRACEABILITY_MANUAL_SALE_NEEDS_EXACT_IDS/);
+  assert.match(saleIdentity, /automatic_unprinted_manual_sale/);
+  assert.match(saleIdentity, /UNIT_STATUSES\.LABEL_PENDING/);
+  assert.match(saleIdentity, /UNIT_STATUSES\.ACTIVE/);
+  assert.match(saleIdentity, /exact_physical_id/);
+});
+
+test("autonomous sale scan resolves exact IDs or product barcodes to product and selling price", () => {
+  assert.match(saleScan, /scan_type: "exact_unit"/);
+  assert.match(saleScan, /scan_type: "product_barcode"/);
+  assert.match(saleScan, /p\.selling_price/);
+  assert.match(saleScan, /sale_ready/);
+  assert.match(saleScan, /exact_id_required/);
+  assert.match(saleScan, /sync-automatic-identities/);
+  assert.match(saleScan, /reconcileAutomaticIdentityCoverage/);
 });
 
 test("Label Studio supports exact-ID selective print, export and partial confirmation", () => {
