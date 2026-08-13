@@ -6,14 +6,23 @@ const {
   LocalAuditSecurityGovernedProvider,
 } = require("./localAuditSecurityGovernedProvider");
 const { OpenAiResponsesProvider } = require("./openAiResponsesProvider");
+const {
+  wrapOperationalFastPath,
+} = require("./operationalFastPathProvider");
 
 let registered = false;
 
 function registerBuiltInAiProviders(registry = aiProviderRegistry) {
   if (registered && registry === aiProviderRegistry) return true;
-  registry.register("local", () => new LocalAuditSecurityGovernedProvider());
-  registry.register("gemini", ({ env }) => new GeminiResilientPublicRouterProvider({ env }));
-  registry.register("openai", ({ env }) => new OpenAiResponsesProvider({ env }));
+  registry.register("local", () =>
+    wrapOperationalFastPath(new LocalAuditSecurityGovernedProvider())
+  );
+  registry.register("gemini", ({ env }) =>
+    wrapOperationalFastPath(new GeminiResilientPublicRouterProvider({ env }))
+  );
+  registry.register("openai", ({ env }) =>
+    wrapOperationalFastPath(new OpenAiResponsesProvider({ env }))
+  );
   if (registry === aiProviderRegistry) registered = true;
   return true;
 }
