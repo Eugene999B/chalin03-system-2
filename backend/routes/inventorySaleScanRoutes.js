@@ -6,6 +6,12 @@ const {
   normalizeUnitCode,
   verifySignedLabelPayload,
 } = require("../services/inventoryTraceabilityService");
+const {
+  reconcileAutomaticIdentityCoverage,
+} = require("../services/inventoryIdentityStudioConstants");
+const {
+  withTransaction,
+} = require("../services/inventoryTraceabilityRepositoryService");
 
 const router = express.Router();
 
@@ -170,6 +176,68 @@ async function resolveProductBarcode(branchId, input) {
     },
   };
 }
+
+// One-time/backfill safety for products that existed before automatic IDs became the
+// Chalin One default. Only an Admin or Manager can create this historical coverage.
+router.post(
+  "/sync-automatic-identities",
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = selectedBranchId(req);
+      if (!branchId) {
+        return res.status(400).json({
+          status: "error",
+          code: "AUTOMATIC_ID_SYNC_BRANCH_REQUIRED",
+          message: "Select a store before reconciling automatic stock IDs.",
+        });
+      }
+
+      const [products] = await pool.query(
+        `SELECT id
+         FROM products
+         WHERE branch_id = ? AND is_active = TRUE
+         ORDER BY id ASC`,
+        [branchId]
+      );
+
+      let automaticIdsCreated = 0;
+      let productsChanged = 0;
+      for (const product of products) {
+        const result = await withTransaction((connection) =>
+          reconcileAutomaticIdentityCoverage(connection, {
+            branchId,
+            productId: Number(product.id),
+            actorUserId: req.user.id,
+            notes: "Automatic identity backfill for existing Chalin One stock.",
+          })
+        );
+        if (Number(result.generated_quantity || 0) > 0) productsChanged += 1;
+        automaticIdsCreated += Number(result.generated_quantity || 0);
+      }
+
+      return res.json({
+        status: "success",
+        message: automaticIdsCreated
+          ? `${automaticIdsCreated} missing stock ID(s) were created automatically for existing products.`
+          : "All existing product quantities already have automatic stock IDs.",
+        products_checked: products.length,
+        products_changed: productsChanged,
+        automatic_ids_created: automaticIdsCreated,
+      });
+    } catch (error) {
+      const statusCode = Number(error.statusCode || 500);
+      if (statusCode >= 500) console.error("Automatic stock-ID sync error:", error);
+      return res.status(statusCode).json({
+        status: "error",
+        code: error.code || "AUTOMATIC_STOCK_ID_SYNC_ERROR",
+        message: statusCode >= 500
+          ? "Unable to reconcile automatic stock IDs for existing products."
+          : error.message,
+      });
+    }
+  }
+);
 
 router.post("/verify", requireRole("admin", "manager", "cashier"), async (req, res) => {
   try {
