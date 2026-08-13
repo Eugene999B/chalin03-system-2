@@ -326,10 +326,11 @@ test("signed-v2 staging router owns dry-run, preparation and restore preflight b
   assert.match(routeSource, /requireProtectedAction/);
   assert.match(routeSource, /requirePermission\("backup\.restore"\)/);
   assert.match(routeSource, /checksumBackup\(backup\)/);
-  assert.match(routeSource, /x-forwarded-host/);
-  assert.match(routeSource, /requestHosts\(req\)/);
+  assert.match(routeSource, /requestHost\(req\)/);
   assert.match(routeSource, /CHALIN_ONE_STAGING_PUBLIC_DOMAIN/);
   assert.match(routeSource, /recoveryEnvironmentForRequest\(req\)/);
+  assert.match(routeSource, /recovery_route:\s*"staging_signed_v2"/);
+  assert.match(routeSource, /X-Chalin03-Backup-Route/);
 
   const stagingMount = serverSource.indexOf(
     'app.use("/api/backups", stagingBackupRecoveryRoutes);'
@@ -345,10 +346,15 @@ test("signed-v2 staging router owns dry-run, preparation and restore preflight b
   assert.ok(delegatedMount < canonicalMount);
 });
 
-test("Railway proxy host forwarding is explicitly recognized by the staging recovery gate", () => {
-  assert.match(routeSource, /headers\?\.\["x-forwarded-host"\]/);
-  assert.match(routeSource, /split\(","\)/);
-  assert.match(routeSource, /includes\(CHALIN_ONE_STAGING_PUBLIC_DOMAIN\)/);
+test("staging recovery falls back to server-side database markers and never trusts forwarded-host authority", () => {
+  assert.doesNotMatch(routeSource, /x-forwarded-host/i);
+  assert.match(routeSource, /STAGING_RECOVERY_DATABASE_MARKERS/);
+  assert.match(routeSource, /chalin_one_full_staging_completion_v1/);
+  assert.match(routeSource, /chalin_one_staging_auth_baseline_v1/);
+  assert.match(routeSource, /chalin_one_staging_clean_master_schema_bootstrap_v1/);
+  assert.match(routeSource, /SELECT migration_name[\s\S]*FROM schema_migrations/);
+  assert.match(routeSource, /stagingRecoveryDatabaseConfirmed/);
+  assert.match(routeSource, /isConfirmedStagingDatabase\(\)/);
 });
 
 test("Backup page exposes one-click trial schema preparation and blocks restore on table or column gaps", () => {
