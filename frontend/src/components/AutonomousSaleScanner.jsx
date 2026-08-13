@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import axiosClient from "../api/axiosClient";
-import CameraBarcodeReader from "./CameraBarcodeReader";
+import CameraBarcodeReader from "./BarcodeCapturePanel";
 
 const SALE_FORMATS = [
   "qr_code",
