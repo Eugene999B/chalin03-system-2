@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "start": "node scripts/runChalinOneFullTrialSeedIfStaging.js && node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "maintenance:legacy-startup-repairs": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
@@ -26,6 +26,8 @@
     "verify:chalin-one:staging:migration": "node scripts/verifyChalinOneStagingEnvironment.js --mode=migration",
     "seed:chalin-one:staging": "node scripts/seedChalinOneStagingContent.js && node scripts/seedChalinOneStagingNavigationHierarchy.js",
     "seed:chalin-one:staging:dry-run": "node scripts/seedChalinOneStagingContent.js --dry-run && node scripts/seedChalinOneStagingNavigationHierarchy.js --dry-run",
+    "seed:chalin-one:full-trial": "node scripts/runChalinOneFullTrialSeedIfStaging.js",
+    "seed:chalin-one:full-trial:dry-run": "node scripts/seedChalinOneFullTrialData.js --dry-run",
     "evidence:chalin-one:release": "node scripts/generateChalinOneReleaseEvidence.js",
     "evidence:chalin-one:staging": "node scripts/generateChalinOneStagingAcceptanceEvidence.js",
     "postevidence:chalin-one:staging": "node scripts/generateChalinOneFinalStagingAcceptanceEvidence.js",
