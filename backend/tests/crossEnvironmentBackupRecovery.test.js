@@ -79,6 +79,8 @@ test("non-production accepts an intact production-signed v2 backup across schema
     signingSecret: stagingSecret,
     requireSignature: false,
     allowAdditiveSchemaDrift: true,
+    allowCrossEnvironmentRecovery: true,
+    recoveryEnvironment: { NODE_ENV: "test" },
   });
 
   assert.equal(report.valid, true, report.errors.join("\n"));
@@ -121,6 +123,8 @@ test("cross-environment mode still rejects checksum tampering", () => {
     signingSecret: stagingSecret,
     requireSignature: false,
     allowAdditiveSchemaDrift: true,
+    allowCrossEnvironmentRecovery: true,
+    recoveryEnvironment: { NODE_ENV: "test" },
   });
 
   assert.equal(report.valid, false);
