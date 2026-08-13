@@ -37,6 +37,6 @@ assert.match(setup, /Serialized Receiving/);
 assert.doesNotMatch(setup, /<option value="purchase">/);
 assert.doesNotMatch(setup, /<option value="restock">/);
 assert.doesNotMatch(setup, /<option value="transfer_receipt">/);
-assert.match(setup, /Choose the exact IDs/);
+assert.match(setup, /Select exact IDs/);
 
 console.log("Inventory Identity & Label Studio frontend contracts passed.");
