@@ -410,8 +410,9 @@ export default function InventoryAutomaticLabelsPage() {
         <p className="traceability-eyebrow">Stock Labels</p>
         <h1>Print labels without managing IDs.</h1>
         <p>
-          Chalin One creates IDs automatically when products are created, restocked or purchased.
-          Here you only choose the product, print the exact stock arrival, attach the labels and confirm.
+          IDs follow your stock automatically. Create 20 items and the system creates 20 IDs;
+          Restock 7 and it creates 7 new IDs. New stock = new ID. You only choose the product,
+          print the exact stock arrival, attach the labels and confirm.
         </p>
         <div className="beginner-label-steps">
           <span><strong>1.</strong> Choose product</span>
@@ -507,7 +508,8 @@ export default function InventoryAutomaticLabelsPage() {
         <summary>Advanced tools — reprints, exact-ID lookup, registers & policy</summary>
         <div>
           <p className="beginner-label-muted">
-            Normal receiving and printing do not need this section. It preserves the full traceability controls for exceptional cases.
+            Normal receiving and printing do not need this section. Choose specific IDs, reprints & ID registers here when needed.
+            Advanced policy & exact-ID lookup are also preserved here. The older InventoryQuickPrintAll shortcut is replaced by the safer stock-arrival cards above.
           </p>
           <InventoryTraceabilitySetupPage />
         </div>
