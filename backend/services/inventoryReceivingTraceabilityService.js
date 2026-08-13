@@ -58,7 +58,7 @@ async function listSerializedPurchaseReceivingQueue(connection = pool, { branchI
       AND lb.source_id = pu.id
       AND lb.source_item_id = pi.id
      WHERE p.inventory_tracking_mode = 'serialized'
-       AND p.inventory_traceability_state = 'setup'
+       AND p.inventory_traceability_state IN ('setup', 'enforced')
      ORDER BY
        CASE WHEN lb.id IS NULL THEN 0 ELSE 1 END ASC,
        pu.purchase_date DESC,
@@ -140,10 +140,17 @@ async function preparePurchaseItemLabelBatch({
       error.code = "TRACEABILITY_PURCHASE_NOT_SERIALIZED";
       throw error;
     }
-    if (item.inventory_traceability_state !== TRACEABILITY_STATES.SETUP) {
-      const error = new Error("Serialized receiving labels can only be prepared while the product is in traceability setup.");
+    if (
+      ![
+        TRACEABILITY_STATES.SETUP,
+        TRACEABILITY_STATES.ENFORCED,
+      ].includes(item.inventory_traceability_state)
+    ) {
+      const error = new Error(
+        "Serialized receiving labels require the product to be in traceability setup or enforced state."
+      );
       error.statusCode = 409;
-      error.code = "TRACEABILITY_PURCHASE_SETUP_REQUIRED";
+      error.code = "TRACEABILITY_PURCHASE_TRACEABILITY_REQUIRED";
       throw error;
     }
 

@@ -190,9 +190,6 @@ function assertTrackingConfiguration({ trackingMode, traceabilityState, productC
   const mode = normalizeTrackingMode(trackingMode);
   const state = normalizeTraceabilityState(traceabilityState);
 
-  // Exact-ID checkout enforcement is only meaningful for serialized products.
-  // The repository service separately verifies physical identity reconciliation
-  // before a product is allowed to enter ENFORCED for the first time.
   if (
     state === TRACEABILITY_STATES.ENFORCED &&
     mode !== TRACKING_MODES.SERIALIZED
@@ -370,3 +367,11 @@ module.exports = {
   stableJson,
   verifySignedLabelPayload,
 };
+
+// Install the Chalin One serialized mutation guards after the current synchronous
+// module-loading pass completes. This avoids circular imports while still mutating
+// the same Express router objects before the server begins handling I/O.
+process.nextTick(() => {
+  const { installInventoryRouteSafety } = require("./inventoryRouteSafetyBootstrap");
+  installInventoryRouteSafety();
+});
