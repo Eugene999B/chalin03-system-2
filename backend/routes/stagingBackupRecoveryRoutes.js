@@ -32,6 +32,11 @@ const release2FinalRoutes = require("./release2FinalRoutes");
 const { requireProtectedAction, appendLedger } = release2FinalRoutes;
 const router = express.Router();
 const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
+const STAGING_RECOVERY_DATABASE_MARKERS = Object.freeze([
+  "chalin_one_full_staging_completion_v1",
+  "chalin_one_staging_auth_baseline_v1",
+  "chalin_one_staging_clean_master_schema_bootstrap_v1",
+]);
 
 function asyncHandler(handler) {
   return (req, res, next) =>
@@ -47,30 +52,48 @@ function normalizeRequestHost(value) {
     .replace(/:\d+$/, "");
 }
 
-function requestHosts(req) {
-  const forwarded = String(req?.headers?.["x-forwarded-host"] || "")
-    .split(",")
-    .map(normalizeRequestHost)
-    .filter(Boolean);
-  const host = normalizeRequestHost(req?.headers?.host);
-  return [...new Set([...forwarded, host].filter(Boolean))];
+function requestHost(req) {
+  return normalizeRequestHost(req?.headers?.host);
 }
 
 function isConfirmedStagingRequest(req) {
   return (
     isConfirmedRailwayStaging() ||
-    requestHosts(req).includes(CHALIN_ONE_STAGING_PUBLIC_DOMAIN)
+    requestHost(req) === CHALIN_ONE_STAGING_PUBLIC_DOMAIN
   );
 }
 
-function recoveryEnvironmentForRequest(req) {
-  if (!isConfirmedStagingRequest(req)) return process.env;
+async function isConfirmedStagingDatabase() {
+  const connection = await pool.getConnection();
+  try {
+    const placeholders = STAGING_RECOVERY_DATABASE_MARKERS.map(() => "?").join(", ");
+    const [rows] = await connection.query(
+      `SELECT migration_name
+         FROM schema_migrations
+        WHERE migration_name IN (${placeholders})`,
+      STAGING_RECOVERY_DATABASE_MARKERS
+    );
+    const found = new Set(rows.map((row) => String(row.migration_name || "")));
+    return STAGING_RECOVERY_DATABASE_MARKERS.every((name) => found.has(name));
+  } catch {
+    return false;
+  } finally {
+    connection.release();
+  }
+}
 
-  // Once the request has crossed the staging-only route gate, use an explicit
-  // recovery identity for validation and migration preparation. Railway has
-  // presented this dedicated staging runtime with production-like labels in
-  // the past; those labels must not silently switch this protected route back
-  // into the live-production validation policy.
+function recoveryEnvironmentForRequest(req) {
+  if (
+    !isConfirmedStagingRequest(req) &&
+    req?.stagingRecoveryDatabaseConfirmed !== true
+  ) {
+    return process.env;
+  }
+
+  // Once the request has crossed a server-side staging identity gate, use an
+  // explicit recovery identity for validation and migration preparation.
+  // Railway has presented this dedicated trial runtime with production-like
+  // labels before; those labels must not switch this route back to live policy.
   return {
     ...process.env,
     RAILWAY_ENVIRONMENT_NAME: "staging",
@@ -80,9 +103,35 @@ function recoveryEnvironmentForRequest(req) {
   };
 }
 
-function stagingOnlyOrNext(req, res, next) {
-  if (!isConfirmedStagingRequest(req)) return next("router");
-  return next();
+async function stagingOnlyOrNext(req, res, next) {
+  try {
+    if (isConfirmedStagingRequest(req)) {
+      req.stagingRecoveryRuntimeConfirmed = true;
+      res.setHeader("X-Chalin03-Backup-Route", "staging-recovery");
+      return next();
+    }
+
+    // Railway proxy/runtime metadata has been inconsistent on this isolated
+    // service. Fall back only to server-side evidence stored in the target DB.
+    // All three markers are staging-only migrations and are never supplied by
+    // a browser header, request body or source backup, so production cannot be
+    // reclassified by a caller-controlled value.
+    if (await isConfirmedStagingDatabase()) {
+      req.stagingRecoveryDatabaseConfirmed = true;
+      res.setHeader("X-Chalin03-Backup-Route", "staging-recovery");
+      return next();
+    }
+
+    return next("router");
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function stagingIdentitySource(req) {
+  return req?.stagingRecoveryDatabaseConfirmed === true
+    ? "database_markers"
+    : "runtime_or_public_host";
 }
 
 function isSignedV2Backup(backup) {
@@ -284,6 +333,7 @@ async function recordPreparationEvent(req, preparation, validation) {
       req.stagingRecoveryAdministrator
     ),
     staging_recovery_only: true,
+    staging_identity_source: stagingIdentitySource(req),
   };
 
   try {
@@ -336,6 +386,8 @@ router.post(
         message: error.message,
         dry_run: true,
         valid: false,
+        recovery_route: "staging_signed_v2",
+        staging_identity_source: stagingIdentitySource(req),
         errors: [error.message],
         warnings: [],
       });
@@ -361,6 +413,8 @@ router.post(
             : "Backup package validation passed, but the isolated trial schema is behind production. Prepare the trial schema before restoring."
           : "Backup dry-run validation failed. Restore is blocked.",
         dry_run: true,
+        recovery_route: "staging_signed_v2",
+        staging_identity_source: stagingIdentitySource(req),
         recovery_schema_ready: ready,
         remaining_source_column_count: sourceOnlyColumnCount(validation),
         ...validation,
@@ -386,6 +440,8 @@ router.post(
       return res.status(400).json({
         status: "error",
         code: error.code || "STAGING_SCHEMA_PREP_BACKUP_INVALID",
+        recovery_route: "staging_signed_v2",
+        staging_identity_source: stagingIdentitySource(req),
         message: error.message,
       });
     }
@@ -401,6 +457,8 @@ router.post(
         return res.status(400).json({
           status: "error",
           code: "STAGING_SCHEMA_PREP_VALIDATION_FAILED",
+          recovery_route: "staging_signed_v2",
+          staging_identity_source: stagingIdentitySource(req),
           message:
             "The source backup did not pass immutable package validation. No schema change was attempted.",
           validation: before,
@@ -434,6 +492,8 @@ router.post(
           : progressCanContinue
             ? "STAGING_RECOVERY_SCHEMA_PROGRESS"
             : "STAGING_RECOVERY_SCHEMA_INCOMPLETE",
+        recovery_route: "staging_signed_v2",
+        staging_identity_source: stagingIdentitySource(req),
         message: ready
           ? "The isolated trial schema now matches every durable table and column required by this production backup."
           : progressCanContinue
@@ -449,6 +509,8 @@ router.post(
       return res.status(409).json({
         status: "error",
         code: error.code || "STAGING_BACKUP_SCHEMA_PREPARATION_FAILED",
+        recovery_route: "staging_signed_v2",
+        staging_identity_source: stagingIdentitySource(req),
         message:
           error.message ||
           "The isolated staging schema could not be prepared safely. No restore was started.",
@@ -476,6 +538,8 @@ router.post(
       return res.status(400).json({
         status: "error",
         code: error.code || "BACKUP_VALIDATION_FAILED",
+        recovery_route: "staging_signed_v2",
+        staging_identity_source: stagingIdentitySource(req),
         message: error.message,
       });
     }
@@ -491,6 +555,8 @@ router.post(
         return res.status(400).json({
           status: "error",
           code: "BACKUP_VALIDATION_FAILED",
+          recovery_route: "staging_signed_v2",
+          staging_identity_source: stagingIdentitySource(req),
           message: "Backup validation failed. No restore was started.",
           ...validation,
         });
@@ -499,6 +565,8 @@ router.post(
         return res.status(409).json({
           status: "error",
           code: "STAGING_SCHEMA_BEHIND_BACKUP",
+          recovery_route: "staging_signed_v2",
+          staging_identity_source: stagingIdentitySource(req),
           message:
             "The backup is valid, but this trial database is still missing production tables or columns. Restore is blocked so no production data can be silently skipped.",
           missing_source_tables: validation.source_only_tables,
@@ -511,10 +579,9 @@ router.post(
       connection.release();
     }
 
-    // Preserve the staging authorization and the exact successful validation
-    // across Express router boundaries. The delegated restore implementation
-    // must not reclassify this request using ambiguous Railway environment
-    // labels after the staging preflight has already passed.
+    // Preserve the server-proven staging authorization and exact successful
+    // validation across Express router boundaries. The delegated restore must
+    // not reclassify this request using ambiguous Railway environment labels.
     req.signedV2StagingRecoveryAuthorized = true;
     req.stagingRecoveryValidation = validation;
     return next("router");
@@ -522,3 +589,5 @@ router.post(
 );
 
 module.exports = router;
+module.exports.STAGING_RECOVERY_DATABASE_MARKERS = STAGING_RECOVERY_DATABASE_MARKERS;
+module.exports.isConfirmedStagingDatabase = isConfirmedStagingDatabase;
