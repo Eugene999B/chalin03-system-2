@@ -13,6 +13,7 @@ const {
 const REPOSITORY_ROOT = path.resolve(__dirname, "../..");
 const DATABASE_ROOT = path.join(REPOSITORY_ROOT, "database");
 const MIGRATION_ROOT = path.join(DATABASE_ROOT, "migrations");
+const RECOVERY_ROOT = path.join(DATABASE_ROOT, "recovery");
 const LOCK_NAME = "chalin03:backup-recovery-schema:staging:v1";
 const DEFAULT_BATCH_SIZE = 3;
 
@@ -25,6 +26,7 @@ const DATA_REPAIR_MIGRATIONS = new Set([
   "20260802_boss_approved_product_quantity_correction",
   "20260804_boss_approved_product_quantity_correction",
   "20260805_automatic_customer_merge_rollback",
+  "20260805_equipment_finance_opening_deposit_foundation_repair",
   "20260805_exact_name_receipt_owner_recovery",
   "20260805_master_mickey_july31_exact_debt_repair",
   "20260805_missing_credit_debt_backfill",
@@ -35,6 +37,57 @@ const DATA_REPAIR_MIGRATIONS = new Set([
   "20260805_zero_payment_credit_debt_visibility_repair",
   "20260806_kwabena_main_store_quantity_correction",
   "20260806_master_mickey_merge_profile_visibility",
+]);
+
+// Historical schema checkpoints are intentionally not replayed. They either
+// describe the original clean baseline, were verification-only compatibility
+// checkpoints, or were explicitly declared `mode: baseline` in the controlled
+// Release 3.1 manifest. The restore gate still requires zero source-only tables
+// and zero source-only columns after all replayable migrations have run, so a
+// checkpoint can never hide an actual schema gap.
+const SCHEMA_CHECKPOINT_MIGRATIONS = new Map([
+  [
+    "clean_master_database_reset",
+    "Original clean-master schema baseline/reset marker; never replay a database reset during recovery.",
+  ],
+  [
+    "equipment_hire_part4_5c",
+    "Original Equipment Hire Parts 4-5C baseline marker; current staging already starts from the application baseline and later controlled Hire migrations remain replayable.",
+  ],
+  [
+    "shared_fleet_mining_baseline",
+    "Original shared Fleet/Mining baseline marker; later controlled Mining migrations remain replayable and final table/column parity is mandatory.",
+  ],
+  [
+    "20260723_equipment_catalogue_core_compatibility_repair_v2",
+    "Historical Equipment Catalogue compatibility checkpoint; the retained Release 3.1 implementation verifies readiness rather than replaying runtime DDL.",
+  ],
+  [
+    "20260723_equipment_sales_commercial_column_repair_v1",
+    "Historical Equipment Sales commercial compatibility checkpoint; the retained Release 3.1 implementation is verification-only and the controlled foundation remains replayable.",
+  ],
+  [
+    "20260723_release31_audit_schema_baseline",
+    "Controlled Release 3.1 manifest mode=baseline; verified by the audit-schema safety verifier and not a mutation migration.",
+  ],
+  [
+    "20260723_release31_runtime_schema_baseline",
+    "Controlled Release 3.1 manifest mode=baseline; records the verified runtime schema contract without mutation.",
+  ],
+]);
+
+// A few pre-controlled migrations use a filename that predates the migration
+// name stored in schema_migrations. Keep the relationship explicit rather than
+// guessing by fuzzy matching.
+const RECOVERY_MIGRATION_ALIASES = new Map([
+  ["stage6a_group_users_staff", "stage6a_group_users_staff_migration.sql"],
+]);
+
+const LEGACY_VERIFIER_ALIASES = new Map([
+  ["stage6a_group_users_staff_migration.sql", "stage6a_verify.sql"],
+  ["stage6b_permissions_audit_migration.sql", "stage6b_verify.sql"],
+  ["stage6c_reliability_migration.sql", "stage6c_verify.sql"],
+  ["stage6d_security_migration.sql", "stage6d_verify.sql"],
 ]);
 
 const FORBIDDEN_SCHEMA_PREPARATION_PATTERNS = Object.freeze([
@@ -140,11 +193,13 @@ function normalizedMigrationStem(fileName) {
 }
 
 function migrationNamesFromBackup(backup) {
-  return [...new Set(
-    (backup.schema_migrations || [])
-      .map((row) => clean(row?.migration_name))
-      .filter(Boolean)
-  )];
+  return [
+    ...new Set(
+      (backup.schema_migrations || [])
+        .map((row) => clean(row?.migration_name))
+        .filter(Boolean)
+    ),
+  ];
 }
 
 function listSqlFiles(directory, directOnly = false) {
@@ -164,6 +219,7 @@ function listSqlFiles(directory, directOnly = false) {
 
 function migrationSourceFiles() {
   return [
+    ...listSqlFiles(RECOVERY_ROOT),
     ...listSqlFiles(DATABASE_ROOT, true),
     ...listSqlFiles(MIGRATION_ROOT),
   ].filter((filePath) => {
@@ -189,12 +245,29 @@ function sourceDateKey(filePath) {
   return `99999999:${fileName}`;
 }
 
+function sourcePriority(filePath) {
+  if (
+    filePath === RECOVERY_ROOT ||
+    filePath.startsWith(`${RECOVERY_ROOT}${path.sep}`)
+  ) {
+    return 0;
+  }
+  if (
+    filePath === MIGRATION_ROOT ||
+    filePath.startsWith(`${MIGRATION_ROOT}${path.sep}`)
+  ) {
+    return 1;
+  }
+  return 2;
+}
+
 function discoverMigrationPlan(backup) {
   const sourceFiles = migrationSourceFiles();
   const backupMigrationNames = migrationNamesFromBackup(backup);
   const plan = [];
   const unresolved = [];
   const excludedDataMigrations = [];
+  const checkpointMigrations = [];
 
   for (const migrationName of backupMigrationNames) {
     if (DATA_REPAIR_MIGRATIONS.has(migrationName)) {
@@ -202,12 +275,25 @@ function discoverMigrationPlan(backup) {
       continue;
     }
 
+    if (SCHEMA_CHECKPOINT_MIGRATIONS.has(migrationName)) {
+      checkpointMigrations.push({
+        migration_name: migrationName,
+        reason: SCHEMA_CHECKPOINT_MIGRATIONS.get(migrationName),
+      });
+      continue;
+    }
+
     const lowerName = migrationName.toLowerCase();
     const normalizedName = lowerName.replace(/^\d{8}_/, "");
+    const aliasFileName = clean(
+      RECOVERY_MIGRATION_ALIASES.get(migrationName)
+    ).toLowerCase();
     const matches = sourceFiles.filter((filePath) => {
+      const baseName = path.basename(filePath).toLowerCase();
       const stem = path.basename(filePath, ".sql").toLowerCase();
       const normalizedStem = normalizedMigrationStem(filePath);
       return (
+        (aliasFileName && baseName === aliasFileName) ||
         stem === lowerName ||
         normalizedStem === lowerName ||
         stem === normalizedName ||
@@ -221,14 +307,22 @@ function discoverMigrationPlan(backup) {
     }
 
     matches.sort((left, right) => {
+      const leftAlias =
+        aliasFileName && path.basename(left).toLowerCase() === aliasFileName
+          ? 0
+          : 1;
+      const rightAlias =
+        aliasFileName && path.basename(right).toLowerCase() === aliasFileName
+          ? 0
+          : 1;
+      if (leftAlias !== rightAlias) return leftAlias - rightAlias;
       const leftExact =
         path.basename(left, ".sql").toLowerCase() === lowerName ? 0 : 1;
       const rightExact =
         path.basename(right, ".sql").toLowerCase() === lowerName ? 0 : 1;
       if (leftExact !== rightExact) return leftExact - rightExact;
-      const leftPreferred = left.startsWith(MIGRATION_ROOT) ? 0 : 1;
-      const rightPreferred = right.startsWith(MIGRATION_ROOT) ? 0 : 1;
-      if (leftPreferred !== rightPreferred) return leftPreferred - rightPreferred;
+      const priorityDelta = sourcePriority(left) - sourcePriority(right);
+      if (priorityDelta !== 0) return priorityDelta;
       return left.localeCompare(right);
     });
 
@@ -243,6 +337,7 @@ function discoverMigrationPlan(backup) {
     plan,
     unresolved,
     excludedDataMigrations,
+    checkpointMigrations,
   };
 }
 
@@ -270,6 +365,29 @@ async function migrationRecorded(connection, migrationName) {
   return Boolean(rows[0]);
 }
 
+async function recordRecoveryMigration(connection, migrationName, filePath) {
+  if (!(await tableExists(connection, "schema_migrations"))) {
+    throw new StagingBackupSchemaPreparationError(
+      `Trusted recovery migration ${migrationName} completed but schema_migrations is unavailable, so completion cannot be recorded safely.`,
+      "STAGING_BACKUP_SCHEMA_MIGRATION_LEDGER_REQUIRED"
+    );
+  }
+
+  const source = path.relative(REPOSITORY_ROOT, filePath).replace(/\\/g, "/");
+  await connection.query(
+    `INSERT INTO schema_migrations (migration_name, description)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE migration_name = VALUES(migration_name)`,
+    [
+      migrationName,
+      `Staging recovery replayed trusted additive schema source ${source}`.slice(
+        0,
+        240
+      ),
+    ]
+  );
+}
+
 function verifierFor(filePath) {
   const directory = path.dirname(filePath);
   const stem = path.basename(filePath, ".sql");
@@ -282,6 +400,14 @@ function verifierFor(filePath) {
       `${stem.replace(/_foundation$/, "")}_verify.sql`
     );
     if (fs.existsSync(shorter)) return shorter;
+  }
+
+  const legacyName = LEGACY_VERIFIER_ALIASES.get(
+    path.basename(filePath).toLowerCase()
+  );
+  if (legacyName) {
+    const legacy = path.join(DATABASE_ROOT, legacyName);
+    if (fs.existsSync(legacy)) return legacy;
   }
 
   return null;
@@ -371,6 +497,14 @@ async function prepareStagingBackupRecoverySchema({
         );
       }
 
+      if (!(await migrationRecorded(connection, item.migrationName))) {
+        await recordRecoveryMigration(
+          connection,
+          item.migrationName,
+          item.filePath
+        );
+      }
+
       applied.push({
         migration_name: item.migrationName,
         file: path.relative(REPOSITORY_ROOT, item.filePath),
@@ -391,6 +525,7 @@ async function prepareStagingBackupRecoverySchema({
       blocked,
       unresolved_source_migrations: discovery.unresolved,
       excluded_data_migrations: discovery.excludedDataMigrations,
+      verified_schema_checkpoints: discovery.checkpointMigrations,
       remaining_candidate_migrations: remaining.map(
         (item) => item.migrationName
       ),
@@ -406,10 +541,15 @@ module.exports = {
   DATA_REPAIR_MIGRATIONS,
   DEFAULT_BATCH_SIZE,
   FORBIDDEN_SCHEMA_PREPARATION_PATTERNS,
+  LEGACY_VERIFIER_ALIASES,
   LOCK_NAME,
+  RECOVERY_MIGRATION_ALIASES,
+  RECOVERY_ROOT,
+  SCHEMA_CHECKPOINT_MIGRATIONS,
   StagingBackupSchemaPreparationError,
   assertRecoveryEnvironment,
   assertSchemaPreparationSql,
   discoverMigrationPlan,
   prepareStagingBackupRecoverySchema,
+  recordRecoveryMigration,
 };
