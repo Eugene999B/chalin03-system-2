@@ -4,32 +4,33 @@ import InventorySerializedReceivingPage from "./InventorySerializedReceivingPage
 import InventoryReturnQuarantinePage from "./InventoryReturnQuarantinePage";
 import InventoryLossControlPage from "./InventoryLossControlPage";
 import "../styles/inventoryTraceabilityHub.css";
+import "../styles/inventoryBeginnerLabels.css";
 
 export default function InventoryTraceabilityPage() {
-  const [section, setSection] = useState("setup");
+  const [section, setSection] = useState("labels");
 
   return (
     <div className="inventory-traceability-hub">
-      <div className="inventory-traceability-hub__tabs" role="tablist" aria-label="Inventory traceability workspaces">
-        <button type="button" role="tab" aria-selected={section === "setup"} className={section === "setup" ? "is-active" : ""} onClick={() => setSection("setup")}>
-          <span>1</span><div><strong>Automatic IDs & Labels</strong><small>IDs follow stock automatically; print all in one click or choose specific IDs</small></div>
+      <div className="inventory-traceability-hub__tabs" role="tablist" aria-label="Inventory workspaces">
+        <button type="button" role="tab" aria-selected={section === "labels"} className={section === "labels" ? "is-active" : ""} onClick={() => setSection("labels")}>
+          <span>🏷️</span><div><strong>Labels</strong><small>Automatic IDs & Labels — print new stock and confirm attachment</small></div>
+        </button>
+        <button type="button" role="tab" aria-selected={section === "returns"} className={section === "returns" ? "is-active" : ""} onClick={() => setSection("returns")}>
+          <span>↩</span><div><strong>Returns</strong><small>Return Quarantine — inspect a returned item before restocking</small></div>
+        </button>
+        <button type="button" role="tab" aria-selected={section === "checks"} className={section === "checks" ? "is-active" : ""} onClick={() => setSection("checks")}>
+          <span>✓</span><div><strong>Stock Checks</strong><small>Blind Counts & Investigations — shortages and missing items</small></div>
         </button>
         <button type="button" role="tab" aria-selected={section === "receiving"} className={section === "receiving" ? "is-active" : ""} onClick={() => setSection("receiving")}>
-          <span>2</span><div><strong>Supplier Receiving Detail</strong><small>Inspect purchase-linked exact IDs and physical receiving evidence</small></div>
-        </button>
-        <button type="button" role="tab" aria-selected={section === "quarantine"} className={section === "quarantine" ? "is-active" : ""} onClick={() => setSection("quarantine")}>
-          <span>3</span><div><strong>Return Quarantine</strong><small>Return the same physical sold ID, then inspect before restock or write-off</small></div>
-        </button>
-        <button type="button" role="tab" aria-selected={section === "loss"} className={section === "loss" ? "is-active" : ""} onClick={() => setSection("loss")}>
-          <span>4</span><div><strong>Blind Counts & Investigations</strong><small>Find shortages, exact missing IDs and custody/location discrepancies</small></div>
+          <span>⚙</span><div><strong>Receiving Detail</strong><small>Supplier Receiving Detail — advanced exact-ID evidence</small></div>
         </button>
       </div>
 
       <div role="tabpanel">
-        {section === "setup" ? <InventoryAutomaticLabelsPage /> : null}
+        {section === "labels" ? <InventoryAutomaticLabelsPage /> : null}
+        {section === "returns" ? <InventoryReturnQuarantinePage /> : null}
+        {section === "checks" ? <InventoryLossControlPage /> : null}
         {section === "receiving" ? <InventorySerializedReceivingPage /> : null}
-        {section === "quarantine" ? <InventoryReturnQuarantinePage /> : null}
-        {section === "loss" ? <InventoryLossControlPage /> : null}
       </div>
     </div>
   );

@@ -1,4 +1,7 @@
 const crypto = require("crypto");
+const {
+  ensureInventoryLabelSigningSecret,
+} = require("./inventoryLabelSigningBootstrap");
 
 const TRACKING_MODES = Object.freeze({
   QUANTITY: "quantity",
@@ -235,12 +238,17 @@ function assertUnitTransition(fromStatus, toStatus) {
 }
 
 function requireLabelSigningSecret(secret = process.env.INVENTORY_LABEL_SIGNING_SECRET) {
+  if (secret === undefined || secret === null || cleanText(secret) === "") {
+    ensureInventoryLabelSigningSecret();
+    secret = process.env.INVENTORY_LABEL_SIGNING_SECRET;
+  }
   const clean = cleanText(secret);
   if (Buffer.byteLength(clean, "utf8") < 32) {
     const error = new Error(
-      "INVENTORY_LABEL_SIGNING_SECRET must be configured with at least 32 bytes before signed inventory labels can be generated."
+      "Inventory label signing is not configured. Configure INVENTORY_LABEL_SIGNING_SECRET (32+ bytes), or ensure the server JWT secret is strong enough for the isolated Chalin One fallback key."
     );
     error.code = "INVENTORY_LABEL_SIGNING_SECRET_REQUIRED";
+    error.statusCode = 503;
     throw error;
   }
   return clean;
