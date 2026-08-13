@@ -9,8 +9,18 @@ const {
   createActionProposal,
   expectedActionConfirmation,
 } = require("./aiActionProposalService");
+const {
+  assertDailyUsage,
+  assertMonthlyCost,
+  buildRequestBudget,
+} = require("./aiCostControlService");
 const { generateProviderResponse } = require("./aiProviderService");
 const { resolveAiScope } = require("./aiPermissionService");
+const {
+  getDailyUsage,
+  getMonthlyCost,
+  recordUsage,
+} = require("./aiUsageService");
 
 const MAX_PLANNED_ACTIONS = 4;
 const ACTION_REQUEST_SIGNAL =
@@ -185,6 +195,82 @@ function actionPlanNotice(states = []) {
     .join("\n\n");
 }
 
+async function governedPlanningProviderCall({ req, persona, scope, message, result, catalogue, provider, env }) {
+  const messages = planningMessages({
+    message,
+    evidence: result?.evidence || [],
+    result,
+  });
+  const budget = buildRequestBudget({ messages, tools: catalogue.tools, env });
+  const [dailyUsage, monthlyCost] = await Promise.all([
+    getDailyUsage({
+      userId: req.user.id,
+      workspaceCode: scope.workspace_code,
+    }),
+    getMonthlyCost(),
+  ]);
+
+  assertDailyUsage({
+    userTokens: dailyUsage.user_tokens,
+    workspaceTokens: dailyUsage.workspace_tokens,
+    budget,
+  });
+  assertMonthlyCost({
+    usedMicros: monthlyCost,
+    additionalMicros: 0,
+    budget,
+  });
+
+  const planning = await generateProviderResponse({
+    provider,
+    messages,
+    tools: catalogue.tools,
+    maxOutputTokens: Math.min(600, budget.maximum_output_tokens),
+    providerContext: {
+      persona,
+      intent: "governed_action_planning",
+      live_data_required: false,
+      workspace_code: scope.workspace_code,
+      // Action planning is a privileged CHALIN operation even when the user's
+      // sentence contains no private literal. Mark it sensitive so the normal
+      // public-safe rewrite cannot discard the proposal-tool catalogue.
+      data_classification: "sensitive",
+      full_context_active: false,
+    },
+    env,
+  });
+
+  const planningTokens = Number(planning.input_tokens || 0) + Number(planning.output_tokens || 0);
+
+  // The provider call has already happened, so always account for its usage
+  // before any post-call ceiling prevents proposal creation.
+  await recordUsage({
+    userId: req.user.id,
+    conversationId: null,
+    messageId: null,
+    providerKey: planning.provider_key,
+    modelKey: planning.model_key,
+    workspaceCode: scope.workspace_code,
+    inputTokens: planning.input_tokens,
+    outputTokens: planning.output_tokens,
+    costMicros: planning.cost_micros,
+    requestId: req.requestId,
+  });
+
+  assertDailyUsage({
+    userTokens: Number(dailyUsage.user_tokens || 0) + planningTokens,
+    workspaceTokens: Number(dailyUsage.workspace_tokens || 0) + planningTokens,
+    budget,
+  });
+  assertMonthlyCost({
+    usedMicros: monthlyCost,
+    additionalMicros: planning.cost_micros,
+    budget,
+  });
+
+  return planning;
+}
+
 async function planGovernedActions({ req, persona, message, result, provider = null, env = process.env } = {}) {
   if (!isFeatureEnabled("aiActions") || !looksLikeActionRequest(message) || result?.action) {
     return result;
@@ -194,21 +280,14 @@ async function planGovernedActions({ req, persona, message, result, provider = n
   const catalogue = availableProposalTools({ user: req.user, persona, scope });
   if (!catalogue.tools.length) return result;
 
-  const planning = await generateProviderResponse({
+  const planning = await governedPlanningProviderCall({
+    req,
+    persona,
+    scope,
+    message,
+    result,
+    catalogue,
     provider,
-    messages: planningMessages({ message, evidence: result?.evidence || [], result }),
-    tools: catalogue.tools,
-    maxOutputTokens: 600,
-    providerContext: {
-      persona,
-      intent: "governed_action_planning",
-      live_data_required: false,
-      workspace_code: scope.workspace_code,
-      data_classification:
-        result?.provider?.selection?.data_classification ||
-        ((result?.evidence || []).length ? "sensitive" : "public"),
-      full_context_active: false,
-    },
     env,
   });
 
@@ -292,6 +371,9 @@ async function planGovernedActions({ req, persona, message, result, provider = n
       requested_count: calls.length,
       prepared_count: states.filter((state) => state.proposal_key).length,
       execution_performed: false,
+      provider_key: planning.provider_key,
+      model_key: planning.model_key,
+      usage_recorded: true,
     }),
   });
 
@@ -316,6 +398,7 @@ module.exports = {
   clean,
   compactEvidence,
   contentHash,
+  governedPlanningProviderCall,
   looksLikeActionRequest,
   missingRequiredFields,
   planGovernedActions,
