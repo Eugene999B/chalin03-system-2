@@ -196,13 +196,23 @@ test("performance diagnostics distinguish profit, cash, inventory and control ca
   assert.match(byKey.get("return_refund_pressure").explanation, /does not automatically prove/i);
 });
 
-test("performance diagnostics defaults to today and registers as a Risk-1 governed read tool", async () => {
+test("performance diagnostics defaults to recent 30 days and registers as a Risk-1 governed read tool", async () => {
   const window = withOperationsDefaultWindow(
     "performance",
     {},
     new Date("2026-08-11T10:15:00.000Z")
   );
   assert.deepEqual(window, {
+    start_date: "2026-07-13",
+    end_date: "2026-08-11",
+  });
+
+  const currentOperationsWindow = withOperationsDefaultWindow(
+    "operations",
+    {},
+    new Date("2026-08-11T10:15:00.000Z")
+  );
+  assert.deepEqual(currentOperationsWindow, {
     start_date: "2026-08-11",
     end_date: "2026-08-11",
   });
@@ -219,6 +229,7 @@ test("performance diagnostics defaults to today and registers as a Risk-1 govern
   assert.deepEqual(definition.required_business_permissions, ["spare_parts.read"]);
   assert.match(definition.description, /profit-estimate/i);
   assert.match(definition.description, /never treats purchases as certified COGS/i);
+  assert.match(definition.description, /most recent 30 calendar days/i);
 
   const output = await registry.get("spare_parts.performance_diagnostics").handler({
     input: {},
