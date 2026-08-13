@@ -14,6 +14,7 @@ const {
 } = require("../services/backupSafetyService");
 const {
   DATA_REPAIR_MIGRATIONS,
+  SCHEMA_CHECKPOINT_MIGRATIONS,
   assertRecoveryEnvironment,
   assertSchemaPreparationSql,
   discoverMigrationPlan,
@@ -30,6 +31,10 @@ const serverSource = fs.readFileSync(
 );
 const frontendSource = fs.readFileSync(
   path.join(repositoryRoot, "frontend/src/pages/BackupPage.jsx"),
+  "utf8"
+);
+const sparePartsRecoverySource = fs.readFileSync(
+  path.join(repositoryRoot, "database/recovery/spare_parts_sales_hotfix.sql"),
   "utf8"
 );
 
@@ -204,6 +209,14 @@ test("schema preparation rejects destructive SQL but permits additive helper pro
   );
 });
 
+test("Spare Parts legacy hotfix recovery restores schema without replaying historical sale updates", () => {
+  assert.match(sparePartsRecoverySource, /amount_tendered/);
+  assert.match(sparePartsRecoverySource, /change_due/);
+  assert.match(sparePartsRecoverySource, /edited_by/);
+  assert.doesNotMatch(sparePartsRecoverySource, /\bUPDATE\s+sales\b/i);
+  assert.doesNotMatch(sparePartsRecoverySource, /\bDELETE\s+FROM\b/i);
+});
+
 test("migration discovery selects trusted production structural sources and excludes data repairs", () => {
   const backup = backupWithMigrations([
     "release3_group_command_configuration",
@@ -239,7 +252,43 @@ test("migration discovery selects trusted production structural sources and excl
   );
 });
 
-test("the exact 2026-08-12 production backup migration history is fully recoverable from trusted repo sources", () => {
+test("legacy migration names resolve to explicit recovery-safe sources or documented checkpoints", () => {
+  const result = discoverMigrationPlan(
+    backupWithMigrations([
+      "stage6a_group_users_staff",
+      "spare_parts_sales_hotfix",
+      "20260723_release31_audit_schema_safety",
+      "20260723_release31_database_safety_guards",
+      "20260723_release31_audit_schema_baseline",
+      "20260723_release31_runtime_schema_baseline",
+    ])
+  );
+  const byName = new Map(result.plan.map((item) => [item.migrationName, item.filePath]));
+  const checkpoints = new Set(
+    result.checkpointMigrations.map((item) => item.migration_name)
+  );
+
+  assert.match(
+    byName.get("stage6a_group_users_staff") || "",
+    /stage6a_group_users_staff_migration\.sql$/
+  );
+  assert.match(
+    byName.get("spare_parts_sales_hotfix") || "",
+    /database[\\/]recovery[\\/]spare_parts_sales_hotfix\.sql$/
+  );
+  assert.match(
+    byName.get("20260723_release31_audit_schema_safety") || "",
+    /database[\\/]recovery[\\/]20260723_release31_audit_schema_safety\.sql$/
+  );
+  assert.match(
+    byName.get("20260723_release31_database_safety_guards") || "",
+    /database[\\/]recovery[\\/]20260723_release31_database_safety_guards\.sql$/
+  );
+  assert.equal(checkpoints.has("20260723_release31_audit_schema_baseline"), true);
+  assert.equal(checkpoints.has("20260723_release31_runtime_schema_baseline"), true);
+});
+
+test("the exact 2026-08-12 production backup migration history is fully classified for safe recovery", () => {
   assert.equal(PRODUCTION_BACKUP_20260812_MIGRATIONS.length, 73);
   const result = discoverMigrationPlan(
     backupWithMigrations(PRODUCTION_BACKUP_20260812_MIGRATIONS)
@@ -247,6 +296,12 @@ test("the exact 2026-08-12 production backup migration history is fully recovera
   const expectedDataRepairs = PRODUCTION_BACKUP_20260812_MIGRATIONS.filter((name) =>
     DATA_REPAIR_MIGRATIONS.has(name)
   ).sort();
+  const expectedCheckpoints = PRODUCTION_BACKUP_20260812_MIGRATIONS.filter((name) =>
+    SCHEMA_CHECKPOINT_MIGRATIONS.has(name)
+  ).sort();
+  const actualCheckpoints = result.checkpointMigrations
+    .map((item) => item.migration_name)
+    .sort();
 
   assert.deepEqual(
     result.unresolved,
@@ -254,8 +309,11 @@ test("the exact 2026-08-12 production backup migration history is fully recovera
     `Missing structural migration source(s): ${result.unresolved.join(", ")}`
   );
   assert.deepEqual([...result.excludedDataMigrations].sort(), expectedDataRepairs);
+  assert.deepEqual(actualCheckpoints, expectedCheckpoints);
   assert.equal(
-    result.plan.length + result.excludedDataMigrations.length,
+    result.plan.length +
+      result.excludedDataMigrations.length +
+      result.checkpointMigrations.length,
     PRODUCTION_BACKUP_20260812_MIGRATIONS.length
   );
 });
