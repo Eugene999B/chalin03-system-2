@@ -2,6 +2,7 @@
 
 const { getConversationDetails, loadOwnedConversation } = require("./aiConversationService");
 const { renderAiDocument, normalizeDocumentFormat } = require("./aiDocumentStudioService");
+const { renderPremiumAiPdf } = require("./aiPremiumPdfRenderer");
 
 class AiDocumentExportError extends Error {
   constructor(message, { code = "AI_DOCUMENT_EXPORT_ERROR", statusCode = 400, details = [] } = {}) {
@@ -32,6 +33,12 @@ function findAssistantMessage(details, messageKey) {
       code: "AI_DOCUMENT_MESSAGE_NOT_EXPORTABLE",
       statusCode: 409,
     });
+  }
+  if (String(message.finish_reason || "").toLowerCase() === "clarification") {
+    throw new AiDocumentExportError(
+      "A clarification prompt is not a finished CHALIN Intelligence report and cannot be exported as the requested business document.",
+      { code: "AI_DOCUMENT_CLARIFICATION_NOT_EXPORTABLE", statusCode: 409 }
+    );
   }
   return message;
 }
@@ -69,36 +76,27 @@ async function createAiDocumentArtifact({
     });
   }
 
-  const conversation = await loadOwnedConversation({
-    connection,
-    conversationKey,
-    userId,
-  });
-  const details = await getConversationDetails({
-    connection,
-    conversationKey,
-    userId,
-    messageLimit: 500,
-  });
+  const conversation = await loadOwnedConversation({ connection, conversationKey, userId });
+  const details = await getConversationDetails({ connection, conversationKey, userId, messageLimit: 500 });
   const message = findAssistantMessage(details, messageKey);
   const documentTitle = clean(title, 180) || defaultTitle(details, message);
+  const renderInput = {
+    title: documentTitle,
+    filename: documentTitle,
+    answer: message.content,
+    evidence: message.evidence || [],
+    actor_name: user?.full_name || user?.name || user?.username,
+    actor_username: user?.username,
+    actor_role: user?.role,
+    workspace_code: conversation.workspace_code,
+    conversation_key: conversation.conversation_key,
+    message_key: message.key,
+    request_id: requestId,
+  };
 
-  const artifact = await renderAiDocument(
-    {
-      title: documentTitle,
-      filename: documentTitle,
-      answer: message.content,
-      evidence: message.evidence || [],
-      actor_name: user?.full_name || user?.name || user?.username,
-      actor_username: user?.username,
-      actor_role: user?.role,
-      workspace_code: conversation.workspace_code,
-      conversation_key: conversation.conversation_key,
-      message_key: message.key,
-      request_id: requestId,
-    },
-    normalizedFormat
-  );
+  const artifact = normalizedFormat === "pdf"
+    ? await renderPremiumAiPdf(renderInput)
+    : await renderAiDocument(renderInput, normalizedFormat);
 
   return Object.freeze({
     ...artifact,
