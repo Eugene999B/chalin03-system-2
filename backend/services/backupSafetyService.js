@@ -1,21 +1,65 @@
 "use strict";
 
-// Compatibility entrypoint retained at the canonical service path because
-// operational contract tests and older runtime modules inspect this source
-// directly. The complete current implementation lives in the staged wrapper
-// below, which delegates to backupSafetyServiceBase and adds non-production
-// cross-environment recovery without weakening production validation.
-//
-// Contract markers intentionally remain visible here:
-// currentIncludedTables
-// Backup is missing current required tables
+// Canonical backup-safety service. Keep all runtime recovery policy here so
+// every route and every compatibility entrypoint executes the same validator.
+// The directory entrypoint re-exports this file.
 
-const implementation = require("./backupSafetyService/index.js");
+const base = require("./backupSafetyServiceBase");
 
-const CHALIN_ONE_STAGING_FRONTEND_HOSTS = new Set([
+const SIGNATURE_PATTERN = /^[a-f0-9]{64}$/i;
+const CHALIN_ONE_STAGING_PUBLIC_DOMAIN =
+  "chalin03-system-2-staging.up.railway.app";
+const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
+  "db796450-1b80-42e8-9988-db3e90ca0713";
+const CHALIN_ONE_STAGING_GIT_BRANCH = "chalin-one";
+const CHALIN_ONE_STAGING_FRONTEND_HOSTS = Object.freeze([
   "chalin-one-staging-preview.pages.dev",
   "chalin-one.chalin03-system-2.pages.dev",
 ]);
+const STAGING_RECOVERY_DATABASE_MARKERS = Object.freeze([
+  "chalin_one_full_staging_completion_v1",
+  "chalin_one_staging_auth_baseline_v1",
+  "chalin_one_staging_clean_master_schema_bootstrap_v1",
+]);
+
+const TECHNICAL_RECOVERY_TABLES = Object.freeze([
+  "chalin03_migration_safety_snapshots",
+  "chalin03_phase3_finance_safety_snapshots",
+  "chalin03_snap_20260731_fin_fleet_assets",
+  "chalin03_snap_20260731_fin_sale_agreements",
+  "chalin03_snap_20260731_fin_schema_migrations",
+  "chalin03_snap_20260731_ops_credit_apps",
+  "chalin03_snap_20260731_ops_issued_documents",
+  "chalin03_snap_20260731_ops_payment_alerts",
+  "chalin03_snap_20260731_ops_sale_agreements",
+  "chalin03_snap_20260731_ops_sale_payments",
+]);
+
+base.EPHEMERAL_SECURITY_TABLES.add("passkey_challenges");
+base.NEVER_RESTORE_TABLES.add("passkey_challenges");
+for (const tableName of TECHNICAL_RECOVERY_TABLES) {
+  base.NEVER_RESTORE_TABLES.add(tableName);
+}
+
+function cleanEnvironmentValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function railwayEnvironmentName(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_ENVIRONMENT_NAME);
+}
+
+function railwayEnvironmentId(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_ENVIRONMENT_ID);
+}
+
+function railwayPublicDomain(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_PUBLIC_DOMAIN);
+}
+
+function railwayGitBranch(env = process.env) {
+  return cleanEnvironmentValue(env.RAILWAY_GIT_BRANCH);
+}
 
 function configuredFrontendHostname(value) {
   const raw = String(value || "").trim();
@@ -31,28 +75,342 @@ function configuredFrontendHostname(value) {
   }
 }
 
-function isConfiguredChalinOneStagingFrontend(env = process.env) {
+function configuredFrontendHosts(env = process.env) {
   return [env.FRONTEND_URL, env.FRONTEND_URL_ALT]
     .map(configuredFrontendHostname)
     .filter(Boolean)
-    .some(
-      (hostname) =>
-        CHALIN_ONE_STAGING_FRONTEND_HOSTS.has(hostname) ||
-        hostname.endsWith(".chalin-one-staging-preview.pages.dev")
-    );
+    .filter((value, index, values) => values.indexOf(value) === index);
 }
 
-function isConfirmedRailwayStaging(env = process.env) {
-  return (
-    implementation.isConfirmedRailwayStaging(env) ||
-    isConfiguredChalinOneStagingFrontend(env)
+function isConfiguredChalinOneStagingFrontend(env = process.env) {
+  return configuredFrontendHosts(env).some(
+    (hostname) =>
+      CHALIN_ONE_STAGING_FRONTEND_HOSTS.includes(hostname) ||
+      hostname.endsWith(".chalin-one-staging-preview.pages.dev")
   );
 }
 
+function migrationNameSet(currentSchemaMigrations = []) {
+  return new Set(
+    (Array.isArray(currentSchemaMigrations) ? currentSchemaMigrations : [])
+      .map((migration) =>
+        String(
+          typeof migration === "string"
+            ? migration
+            : migration?.migration_name || ""
+        ).trim()
+      )
+      .filter(Boolean)
+  );
+}
+
+function hasStagingRecoveryMigrationMarkers(currentSchemaMigrations = []) {
+  const names = migrationNameSet(currentSchemaMigrations);
+  return STAGING_RECOVERY_DATABASE_MARKERS.every((name) => names.has(name));
+}
+
+function isConfirmedRailwayStaging(env = process.env) {
+  if (isConfiguredChalinOneStagingFrontend(env)) return true;
+  if (railwayGitBranch(env) === CHALIN_ONE_STAGING_GIT_BRANCH) return true;
+  if (railwayEnvironmentName(env) === "staging") return true;
+  if (railwayEnvironmentId(env) === CHALIN_ONE_STAGING_ENVIRONMENT_ID) return true;
+  return railwayPublicDomain(env) === CHALIN_ONE_STAGING_PUBLIC_DOMAIN;
+}
+
+function isLiveProductionEnvironment(env = process.env) {
+  if (isConfirmedRailwayStaging(env)) return false;
+  const railwayEnvironment = railwayEnvironmentName(env);
+  if (railwayEnvironment) return railwayEnvironment === "production";
+  return cleanEnvironmentValue(env.NODE_ENV) === "production";
+}
+
+function forcedStagingRecoveryEnvironment(env = process.env) {
+  return {
+    ...env,
+    RAILWAY_ENVIRONMENT_NAME: "staging",
+    RAILWAY_ENVIRONMENT_ID: CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+    RAILWAY_PUBLIC_DOMAIN: CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+    RAILWAY_GIT_BRANCH: CHALIN_ONE_STAGING_GIT_BRANCH,
+  };
+}
+
+function canOmitCurrentColumn(columnMetadata) {
+  if (!columnMetadata || typeof columnMetadata !== "object") return false;
+  if (columnMetadata.nullable === true) return true;
+  if (columnMetadata.hasDefault === true) return true;
+  return String(columnMetadata.extra || "")
+    .toLowerCase()
+    .includes("auto_increment");
+}
+
+function isCrossEnvironmentRecovery(
+  {
+    backup,
+    requireSignature,
+    allowAdditiveSchemaDrift,
+    allowCrossEnvironmentRecovery,
+    currentSchemaMigrations,
+  },
+  env = process.env
+) {
+  const signedV2Backup =
+    backup?.backup_type === base.BACKUP_TYPE &&
+    backup?.version === base.BACKUP_MANIFEST_VERSION;
+
+  if (!signedV2Backup || allowAdditiveSchemaDrift !== true) return false;
+
+  // Strongest signal: all three staging-only migrations are present in the
+  // target database ledger. They are server-side state, not request input.
+  if (hasStagingRecoveryMigrationMarkers(currentSchemaMigrations)) return true;
+
+  const confirmedRailwayStaging = isConfirmedRailwayStaging(env);
+  const railwayEnvironment = railwayEnvironmentName(env);
+
+  // A real production environment cannot opt itself into staging behavior.
+  if (railwayEnvironment === "production" && !confirmedRailwayStaging) {
+    return false;
+  }
+
+  if (confirmedRailwayStaging) return true;
+  if (isLiveProductionEnvironment(env)) return false;
+
+  return allowCrossEnvironmentRecovery === true && requireSignature === false;
+}
+
+function isCompatibilityError(message) {
+  const text = String(message || "");
+  return (
+    text.startsWith(
+      "Backup contains tables that are not supported by the current database:"
+    ) ||
+    /^Backup columns for .+ are not supported by the current database:/.test(
+      text
+    ) ||
+    text.startsWith(
+      "Backup was created by a schema newer than or incompatible with this runtime. Unknown backup migrations:"
+    ) ||
+    text ===
+      "Backup migration history does not match the current application schema. Apply the matching code and migrations before restoring." ||
+    text === "Backup signature is missing or invalid for this server."
+  );
+}
+
+function validateCrossEnvironmentShape({
+  backup,
+  currentIncludedTables,
+  currentTableColumns,
+  currentTableMetadata,
+  report,
+}) {
+  const errors = [];
+  const warnings = [];
+  const expectedTables = base.sortedUniqueIdentifiers(currentIncludedTables);
+  const rawIncludedTables = base.sortedUniqueIdentifiers(backup.included_tables);
+  const includedTables = rawIncludedTables.filter(
+    (tableName) =>
+      expectedTables.includes(tableName) &&
+      !base.NEVER_RESTORE_TABLES.has(tableName)
+  );
+  const sourceOnlyTables = rawIncludedTables.filter(
+    (tableName) =>
+      !expectedTables.includes(tableName) &&
+      !base.NEVER_RESTORE_TABLES.has(tableName)
+  );
+  const currentOnlyTables = expectedTables.filter(
+    (tableName) => !rawIncludedTables.includes(tableName)
+  );
+  const restoreColumns = {};
+  const sourceOnlyColumns = {};
+
+  if (!SIGNATURE_PATTERN.test(String(backup.signature_hmac_sha256 || ""))) {
+    errors.push(
+      "Cross-environment recovery requires the source signed-v2 HMAC signature to be present in the backup package."
+    );
+  }
+
+  if (includedTables.length === 0) {
+    errors.push(
+      "Cross-environment recovery found no common restorable tables between the backup and this target database."
+    );
+  }
+
+  if (sourceOnlyTables.length) {
+    warnings.push(
+      `The source backup contains ${sourceOnlyTables.length} durable table(s) that do not exist in this non-production target. Restore remains blocked until the trial schema is prepared: ${sourceOnlyTables.join(", ")}.`
+    );
+  }
+
+  if (currentOnlyTables.length) {
+    warnings.push(
+      `The non-production target contains ${currentOnlyTables.length} newer/local table(s) that are absent from the source backup. They will be preserved: ${currentOnlyTables.join(", ")}.`
+    );
+  }
+
+  for (const tableName of includedTables) {
+    const targetColumns = base.sortedUniqueIdentifiers(
+      currentTableColumns?.[tableName] || []
+    );
+    const sourceColumns = base.sortedUniqueIdentifiers(
+      backup.table_columns?.[tableName] || []
+    );
+    const commonColumns = sourceColumns.filter((columnName) =>
+      targetColumns.includes(columnName)
+    );
+    const missingSourceColumns = sourceColumns.filter(
+      (columnName) => !targetColumns.includes(columnName)
+    );
+    const targetOnlyColumns = targetColumns.filter(
+      (columnName) => !sourceColumns.includes(columnName)
+    );
+
+    if ((backup.tables?.[tableName] || []).length > 0 && !commonColumns.length) {
+      errors.push(
+        `Cross-environment recovery cannot safely map any columns for ${tableName}.`
+      );
+      continue;
+    }
+
+    if (missingSourceColumns.length) {
+      sourceOnlyColumns[tableName] = missingSourceColumns;
+      warnings.push(
+        `The source backup has ${missingSourceColumns.length} durable column(s) for ${tableName} that this trial target does not have. Restore remains blocked until the trial schema is prepared: ${missingSourceColumns.join(", ")}.`
+      );
+    }
+
+    if (targetOnlyColumns.length && (backup.tables?.[tableName] || []).length) {
+      const metadataByName = new Map(
+        (currentTableMetadata?.[tableName] || []).map((column) => [
+          column.name,
+          column,
+        ])
+      );
+      const requiredMissingColumns = targetOnlyColumns.filter(
+        (columnName) => !canOmitCurrentColumn(metadataByName.get(columnName))
+      );
+      if (requiredMissingColumns.length) {
+        errors.push(
+          `Cross-environment recovery cannot safely supply required target columns for ${tableName}: ${requiredMissingColumns.join(", ")}.`
+        );
+      } else {
+        warnings.push(
+          `The trial target has additive columns for ${tableName} that will use their current defaults or NULL values: ${targetOnlyColumns.join(", ")}.`
+        );
+      }
+    }
+
+    restoreColumns[tableName] = commonColumns;
+  }
+
+  const totalRows = includedTables.reduce(
+    (total, tableName) =>
+      total +
+      (Array.isArray(backup.tables?.[tableName])
+        ? backup.tables[tableName].length
+        : 0),
+    0
+  );
+
+  return {
+    errors,
+    warnings,
+    includedTables,
+    sourceOnlyTables,
+    sourceOnlyColumns,
+    currentOnlyTables,
+    restoreColumns,
+    totalRows,
+    originalReport: report,
+  };
+}
+
+function validateBackupContract(args) {
+  const markerConfirmed = hasStagingRecoveryMigrationMarkers(
+    args?.currentSchemaMigrations
+  );
+  const recoveryEnvironment = markerConfirmed
+    ? forcedStagingRecoveryEnvironment(
+        args?.recoveryEnvironment || process.env
+      )
+    : args?.recoveryEnvironment || process.env;
+  const recoveryArgs = markerConfirmed
+    ? {
+        ...args,
+        allowCrossEnvironmentRecovery: true,
+        recoveryEnvironment,
+      }
+    : { ...args, recoveryEnvironment };
+
+  const report = base.validateBackupContract(recoveryArgs);
+  const crossEnvironmentRecovery =
+    markerConfirmed ||
+    isCrossEnvironmentRecovery(recoveryArgs, recoveryEnvironment);
+  if (!crossEnvironmentRecovery) return report;
+
+  const checksumFailed = report.errors.some((error) =>
+    /checksum/i.test(String(error || ""))
+  );
+  if (checksumFailed) return report;
+
+  const compatibility = validateCrossEnvironmentShape({
+    backup: recoveryArgs.backup,
+    currentIncludedTables: recoveryArgs.currentIncludedTables,
+    currentTableColumns: recoveryArgs.currentTableColumns,
+    currentTableMetadata: recoveryArgs.currentTableMetadata || {},
+    report,
+  });
+
+  const retainedErrors = report.errors.filter(
+    (error) => !isCompatibilityError(error)
+  );
+  const errors = [...retainedErrors, ...compatibility.errors];
+  const warnings = [
+    ...report.warnings,
+    ...report.errors
+      .filter(isCompatibilityError)
+      .map((error) => `Cross-environment trial compatibility: ${error}`),
+    ...compatibility.warnings,
+  ];
+
+  // Never mutate the signed-v2 source package during validation. Restore uses
+  // restoreColumns from the report and the original checksum remains stable.
+  return {
+    ...report,
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    includedTables: compatibility.includedTables,
+    currentOnlyTables: compatibility.currentOnlyTables,
+    sourceOnlyTables: compatibility.sourceOnlyTables,
+    sourceOnlyColumns: compatibility.sourceOnlyColumns,
+    totalRows: compatibility.totalRows,
+    restoreColumns: compatibility.restoreColumns,
+    crossEnvironmentRecovery: true,
+    stagingRecoveryDatabaseConfirmed: markerConfirmed,
+    signatureVerified: false,
+    additiveSchemaCompatibilityApplied: true,
+  };
+}
+
 module.exports = {
-  ...implementation,
+  ...base,
+  CHALIN_ONE_STAGING_ENVIRONMENT_ID,
   CHALIN_ONE_STAGING_FRONTEND_HOSTS,
+  CHALIN_ONE_STAGING_GIT_BRANCH,
+  CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+  STAGING_RECOVERY_DATABASE_MARKERS,
+  TECHNICAL_RECOVERY_TABLES,
   configuredFrontendHostname,
+  configuredFrontendHosts,
+  forcedStagingRecoveryEnvironment,
+  hasStagingRecoveryMigrationMarkers,
   isConfiguredChalinOneStagingFrontend,
   isConfirmedRailwayStaging,
+  isCrossEnvironmentRecovery,
+  isLiveProductionEnvironment,
+  migrationNameSet,
+  railwayEnvironmentId,
+  railwayEnvironmentName,
+  railwayGitBranch,
+  railwayPublicDomain,
+  validateBackupContract,
 };
