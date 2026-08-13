@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axiosClient from "../api/axiosClient";
-import CameraBarcodeReader from "./CameraBarcodeReader";
+import CameraBarcodeReader from "./BarcodeCapturePanel";
 import "../styles/inventoryUnitScanner.css";
 
 function apiMessage(error, fallback) {
