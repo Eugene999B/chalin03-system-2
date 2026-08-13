@@ -9,10 +9,14 @@ const { executeSqlScript } = require("./sqlScriptRunner");
 const {
   assertDedicatedRailwayStaging,
 } = require("./completeChalinOneFullStagingDatabase");
+const {
+  reconcileChalinOneSyntheticPayrollGovernance,
+} = require("./reconcileChalinOneSyntheticPayrollGovernance");
 
 const LOCK_NAME = "chalin03:chalin-one:staging-operational-schema:v2";
 const REPOSITORY_ROOT = path.resolve(__dirname, "../..");
 const MIGRATION_ROOT = path.join(REPOSITORY_ROOT, "database", "migrations");
+const PAYROLL_FOUNDATION_RECORD = "20260810_payroll_financial_foundation";
 
 // CHALIN ONE's clean schema intentionally does not replay every historical
 // operational migration. Current admin/worker routes, however, still depend on
@@ -149,7 +153,7 @@ const STAGING_FOUNDATION_MIGRATIONS = Object.freeze([
 
 const STAGING_OPERATIONAL_MIGRATIONS = Object.freeze([
   Object.freeze({
-    record: "20260810_payroll_financial_foundation",
+    record: PAYROLL_FOUNDATION_RECORD,
     file: "20260810_payroll_financial_foundation.sql",
     verify: "20260810_payroll_financial_foundation_verify.sql",
     zero_fields: Object.freeze([
@@ -410,6 +414,20 @@ async function applyStagingOperationalPlan(connection) {
   });
 }
 
+async function canReconcileRecordedSyntheticPayroll(connection) {
+  if (!(await migrationRecorded(connection, PAYROLL_FOUNDATION_RECORD))) return false;
+  for (const tableName of [
+    "users",
+    "worker_profiles",
+    "payroll_compensation_profiles",
+    "payroll_periods",
+    "payroll_entries",
+  ]) {
+    if (!(await tableExists(connection, tableName))) return false;
+  }
+  return true;
+}
+
 async function upgradeChalinOneStagingOperationalSchema({ env = process.env } = {}) {
   const safety = assertDedicatedRailwayStaging(env);
   const connection = await pool.getConnection();
@@ -428,12 +446,19 @@ async function upgradeChalinOneStagingOperationalSchema({ env = process.env } = 
       );
     }
 
+    let payrollGovernanceReconciliation = null;
+    if (await canReconcileRecordedSyntheticPayroll(connection)) {
+      payrollGovernanceReconciliation =
+        await reconcileChalinOneSyntheticPayrollGovernance({ connection, env });
+    }
+
     const reports = await applyStagingOperationalPlan(connection);
 
     const result = Object.freeze({
       safe: true,
       database: databaseName,
       railway_environment: safety.railway_environment,
+      payroll_governance_reconciliation: payrollGovernanceReconciliation,
       foundation_migrations: reports.foundations,
       operational_migrations: reports.operational,
       production_runner_used: false,
@@ -464,6 +489,7 @@ if (require.main === module) {
 
 module.exports = {
   LOCK_NAME,
+  PAYROLL_FOUNDATION_RECORD,
   STAGING_FOUNDATION_MIGRATIONS,
   STAGING_OPERATIONAL_MIGRATIONS,
   ChalinOneStagingOperationalSchemaError,
@@ -471,6 +497,7 @@ module.exports = {
   applyStagingMigration,
   applyStagingOperationalPlan,
   assertVerifierZeroResults,
+  canReconcileRecordedSyntheticPayroll,
   missingFoundationStructure,
   upgradeChalinOneStagingOperationalSchema,
 };
