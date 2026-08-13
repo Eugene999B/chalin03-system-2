@@ -4,7 +4,9 @@ const assert = require("node:assert/strict");
 const {
   BACKUP_MANIFEST_VERSION,
   BACKUP_TYPE,
+  STAGING_RECOVERY_DATABASE_MARKERS,
   checksumBackup,
+  hasStagingRecoveryMigrationMarkers,
   signBackup,
   validateBackupContract,
 } = require("../services/backupSafetyService");
@@ -93,6 +95,42 @@ test("non-production accepts an intact production-signed v2 backup across schema
   assert.match(report.warnings.join(" "), /cross-environment|trial/i);
 });
 
+test("staging-only database migration markers activate recovery even through the canonical strict route", () => {
+  const backup = sourceBackup();
+  const currentSchemaMigrations = STAGING_RECOVERY_DATABASE_MARKERS.map(
+    (migration_name) => ({ migration_name })
+  );
+
+  assert.equal(
+    hasStagingRecoveryMigrationMarkers(currentSchemaMigrations),
+    true
+  );
+
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: targetTables,
+    currentTableColumns: targetColumns,
+    currentTableMetadata: targetMetadata,
+    currentSchemaMigrations,
+    signingSecret: stagingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+    recoveryEnvironment: {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+    },
+  });
+
+  assert.equal(report.valid, true, report.errors.join("\n"));
+  assert.equal(report.crossEnvironmentRecovery, true);
+  assert.equal(report.signatureVerified, false);
+  assert.deepEqual(report.sourceOnlyTables, ["source_only_table"]);
+  assert.deepEqual(report.sourceOnlyColumns, {
+    products: ["source_only_column"],
+  });
+  assert.match(report.warnings.join(" "), /cross-environment|trial/i);
+});
+
 test("production remains strict for a backup signed by a different server", () => {
   const backup = sourceBackup();
   const report = validateBackupContract({
@@ -104,6 +142,36 @@ test("production remains strict for a backup signed by a different server", () =
     signingSecret: stagingSecret,
     requireSignature: true,
     allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, false);
+  assert.match(report.errors.join(" "), /signature|newer|not supported/i);
+});
+
+test("partial staging markers do not weaken production validation", () => {
+  const backup = sourceBackup();
+  const currentSchemaMigrations = STAGING_RECOVERY_DATABASE_MARKERS.slice(0, 2).map(
+    (migration_name) => ({ migration_name })
+  );
+
+  assert.equal(
+    hasStagingRecoveryMigrationMarkers(currentSchemaMigrations),
+    false
+  );
+
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: targetTables,
+    currentTableColumns: targetColumns,
+    currentTableMetadata: targetMetadata,
+    currentSchemaMigrations,
+    signingSecret: stagingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+    recoveryEnvironment: {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+    },
   });
 
   assert.equal(report.valid, false);
