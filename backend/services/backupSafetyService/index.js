@@ -12,6 +12,11 @@ const CHALIN_ONE_STAGING_FRONTEND_HOSTS = Object.freeze([
   "chalin-one-staging-preview.pages.dev",
   "chalin-one.chalin03-system-2.pages.dev",
 ]);
+const STAGING_RECOVERY_DATABASE_MARKERS = Object.freeze([
+  "chalin_one_full_staging_completion_v1",
+  "chalin_one_staging_auth_baseline_v1",
+  "chalin_one_staging_clean_master_schema_bootstrap_v1",
+]);
 
 const TECHNICAL_RECOVERY_TABLES = Object.freeze([
   "chalin03_migration_safety_snapshots",
@@ -73,6 +78,23 @@ function configuredFrontendHosts(env = process.env) {
   return [...new Set(hosts.filter(Boolean))];
 }
 
+function migrationNameSet(currentSchemaMigrations = []) {
+  return new Set(
+    (Array.isArray(currentSchemaMigrations) ? currentSchemaMigrations : [])
+      .map((migration) =>
+        String(
+          typeof migration === "string" ? migration : migration?.migration_name || ""
+        ).trim()
+      )
+      .filter(Boolean)
+  );
+}
+
+function hasStagingRecoveryMigrationMarkers(currentSchemaMigrations = []) {
+  const names = migrationNameSet(currentSchemaMigrations);
+  return STAGING_RECOVERY_DATABASE_MARKERS.every((name) => names.has(name));
+}
+
 function isConfirmedRailwayStaging(env = process.env) {
   const frontendHosts = configuredFrontendHosts(env);
   if (
@@ -113,7 +135,13 @@ function canOmitCurrentColumn(columnMetadata) {
 }
 
 function isCrossEnvironmentRecovery(
-  { backup, requireSignature, allowAdditiveSchemaDrift, allowCrossEnvironmentRecovery },
+  {
+    backup,
+    requireSignature,
+    allowAdditiveSchemaDrift,
+    allowCrossEnvironmentRecovery,
+    currentSchemaMigrations,
+  },
   env = process.env
 ) {
   const signedV2Backup =
@@ -121,6 +149,15 @@ function isCrossEnvironmentRecovery(
     backup?.version === base.BACKUP_MANIFEST_VERSION;
 
   if (!signedV2Backup || allowAdditiveSchemaDrift !== true) return false;
+
+  // The target database migration ledger is stronger evidence than request
+  // headers or ambiguous Railway process labels. These three migrations exist
+  // only in the isolated CHALIN ONE trial database. If they are all present,
+  // use cross-environment recovery even when the request fell through to the
+  // canonical backup router or Railway reports production-like labels.
+  if (hasStagingRecoveryMigrationMarkers(currentSchemaMigrations)) {
+    return true;
+  }
 
   const confirmedRailwayStaging = isConfirmedRailwayStaging(env);
   const railwayEnvironment = railwayEnvironmentName(env);
@@ -350,11 +387,14 @@ module.exports = {
   CHALIN_ONE_STAGING_FRONTEND_HOSTS,
   CHALIN_ONE_STAGING_GIT_BRANCH,
   CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+  STAGING_RECOVERY_DATABASE_MARKERS,
   TECHNICAL_RECOVERY_TABLES,
   configuredFrontendHosts,
+  hasStagingRecoveryMigrationMarkers,
   isConfirmedRailwayStaging,
   isCrossEnvironmentRecovery,
   isLiveProductionEnvironment,
+  migrationNameSet,
   railwayEnvironmentId,
   railwayEnvironmentName,
   railwayGitBranch,
