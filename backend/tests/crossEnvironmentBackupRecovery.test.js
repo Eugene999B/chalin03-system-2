@@ -72,6 +72,7 @@ const targetMetadata = {
 
 test("non-production accepts an intact production-signed v2 backup across schema and HMAC boundaries", () => {
   const backup = sourceBackup();
+  const originalChecksum = backup.checksum_sha256;
   const report = validateBackupContract({
     backup,
     currentIncludedTables: targetTables,
@@ -91,7 +92,14 @@ test("non-production accepts an intact production-signed v2 backup across schema
   assert.deepEqual(report.includedTables, ["products", "users"]);
   assert.deepEqual(report.sourceOnlyTables, ["source_only_table"]);
   assert.deepEqual(report.currentOnlyTables, ["target_only_table"]);
-  assert.deepEqual(backup.table_columns.products, ["id", "name"]);
+  assert.deepEqual(report.restoreColumns.products, ["id", "name"]);
+  assert.deepEqual(backup.table_columns.products, [
+    "id",
+    "name",
+    "source_only_column",
+  ]);
+  assert.equal(backup.checksum_sha256, originalChecksum);
+  assert.equal(checksumBackup(backup), originalChecksum);
   assert.match(report.warnings.join(" "), /cross-environment|trial/i);
 });
 
@@ -128,6 +136,7 @@ test("staging-only database migration markers activate recovery even through the
   assert.deepEqual(report.sourceOnlyColumns, {
     products: ["source_only_column"],
   });
+  assert.deepEqual(report.restoreColumns.products, ["id", "name"]);
   assert.match(report.warnings.join(" "), /cross-environment|trial/i);
 });
 
