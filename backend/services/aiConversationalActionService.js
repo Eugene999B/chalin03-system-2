@@ -17,6 +17,9 @@ const {
   isCapabilityQuestion,
   resolveActionCapabilities,
 } = require("./aiActionCapabilityService");
+const {
+  planGovernedActions,
+} = require("./aiAgentActionPlanningService");
 
 const RENAME_PATTERNS = Object.freeze([
   /^(?:please\s+)?rename\s+(?:this|the)\s+(?:chat|conversation)\s+(?:to|as)\s+(.+)$/i,
@@ -27,6 +30,7 @@ const USER_DEACTIVATION_PATTERN =
   /^(?:please\s+)?(?:deactivate|disable|offboard)\s+(?:user|account)\s+(.+?)(?:\s+(?:because|with\s+reason|reason\s*:)\s+(.+))?$/i;
 const USER_ID_REFERENCE_PATTERN = /^#?(\d+)$/;
 const USERNAME_REFERENCE_PATTERN = /^@([A-Za-z0-9._-]{1,120})$/;
+const ACTION_CONFIRMATION_PATTERN = /^(CONFIRM|EXECUTE)\s+(ap_[a-z0-9]{16,80})$/i;
 
 function clean(value, maximum = 4000) {
   return String(value ?? "")
@@ -44,6 +48,17 @@ function stripWrappingQuotes(value) {
 
 function normalizeUserReference(value) {
   return stripWrappingQuotes(value).replace(/\s+/g, " ").slice(0, 180);
+}
+
+function detectActionConfirmation(message) {
+  const match = clean(message, 160).match(ACTION_CONFIRMATION_PATTERN);
+  if (!match) return null;
+  const verb = String(match[1]).toUpperCase();
+  const proposalKey = String(match[2]).toLowerCase();
+  return Object.freeze({
+    proposal_key: proposalKey,
+    confirmation: `${verb} ${proposalKey}`,
+  });
 }
 
 function detectConversationalAction(message, { conversationKey = null } = {}) {
@@ -220,7 +235,18 @@ function actionNotice(actionState) {
     if (actionState.action_key === "intelligence.conversation.rename") {
       return `Done — I renamed this conversation to “${actionState.result?.title || "the requested title"}”.`;
     }
+    if (actionState.action_key === "communications.sms.send") {
+      const result = actionState.result || {};
+      return `Done — I submitted the SMS to ${result.recipient || "the confirmed recipient"}. Provider status: ${result.status || "accepted"}${result.delivery_confirmed ? " (delivery confirmed)" : ""}.`;
+    }
+    if (actionState.action_key === "spare_parts.debt_reminder.send") {
+      const result = actionState.result || {};
+      return `Done — I submitted the governed debt reminder${result.customer_name ? ` for ${result.customer_name}` : ""}. Provider status: ${result.status || "accepted"}${result.delivery_confirmed ? " (delivery confirmed)" : ""}.`;
+    }
     return `Done — the governed action ${actionState.action_key} completed successfully.`;
+  }
+  if (actionState.status === "approved") {
+    return `Governed action proposal ${actionState.proposal_key} is approved but has **not** executed. To proceed, use the exact confirmation “${actionState.expected_confirmation}”.`;
   }
   if (actionState.status === "pending_review") {
     const target = actionState.target;
@@ -250,7 +276,7 @@ function actionNotice(actionState) {
     return `User #${actionState.target_user_id}${target.username ? ` (@${target.username})` : ""} is already inactive, so I did not create or execute another deactivation action.`;
   }
   if (actionState.status === "failed") {
-    return `I recognized the action request, but the governed action could not be prepared safely: ${actionState.reason || "unknown action error"}. No unapproved write was performed.`;
+    return `I recognized the action request, but the governed action could not be completed safely: ${actionState.reason || "unknown action error"}. No unapproved write was performed.`;
   }
   return "";
 }
@@ -282,6 +308,56 @@ async function capabilityResult({ req, persona, result }) {
   });
 }
 
+async function conversationalConfirmationResult({
+  req,
+  confirmation,
+  conversationKey,
+  assistantMessageKey,
+  result,
+} = {}) {
+  let actionState;
+  try {
+    const executed = await executeActionProposal({
+      proposalKey: confirmation.proposal_key,
+      confirmation: confirmation.confirmation,
+      user: req.user,
+      req,
+    });
+    actionState = Object.freeze({
+      action_key: executed.action_key,
+      risk_level: Number(executed.risk_level || 0),
+      proposal_key: executed.proposal_key,
+      status: "executed",
+      result: executed.result || null,
+      execution_performed: true,
+    });
+  } catch (error) {
+    actionState = safeActionErrorState(
+      {
+        action_key: "governed.action.confirmation",
+        risk_level: 1,
+      },
+      error
+    );
+  }
+
+  const notice = actionNotice(actionState);
+  const nextResult = Object.freeze({
+    ...result,
+    answer: notice || result?.answer || "",
+    action: actionState,
+  });
+  if (notice && assistantMessageKey && conversationKey && req?.user?.id) {
+    await replaceOwnedAssistantMessage({
+      messageKey: assistantMessageKey,
+      conversationKey,
+      userId: req.user.id,
+      content: notice,
+    }).catch(() => null);
+  }
+  return nextResult;
+}
+
 async function processConversationalAction({
   req,
   persona,
@@ -303,8 +379,38 @@ async function processConversationalAction({
     return nextResult;
   }
 
+  const confirmation = detectActionConfirmation(message);
+  if (confirmation) {
+    return conversationalConfirmationResult({
+      req,
+      confirmation,
+      conversationKey,
+      assistantMessageKey,
+      result,
+    });
+  }
+
   const intent = detectConversationalAction(message, { conversationKey });
-  if (!intent) return result;
+  if (!intent) {
+    try {
+      return await planGovernedActions({
+        req,
+        persona,
+        message,
+        result,
+      });
+    } catch (error) {
+      return Object.freeze({
+        ...result,
+        action_planning: Object.freeze({
+          planner: "llm_structured_tool_selection",
+          status: "unavailable",
+          error_code: clean(error?.code, 120) || "AI_ACTION_PLANNER_UNAVAILABLE",
+          execution_performed: false,
+        }),
+      });
+    }
+  }
 
   let actionState;
   if (!isFeatureEnabled("aiActions")) {
@@ -328,9 +434,6 @@ async function processConversationalAction({
       const scope = resolveAiScope({ req, persona });
       const definition = aiActionRegistry.get(intent.action_key);
 
-      // High-risk identity lookups are themselves sensitive. Verify that the
-      // authenticated account is allowed to propose the action before probing
-      // the user directory or exposing candidate identities.
       assertDefinitionAuthority({
         definition,
         user: req.user,
@@ -463,6 +566,7 @@ async function processConversationalAction({
 }
 
 module.exports = {
+  ACTION_CONFIRMATION_PATTERN,
   RENAME_PATTERNS,
   USER_DEACTIVATION_PATTERN,
   USER_ID_REFERENCE_PATTERN,
@@ -472,6 +576,8 @@ module.exports = {
   candidateText,
   capabilityResult,
   clean,
+  conversationalConfirmationResult,
+  detectActionConfirmation,
   detectConversationalAction,
   normalizeUserReference,
   processConversationalAction,
