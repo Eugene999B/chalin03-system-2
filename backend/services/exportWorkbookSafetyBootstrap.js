@@ -19,6 +19,9 @@ const CHALIN_ONE_FULL_TRIAL_SEED_FLAG = Symbol.for(
 const CHALIN_ONE_FULL_TRIAL_SEED_DIAGNOSTIC = Symbol.for(
   "chalin03.chalinOneFullTrialSeedDiagnostic"
 );
+const CHALIN_ONE_TRIAL_HEALTH_PATCH_FLAG = Symbol.for(
+  "chalin03.chalinOneTrialHealthPatchInstalled"
+);
 const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
   "db796450-1b80-42e8-9988-db3e90ca0713";
 const TRIAL_SEED_OUTPUT_LIMIT = 2400;
@@ -36,6 +39,45 @@ function setTrialSeedDiagnostic(value) {
     ...value,
     updated_at: new Date().toISOString(),
   });
+}
+
+function installStagingTrialHealthDiagnostic() {
+  const environmentId = String(process.env.RAILWAY_ENVIRONMENT_ID || "").trim();
+  if (environmentId !== CHALIN_ONE_STAGING_ENVIRONMENT_ID) return false;
+  if (globalThis[CHALIN_ONE_TRIAL_HEALTH_PATCH_FLAG]) return false;
+
+  const express = require("express");
+  const originalJson = express.response.json;
+
+  express.response.json = function chalinOneTrialHealthJson(body) {
+    const requestPath = String(this.req?.originalUrl || "").split("?", 1)[0];
+    if (
+      requestPath === "/api/health" &&
+      body &&
+      typeof body === "object" &&
+      !Array.isArray(body)
+    ) {
+      const diagnostic = globalThis[CHALIN_ONE_FULL_TRIAL_SEED_DIAGNOSTIC] || {
+        status: "not_started",
+        environment_id: environmentId,
+        message: "CHALIN ONE full-trial seed has not started in this process.",
+        updated_at: new Date().toISOString(),
+      };
+      return originalJson.call(this, {
+        ...body,
+        chalin_one_trial_seed: diagnostic,
+      });
+    }
+    return originalJson.call(this, body);
+  };
+
+  Object.defineProperty(globalThis, CHALIN_ONE_TRIAL_HEALTH_PATCH_FLAG, {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+  return true;
 }
 
 function runChalinOneFullTrialSeedBootstrap() {
@@ -224,6 +266,7 @@ function installExportWorkbookSafety() {
   return true;
 }
 
+installStagingTrialHealthDiagnostic();
 runChalinOneFullTrialSeedBootstrap();
 runMasterMickeyMergeProfileVisibility();
 installExportWorkbookSafety();
@@ -236,6 +279,7 @@ module.exports = {
   cleanTrialSeedOutput,
   createUniqueWorksheetName,
   installExportWorkbookSafety,
+  installStagingTrialHealthDiagnostic,
   runChalinOneFullTrialSeedBootstrap,
   runMasterMickeyMergeProfileVisibility,
   sanitizeWorksheetName,
