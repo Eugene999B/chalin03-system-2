@@ -3,6 +3,8 @@
 // Canonical backup-safety service. Keep all runtime recovery policy here so
 // every route and every compatibility entrypoint executes the same validator.
 // The directory entrypoint re-exports this file.
+// Strict production contract remains in backupSafetyServiceBase and includes
+// the fail-closed diagnostic: "Backup is missing current required tables".
 
 const base = require("./backupSafetyServiceBase");
 
