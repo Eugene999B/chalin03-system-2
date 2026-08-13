@@ -1,28 +1,50 @@
 /*
   CHALIN ONE inventory trial route hardening.
 
-  The main server remains untouched because it is shared with a large staging/public-content
-  integration lane. This preload redirects only the two legacy route-module exports to the
-  audited serialized-inventory wrappers. The wrappers capture the original routers first and
-  delegate every non-serialized request back to them unchanged.
+  The shared server keeps importing the established product and sale routers. During
+  Inventory Traceability startup this installer prepends only the audited serialized
+  mutation guards to those same router objects. Existing non-serialized route layers
+  remain unchanged and keep their original order.
 */
 
-const productRoutePath = require.resolve("../routes/productRoutes");
-const saleRoutePath = require.resolve("../routes/saleRoutes");
+const INSTALL_FLAG = Symbol.for("chalin03.inventoryRouteSafetyInstalled");
 
-const hardenedProductRoutes = require("../routes/productRoutesInventoryHardened");
-const hardenedSaleRoutes = require("../routes/saleRoutesInventoryHardened");
-
-if (!require.cache[productRoutePath] || !require.cache[saleRoutePath]) {
-  throw new Error(
-    "Inventory route hardening bootstrap could not resolve the established product/sale routers."
-  );
+function guardLayers(wrapper) {
+  // Each hardened wrapper ends with router.use(legacyRouter). We need only the
+  // guard layers; the original router already owns its established route stack.
+  return wrapper.stack.slice(0, -1);
 }
 
-require.cache[productRoutePath].exports = hardenedProductRoutes;
-require.cache[saleRoutePath].exports = hardenedSaleRoutes;
+function installInventoryRouteSafety() {
+  if (globalThis[INSTALL_FLAG]) return false;
+
+  const productRoutes = require("../routes/productRoutes");
+  const saleRoutes = require("../routes/saleRoutes");
+  const originalProductStack = productRoutes.stack.slice();
+  const originalSaleStack = saleRoutes.stack.slice();
+
+  const hardenedProductRoutes = require("../routes/productRoutesInventoryHardened");
+  const hardenedSaleRoutes = require("../routes/saleRoutesInventoryHardened");
+
+  productRoutes.stack = [
+    ...guardLayers(hardenedProductRoutes),
+    ...originalProductStack,
+  ];
+  saleRoutes.stack = [
+    ...guardLayers(hardenedSaleRoutes),
+    ...originalSaleStack,
+  ];
+
+  Object.defineProperty(globalThis, INSTALL_FLAG, {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+  return true;
+}
 
 module.exports = {
-  productRoutePath,
-  saleRoutePath,
+  INSTALL_FLAG,
+  installInventoryRouteSafety,
 };
