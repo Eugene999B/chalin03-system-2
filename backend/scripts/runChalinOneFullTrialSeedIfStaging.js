@@ -61,6 +61,7 @@ async function runChalinOneFullTrialSeedIfStaging({
   env = process.env,
   seed = null,
   verify = null,
+  reconcile = null,
 } = {}) {
   const environmentId = String(env.RAILWAY_ENVIRONMENT_ID || "").trim();
   if (environmentId !== CHALIN_ONE_STAGING_ENVIRONMENT_ID) {
@@ -82,13 +83,23 @@ async function runChalinOneFullTrialSeedIfStaging({
       seed || require("./seedChalinOneFullTrialData").seedChalinOneFullTrialData;
     const seedResult = await seedFunction();
 
-    // Preserve dependency-injected unit-test behavior unless a verifier is also
-    // explicitly supplied. Runtime calls always verify the live staging data.
-    if (seed && !verify) return seedResult;
+    // Preserve dependency-injected unit-test behavior unless a verifier or
+    // reconciliation function is explicitly supplied. Runtime calls always
+    // repair the isolated synthetic fixture before verifying live staging data.
+    if (seed && !verify && !reconcile) return seedResult;
 
     if (restorePoolConnectionFactory) {
       restorePoolConnectionFactory();
       restorePoolConnectionFactory = null;
+    }
+
+    let governanceReconciliation = null;
+    if (!seed || reconcile) {
+      const reconcileFunction =
+        reconcile ||
+        require("./reconcileChalinOneSyntheticPayrollGovernance")
+          .reconcileChalinOneSyntheticPayrollGovernance;
+      governanceReconciliation = await reconcileFunction({ env });
     }
 
     const verifyFunction =
@@ -97,6 +108,7 @@ async function runChalinOneFullTrialSeedIfStaging({
 
     return Object.freeze({
       ...seedResult,
+      payroll_governance_reconciliation: governanceReconciliation,
       verification,
     });
   } finally {
