@@ -19,7 +19,7 @@ const usersSettingsPage = read("src/pages/UsersSettingsPage.jsx");
 const workspaceAdministrationPage = read(
   "src/pages/WorkspaceAdministrationPage.jsx"
 );
-const newSale = read("src/pages/NewSalePage.jsx");
+const newSale = read("src/pages/ManualNewSalePage.jsx");
 const salesHistory = read("src/pages/SalesHistoryPage.jsx");
 const productsPage = read("src/pages/ProductsPage.jsx");
 const smsPage = read("src/pages/SmsPage.jsx");
