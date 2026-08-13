@@ -17,7 +17,7 @@ const DOCUMENT_ACTION_PATTERN = /\b(?:generate|create|make|prepare|export|downlo
 const DOCUMENT_NOUN_PATTERN = /\b(?:document|report|statement|file|spreadsheet|workbook|pdf|word|docx|excel|xlsx|csv)\b/i;
 const DOCUMENT_TOPIC_PATTERN = /\b(?:sales?|stock|inventory|debts?|collections?|customers?|expenses?|payroll|salary|audit|mining|production|hire|finance|arrears|payments?|profit|performance|operations?)\b/i;
 const FORMAT_PATTERN = /\b(?:pdf|word|docx|excel|xlsx|spreadsheet|csv)\b/i;
-const PERIOD_PATTERN = /\b(?:today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|this\s+year|last\s+year|current(?:ly)?|right\s+now|from\s+\d{4}-\d{2}-\d{2}|to\s+\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2})\b/i;
+const PERIOD_PATTERN = /\b(?:today|yesterday|this\s+week|last\s+week|this\s+month|last\s+month|this\s+year|last\s+year|current(?:ly)?|right\s+now|lately|recent(?:ly)?|latest|past\s+7\s+days|last\s+7\s+days|from\s+\d{4}-\d{2}-\d{2}|to\s+\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2})\b/i;
 const TIME_BOUND_TOPIC_PATTERN = /\b(?:sales?|stock|inventory|debts?|collections?|expenses?|payroll|salary|audit|mining|production|hire|finance|arrears|payments?|profit|performance|operations?)\b/i;
 
 function clean(value, maximum = 12000) {
@@ -52,30 +52,25 @@ function buildClarificationRequest({ prompt } = {}) {
   const text = clean(prompt);
   if (!isDocumentRequest(text)) return null;
 
-  const missing = [];
-  if (!FORMAT_PATTERN.test(text)) missing.push("format");
-  if (TIME_BOUND_TOPIC_PATTERN.test(text) && !PERIOD_PATTERN.test(text)) {
-    missing.push("period");
-  }
-  if (missing.length === 0) return null;
+  // Once a user has explicitly chosen a supported output format, the request
+  // is actionable. Time-bound operational reports use a bounded recent default
+  // when no period is stated, and the governed reasoning/tool layer records the
+  // exact period it actually used. Do not force an extra chat turn merely to
+  // ask for dates.
+  if (FORMAT_PATTERN.test(text)) return null;
 
-  let answer;
-  if (missing.includes("format") && missing.includes("period")) {
-    answer =
-      "Yes — I can prepare that. Which format do you want: PDF, Word, Excel, or CSV? And what period should I use: today, yesterday, this week, this month, or custom dates? I’ll use your current authorized workspace/store unless you name another one.";
-  } else if (missing.includes("format")) {
-    answer =
-      "Yes — I can prepare that. Which format do you want: PDF, Word, Excel, or CSV? I’ll keep the period and authorized business scope you already specified.";
-  } else {
-    answer =
-      "Yes — I can prepare that document. What period should I use: today, yesterday, this week, this month, or custom dates? I’ll keep the format and current authorized workspace/store you already specified.";
-  }
+  const timeBound = TIME_BOUND_TOPIC_PATTERN.test(text);
+  const periodAlreadySpecified = PERIOD_PATTERN.test(text);
+  const answer = timeBound && !periodAlreadySpecified
+    ? "Yes — I can prepare that. Which format do you want: PDF, Word, Excel, or CSV? If you do not name a period, I’ll use a bounded recent view and state the exact dates in the finished document. I’ll use your current authorized workspace/store unless you name another one."
+    : "Yes — I can prepare that. Which format do you want: PDF, Word, Excel, or CSV? I’ll keep the period and authorized business scope you already specified.";
 
   return Object.freeze({
     kind: "document_generation",
     answer,
-    missing_fields: Object.freeze(missing),
-    requested_format: requestedFormat(text),
+    missing_fields: Object.freeze(["format"]),
+    requested_format: null,
+    period_default: timeBound && !periodAlreadySpecified ? "recent_bounded" : null,
     source_of_truth: false,
     execution_authority: false,
     requires_provider: false,
@@ -182,6 +177,7 @@ async function runClarificationTurn({
     metadata: {
       clarification_kind: request.kind,
       missing_fields: request.missing_fields,
+      period_default: request.period_default || null,
       provider_called: false,
       source_of_truth: false,
       execution_authority: false,
@@ -220,7 +216,7 @@ async function runClarificationTurn({
     }),
     provider: Object.freeze({
       key: "server_clarification",
-      model: "deterministic-v1",
+      model: "deterministic-v2",
       finish_reason: "clarification",
       reasoning_effort: null,
       provider_side_storage_enabled: false,
@@ -236,6 +232,9 @@ async function runClarificationTurn({
 }
 
 module.exports = {
+  FORMAT_PATTERN,
+  PERIOD_PATTERN,
+  TIME_BOUND_TOPIC_PATTERN,
   buildClarificationRequest,
   isDocumentRequest,
   requestedFormat,
