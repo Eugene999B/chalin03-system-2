@@ -16,16 +16,18 @@ const routesSource = fs.readFileSync(
   "utf8"
 );
 
-test("under-specified sales document asks for format and period instead of failing", () => {
+test("under-specified sales document asks only for format and safely defaults the period", () => {
   const result = buildClarificationRequest({
     prompt: "can you generate a document on sales for me",
   });
   assert.ok(result);
   assert.equal(result.kind, "document_generation");
-  assert.deepEqual(result.missing_fields, ["format", "period"]);
+  assert.deepEqual(result.missing_fields, ["format"]);
   assert.match(result.answer, /PDF, Word, Excel, or CSV/);
-  assert.match(result.answer, /today, yesterday, this week, this month, or custom dates/);
+  assert.match(result.answer, /bounded recent view/i);
+  assert.match(result.answer, /exact dates/i);
   assert.match(result.answer, /current authorized workspace\/store/);
+  assert.equal(result.period_default, "recent_bounded");
   assert.equal(result.requires_provider, false);
   assert.equal(result.source_of_truth, false);
   assert.equal(result.execution_authority, false);
@@ -38,17 +40,18 @@ test("document requests with period but no format ask only for format", () => {
   assert.ok(result);
   assert.deepEqual(result.missing_fields, ["format"]);
   assert.match(result.answer, /Which format do you want/);
-  assert.doesNotMatch(result.answer, /what period should I use/i);
+  assert.doesNotMatch(result.answer, /bounded recent view/i);
+  assert.equal(result.period_default, null);
 });
 
-test("document requests with format but no period ask only for period", () => {
-  const result = buildClarificationRequest({
-    prompt: "generate a PDF sales report",
-  });
-  assert.ok(result);
-  assert.deepEqual(result.missing_fields, ["period"]);
-  assert.equal(result.requested_format, "pdf");
-  assert.match(result.answer, /What period should I use/);
+test("document requests with format but no period proceed using the governed bounded default", () => {
+  assert.equal(
+    buildClarificationRequest({
+      prompt: "generate a PDF sales report",
+    }),
+    null
+  );
+  assert.equal(requestedFormat("generate a PDF sales report"), "pdf");
 });
 
 test("complete document requests proceed to governed reasoning and evidence", () => {
