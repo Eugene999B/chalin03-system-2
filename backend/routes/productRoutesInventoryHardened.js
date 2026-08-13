@@ -12,6 +12,10 @@ const {
   movementLabel,
   validateMovementCompatibility,
 } = require("../services/stockMovementService");
+const {
+  createAutomaticIdentityBatches,
+  reconcileAutomaticIdentityCoverage,
+} = require("../services/inventoryIdentityStudioConstants");
 
 const legacyProductRoutes = require("./productRoutes");
 
@@ -59,29 +63,186 @@ function toMovementDate(value) {
   return parsed.toISOString().slice(0, 10) === cleanValue ? cleanValue : null;
 }
 
-function isEnforcedSerialized(product) {
-  return (
-    String(product?.inventory_tracking_mode || "").toLowerCase() === "serialized" &&
-    String(product?.inventory_traceability_state || "").toLowerCase() === "enforced"
-  );
+function nullIfEmpty(value) {
+  if (value === undefined || value === null || value === "") return null;
+  return value;
 }
 
-function sendSerializedMutationBlocked(res, product, action) {
-  const restock = action === "restock";
+function isSerializedProduct(product) {
+  return String(product?.inventory_tracking_mode || "").toLowerCase() === "serialized";
+}
+
+function sendSerializedDecreaseBlocked(res, product) {
   return res.status(409).json({
     status: "error",
-    code: restock
-      ? "SERIALIZED_RESTOCK_REQUIRES_CONTROLLED_RECEIVING"
-      : "SERIALIZED_STOCK_ADJUSTMENT_REQUIRES_EXACT_IDS",
-    message: restock
-      ? `${product.name} uses enforced physical-ID tracking. Record the supplier purchase and prepare its exact identities in Serialized Receiving instead of changing quantity through Quick Restock.`
-      : `${product.name} uses enforced physical-ID tracking. Quantity-only stock adjustment is blocked because it would separate system stock from the exact physical-unit ledger. Use the traceability investigation / exact-ID workflow for the correction.`,
+    code: "SERIALIZED_STOCK_ADJUSTMENT_REQUIRES_EXACT_IDS",
+    message: `${product.name} has automatic physical-unit identities. A quantity decrease must identify which exact unit left, was damaged, is missing or was written off. Use the traceability investigation / exact-ID workflow for the correction.`,
     product_id: Number(product.id),
     inventory_tracking_mode: product.inventory_tracking_mode,
     inventory_traceability_state: product.inventory_traceability_state,
   });
 }
 
+// Chalin One automatic identity policy: every newly created product is immediately
+// given a serialized identity profile and one internal ID for every opening-stock unit.
+router.post(
+  "/",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+    let transactionStarted = false;
+    try {
+      const storeId = requireSelectedBranch(req, res);
+      if (!storeId) return;
+
+      const {
+        name,
+        size,
+        category,
+        cost_price,
+        selling_price,
+        quantity,
+        low_stock_threshold,
+        barcode,
+        image_url,
+      } = req.body;
+
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ status: "error", message: "Product name is required." });
+      }
+
+      const cleanName = String(name).trim();
+      const costPrice = toMoney(cost_price);
+      const sellingPrice = toMoney(selling_price);
+      const productQuantity = toNonNegativeInt(Number(quantity ?? 0));
+      const lowStockThreshold = toNonNegativeInt(Number(low_stock_threshold ?? 5));
+
+      if (costPrice === null) {
+        return res.status(400).json({ status: "error", message: "Cost price must be a valid number and cannot be negative." });
+      }
+      if (sellingPrice === null) {
+        return res.status(400).json({ status: "error", message: "Selling price must be a valid number and cannot be negative." });
+      }
+      if (productQuantity === null) {
+        return res.status(400).json({ status: "error", message: "Opening quantity must be a whole number and cannot be negative." });
+      }
+      if (lowStockThreshold === null) {
+        return res.status(400).json({ status: "error", message: "Low-stock threshold must be a whole number and cannot be negative." });
+      }
+
+      await connection.beginTransaction();
+      transactionStarted = true;
+
+      const [result] = await connection.query(
+        `INSERT INTO products (
+          branch_id, name, size, category, cost_price, selling_price, quantity,
+          low_stock_threshold, barcode, image_url, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          storeId,
+          cleanName,
+          nullIfEmpty(size),
+          nullIfEmpty(category),
+          costPrice,
+          sellingPrice,
+          productQuantity,
+          lowStockThreshold,
+          nullIfEmpty(barcode),
+          nullIfEmpty(image_url),
+          req.user.id,
+        ]
+      );
+
+      if (productQuantity > 0) {
+        await connection.query(
+          `INSERT INTO stock_adjustments (
+            branch_id, product_id, adjustment_type, movement_type, quantity,
+            old_quantity, new_quantity, reason, unit_cost, cost_price_before,
+            cost_price_after, movement_date, notes, adjusted_by
+          ) VALUES (?, ?, 'set', ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            storeId,
+            result.insertId,
+            MOVEMENT_TYPES.OPENING_BALANCE,
+            productQuantity,
+            productQuantity,
+            "Opening quantity recorded when product was created",
+            costPrice,
+            costPrice,
+            costPrice,
+            new Date().toISOString().slice(0, 10),
+            "System-created opening balance record",
+            req.user.id,
+          ]
+        );
+      }
+
+      const identityResult = await reconcileAutomaticIdentityCoverage(connection, {
+        branchId: storeId,
+        productId: result.insertId,
+        actorUserId: req.user.id,
+        notes: "Automatic IDs created with product opening stock.",
+      });
+
+      await writeAuditEvent({
+        connection,
+        branchId: storeId,
+        userId: req.user.id,
+        action: "CREATE_PRODUCT",
+        details: `Created product "${cleanName}" with opening quantity ${productQuantity} and ${identityResult.generated_quantity} automatic stock ID(s).`,
+        workspaceCode: "spare_parts",
+        entityType: "product",
+        entityId: String(result.insertId),
+        actionType: "CREATE_PRODUCT",
+        outcome: "success",
+        severity: "notice",
+        metadata: {
+          automatic_identity_tracking: true,
+          automatic_ids_created: identityResult.generated_quantity,
+        },
+      });
+
+      await connection.commit();
+      transactionStarted = false;
+
+      const [products] = await pool.query(
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [result.insertId, storeId]
+      );
+
+      return res.status(201).json({
+        status: "success",
+        message: productQuantity > 0
+          ? `Product created successfully. ${identityResult.generated_quantity} stock ID(s) were created automatically.`
+          : "Product created successfully. Automatic identity tracking is ready for its first stock.",
+        branch_id: storeId,
+        automatic_ids_created: identityResult.generated_quantity,
+        product: products[0],
+      });
+    } catch (error) {
+      if (transactionStarted) {
+        try { await connection.rollback(); } catch { /* preserve original */ }
+      }
+      console.error("Automatic-ID create product error:", error);
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({ status: "error", message: "A product with this barcode already exists in this store." });
+      }
+      return res.status(Number(error.statusCode || 500)).json({
+        status: "error",
+        code: error.code || "AUTOMATIC_PRODUCT_IDENTITY_CREATE_ERROR",
+        message: Number(error.statusCode || 500) >= 500
+          ? "Something went wrong while creating the product and its automatic stock IDs."
+          : error.message,
+      });
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+// Restocking is one atomic operation: first reconcile any legacy opening-stock gap,
+// then add quantity and create brand-new IDs for exactly the newly received units.
 router.post(
   "/:id/restock",
   requireAuth,
@@ -128,7 +289,7 @@ router.post(
       transactionStarted = true;
 
       const [products] = await connection.query(
-        `SELECT id, branch_id, name, quantity, cost_price,
+        `SELECT id, branch_id, name, size, quantity, cost_price,
                 inventory_tracking_mode, inventory_traceability_state
          FROM products
          WHERE id = ? AND branch_id = ? AND is_active = TRUE
@@ -142,11 +303,12 @@ router.post(
       }
 
       const product = products[0];
-      if (isEnforcedSerialized(product)) {
-        await connection.rollback();
-        transactionStarted = false;
-        return sendSerializedMutationBlocked(res, product, "restock");
-      }
+      const priorIdentityResult = await reconcileAutomaticIdentityCoverage(connection, {
+        branchId: storeId,
+        productId: Number(id),
+        actorUserId: req.user.id,
+        notes: "Automatic reconciliation before restock.",
+      });
 
       const oldQuantity = Number(product.quantity || 0);
       const newQuantity = oldQuantity + receivedQuantity;
@@ -174,12 +336,26 @@ router.post(
         ]
       );
 
+      const identityBatches = await createAutomaticIdentityBatches(connection, {
+        branchId: storeId,
+        productId: Number(id),
+        actorUserId: req.user.id,
+        quantity: receivedQuantity,
+        sourceType: "restock",
+        sourceId: movementResult.insertId,
+        notes: `Automatic IDs for restock from ${cleanSource}${cleanReference ? ` (${cleanReference})` : ""}.`,
+      });
+      const newIdsCreated = identityBatches.reduce(
+        (sum, batch) => sum + Number(batch.generated_quantity || 0),
+        0
+      );
+
       await writeAuditEvent({
         connection,
         branchId: storeId,
         userId: req.user.id,
         action: "RESTOCK_PRODUCT",
-        details: `Received ${receivedQuantity} unit(s) of "${product.name}" from ${cleanSource}. Stock ${oldQuantity} to ${newQuantity}. Reference: ${cleanReference || "-"}`,
+        details: `Received ${receivedQuantity} unit(s) of "${product.name}" from ${cleanSource}. Stock ${oldQuantity} to ${newQuantity}. ${newIdsCreated} new stock ID(s) created automatically.`,
         workspaceCode: "spare_parts",
         entityType: "product",
         entityId: String(id),
@@ -194,16 +370,22 @@ router.post(
           movement_date: receivedDate,
           old_quantity: oldQuantity,
           new_quantity: newQuantity,
+          legacy_ids_reconciled: priorIdentityResult.generated_quantity,
+          new_automatic_ids_created: newIdsCreated,
         },
       });
 
       await connection.commit();
       transactionStarted = false;
-      const [updatedProducts] = await pool.query(`SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`, [id, storeId]);
+      const [updatedProducts] = await pool.query(
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [id, storeId]
+      );
       return res.status(201).json({
         status: "success",
-        message: `${receivedQuantity} unit(s) received and recorded successfully.`,
+        message: `${receivedQuantity} unit(s) received. ${newIdsCreated} new stock ID(s) were created automatically and are ready for one-click label printing.`,
         branch_id: storeId,
+        automatic_ids_created: newIdsCreated,
         movement: {
           id: movementResult.insertId,
           movement_type: MOVEMENT_TYPES.QUICK_RESTOCK,
@@ -221,8 +403,14 @@ router.post(
       if (transactionStarted) {
         try { await connection.rollback(); } catch { /* preserve original */ }
       }
-      console.error("Hardened restock product error:", error);
-      return res.status(500).json({ status: "error", message: error.message || "Something went wrong while receiving stock." });
+      console.error("Automatic-ID restock product error:", error);
+      return res.status(Number(error.statusCode || 500)).json({
+        status: "error",
+        code: error.code || "AUTOMATIC_RESTOCK_IDENTITY_ERROR",
+        message: Number(error.statusCode || 500) >= 500
+          ? "Something went wrong while receiving stock and creating its automatic IDs."
+          : error.message,
+      });
     } finally {
       connection.release();
     }
@@ -290,12 +478,14 @@ router.patch(
         transactionStarted = false;
         return res.status(404).json({ status: "error", message: "Product not found in this store." });
       }
+
       const product = products[0];
-      if (isEnforcedSerialized(product)) {
-        await connection.rollback();
-        transactionStarted = false;
-        return sendSerializedMutationBlocked(res, product, "adjustment");
-      }
+      await reconcileAutomaticIdentityCoverage(connection, {
+        branchId: storeId,
+        productId: Number(id),
+        actorUserId: req.user.id,
+        notes: "Automatic reconciliation before stock adjustment.",
+      });
 
       const oldQuantity = Number(product.quantity || 0);
       let newQuantity;
@@ -307,7 +497,16 @@ router.patch(
         return res.status(400).json({ status: "error", message: calculationError.message });
       }
 
-      await connection.query(`UPDATE products SET quantity = ? WHERE id = ? AND branch_id = ?`, [newQuantity, id, storeId]);
+      if (isSerializedProduct(product) && newQuantity < oldQuantity) {
+        await connection.rollback();
+        transactionStarted = false;
+        return sendSerializedDecreaseBlocked(res, product);
+      }
+
+      await connection.query(
+        `UPDATE products SET quantity = ? WHERE id = ? AND branch_id = ?`,
+        [newQuantity, id, storeId]
+      );
       const [adjustmentResult] = await connection.query(
         `INSERT INTO stock_adjustments (
            branch_id, product_id, adjustment_type, movement_type,
@@ -321,6 +520,24 @@ router.patch(
           cleanMovementDate, cleanNotes || null, req.user.id,
         ]
       );
+
+      const increase = Math.max(0, newQuantity - oldQuantity);
+      let automaticIdsCreated = 0;
+      if (increase > 0) {
+        const batches = await createAutomaticIdentityBatches(connection, {
+          branchId: storeId,
+          productId: Number(id),
+          actorUserId: req.user.id,
+          quantity: increase,
+          sourceType: "stock_adjustment",
+          sourceId: adjustmentResult.insertId,
+          notes: `Automatic IDs for stock increase: ${cleanReason}`,
+        });
+        automaticIdsCreated = batches.reduce(
+          (sum, batch) => sum + Number(batch.generated_quantity || 0),
+          0
+        );
+      }
 
       await writeAuditEvent({
         connection,
@@ -341,18 +558,25 @@ router.patch(
           old_quantity: oldQuantity,
           new_quantity: newQuantity,
           reference_number: cleanReference || null,
+          automatic_ids_created: automaticIdsCreated,
         },
       });
 
       await connection.commit();
       transactionStarted = false;
-      const [updatedProducts] = await pool.query(`SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`, [id, storeId]);
+      const [updatedProducts] = await pool.query(
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [id, storeId]
+      );
       return res.json({
         status: "success",
-        message: `${movementLabel(cleanMovementType)} recorded successfully.`,
+        message: automaticIdsCreated
+          ? `${movementLabel(cleanMovementType)} recorded. ${automaticIdsCreated} new stock ID(s) were created automatically.`
+          : `${movementLabel(cleanMovementType)} recorded successfully.`,
         branch_id: storeId,
         old_quantity: oldQuantity,
         new_quantity: newQuantity,
+        automatic_ids_created: automaticIdsCreated,
         adjustment: {
           id: adjustmentResult.insertId,
           branch_id: storeId,
@@ -376,9 +600,12 @@ router.patch(
         try { await connection.rollback(); } catch { /* preserve original */ }
       }
       console.error("Hardened stock adjustment error:", error);
-      return res.status(500).json({
+      return res.status(Number(error.statusCode || 500)).json({
         status: "error",
-        message: error.message || "Something went wrong while adjusting stock. Make sure the stock movement migration has been applied.",
+        code: error.code || "AUTOMATIC_STOCK_IDENTITY_ADJUSTMENT_ERROR",
+        message: Number(error.statusCode || 500) >= 500
+          ? "Something went wrong while adjusting stock."
+          : error.message,
       });
     } finally {
       connection.release();
