@@ -26,7 +26,6 @@ const DATA_REPAIR_MIGRATIONS = new Set([
   "20260802_boss_approved_product_quantity_correction",
   "20260804_boss_approved_product_quantity_correction",
   "20260805_automatic_customer_merge_rollback",
-  "20260805_equipment_finance_opening_deposit_foundation_repair",
   "20260805_exact_name_receipt_owner_recovery",
   "20260805_master_mickey_july31_exact_debt_repair",
   "20260805_missing_credit_debt_backfill",
