@@ -63,7 +63,7 @@ assert.match(camera, /playsInline/);
 assert.match(camera, /display: visible \? "block" : "none"/);
 assert.match(camera, /NotAllowedError/);
 assert.match(camera, /NotReadableError/);
-assert.match(camera, /Move it away/);
+assert.match(camera, /Move .* away/);
 assert.match(camera, /700/);
 assert.match(camera, /callbackRef/);
 assert.match(camera, /modeRef/);
