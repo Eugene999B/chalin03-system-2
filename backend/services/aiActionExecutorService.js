@@ -4,6 +4,12 @@ const { pool } = require("../config/db");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { renameConversation } = require("./aiConversationService");
 const { secureDeactivateUser } = require("./userIdentityPreservationService");
+const {
+  executeCustomerDebtReminder,
+  executeOutboundSms,
+  validateCustomerDebtReminder,
+  validateOutboundSms,
+} = require("./aiCommunicationActionAdapters");
 
 const EXECUTOR_KEY_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$/;
 
@@ -104,6 +110,18 @@ aiActionExecutorRegistry.register({
       title: input.title,
     });
   },
+});
+
+aiActionExecutorRegistry.register({
+  key: "communications.sms.send",
+  validate: validateOutboundSms,
+  execute: executeOutboundSms,
+});
+
+aiActionExecutorRegistry.register({
+  key: "spare_parts.debt_reminder.send",
+  validate: validateCustomerDebtReminder,
+  execute: executeCustomerDebtReminder,
 });
 
 aiActionExecutorRegistry.register({
