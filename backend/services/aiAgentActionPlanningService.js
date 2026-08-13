@@ -1,5 +1,7 @@
 "use strict";
 
+const crypto = require("node:crypto");
+const { pool } = require("../config/db");
 const { isFeatureEnabled } = require("./featureFlagService");
 const { aiActionRegistry } = require("./aiActionRegistry");
 const {
@@ -9,9 +11,6 @@ const {
 } = require("./aiActionProposalService");
 const { generateProviderResponse } = require("./aiProviderService");
 const { resolveAiScope } = require("./aiPermissionService");
-const {
-  replaceOwnedAssistantMessage,
-} = require("./aiConversationalActionService");
 
 const MAX_PLANNED_ACTIONS = 4;
 const ACTION_REQUEST_SIGNAL =
@@ -23,6 +22,32 @@ function clean(value, maximum = 8000) {
     .replace(/\r\n?/g, "\n")
     .trim()
     .slice(0, maximum);
+}
+
+function contentHash(value) {
+  return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+}
+
+async function replaceOwnedAssistantMessage({
+  messageKey,
+  conversationKey,
+  userId,
+  content,
+  connection = pool,
+} = {}) {
+  const text = clean(content, 1000000);
+  if (!messageKey || !conversationKey || !userId || !text) return false;
+  const [update] = await connection.query(
+    `UPDATE ai_messages m
+     INNER JOIN ai_conversations c ON c.id = m.conversation_id
+     SET m.content_text = ?, m.content_sha256 = ?
+     WHERE m.message_key = ?
+       AND m.message_role = 'assistant'
+       AND c.conversation_key = ?
+       AND c.user_id = ?`,
+    [text, contentHash(text), messageKey, conversationKey, Number(userId)]
+  );
+  return Number(update.affectedRows || 0) === 1;
 }
 
 function looksLikeActionRequest(message) {
@@ -290,10 +315,12 @@ module.exports = {
   canProposeDefinition,
   clean,
   compactEvidence,
+  contentHash,
   looksLikeActionRequest,
   missingRequiredFields,
   planGovernedActions,
   planningMessages,
   proposalToolKey,
+  replaceOwnedAssistantMessage,
   withScopeDefaults,
 };
