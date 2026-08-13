@@ -41,8 +41,8 @@ assert.match(scanner, /Single Item/);
 assert.match(scanner, /Multiple Items/);
 assert.match(scanner, /Automatic add/);
 assert.match(scanner, /CameraBarcodeReader/);
-assert.match(scanner, /qr_code/);
-assert.match(scanner, /ean_13/);
+assert.match(scanner, /accepted === false/);
+assert.match(scanner, /queueRef/);
 assert.doesNotMatch(scanner, /Camera scanning is unavailable in this browser/);
 
 assert.match(exactScanner, /CameraBarcodeReader/);
@@ -50,19 +50,23 @@ assert.match(exactScanner, /Scan Physical Item IDs/);
 assert.match(exactScanner, /accepted: true/);
 assert.match(exactScanner, /next\.length >= count/);
 
-assert.match(camera, /navigator\.mediaDevices\.getUserMedia/);
-assert.match(camera, /BarcodeDetector/);
-assert.match(camera, /ZXING_FALLBACK_URL/);
+// The preview element stays mounted while hidden, then ZXing owns camera stream
+// creation + attachment. This prevents the old permission-granted black-screen
+// race where getUserMedia completed before the <video> element existed.
+assert.match(camera, /DECODER_URL/);
 assert.match(camera, /cdn\.jsdelivr\.net\/npm\/@zxing\/browser@0\.1\.5/);
 assert.match(camera, /BrowserMultiFormatReader/);
-assert.match(camera, /enumerateDevices/);
-assert.match(camera, /getCapabilities/);
-assert.match(camera, /torch/);
-assert.match(camera, /Camera permission is blocked/);
+assert.match(camera, /decodeFromConstraints/);
+assert.match(camera, /facingMode/);
+assert.match(camera, /videoRef/);
+assert.match(camera, /playsInline/);
+assert.match(camera, /display: visible \? "block" : "none"/);
+assert.match(camera, /NotAllowedError/);
 assert.match(camera, /NotReadableError/);
 assert.match(camera, /Move it away/);
-assert.match(camera, /blockedRawRef/);
-assert.match(camera, /650/);
+assert.match(camera, /1200/);
+assert.match(camera, /callbackRef/);
+assert.match(camera, /modeRef/);
 
 assert.match(headers, /Permissions-Policy: camera=\(self\)/);
 assert.doesNotMatch(headers, /Permissions-Policy: camera=\(\)/);
@@ -72,4 +76,4 @@ assert.match(studio, /Choose Specific IDs/);
 assert.match(studio, /Excel ID Register/);
 assert.match(studio, /CSV ID Register/);
 
-console.log("Beginner inventory, camera reliability, and integrated New Sale scanner contracts passed.");
+console.log("Beginner inventory, mounted camera preview, and integrated New Sale scanner contracts passed.");
