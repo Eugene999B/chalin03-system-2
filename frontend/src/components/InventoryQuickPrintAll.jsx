@@ -18,20 +18,28 @@ function downloadBlob(blob, fileName) {
 
 export default function InventoryQuickPrintAll({ productId, onPrinted }) {
   const [units, setUnits] = useState([]);
+  const [maxSelection, setMaxSelection] = useState(500);
   const [format, setFormat] = useState("sticker");
   const [style, setStyle] = useState("standard");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [confirmationCodes, setConfirmationCodes] = useState([]);
+  const [voidCodes, setVoidCodes] = useState(() => new Set());
+  const [physicalConfirmed, setPhysicalConfirmed] = useState(false);
 
   const load = useCallback(async () => {
     const response = await axiosClient.get(
       "/inventory-traceability/identity-studio/units"
     );
     setUnits(response.data?.units || []);
+    setMaxSelection(Number(response.data?.max_selection || 500));
   }, []);
 
   useEffect(() => {
+    setConfirmationCodes([]);
+    setVoidCodes(new Set());
+    setPhysicalConfirmed(false);
     load().catch((loadError) =>
       setError(apiMessage(loadError, "Unable to load unprinted IDs."))
     );
@@ -50,14 +58,15 @@ export default function InventoryQuickPrintAll({ productId, onPrinted }) {
 
   async function printAll() {
     if (!unprinted.length) return;
-    setBusy(true);
+    const rows = unprinted.slice(0, maxSelection);
+    setBusy("print");
     setError("");
     setNotice("");
     try {
       const response = await axiosClient.post(
         "/inventory-traceability/identity-studio/print-selected",
         {
-          unit_codes: unprinted.map((unit) => unit.unit_code),
+          unit_codes: rows.map((unit) => unit.unit_code),
           print_format: format,
           label_style: style,
         },
@@ -67,8 +76,13 @@ export default function InventoryQuickPrintAll({ productId, onPrinted }) {
         response.data,
         `chalin03-all-unprinted-labels-${Date.now()}.pdf`
       );
+      setConfirmationCodes(rows.map((unit) => unit.unit_code));
+      setVoidCodes(new Set());
+      setPhysicalConfirmed(false);
       setNotice(
-        `${unprinted.length} label${unprinted.length === 1 ? "" : "s"} downloaded. Attach them to the matching stock, then use the confirmation section below.`
+        unprinted.length > rows.length
+          ? `${rows.length} labels downloaded. ${unprinted.length - rows.length} remain for the next one-click print job.`
+          : `${rows.length} label${rows.length === 1 ? "" : "s"} downloaded. Attach them to the matching stock, then confirm below.`
       );
       await load();
       await onPrinted?.();
@@ -86,7 +100,45 @@ export default function InventoryQuickPrintAll({ productId, onPrinted }) {
       }
       setError(message);
     } finally {
-      setBusy(false);
+      setBusy("");
+    }
+  }
+
+  function toggleVoid(code) {
+    setVoidCodes((current) => {
+      const next = new Set(current);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+    setPhysicalConfirmed(false);
+  }
+
+  async function confirmPrinted() {
+    if (!confirmationCodes.length || !physicalConfirmed) return;
+    const active = confirmationCodes.filter((code) => !voidCodes.has(code));
+    const voided = confirmationCodes.filter((code) => voidCodes.has(code));
+    setBusy("confirm");
+    setError("");
+    try {
+      const response = await axiosClient.post(
+        "/inventory-traceability/identity-studio/confirm-selected",
+        {
+          active_unit_codes: active,
+          void_unit_codes: voided,
+          notes: `Quick Print confirmation: ${active.length} attached; ${voided.length} damaged/unused.`,
+        }
+      );
+      setNotice(response.data?.message || "Printed labels confirmed.");
+      setConfirmationCodes([]);
+      setVoidCodes(new Set());
+      setPhysicalConfirmed(false);
+      await load();
+      await onPrinted?.();
+    } catch (confirmError) {
+      setError(apiMessage(confirmError, "Unable to confirm the printed labels."));
+    } finally {
+      setBusy("");
     }
   }
 
@@ -131,14 +183,67 @@ export default function InventoryQuickPrintAll({ productId, onPrinted }) {
         <button
           type="button"
           className="simple-label-studio__primary"
-          disabled={!unprinted.length || busy}
+          disabled={!unprinted.length || Boolean(busy)}
           onClick={printAll}
         >
-          {busy
+          {busy === "print"
             ? "Preparing All Labels…"
             : `Print All ${unprinted.length || ""} Unprinted IDs`}
         </button>
       </div>
+
+      {confirmationCodes.length ? (
+        <div className="simple-label-studio__confirm" style={{ marginTop: "1rem" }}>
+          <div className="simple-label-studio__confirm-number">✓</div>
+          <div>
+            <h3>Confirm what you physically attached</h3>
+            <p>
+              Keep successful labels checked. Untick only a damaged or unused label;
+              that exact ID will be voided instead of activated.
+            </p>
+            <div className="simple-label-studio__confirm-list">
+              {confirmationCodes.map((code) => {
+                const attached = !voidCodes.has(code);
+                return (
+                  <label key={code} className={!attached ? "is-void" : ""}>
+                    <input
+                      type="checkbox"
+                      checked={attached}
+                      onChange={() => toggleVoid(code)}
+                    />
+                    <span>
+                      <strong>{code}</strong>
+                      <small>
+                        {attached
+                          ? "Attached to physical stock"
+                          : "Damaged / unused — void this ID"}
+                      </small>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <label className="traceability-confirmation">
+              <input
+                type="checkbox"
+                checked={physicalConfirmed}
+                onChange={(event) => setPhysicalConfirmed(event.target.checked)}
+              />
+              <span>I physically checked the attached/unused choices above.</span>
+            </label>
+            <button
+              type="button"
+              className="simple-label-studio__primary"
+              disabled={!physicalConfirmed || Boolean(busy)}
+              onClick={confirmPrinted}
+            >
+              {busy === "confirm"
+                ? "Confirming…"
+                : `Confirm ${confirmationCodes.length - voidCodes.size} Attached · Void ${voidCodes.size}`}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
