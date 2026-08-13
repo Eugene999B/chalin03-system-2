@@ -181,7 +181,7 @@ test("known CHALIN ONE staging frontend identifies the staging runtime", () => {
   );
 });
 
-test("protected staging recovery override survives a misleading Railway production label", () => {
+test("protected staging recovery context survives a misleading Railway production label", () => {
   withEnvironment(
     {
       NODE_ENV: "production",
@@ -193,6 +193,13 @@ test("protected staging recovery override survives a misleading Railway producti
       const report = validateCurrentEnvironment({
         requireSignature: false,
         allowCrossEnvironmentRecovery: true,
+        recoveryEnvironment: {
+          NODE_ENV: "production",
+          RAILWAY_ENVIRONMENT_NAME: "staging",
+          RAILWAY_ENVIRONMENT_ID: CHALIN_ONE_STAGING_ENVIRONMENT_ID,
+          RAILWAY_GIT_BRANCH: CHALIN_ONE_STAGING_GIT_BRANCH,
+          RAILWAY_PUBLIC_DOMAIN: CHALIN_ONE_STAGING_PUBLIC_DOMAIN,
+        },
       });
       assert.equal(report.valid, true, report.errors.join("\n"));
       assert.equal(report.crossEnvironmentRecovery, true);
