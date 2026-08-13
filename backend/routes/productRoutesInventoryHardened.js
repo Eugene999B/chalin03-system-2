@@ -480,7 +480,7 @@ router.patch(
       }
 
       const product = products[0];
-      await reconcileAutomaticIdentityCoverage(connection, {
+      const identityCoverage = await reconcileAutomaticIdentityCoverage(connection, {
         branchId: storeId,
         productId: Number(id),
         actorUserId: req.user.id,
@@ -497,10 +497,10 @@ router.patch(
         return res.status(400).json({ status: "error", message: calculationError.message });
       }
 
-      if (isSerializedProduct(product) && newQuantity < oldQuantity) {
+      if (isSerializedProduct(identityCoverage.product) && newQuantity < oldQuantity) {
         await connection.rollback();
         transactionStarted = false;
-        return sendSerializedDecreaseBlocked(res, product);
+        return sendSerializedDecreaseBlocked(res, identityCoverage.product);
       }
 
       await connection.query(
