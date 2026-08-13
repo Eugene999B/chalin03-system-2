@@ -4,7 +4,7 @@ import ManualNewSalePage from "./ManualNewSalePage";
 
 // ManualNewSalePage intentionally preserves the complete professional installment UI:
 // Installment Agreement, terms_accepted, after_full_payment, Custom Due Dates,
-// custom_due_dates_text and custom_due_dates. Autonomous mode is the fast checkout path.
+// custom_due_dates_text and custom_due_dates: preserved inside Manual Sale.
 export default function NewSalePage() {
   const [mode, setMode] = useState("autonomous");
 

@@ -26,7 +26,7 @@ test("sale creation accepts and verifies an explicit existing customer", () => {
 });
 
 test("New Sale can search, select and submit a saved customer", () => {
-  const source = read("frontend", "src", "pages", "NewSalePage.jsx");
+  const source = read("frontend", "src", "pages", "ManualNewSalePage.jsx");
   assert.match(source, /\/sales\/customers/);
   assert.match(source, /Returning Customer Search/);
   assert.match(source, /selectSavedCustomer/);
@@ -59,7 +59,7 @@ test("Equipment Hire and Equipment Finance continue using reusable customer IDs"
 
 
 test("returning customer search appears below reusable identity fields", () => {
-  const source = read("frontend", "src", "pages", "NewSalePage.jsx");
+  const source = read("frontend", "src", "pages", "ManualNewSalePage.jsx");
   const css = read("frontend", "src", "index.css");
   const nameIndex = source.indexOf("<label>Customer Name</label>");
   const locationIndex = source.indexOf("<label>Customer Location</label>");
