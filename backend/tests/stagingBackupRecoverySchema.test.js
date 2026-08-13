@@ -33,6 +33,82 @@ const frontendSource = fs.readFileSync(
   "utf8"
 );
 
+const PRODUCTION_BACKUP_20260812_MIGRATIONS = Object.freeze([
+  "20260714_cash_control_security_migration",
+  "20260718_release3d_notifications_group_alerts",
+  "20260718_release3e_shared_reports_documents_roles_audit",
+  "20260718_release3fb_professional_installment_sales",
+  "20260718_release3fd2_worker_identity_cards",
+  "20260719_standalone_employment_documents_signature",
+  "20260719_worker_hr_letters",
+  "20260722_bank_biometric_device_reset_v1",
+  "20260722_equipment_sales_installments_foundation",
+  "20260723_equipment_catalogue_core_compatibility_repair_v2",
+  "20260723_equipment_sales_commercial_column_repair_v1",
+  "20260723_release31_audit_schema_baseline",
+  "20260723_release31_audit_schema_safety",
+  "20260723_release31_database_safety_guards",
+  "20260723_release31_runtime_schema_baseline",
+  "20260725_phase1_financial_control_hardening",
+  "20260725_post_phase1_audit_signoff_readiness",
+  "20260726_mining_trial_data_cleanup",
+  "20260729_equipment_credit_application_foundation",
+  "20260729_equipment_finance_agreement_activation",
+  "20260729_equipment_finance_deposit_reservation",
+  "20260729_equipment_finance_final_lifecycle",
+  "20260731_equipment_finance_operational_polish",
+  "20260731_equipment_finance_professional_rebuild",
+  "20260801_equipment_finance_phase1_schema_foundation",
+  "20260802_boss_approved_product_quantity_correction",
+  "20260803_equipment_finance_phase3_agreement_creation",
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity",
+  "20260803_equipment_finance_phase5_unified_documents",
+  "20260803_equipment_finance_phase6_performance",
+  "20260804_boss_approved_product_quantity_correction",
+  "20260804_equipment_finance_phase3_application_pipeline",
+  "20260805_automatic_customer_merge_rollback",
+  "20260805_equipment_finance_opening_deposit_foundation_repair",
+  "20260805_exact_name_receipt_owner_recovery",
+  "20260805_master_mickey_july31_exact_debt_repair",
+  "20260805_missing_credit_debt_backfill",
+  "20260805_post_rollback_debt_account_reconciliation",
+  "20260805_unpaid_receipt_identity_isolation",
+  "20260805_user_authorized_equipment_installment_restart_reset",
+  "20260805_user_authorized_installment_finance_excavator_cleanup",
+  "20260805_zero_payment_credit_debt_visibility_repair",
+  "20260806_kwabena_main_store_quantity_correction",
+  "20260806_master_mickey_merge_profile_visibility",
+  "20260810_payroll_financial_foundation",
+  "clean_master_database_reset",
+  "equipment_finance_phase4_balance_guard",
+  "equipment_finance_phase4_corrections_settlements",
+  "equipment_finance_phase5a_private_documents",
+  "equipment_finance_phase5b_document_review",
+  "equipment_finance_phase5c_delivery_authorization",
+  "equipment_finance_phase5d_delivery_confirmation",
+  "equipment_finance_phase6_reporting_notifications",
+  "equipment_hire_part4_5c",
+  "release2_final_security_backup_workers_executive",
+  "release2a1_one_active_session",
+  "release2a2_account_lock_otp",
+  "release2d_worker_profile_expansion",
+  "release2f_worker_print_pack",
+  "release3_group_command_configuration",
+  "release3_owner_mfa_security",
+  "release3b_mining_operations_control",
+  "release3c_hire_commercial_completion",
+  "release3fa_authentication_sessions_ux",
+  "release3fc_user_permissions_security_messages",
+  "release3fc2_category_isolation_guides_receipts_workers",
+  "release3fc3_mobile_id_expense_funding",
+  "shared_fleet_mining_baseline",
+  "spare_parts_sales_hotfix",
+  "stage6a_group_users_staff",
+  "stage6b_permissions_audit_migration",
+  "stage6c_reliability_migration",
+  "stage6d_security_migration",
+]);
+
 function backupWithMigrations(names) {
   return {
     backup_type: BACKUP_TYPE,
@@ -160,6 +236,27 @@ test("migration discovery selects trusted production structural sources and excl
   assert.equal(
     result.unresolved.includes("migration_source_that_is_not_in_repository"),
     true
+  );
+});
+
+test("the exact 2026-08-12 production backup migration history is fully recoverable from trusted repo sources", () => {
+  assert.equal(PRODUCTION_BACKUP_20260812_MIGRATIONS.length, 73);
+  const result = discoverMigrationPlan(
+    backupWithMigrations(PRODUCTION_BACKUP_20260812_MIGRATIONS)
+  );
+  const expectedDataRepairs = PRODUCTION_BACKUP_20260812_MIGRATIONS.filter((name) =>
+    DATA_REPAIR_MIGRATIONS.has(name)
+  ).sort();
+
+  assert.deepEqual(
+    result.unresolved,
+    [],
+    `Missing structural migration source(s): ${result.unresolved.join(", ")}`
+  );
+  assert.deepEqual([...result.excludedDataMigrations].sort(), expectedDataRepairs);
+  assert.equal(
+    result.plan.length + result.excludedDataMigrations.length,
+    PRODUCTION_BACKUP_20260812_MIGRATIONS.length
   );
 });
 
