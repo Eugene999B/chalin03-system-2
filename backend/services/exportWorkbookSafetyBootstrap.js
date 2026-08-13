@@ -13,6 +13,49 @@ const INSTALL_FLAG = Symbol.for("chalin03.exportWorkbookSafetyInstalled");
 const MICKEY_VISIBILITY_FLAG = Symbol.for(
   "chalin03.masterMickeyMergeProfileVisibilityChecked"
 );
+const CHALIN_ONE_FULL_TRIAL_SEED_FLAG = Symbol.for(
+  "chalin03.chalinOneFullTrialSeedChecked"
+);
+const CHALIN_ONE_STAGING_ENVIRONMENT_ID =
+  "db796450-1b80-42e8-9988-db3e90ca0713";
+
+function runChalinOneFullTrialSeedBootstrap() {
+  const environmentId = String(process.env.RAILWAY_ENVIRONMENT_ID || "").trim();
+  if (environmentId !== CHALIN_ONE_STAGING_ENVIRONMENT_ID) {
+    return { skipped: true, reason: "not-dedicated-chalin-one-staging" };
+  }
+  if (globalThis[CHALIN_ONE_FULL_TRIAL_SEED_FLAG]) {
+    return { skipped: true, reason: "already-checked" };
+  }
+
+  const scriptPath = path.join(
+    __dirname,
+    "..",
+    "scripts",
+    "runChalinOneFullTrialSeedIfStaging.js"
+  );
+  const result = spawnSync(process.execPath, [scriptPath], {
+    cwd: path.join(__dirname, ".."),
+    env: process.env,
+    stdio: "inherit",
+    shell: false,
+  });
+
+  if (result.error) throw result.error;
+  if (Number(result.status) !== 0) {
+    throw new Error(
+      `CHALIN ONE full-trial staging seed bootstrap failed with exit code ${result.status}.`
+    );
+  }
+
+  Object.defineProperty(globalThis, CHALIN_ONE_FULL_TRIAL_SEED_FLAG, {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+  return { applied_or_verified: true };
+}
 
 function runMasterMickeyMergeProfileVisibility() {
   if (String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production") {
@@ -106,14 +149,17 @@ function installExportWorkbookSafety() {
   return true;
 }
 
+runChalinOneFullTrialSeedBootstrap();
 runMasterMickeyMergeProfileVisibility();
 installExportWorkbookSafety();
 
 module.exports = {
+  CHALIN_ONE_STAGING_ENVIRONMENT_ID,
   INVALID_WORKSHEET_CHARACTERS,
   MAX_WORKSHEET_NAME_LENGTH,
   createUniqueWorksheetName,
   installExportWorkbookSafety,
+  runChalinOneFullTrialSeedBootstrap,
   runMasterMickeyMergeProfileVisibility,
   sanitizeWorksheetName,
 };
