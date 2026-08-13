@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import InventoryUnitScanner from "../components/InventoryUnitScanner";
+import AutonomousSaleScanner from "../components/AutonomousSaleScanner";
 import { useAuth } from "../context/AuthContext";
 
 export default function NewSalePage() {
@@ -661,6 +662,69 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setQuantity(1);
   }
 
+  function addResolvedScanToCart(scan) {
+    setError("");
+    setMessage("");
+
+    const product = scan?.product;
+    if (!product?.id) {
+      setError("The scan did not identify a sellable product.");
+      return;
+    }
+
+    const unitCode = cleanText(scan?.unit?.unit_code).toUpperCase();
+    if (
+      unitCode &&
+      cart.some((item) => (item.unit_ids || []).includes(unitCode))
+    ) {
+      setError(`${unitCode} is already in this sale.`);
+      return;
+    }
+
+    const existingItem = cart.find(
+      (item) => Number(item.id) === Number(product.id)
+    );
+    const existingQuantity = existingItem ? Number(existingItem.quantity) : 0;
+    const finalQuantity = existingQuantity + 1;
+
+    if (finalQuantity > Number(product.quantity || 0)) {
+      setError(`Only ${product.quantity} in stock for ${product.name}.`);
+      return;
+    }
+
+    if (existingItem) {
+      setCart(
+        cart.map((item) =>
+          Number(item.id) === Number(product.id)
+            ? {
+                ...item,
+                quantity: finalQuantity,
+                unit_ids: unitCode
+                  ? [...(item.unit_ids || []), unitCode]
+                  : item.unit_ids || [],
+              }
+            : item
+        )
+      );
+    } else {
+      setCart([
+        ...cart,
+        {
+          ...product,
+          quantity: 1,
+          unit_ids: unitCode ? [unitCode] : [],
+        },
+      ]);
+    }
+
+    setMessage(
+      `${product.name} added by scan${unitCode ? ` · ${unitCode}` : ""}. Continue scanning or search manually.`
+    );
+    setSelectedProductId("");
+    setProductSearch("");
+    setQuantity(1);
+  }
+
   function removeFromCart(productId) {
     setCart(cart.filter((item) => item.id !== productId));
   }
@@ -1307,7 +1371,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 Record cash, MoMo, bank, mixed and credit sales for{" "}
                 <strong>{currentStoreName}</strong>
                 {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
-                Stock will reduce immediately after a successful receipt.
+                Search products normally or scan an item straight into the same cart.
               </p>
             </div>
 
@@ -1402,12 +1466,14 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 <p style={styles.eyebrowDark}>Step 1</p>
                 <h2 style={styles.panelTitle}>Find Product & Build Cart</h2>
                 <p style={styles.panelSubtitle}>
-                  Search by product name, barcode, category or excavator type.
+                  Scan an item for fast entry, or use the familiar product search and quantity controls below.
                 </p>
               </div>
 
               <span style={styles.goldBadge}>{currentStoreCode}</span>
             </div>
+
+            <AutonomousSaleScanner onResolvedScan={addResolvedScanToCart} />
 
             <div style={{ ...styles.searchGrid, ...compactSearchGrid }}>
               <div>
@@ -1517,7 +1583,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
               <div>
                 <h2 style={styles.panelTitle}>Sale Items</h2>
                 <p style={styles.panelSubtitle}>
-                  Review quantities before completing the sale.
+                  Scanned and manually selected products share this one cart.
                 </p>
               </div>
 
@@ -1528,7 +1594,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
               <div style={styles.emptyCart}>
                 <span>🛒</span>
                 <strong>No items added yet.</strong>
-                <p>Search and select a product, then add it to the sale.</p>
+                <p>Scan an item or search and select a product.</p>
               </div>
             ) : (
               <div style={styles.cartList}>
@@ -1576,13 +1642,13 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                         Remove
                       </button>
 
-                      {serializedItem ? (
+                      {unitIdsRequired ? (
                         <div style={{ gridColumn: "1 / -1" }}>
                           <InventoryUnitScanner
                             product={item}
                             requiredCount={item.quantity}
                             selectedUnitCodes={item.unit_ids || []}
-                            required={unitIdsRequired}
+                            required
                             onChange={(unitIds) =>
                               setCart((current) =>
                                 current.map((cartItem) =>
