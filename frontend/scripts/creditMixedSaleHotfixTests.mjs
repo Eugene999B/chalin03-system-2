@@ -8,7 +8,7 @@ const root = path.resolve(here, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-const newSale = read("src/pages/NewSalePage.jsx");
+const newSale = read("src/pages/ManualNewSalePage.jsx");
 const retirementBridge = read(
   "src/utils/sparePartsInstallmentRetirementBridge.js"
 );
@@ -37,4 +37,4 @@ assert.match(validators, /"credit"/);
 assert.match(validators, /"mixed"/);
 assert.match(validators, /Customer name or phone is required for credit, mixed/);
 
-console.log("Credit and Mixed New Sale hotfix contracts passed.");
+console.log("Credit and Mixed Manual Sale hotfix contracts passed.");
