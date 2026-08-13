@@ -52,11 +52,6 @@ function buildClarificationRequest({ prompt } = {}) {
   const text = clean(prompt);
   if (!isDocumentRequest(text)) return null;
 
-  // Once a user has explicitly chosen a supported output format, the request
-  // is actionable. Time-bound operational reports use a bounded recent default
-  // when no period is stated, and the governed reasoning/tool layer records the
-  // exact period it actually used. Do not force an extra chat turn merely to
-  // ask for dates.
   if (FORMAT_PATTERN.test(text)) return null;
 
   const timeBound = TIME_BOUND_TOPIC_PATTERN.test(text);
@@ -85,22 +80,10 @@ async function clarificationConversation({
   title,
 } = {}) {
   if (!conversationKey) {
-    const created = await createConversation({
-      persona,
-      userId: req.user.id,
-      scope,
-      title,
-    });
-    return loadOwnedConversation({
-      conversationKey: created.key,
-      userId: req.user.id,
-    });
+    const created = await createConversation({ persona, userId: req.user.id, scope, title });
+    return loadOwnedConversation({ conversationKey: created.key, userId: req.user.id });
   }
-
-  const conversation = await loadOwnedConversation({
-    conversationKey,
-    userId: req.user.id,
-  });
+  const conversation = await loadOwnedConversation({ conversationKey, userId: req.user.id });
   if (
     conversation.persona !== persona ||
     !sameScope(conversation, scope) ||
@@ -115,18 +98,10 @@ async function clarificationConversation({
   return conversation;
 }
 
-async function runClarificationTurn({
-  req,
-  persona,
-  scope,
-  conversationKey = null,
-  message,
-  clarification = null,
-} = {}) {
+async function runClarificationTurn({ req, persona, scope, conversationKey = null, message, clarification = null } = {}) {
   const promptInspection = inspectPrompt(message, { allowHighRiskDiscussion: true });
   const request = clarification || buildClarificationRequest({ prompt: promptInspection.text });
   if (!request) return null;
-
   const conversation = await clarificationConversation({
     req,
     persona,
@@ -141,7 +116,6 @@ async function runClarificationTurn({
     safetyStatus: promptInspection.action,
     createdBy: req.user.id,
   });
-
   await writePromptSafetyEvent({
     req,
     userId: req.user.id,
@@ -154,7 +128,6 @@ async function runClarificationTurn({
     inputSha256: promptInspection.input_sha256,
     safeSummary: promptInspection.safe_summary,
   });
-
   const assistantMessage = await addMessage({
     conversationId: conversation.id,
     role: "assistant",
@@ -163,7 +136,6 @@ async function runClarificationTurn({
     finishReason: "clarification",
     createdBy: req.user.id,
   });
-
   await writeAiAuditEvent({
     req,
     userId: req.user.id,
@@ -184,29 +156,16 @@ async function runClarificationTurn({
       prompt_sha256: promptInspection.input_sha256,
     },
   }).catch(() => null);
-
-  const title =
-    userMessage.conversation_title ||
-    conversation.title ||
-    deriveConversationTitle(promptInspection.text);
-
+  const title = userMessage.conversation_title || conversation.title || deriveConversationTitle(promptInspection.text);
   return Object.freeze({
     conversation_key: conversation.conversation_key,
-    conversation: Object.freeze({
-      key: conversation.conversation_key,
-      title,
-      persona,
-      workspace_code: scope?.workspace_code || null,
-    }),
+    conversation: Object.freeze({ key: conversation.conversation_key, title, persona, workspace_code: scope?.workspace_code || null }),
     message_key: assistantMessage.key,
     persona,
     answer: request.answer,
     evidence: Object.freeze([]),
     citations: Object.freeze({}),
-    continuity: Object.freeze({
-      recalled_count: 0,
-      evidence_authority: false,
-    }),
+    continuity: Object.freeze({ recalled_count: 0, evidence_authority: false }),
     reasoning: Object.freeze({
       intent: "clarification",
       live_data_required: false,
@@ -223,11 +182,7 @@ async function runClarificationTurn({
       rounds: 0,
       selection: null,
     }),
-    usage: Object.freeze({
-      input_tokens: 0,
-      output_tokens: 0,
-      cost_micros: 0,
-    }),
+    usage: Object.freeze({ input_tokens: 0, output_tokens: 0, cost_micros: 0 }),
   });
 }
 
