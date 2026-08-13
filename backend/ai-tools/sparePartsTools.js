@@ -31,16 +31,34 @@ function utcDateOnly(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
+function recentUtcWindow(now = new Date(), days = 30) {
+  const safeDays = Math.max(1, Math.min(365, Number(days) || 30));
+  const end = new Date(now);
+  const start = new Date(
+    Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
+  );
+  start.setUTCDate(start.getUTCDate() - (safeDays - 1));
+  return Object.freeze({
+    start_date: utcDateOnly(start),
+    end_date: utcDateOnly(end),
+  });
+}
+
 function withOperationsDefaultWindow(viewKey, input = {}, now = new Date()) {
   const normalized = input && typeof input === "object" ? { ...input } : {};
   if (
-    ["operations", "performance"].includes(viewKey) &&
     !String(normalized.start_date || "").trim() &&
     !String(normalized.end_date || "").trim()
   ) {
     const today = utcDateOnly(now);
-    normalized.start_date = today;
-    normalized.end_date = today;
+    if (viewKey === "operations") {
+      normalized.start_date = today;
+      normalized.end_date = today;
+    } else if (viewKey === "performance") {
+      const recent = recentUtcWindow(now, 30);
+      normalized.start_date = recent.start_date;
+      normalized.end_date = recent.end_date;
+    }
   }
   return normalized;
 }
@@ -205,7 +223,7 @@ function registerSparePartsAiTools(
     key: "spare_parts.performance_diagnostics",
     title: "Spare Parts cross-module performance diagnostics",
     description:
-      "Explains branch-scoped sales, profit-estimate, discount, expense, return/refund, collection/debt, purchase/stock and inventory-control drivers together. Distinguishes management profit estimates from cash flow, receivables, inventory availability and data-quality risk; never treats purchases as certified COGS. Use for questions such as why sales, cash or profit performance is weak.",
+      "Explains branch-scoped sales, profit-estimate, discount, expense, return/refund, collection/debt, purchase/stock and inventory-control drivers together. Distinguishes management profit estimates from cash flow, receivables, inventory availability and data-quality risk; never treats purchases as certified COGS. Use for questions such as why sales, cash or profit performance is weak. When no date range is supplied, performance diagnostics uses the most recent 30 calendar days ending on the current UTC business date, while explicit date ranges always take precedence.",
     handler: async ({ input, context }) =>
       executeView({
         input,
@@ -276,6 +294,7 @@ module.exports = {
   evidenceExcerpt,
   evidenceScope,
   executeView,
+  recentUtcWindow,
   registerSparePartsAiTools,
   utcDateOnly,
   withOperationsDefaultWindow,
