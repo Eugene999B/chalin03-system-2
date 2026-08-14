@@ -52,11 +52,13 @@ const WORKSPACE_DOMAIN = Object.freeze({
   instalment_finance: "equipment_finance",
 });
 
-const BUSINESS_SIGNAL_PATTERN = /\b(?:sale|sales|sold|sell|selling|profit|margin|stock|inventory|customer|debt|owe|owing|payment|collection|payroll|salary|worker|employee|production|cost|expense|contract|invoice|arrears|receivable)\b/i;
+const BUSINESS_SIGNAL_PATTERN = /\b(?:sale|sales|sold|sell|selling|buy|buying|bought|profit|margin|stock|inventory|customer|debt|owe|owing|payment|collection|payroll|salary|worker|employee|production|cost|expense|contract|invoice|arrears|receivable)\b/i;
 const LIVE_SIGNAL_PATTERN = /\b(?:today|yesterday|now|current|currently|latest|live|outstanding|overdue|active|this week|this month|last week|last month|right now)\b/i;
-const INTRINSIC_LIVE_PATTERN = /\b(?:how much (?:did|do|does|is|are)|how many|current balance|current stock|stock level|outstanding debt|(?:what|how much) .* owe|owes us|owing us|sales today|sold today|profit today|margin today|production today|payments? today|collections? today)\b/i;
+const INTRINSIC_LIVE_PATTERN = /\b(?:how much (?:did|do|does|is|are)|how many|current balance|current stock|stock level|outstanding debt|(?:what|how much) .* owe|owes us|owing us|sales today|sold today|bought today|profit today|margin today|production today|payments? today|collections? today)\b/i;
 const REFERENTIAL_PATTERN = /\b(?:it|its|that|this|these|those|them|they|he|his|him|she|her|there|same|previous|earlier|yesterday)\b/i;
 const FOLLOW_UP_START_PATTERN = /^(?:and\b|also\b|then\b|what about\b|how about\b|why\b|who\b|which\b|where\b|when\b|how much\b|how many\b|profit\b|sales?\b|margin\b|yesterday\b|today\b|there\b|same\b|do it\b|generate it\b|put that\b|put it\b|compare them\b|continue\b)/i;
+const CONFIRMATION_CONTINUATION_PATTERN = /^(?:(?:yes|yeah|yep|sure|okay|ok|alright)(?:\s*,?\s*(?:(?:please\s+)?do\s+(?:it|that|this)|go\s+ahead|continue|proceed))?|(?:please\s+)?do\s+(?:it|that|this)|go\s+ahead|continue|proceed)[.!]*$/i;
+const ASSISTANT_OFFER_PATTERN = /\b(?:i can|i could|i will|i'll|would you like me to|do you want me to|want me to|shall i)\b/i;
 
 const ANSWER_MODE_RULES = Object.freeze([
   Object.freeze({ key: "action", pattern: /^(?:please\s+)?(?:deactivate|disable|activate|rename|create|generate|export|send|issue|approve|reject|record|update|change|remove|archive|restore)\b/i }),
@@ -108,11 +110,41 @@ function recentTaskHistory(history = [], maximum = MAX_HISTORY_TURNS) {
   );
 }
 
+function isConfirmationContinuation(prompt) {
+  return CONFIRMATION_CONTINUATION_PATTERN.test(clean(prompt, 2400));
+}
+
+function latestAssistantOffer(history = []) {
+  const items = recentTaskHistory(history);
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.role !== "assistant" || !ASSISTANT_OFFER_PATTERN.test(item.content)) continue;
+    const candidates = item.content
+      .split(/\n+/)
+      .flatMap((line) => line.match(/[^.!?]+[.!?]?/g) || [])
+      .map((candidate) => clean(candidate, 1000))
+      .filter(Boolean);
+    for (let candidateIndex = candidates.length - 1; candidateIndex >= 0; candidateIndex -= 1) {
+      if (ASSISTANT_OFFER_PATTERN.test(candidates[candidateIndex])) {
+        return candidates[candidateIndex];
+      }
+    }
+  }
+  return "";
+}
+
+function assistantOfferObjective(offer) {
+  return clean(offer, 1000)
+    .replace(/^(?:i can|i could|i will|i'll|would you like me to|do you want me to|want me to|shall i)\s+/i, "")
+    .replace(/[?!.]+$/g, "")
+    .trim();
+}
+
 function isContinuation(prompt, history = [], explicitTaskState = null) {
   if (explicitTaskState?.follow_up === true || explicitTaskState?.referential_language === true) return true;
   const text = clean(prompt, 2400);
   if (!text || recentTaskHistory(history).length === 0) return false;
-  if (FOLLOW_UP_START_PATTERN.test(text) || REFERENTIAL_PATTERN.test(text)) return true;
+  if (isConfirmationContinuation(text) || FOLLOW_UP_START_PATTERN.test(text) || REFERENTIAL_PATTERN.test(text)) return true;
   const words = text.split(/\s+/).filter(Boolean);
   return words.length <= 5 && BUSINESS_SIGNAL_PATTERN.test(text);
 }
@@ -150,7 +182,7 @@ function isShortContinuation(prompt) {
   const text = clean(prompt, 2400);
   if (!text) return false;
   const words = text.split(/\s+/).filter(Boolean);
-  return words.length <= 7 && (FOLLOW_UP_START_PATTERN.test(text) || REFERENTIAL_PATTERN.test(text) || BUSINESS_SIGNAL_PATTERN.test(text));
+  return words.length <= 7 && (isConfirmationContinuation(text) || FOLLOW_UP_START_PATTERN.test(text) || REFERENTIAL_PATTERN.test(text) || BUSINESS_SIGNAL_PATTERN.test(text));
 }
 
 function inferDomains({ prompt, history = [], workspaceCode = "", taskState = null } = {}) {
@@ -228,9 +260,9 @@ function inferHints(text) {
   const value = clean(text, 8000);
   const times = unique((value.match(/\b(?:today|yesterday|this week|last week|this month|last month|now|current(?:ly)?)\b/gi) || []).map((item) => item.toLowerCase())).slice(0, 4);
   const metrics = unique(
-    (value.match(/\b(?:sales?|sell(?:ing)?|sold|profit|margin|stock|inventory|debt|outstanding|collections?|payments?|salary|payroll|production|costs?|expenses?|receivables?|arrears)\b/gi) || [])
+    (value.match(/\b(?:sales?|sell(?:ing)?|sold|buy(?:ing)?|bought|profit|margin|stock|inventory|debt|outstanding|collections?|payments?|salary|payroll|production|costs?|expenses?|receivables?|arrears)\b/gi) || [])
       .map((item) => item.toLowerCase())
-      .map((item) => /^(?:sale|sales|sell|selling|sold)$/.test(item) ? "sales" : item)
+      .map((item) => /^(?:sale|sales|sell|selling|sold|buy|buying|bought)$/.test(item) ? "sales" : item)
   ).slice(0, 8);
   const explicitLocations = /\bmain store\b/i.test(value) ? ["Main Store"] : [];
   const genericLocations = (value.match(/\b[a-z][a-z-]{1,30}(?:\s+[a-z][a-z-]{1,30}){0,2}\s+(?:store|branch|site|location)\b/gi) || [])
@@ -254,22 +286,31 @@ function understandConversationTask({
 } = {}) {
   const currentPrompt = clean(prompt, 12000);
   const continuityRequired = isContinuation(currentPrompt, history, taskState);
+  const confirmationContinuation = continuityRequired && isConfirmationContinuation(currentPrompt);
+  const confirmedAssistantOffer = confirmationContinuation ? latestAssistantOffer(history) : "";
+  const confirmedObjective = confirmationContinuation
+    ? assistantOfferObjective(confirmedAssistantOffer) || clean(taskState?.working_state?.objective, 1000)
+    : "";
   const historyText = continuityRequired
     ? recentTaskHistory(history)
         .filter((item) => item.role === "user")
         .map((item) => item.content)
         .join("\n")
     : "";
-  const continuityContext = resolvedPrompt || taskState?.resolved_prompt || historyText;
+  const inheritedContext = resolvedPrompt || taskState?.resolved_prompt || historyText;
+  const continuityContext = [confirmedObjective, inheritedContext].filter(Boolean).join("\n");
   const domainResult = inferDomains({
     prompt: currentPrompt,
     history,
     workspaceCode,
     taskState,
   });
-  const objectives = objectiveList(currentPrompt, subquestions.length ? subquestions : taskState?.subquestions);
-  const mode = answerMode(currentPrompt);
-  const facets = answerFacets(currentPrompt);
+  const objectives = confirmationContinuation && confirmedObjective
+    ? Object.freeze([confirmedObjective])
+    : objectiveList(currentPrompt, subquestions.length ? subquestions : taskState?.subquestions);
+  const intentPrompt = confirmedObjective || currentPrompt;
+  const mode = answerMode(intentPrompt);
+  const facets = answerFacets(intentPrompt);
   const liveDataRequired = inferLiveDataRequired({
     prompt: currentPrompt,
     resolvedPrompt: continuityContext,
@@ -288,6 +329,8 @@ function understandConversationTask({
     ambiguous_domain: domainResult.ambiguous,
     live_data_required: liveDataRequired,
     continuity_required: continuityRequired,
+    confirmation_continuation: confirmationContinuation,
+    confirmed_assistant_offer: confirmedAssistantOffer || null,
     objectives,
     objective_count: objectives.length,
     evidence_families: evidenceFamiliesForDomains(domainResult.domains),
@@ -307,7 +350,9 @@ function understandConversationTask({
 
 module.exports = {
   ANSWER_MODE_RULES,
+  ASSISTANT_OFFER_PATTERN,
   BUSINESS_SIGNAL_PATTERN,
+  CONFIRMATION_CONTINUATION_PATTERN,
   DOMAIN_EVIDENCE_FAMILIES,
   DOMAIN_RULES,
   FOLLOW_UP_START_PATTERN,
@@ -320,13 +365,16 @@ module.exports = {
   WORKSPACE_DOMAIN,
   answerFacets,
   answerMode,
+  assistantOfferObjective,
   clean,
   domainMatches,
   evidenceFamiliesForDomains,
   inferDomains,
   inferHints,
   inferLiveDataRequired,
+  isConfirmationContinuation,
   isContinuation,
+  latestAssistantOffer,
   objectiveList,
   recentTaskHistory,
   understandConversationTask,
