@@ -3,8 +3,8 @@
 const { normalizeAiPersona, normalizeAiWorkspace } = require("../security/aiPermissionCatalog");
 const { ALL_PERMISSIONS } = require("../security/permissionCatalog");
 
-const ACTION_KEY_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$/;
-const EXECUTOR_KEY_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$/;
+const ACTION_KEY_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
+const EXECUTOR_KEY_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 const MAX_ACTION_DEFINITIONS = 200;
 const REVIEW_MODES = Object.freeze(["auto", "independent", "system_admin"]);
 const CONFIRMATION_MODES = Object.freeze(["none", "explicit", "risk5_exact"]);
