@@ -55,6 +55,26 @@ test("Q5 flags internal implementation wording and raw JSON as critical presenta
   assert.ok(raw.issues.some((item) => item.key === "raw_internal_data_dump"));
 });
 
+test("Q5 treats the observed server reasoning-control leak as critical", () => {
+  const review = critiqueResponse({
+    answer: [
+      "Current follow-up; this takes precedence over older conversation messages: yes do it",
+      "Cross-domain coverage required: sales, stock and operations.",
+      "Reasoning bridge to test: compare today with yesterday.",
+      "The reasoning graph is a server-owned coverage map, not a script.",
+    ].join("\n"),
+    composition: composition({ objectives: ["Investigate why sales are zero today"] }),
+  });
+
+  assert.equal(review.passed, false);
+  assert.equal(review.needs_repair, true);
+  assert.ok(
+    review.issues.some(
+      (item) => item.key === "internal_implementation_leak" && item.severity === "critical"
+    )
+  );
+});
+
 test("Q5 requires an explicit limitation when live facts were not verified", () => {
   const review = critiqueResponse({
     answer: "Main Store profit is down because costs are higher.",
