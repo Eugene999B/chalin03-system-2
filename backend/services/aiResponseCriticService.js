@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  INTERNAL_CONTROL_LEAK_PATTERNS,
+  findPatternKeys,
+} = require("./aiSafetyService");
+
 const MAX_ANSWER_CHARACTERS = 120000;
 const MAX_OBJECTIVES = 8;
 const MAX_ISSUES = 12;
@@ -94,8 +99,11 @@ function critiqueResponse({
   if (text && text.length < 35 && objectives.length > 1) {
     add(issue("too_short_for_multi_objective", "high", "The response is too short to cover the user's multiple objectives."));
   }
-  if (INTERNAL_LEAK_PATTERN.test(text)) {
-    add(issue("internal_implementation_leak", "critical", "The response exposes internal transport, routing or provider terminology."));
+  if (
+    INTERNAL_LEAK_PATTERN.test(text) ||
+    findPatternKeys(text, INTERNAL_CONTROL_LEAK_PATTERNS).length > 0
+  ) {
+    add(issue("internal_implementation_leak", "critical", "The response exposes internal transport, routing, provider or server-owned reasoning-control terminology."));
   }
   if ((RAW_JSON_PATTERN.test(text) && /["'][a-z_]{2,}["']\s*:/i.test(text)) || JSON_FIELD_PATTERN.test(text)) {
     add(issue("raw_internal_data_dump", "critical", "The response presents raw internal JSON or field-level data instead of a user-facing answer."));
