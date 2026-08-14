@@ -98,6 +98,53 @@ test("PDF renderer produces a real PDF with provenance metadata", async () => {
   assert.match(artifact.filename, /Main-Store-Management-Report\.pdf$/);
 });
 
+test("yesterday Main Store sales evidence renders as a real persisted-answer PDF", async () => {
+  const yesterdayEvidence = Object.freeze([
+    Object.freeze({
+      citation: "E1",
+      label: "Main Store sales snapshot — 2026-08-13",
+      source_type: "system_snapshot",
+      source_ref: "spare_parts:operations:branch:1",
+      classification: "internal",
+      workspace_code: "spare_parts",
+      as_of_at: "2026-08-13T23:59:59.000Z",
+      excerpt_text: JSON.stringify({
+        branch_name: "Main Store",
+        period: ["2026-08-13", "2026-08-13"],
+        sales: { transaction_count: 14, total_sales: 7250 },
+      }),
+      metadata: {
+        branch_id: 1,
+        start_date: "2026-08-13",
+        end_date: "2026-08-13",
+        aggregate_only: true,
+      },
+    }),
+  ]);
+  const artifact = await renderAiDocument(
+    payload({
+      title: "Main Store Yesterday Sales — 2026-08-13",
+      answer: "Main Store recorded 14 sales transactions totaling GHS 7,250.00 on August 13, 2026 [E1].",
+      evidence: yesterdayEvidence,
+      generated_at: "2026-08-14T12:46:00.000Z",
+      conversation_key: "conv_incident_regression",
+      message_key: "msg_yesterday_sales_pdf",
+      request_id: "req_yesterday_sales_pdf",
+    }),
+    "pdf"
+  );
+
+  assert.equal(artifact.format, "pdf");
+  assert.equal(artifact.content_type, "application/pdf");
+  assert.equal(artifact.classification, "internal");
+  assert.equal(artifact.evidence_count, 1);
+  assert.ok(Buffer.isBuffer(artifact.buffer));
+  assert.equal(artifact.buffer.subarray(0, 4).toString("ascii"), "%PDF");
+  assert.ok(artifact.byte_length > 500);
+  assert.match(artifact.sha256, /^[a-f0-9]{64}$/);
+  assert.match(artifact.filename, /Main-Store-Yesterday-Sales-2026-08-13\.pdf$/);
+});
+
 test("Excel renderer produces an Office ZIP workbook", async () => {
   const artifact = await renderAiDocument(payload(), "xlsx");
   assert.equal(artifact.format, "xlsx");
@@ -189,13 +236,17 @@ test("document export reads owned persisted assistant answer and evidence on the
   assert.match(aiRoutesSource, /router\.use\("\/documents", aiDocumentRoutes\)/);
 });
 
-test("protected Intelligence frontend triggers documents only from successful chat responses", () => {
+test("protected Intelligence frontend triggers each requested document once from a successful persisted chat response", () => {
   const clientSource = fs.readFileSync(
     path.resolve(__dirname, "../../frontend/src/chalin-one/ai/aiDocumentClient.js"),
     "utf8"
   );
   const captureSource = fs.readFileSync(
     path.resolve(__dirname, "../../frontend/src/chalin-one/ai/AiFeedbackCorrectionCapture.jsx"),
+    "utf8"
+  );
+  const apiSource = fs.readFileSync(
+    path.resolve(__dirname, "../../frontend/src/chalin-one/ai/aiApi.js"),
     "utf8"
   );
   const entrySource = fs.readFileSync(
@@ -206,6 +257,8 @@ test("protected Intelligence frontend triggers documents only from successful ch
   assert.match(clientSource, /\/ai\/documents\/generate/);
   assert.match(clientSource, /responseType:\s*"blob"/);
   assert.match(clientSource, /requestedAiDocumentFormat/);
+  assert.match(clientSource, /\["pdf",\s*\/\\bpdf\\b\/i\]/);
+  assert.match(clientSource, /DOCUMENT_ACTION_PATTERN[^\n]*generate/);
   assert.match(clientSource, /URL\.createObjectURL/);
   assert.doesNotMatch(clientSource, /window\.location\.reload|location\.reload/);
 
@@ -214,7 +267,12 @@ test("protected Intelligence frontend triggers documents only from successful ch
   assert.match(captureSource, /generateAndDownloadAiDocument/);
   assert.match(captureSource, /conversation_key/);
   assert.match(captureSource, /message_key/);
+  assert.match(captureSource, /Promise\.resolve\(\)[\s\S]*generateAndDownloadAiDocument/);
   assert.doesNotMatch(captureSource, /window\.prompt/);
+
+  assert.doesNotMatch(apiSource, /generateAndDownloadAiDocument/);
+  assert.doesNotMatch(apiSource, /requestedAiDocumentFormat/);
+  assert.equal((captureSource.match(/generateAndDownloadAiDocument\(documentRequest\)/g) || []).length, 1);
 
   assert.match(entrySource, /AiFeedbackCorrectionCapture/);
   assert.match(entrySource, /intelligence/);
