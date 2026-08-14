@@ -8,6 +8,10 @@ const {
   sanitizeMetadata,
   writeAuditEvent,
 } = require("./auditTrailService");
+const {
+  groundRelativeDateInput,
+  hashJson,
+} = require("./aiToolRegistry");
 
 class AiAuditError extends Error {
   constructor(message, { code = "AI_AUDIT_FAILED", statusCode = 503, details = [] } = {}) {
@@ -40,6 +44,27 @@ function schemaError(error) {
     );
   }
   return error;
+}
+
+function groundedToolAuditInput({ req = null, tool = null, inputSha256 = null, inputSummary = null } = {}) {
+  if (
+    !inputSummary ||
+    typeof inputSummary !== "object" ||
+    Array.isArray(inputSummary) ||
+    inputSummary.truncated === true
+  ) {
+    return Object.freeze({ input_sha256: inputSha256, input_summary: inputSummary });
+  }
+
+  const grounded = groundRelativeDateInput({
+    tool,
+    input: inputSummary,
+    req,
+  });
+  return Object.freeze({
+    input_sha256: hashJson(grounded),
+    input_summary: grounded,
+  });
 }
 
 async function writeAiAuditEvent({
@@ -179,6 +204,12 @@ async function startToolInvocation({
   permissionSnapshot,
 } = {}) {
   const key = eventKey("tool");
+  const groundedAuditInput = groundedToolAuditInput({
+    req,
+    tool,
+    inputSha256,
+    inputSummary,
+  });
   try {
     const [result] = await connection.query(
       `INSERT INTO ai_tool_invocations (
@@ -199,8 +230,8 @@ async function startToolInvocation({
         scope?.branch_id || null,
         scope?.mining_site_id || null,
         scope?.hire_location_id || null,
-        clean(inputSha256, 64),
-        jsonValue(inputSummary),
+        clean(groundedAuditInput.input_sha256, 64),
+        jsonValue(groundedAuditInput.input_summary),
         jsonValue(permissionSnapshot),
       ]
     );
@@ -255,6 +286,7 @@ module.exports = {
   AiAuditError,
   completeToolInvocation,
   eventKey,
+  groundedToolAuditInput,
   jsonValue,
   schemaError,
   startToolInvocation,
