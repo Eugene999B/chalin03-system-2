@@ -25,6 +25,10 @@ const {
 const MAX_PLANNED_ACTIONS = 4;
 const ACTION_REQUEST_SIGNAL =
   /\b(?:send|text|message|notify|remind|contact|rename|change|update|create|add|remove|delete|deactivate|disable|offboard|approve|reject|cancel|close|reopen|issue|pay|collect|refund|whatsapp|sms)\b/i;
+const ANALYSIS_ONLY_SIGNAL =
+  /\b(?:what|why|how|when|where|which|explain|analyse|analyze|investigate|compare|show|check|review)\b/i;
+const STRONG_WRITE_SIGNAL =
+  /\b(?:send|text|message|notify|remind|contact|rename|update|create|add|remove|delete|deactivate|disable|offboard|approve|reject|cancel|reopen|issue|pay|collect|refund|whatsapp|sms)\b/i;
 
 function clean(value, maximum = 8000) {
   return String(value ?? "")
@@ -61,7 +65,17 @@ async function replaceOwnedAssistantMessage({
 }
 
 function looksLikeActionRequest(message) {
-  return ACTION_REQUEST_SIGNAL.test(clean(message, 4000));
+  const text = clean(message, 4000);
+  if (!ACTION_REQUEST_SIGNAL.test(text)) return false;
+
+  // Words such as "change" and "close" are common in analytical questions
+  // ("why did sales change?", "how did closing go?"). Avoid spending a
+  // privileged second planning call unless the same turn also contains a
+  // concrete write verb. The provider still makes the final action decision.
+  if (ANALYSIS_ONLY_SIGNAL.test(text) && !STRONG_WRITE_SIGNAL.test(text)) {
+    return false;
+  }
+  return true;
 }
 
 function canProposeDefinition({ definition, user, persona, scope }) {
@@ -157,9 +171,18 @@ function planningMessages({ message, evidence = [], result = {} }) {
 function withScopeDefaults(definition, input = {}, { scope, result } = {}) {
   const payload = input && typeof input === "object" ? { ...input } : {};
   const properties = definition?.input_schema?.properties || {};
-  if (Object.hasOwn(properties, "branch_id") && !payload.branch_id && scope?.branch_id) {
-    payload.branch_id = Number(scope.branch_id);
+  const scopedDefaults = {
+    branch_id: scope?.branch_id,
+    mining_site_id: scope?.mining_site_id,
+    hire_location_id: scope?.hire_location_id,
+  };
+
+  for (const [field, value] of Object.entries(scopedDefaults)) {
+    if (Object.hasOwn(properties, field) && !payload[field] && value) {
+      payload[field] = Number(value);
+    }
   }
+
   if (
     Object.hasOwn(properties, "conversation_key") &&
     !payload.conversation_key &&
@@ -391,7 +414,9 @@ async function planGovernedActions({ req, persona, message, result, provider = n
 
 module.exports = {
   ACTION_REQUEST_SIGNAL,
+  ANALYSIS_ONLY_SIGNAL,
   MAX_PLANNED_ACTIONS,
+  STRONG_WRITE_SIGNAL,
   actionPlanNotice,
   availableProposalTools,
   canProposeDefinition,
