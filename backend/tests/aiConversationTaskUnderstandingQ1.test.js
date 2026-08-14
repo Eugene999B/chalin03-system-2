@@ -74,6 +74,100 @@ test("Q1 short why follow-up inherits domain and live task context", () => {
   assert.ok(task.time_hints.includes("today"));
 });
 
+test("Q1 resumes the assistant's offered investigation when the owner says yes do it", () => {
+  const first = understandConversationTask({
+    prompt: "have anybody bought something today",
+    workspaceCode: "spare_parts",
+  });
+
+  assert.deepEqual(first.domains, ["spare_parts"]);
+  assert.equal(first.domain_source, "authorized_workspace_context");
+  assert.equal(first.live_data_required, true);
+  assert.ok(first.metric_hints.includes("sales"));
+  assert.ok(first.time_hints.includes("today"));
+
+  const history = [
+    { role: "user", content: "have anybody bought something today" },
+    {
+      role: "assistant",
+      content: "No sales have been recorded at Main Store today. I can investigate why sales are zero today and compare operations with recent activity.",
+    },
+  ];
+  const second = understandConversationTask({
+    prompt: "yes do it",
+    history,
+    workspaceCode: "spare_parts",
+    taskState: {
+      working_state: first.working_state,
+      resolved_prompt: first.current_prompt,
+    },
+  });
+
+  assert.equal(second.continuity_required, true);
+  assert.equal(second.confirmation_continuation, true);
+  assert.match(second.confirmed_assistant_offer, /I can investigate why sales are zero today/i);
+  assert.equal(second.answer_mode, "diagnosis");
+  assert.equal(second.objective_count, 1);
+  assert.match(second.objectives[0], /^investigate why sales are zero today/i);
+  assert.notEqual(second.objectives[0].toLowerCase(), "yes do it");
+  assert.deepEqual(second.domains, ["spare_parts"]);
+  assert.equal(second.domain_source, "working_state_continuity");
+  assert.equal(second.live_data_required, true);
+  assert.equal(second.working_state.subject, first.working_state.subject);
+  assert.match(second.working_state.objective, /^investigate why sales are zero today/i);
+  assert.ok(second.working_state.metrics.includes("sales"));
+  assert.ok(second.working_state.periods.active.includes("today"));
+
+  const thirdHistory = [
+    ...history,
+    { role: "user", content: "yes do it" },
+    {
+      role: "assistant",
+      content: "Today's zero sales need comparison with stock availability and transaction activity before drawing a cause.",
+    },
+  ];
+  const third = understandConversationTask({
+    prompt: "generate pdf format of yesterday sales",
+    history: thirdHistory,
+    workspaceCode: "spare_parts",
+    taskState: {
+      working_state: second.working_state,
+      resolved_prompt: second.working_state.objective,
+    },
+  });
+
+  assert.equal(third.continuity_required, true);
+  assert.deepEqual(third.domains, ["spare_parts"]);
+  assert.equal(third.answer_mode, "action");
+  assert.ok(third.metric_hints.includes("sales"));
+  assert.ok(third.time_hints.includes("yesterday"));
+  assert.deepEqual(third.working_state.domains, ["spare_parts"]);
+  assert.equal(third.working_state.answer_mode, "action");
+  assert.ok(third.working_state.metrics.includes("sales"));
+  assert.ok(third.working_state.periods.active.includes("yesterday"));
+  assert.ok(third.working_state.periods.comparison.includes("today"));
+});
+
+test("Q1 recognizes common confirmation variants as continuation without inventing a new objective", () => {
+  const history = [
+    { role: "user", content: "Why are Main Store sales low today?" },
+    { role: "assistant", content: "I can investigate the sales drop against stock availability." },
+  ];
+  const taskState = {
+    working_state: understandConversationTask({
+      prompt: "Why are Main Store sales low today?",
+      workspaceCode: "spare_parts",
+    }).working_state,
+  };
+
+  for (const prompt of ["yes do it", "okay do that", "go ahead", "please do it"]) {
+    const task = understandConversationTask({ prompt, history, workspaceCode: "spare_parts", taskState });
+    assert.equal(task.continuity_required, true, prompt);
+    assert.equal(task.confirmation_continuation, true, prompt);
+    assert.match(task.objectives[0], /^investigate the sales drop/i, prompt);
+  }
+});
+
 test("Q1 CHALIN business-description question stays static product explanation", () => {
   const task = understandConversationTask({
     prompt: "Tell me more about CHALIN and its businesses",
