@@ -24,6 +24,41 @@ const SECRET_REQUEST_PATTERNS = Object.freeze([
   Object.freeze({ key: "raw_auth_header", pattern: /(show|reveal|return)\s+.{0,30}(authorization header|bearer token|session token)/i }),
 ]);
 
+const INTERNAL_CONTROL_LEAK_PATTERNS = Object.freeze([
+  Object.freeze({
+    key: "current_follow_up_control",
+    pattern: /current\s+follow-up;\s*this\s+takes\s+precedence\s+over\s+older\s+conversation\s+messages/i,
+  }),
+  Object.freeze({
+    key: "current_task_state_control",
+    pattern: /current\s+task\s+state\s*:/i,
+  }),
+  Object.freeze({
+    key: "cross_domain_coverage_control",
+    pattern: /cross-domain\s+coverage\s+required\s*:/i,
+  }),
+  Object.freeze({
+    key: "reasoning_bridge_control",
+    pattern: /reasoning\s+bridge\s+to\s+test\s*:/i,
+  }),
+  Object.freeze({
+    key: "reasoning_graph_control",
+    pattern: /reasoning\s+graph\s+is\s+a\s+server-owned\s+coverage\s+map/i,
+  }),
+  Object.freeze({
+    key: "structured_hypothesis_control",
+    pattern: /treat\s+it\s+as\s+a\s+structured\s+hypothesis\s+space/i,
+  }),
+  Object.freeze({
+    key: "reasoning_block_non_disclosure_control",
+    pattern: /do\s+not\s+repeat\s+or\s+paraphrase\s+this\s+block\s+in\s+the\s+user-facing\s+answer/i,
+  }),
+  Object.freeze({
+    key: "reasoning_prompt_block_identifier",
+    pattern: /reasoningpromptblock/i,
+  }),
+]);
+
 const HIGH_RISK_ACTION_PATTERNS = Object.freeze([
   Object.freeze({ key: "delete_transactions", pattern: /\b(delete|erase|remove)\b.{0,50}\b(sale|payment|debt|transaction|audit)\b/i }),
   Object.freeze({ key: "merge_customer", pattern: /\bmerge\b.{0,30}\bcustomers?\b/i }),
@@ -304,6 +339,7 @@ function validateProviderOutput(value) {
   }
 
   const secretKeys = findPatternKeys(text, SECRET_REQUEST_PATTERNS);
+  const internalControlKeys = findPatternKeys(text, INTERNAL_CONTROL_LEAK_PATTERNS);
   const redacted = redactSensitiveText(text);
   if (secretKeys.length > 0) {
     throw new AiSafetyError(
@@ -312,6 +348,16 @@ function validateProviderOutput(value) {
         code: "AI_PROVIDER_OUTPUT_BLOCKED",
         statusCode: 502,
         details: secretKeys,
+      }
+    );
+  }
+  if (internalControlKeys.length > 0) {
+    throw new AiSafetyError(
+      "The AI provider response contained internal control material and was discarded.",
+      {
+        code: "AI_INTERNAL_CONTROL_LEAK",
+        statusCode: 502,
+        details: internalControlKeys,
       }
     );
   }
@@ -327,6 +373,7 @@ function validateProviderOutput(value) {
 module.exports = {
   AiSafetyError,
   HIGH_RISK_ACTION_PATTERNS,
+  INTERNAL_CONTROL_LEAK_PATTERNS,
   MAX_PROMPT_CHARACTERS,
   MAX_PROVIDER_CONTEXT_CHARACTERS,
   MAX_PROVIDER_ESSENTIAL_MESSAGE_CHARACTERS,
