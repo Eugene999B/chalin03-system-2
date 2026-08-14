@@ -23,6 +23,9 @@ const TOOL_KEY_PATTERN = /^[a-z][a-z0-9_.-]{2,149}$/;
 const FORBIDDEN_HANDLER_SOURCE =
   /(config\/db|mysql2|\bpool\s*\.|\bconnection\s*\.|\.query\s*\(|\bSELECT\s+|\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bDELETE\s+FROM\b)/i;
 const EQUIPMENT_DIVISION_VALUES = Object.freeze(Object.values(EQUIPMENT_DIVISIONS));
+const TODAY_SIGNAL_PATTERN = /\btoday\b/i;
+const YESTERDAY_SIGNAL_PATTERN = /\byesterday\b/i;
+const RELATIVE_DATE_RANGE_PATTERN = /\b(?:compare|comparison|compared|versus|vs\.?|between|from|through|until|since|last\s+(?:week|month|quarter|year|\d+\s+days?)|this\s+(?:week|month|quarter|year)|past\s+\d+\s+days?)\b/i;
 
 class AiToolRegistryError extends Error {
   constructor(message, { code = "AI_TOOL_REGISTRY_ERROR", statusCode = 400, details = [] } = {}) {
@@ -50,6 +53,68 @@ function serializedBytes(value) {
     });
   }
   return Buffer.byteLength(encoded, "utf8");
+}
+
+function requestPrompt(req) {
+  return String(req?.body?.message ?? req?.body?.prompt ?? "")
+    .replace(/\u0000/g, "")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .slice(0, 12000);
+}
+
+function utcDateOnly(value = new Date()) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftedUtcDateOnly(value = new Date(), days = 0) {
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return utcDateOnly(date);
+}
+
+function toolAcceptsDateWindow(tool) {
+  const properties = tool?.input_schema?.properties;
+  return Boolean(
+    properties &&
+    typeof properties === "object" &&
+    Object.prototype.hasOwnProperty.call(properties, "start_date") &&
+    Object.prototype.hasOwnProperty.call(properties, "end_date")
+  );
+}
+
+function groundRelativeDateInput({ tool, input = {}, req = null, now = new Date() } = {}) {
+  const sourceInput = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  if (Number(tool?.risk_level || 0) !== 1 || !toolAcceptsDateWindow(tool)) {
+    return Object.freeze({ ...sourceInput });
+  }
+
+  const prompt = requestPrompt(req);
+  if (!prompt || RELATIVE_DATE_RANGE_PATTERN.test(prompt)) {
+    return Object.freeze({ ...sourceInput });
+  }
+
+  const today = TODAY_SIGNAL_PATTERN.test(prompt);
+  const yesterday = YESTERDAY_SIGNAL_PATTERN.test(prompt);
+  if (today === yesterday) {
+    return Object.freeze({ ...sourceInput });
+  }
+
+  const groundedDate = yesterday
+    ? shiftedUtcDateOnly(now, -1)
+    : utcDateOnly(now);
+  if (!groundedDate) {
+    return Object.freeze({ ...sourceInput });
+  }
+
+  return Object.freeze({
+    ...sourceInput,
+    start_date: groundedDate,
+    end_date: groundedDate,
+  });
 }
 
 function hashJson(value) {
@@ -287,7 +352,8 @@ class AiToolRegistry {
       );
     }
 
-    const inputBytes = serializedBytes(input);
+    const groundedInput = groundRelativeDateInput({ tool, input, req });
+    const inputBytes = serializedBytes(groundedInput);
     if (inputBytes > tool.max_input_bytes) {
       throw new AiToolRegistryError("AI tool input exceeded its safe size limit.", {
         code: "AI_TOOL_INPUT_TOO_LARGE",
@@ -301,7 +367,7 @@ class AiToolRegistry {
 
     const started = Date.now();
     const output = await withTimeout(
-      Promise.resolve(tool.handler(Object.freeze({ input: Object.freeze({ ...input }), context }))),
+      Promise.resolve(tool.handler(Object.freeze({ input: groundedInput, context }))),
       tool.timeout_ms,
       tool.key
     );
@@ -316,8 +382,8 @@ class AiToolRegistry {
 
     return Object.freeze({
       tool: publicToolDefinition(tool),
-      input_sha256: hashJson(input),
-      input_summary: safeSummary(input),
+      input_sha256: hashJson(groundedInput),
+      input_summary: safeSummary(groundedInput),
       output,
       output_summary: safeSummary(output),
       latency_ms: Date.now() - started,
@@ -336,12 +402,20 @@ module.exports = {
   DEFAULT_TOOL_TIMEOUT_MS,
   EQUIPMENT_DIVISION_VALUES,
   FORBIDDEN_HANDLER_SOURCE,
+  RELATIVE_DATE_RANGE_PATTERN,
+  TODAY_SIGNAL_PATTERN,
   TOOL_KEY_PATTERN,
+  YESTERDAY_SIGNAL_PATTERN,
   aiToolRegistry,
+  groundRelativeDateInput,
   hashJson,
   normalizeToolDefinition,
   publicToolDefinition,
+  requestPrompt,
   safeSummary,
   serializedBytes,
+  shiftedUtcDateOnly,
+  toolAcceptsDateWindow,
+  utcDateOnly,
   withTimeout,
 };
