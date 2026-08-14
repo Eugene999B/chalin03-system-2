@@ -75,6 +75,23 @@ test("action registry still rejects embedded executor functions", () => {
   );
 });
 
+test("governed action and executor namespaces allow controlled underscore workspace segments", () => {
+  const definition = normalizeDefinition({
+    key: "spare_parts.debt_reminder.send",
+    version: "1",
+    risk_level: 4,
+    personas: ["copilot"],
+    allowed_workspaces: ["spare_parts"],
+    required_permissions: ["ai.read_sensitive"],
+    review_mode: "independent",
+    confirmation_mode: "explicit",
+    executor_key: "spare_parts.debt_reminder.send",
+  });
+
+  assert.equal(definition.key, "spare_parts.debt_reminder.send");
+  assert.equal(definition.executor_key, "spare_parts.debt_reminder.send");
+});
+
 test("Phase 2D registers one Risk-3 action and one protected Risk-5 executor-backed action", () => {
   const definitions = registerBuiltInAiActions();
   const rename = definitions.find((item) => item.key === "intelligence.conversation.rename");
@@ -114,9 +131,11 @@ test("Risk-5 metadata cannot be weakened away from System Administrator only", (
   );
 });
 
-test("approved executor registry exposes only named adapters", () => {
+test("approved executor registry exposes only named governed adapters", () => {
   assert.deepEqual(aiActionExecutorRegistry.list(), [
+    "communications.sms.send",
     "intelligence.conversation.rename",
+    "spare_parts.debt_reminder.send",
     "system.user.deactivate",
   ]);
   assert.deepEqual(validateConversationRename({ conversation_key: "conv_123", title: "New title" }), {
