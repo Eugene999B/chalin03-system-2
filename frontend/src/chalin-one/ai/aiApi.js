@@ -1,8 +1,4 @@
 import axiosClient from "../../api/axiosClient";
-import {
-  generateAndDownloadAiDocument,
-  requestedAiDocumentFormat,
-} from "./aiDocumentClient";
 
 export const AI_PERSONAS = Object.freeze({
   copilot: "copilot",
@@ -179,7 +175,6 @@ export async function sendAiMessage(
   { conversationKey = null, message },
   { signal } = {}
 ) {
-  const requestedFormat = requestedAiDocumentFormat(message);
   const response = await axiosClient.post(
     `${personaPath(persona)}/chat`,
     {
@@ -197,43 +192,6 @@ export async function sendAiMessage(
       result?.conversation?.title || null
     );
   }
-
-  if (
-    requestedFormat &&
-    result?.conversation_key &&
-    result?.message_key &&
-    result?.reasoning?.intent !== "clarification" &&
-    result?.provider?.finish_reason !== "clarification"
-  ) {
-    try {
-      const artifact = await generateAndDownloadAiDocument({
-        conversationKey: result.conversation_key,
-        messageKey: result.message_key,
-        format: requestedFormat,
-        title: result?.conversation?.title || null,
-      });
-      return {
-        ...result,
-        document_export: Object.freeze({
-          status: "downloaded",
-          format: requestedFormat,
-          filename: artifact.filename,
-          sha256: artifact.sha256,
-          classification: artifact.classification,
-        }),
-      };
-    } catch (documentError) {
-      return {
-        ...result,
-        document_export: Object.freeze({
-          status: "failed",
-          format: requestedFormat,
-          message: aiErrorMessage(documentError),
-        }),
-      };
-    }
-  }
-
   return result;
 }
 
