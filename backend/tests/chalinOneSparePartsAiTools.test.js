@@ -15,6 +15,7 @@ const {
   normalizeDateWindow,
 } = require("../services/aiSparePartsIntelligenceService");
 const {
+  collectionRateSemantics,
   registerSparePartsAiTools,
 } = require("../ai-tools/sparePartsTools");
 
@@ -185,6 +186,17 @@ test("aggregate snapshots expose business intelligence without customer identiti
   assert.doesNotMatch(serialized, /MUST NOT LEAK|0240000000/);
 });
 
+test("collection rate is not applicable when there are no sales", () => {
+  assert.deepEqual(collectionRateSemantics(0, 0), {
+    collection_rate: null,
+    collection_rate_applicable: false,
+  });
+  assert.deepEqual(collectionRateSemantics(5000, 84), {
+    collection_rate: 84,
+    collection_rate_applicable: true,
+  });
+});
+
 test("Spare Parts AI tools register as read-only branch-scoped R1 tools", () => {
   const registry = new AiToolRegistry();
   registerSparePartsAiTools(registry, {
@@ -229,6 +241,57 @@ test("tool handlers return aggregate evidence and no execution authority", async
     assert.equal(output.evidence[0].metadata.branch_id, 7);
     assert.equal(output.evidence[0].metadata.aggregate_only, true);
   }
+
+  const operations = await registry.get("spare_parts.operations_snapshot").handler({
+    input: { start_date: "2026-08-01", end_date: "2026-08-07" },
+    context,
+  });
+  assert.equal(operations.sales.collection_rate, 84);
+  assert.equal(operations.sales.collection_rate_applicable, true);
+});
+
+test("zero-sale tool evidence exposes collection rate as not applicable instead of zero percent", async () => {
+  const zeroSalesIntelligence = {
+    ...intelligence,
+    sales: {
+      ...intelligence.sales,
+      transaction_count: 0,
+      total_sales: 0,
+      total_paid: 0,
+      total_balance: 0,
+      total_discount: 0,
+      average_sale: 0,
+      collection_rate: 0,
+      cash_total: 0,
+      momo_total: 0,
+      bank_total: 0,
+      credit_total: 0,
+      mixed_total: 0,
+    },
+    profit_and_loss: {
+      ...intelligence.profit_and_loss,
+      gross_sales: 0,
+      discounts: 0,
+      net_sales: 0,
+      estimated_net_before_stock_cost: 0,
+      conservative_cash_position: 0,
+    },
+  };
+  const registry = new AiToolRegistry();
+  registerSparePartsAiTools(registry, {
+    loader: async () => ({ intelligence: zeroSalesIntelligence, context }),
+  });
+
+  const operations = await registry.get("spare_parts.operations_snapshot").handler({
+    input: { start_date: "2026-08-14", end_date: "2026-08-14" },
+    context,
+  });
+  assert.equal(operations.sales.total_sales, 0);
+  assert.equal(operations.sales.collection_rate, null);
+  assert.equal(operations.sales.collection_rate_applicable, false);
+  const evidence = JSON.parse(operations.evidence[0].excerpt_text);
+  assert.equal(evidence.sales.collection_rate, null);
+  assert.equal(evidence.sales.collection_rate_applicable, false);
 });
 
 test("AI tool layer contains no direct database or SQL access", () => {
