@@ -12,6 +12,9 @@ const {
   writeAiAuditEvent,
   writePromptSafetyEvent,
 } = require("./aiAuditService");
+const {
+  buildDeterministicUtilityRequest,
+} = require("./aiDeterministicUtilityService");
 
 const DOCUMENT_ACTION_PATTERN = /\b(?:generate|create|make|prepare|export|download|produce|build|give me|put together|turn into)\b/i;
 const DOCUMENT_NOUN_PATTERN = /\b(?:document|report|statement|file|spreadsheet|workbook|pdf|word|docx|excel|xlsx|csv)\b/i;
@@ -48,8 +51,14 @@ function requestedFormat(value) {
   return null;
 }
 
-function buildClarificationRequest({ prompt } = {}) {
+function buildClarificationRequest({ prompt, now, timeZone } = {}) {
   const text = clean(prompt);
+  const deterministic = buildDeterministicUtilityRequest({
+    prompt: text,
+    ...(now === undefined ? {} : { now }),
+    ...(timeZone === undefined ? {} : { timeZone }),
+  });
+  if (deterministic) return deterministic;
   if (!isDocumentRequest(text)) return null;
 
   if (FORMAT_PATTERN.test(text)) return null;
@@ -102,6 +111,7 @@ async function runClarificationTurn({ req, persona, scope, conversationKey = nul
   const promptInspection = inspectPrompt(message, { allowHighRiskDiscussion: true });
   const request = clarification || buildClarificationRequest({ prompt: promptInspection.text });
   if (!request) return null;
+  const deterministicUtility = request.kind === "current_date" && request.requires_provider === false;
   const conversation = await clarificationConversation({
     req,
     persona,
@@ -133,7 +143,9 @@ async function runClarificationTurn({ req, persona, scope, conversationKey = nul
     role: "assistant",
     content: request.answer,
     safetyStatus: "allowed",
-    finishReason: "clarification",
+    providerKey: deterministicUtility ? "chalin" : null,
+    modelKey: deterministicUtility ? "deterministic-date-v1" : null,
+    finishReason: deterministicUtility ? "deterministic" : "clarification",
     createdBy: req.user.id,
   });
   await writeAiAuditEvent({
@@ -141,18 +153,22 @@ async function runClarificationTurn({ req, persona, scope, conversationKey = nul
     userId: req.user.id,
     conversationId: conversation.id,
     messageId: assistantMessage.id,
-    eventType: "AI_CLARIFICATION_REQUESTED",
+    eventType: deterministicUtility ? "AI_DETERMINISTIC_UTILITY_COMPLETED" : "AI_CLARIFICATION_REQUESTED",
     outcome: "success",
     severity: "info",
     persona,
     scope,
     metadata: {
       clarification_kind: request.kind,
+      utility_kind: deterministicUtility ? request.kind : null,
       missing_fields: request.missing_fields,
       period_default: request.period_default || null,
       provider_called: false,
-      source_of_truth: false,
+      source_of_truth: request.source_of_truth === true,
       execution_authority: false,
+      server_owned_clock: request.server_owned_clock === true,
+      time_zone: request.time_zone || null,
+      date_key: request.date_key || null,
       prompt_sha256: promptInspection.input_sha256,
     },
   }).catch(() => null);
@@ -167,16 +183,25 @@ async function runClarificationTurn({ req, persona, scope, conversationKey = nul
     citations: Object.freeze({}),
     continuity: Object.freeze({ recalled_count: 0, evidence_authority: false }),
     reasoning: Object.freeze({
-      intent: "clarification",
+      intent: deterministicUtility ? "utility" : "clarification",
       live_data_required: false,
       retrieval_query_count: 0,
-      clarification: request,
+      ...(deterministicUtility
+        ? {
+            deterministic_utility: Object.freeze({
+              kind: request.kind,
+              date_key: request.date_key,
+              time_zone: request.time_zone,
+              server_owned_clock: true,
+            }),
+          }
+        : { clarification: request }),
       hidden_chain_of_thought_exposed: false,
     }),
     provider: Object.freeze({
-      key: "server_clarification",
-      model: "deterministic-v2",
-      finish_reason: "clarification",
+      key: deterministicUtility ? "chalin" : "server_clarification",
+      model: deterministicUtility ? "deterministic-date-v1" : "deterministic-v2",
+      finish_reason: deterministicUtility ? "deterministic" : "clarification",
       reasoning_effort: null,
       provider_side_storage_enabled: false,
       rounds: 0,
