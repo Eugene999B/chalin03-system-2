@@ -11,7 +11,7 @@ const {
   validateOutboundSms,
 } = require("./aiCommunicationActionAdapters");
 
-const EXECUTOR_KEY_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$/;
+const EXECUTOR_KEY_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/;
 
 class AiActionExecutorError extends Error {
   constructor(message, { code = "AI_ACTION_EXECUTOR_ERROR", statusCode = 400, details = [] } = {}) {
