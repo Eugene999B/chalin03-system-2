@@ -63,6 +63,59 @@ function withOperationsDefaultWindow(viewKey, input = {}, now = new Date()) {
   return normalized;
 }
 
+function collectionRateSemantics(totalSales, collectionRate) {
+  const salesTotal = Number(totalSales);
+  if (!Number.isFinite(salesTotal) || salesTotal <= 0) {
+    return Object.freeze({
+      collection_rate: null,
+      collection_rate_applicable: false,
+    });
+  }
+  const rate = Number(collectionRate);
+  return Object.freeze({
+    collection_rate: Number.isFinite(rate) ? rate : 0,
+    collection_rate_applicable: true,
+  });
+}
+
+function applyCollectionRateSemantics(viewKey, output) {
+  if (!output || typeof output !== "object") return output;
+  if (viewKey === "operations" && output.sales) {
+    return {
+      ...output,
+      sales: {
+        ...output.sales,
+        ...collectionRateSemantics(output.sales.total_sales, output.sales.collection_rate),
+      },
+    };
+  }
+  if (viewKey === "collections" && output.collections) {
+    return {
+      ...output,
+      collections: {
+        ...output.collections,
+        ...collectionRateSemantics(
+          output.collections.sales_total,
+          output.collections.collection_rate
+        ),
+      },
+    };
+  }
+  if (viewKey === "performance" && output.financial_view) {
+    return {
+      ...output,
+      financial_view: {
+        ...output.financial_view,
+        ...collectionRateSemantics(
+          output.financial_view.gross_sales,
+          output.financial_view.collection_rate
+        ),
+      },
+    };
+  }
+  return output;
+}
+
 function evidenceScope(output) {
   return {
     branch_id: output.scope.branch_id,
@@ -91,6 +144,7 @@ function evidenceExcerpt(viewKey, output) {
       total_debt_balance: output.collections.total_debt_balance,
       debt_payments: output.collections.debt_payments,
       collection_rate: output.collections.collection_rate,
+      collection_rate_applicable: output.collections.collection_rate_applicable,
       aging: output.collections.aging,
     });
   }
@@ -169,7 +223,8 @@ function buildAggregateEvidence(viewKey, output) {
 async function executeView({ input, context, loader, projector, viewKey }) {
   const effectiveInput = withOperationsDefaultWindow(viewKey, input);
   const { intelligence } = await loader({ context, input: effectiveInput });
-  const output = projector(intelligence, context);
+  const projected = projector(intelligence, context);
+  const output = applyCollectionRateSemantics(viewKey, projected);
   return {
     ...output,
     evidence: buildAggregateEvidence(viewKey, output),
@@ -290,7 +345,9 @@ function registerSparePartsAiTools(
 
 module.exports = {
   DATE_PROPERTIES,
+  applyCollectionRateSemantics,
   buildAggregateEvidence,
+  collectionRateSemantics,
   evidenceExcerpt,
   evidenceScope,
   executeView,
