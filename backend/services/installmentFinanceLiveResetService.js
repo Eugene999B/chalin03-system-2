@@ -64,6 +64,7 @@ async function tableExists(connection, tableName) {
 }
 
 async function tableColumns(connection, tableName) {
+  if (!(await tableExists(connection, tableName))) return new Set();
   const [rows] = await connection.query(
     `SELECT COLUMN_NAME
        FROM information_schema.COLUMNS
@@ -207,19 +208,14 @@ async function restoreFinanceAssets(connection, assetIds, deleted) {
   const columns = await tableColumns(connection, "fleet_assets");
   const updates = [];
 
-  if (columns.has("sale_status")) {
-    updates.push("`sale_status` = 'available'");
-  }
+  if (columns.has("sale_status")) updates.push("`sale_status` = 'available'");
   if (columns.has("current_status")) {
     updates.push(
       "`current_status` = CASE WHEN `current_status` IN ('sold', 'reserved', 'installment') THEN 'available' ELSE `current_status` END"
     );
   }
-  if (columns.has("sold_at")) {
-    updates.push("`sold_at` = NULL");
-  }
-
-  if (!updates.length) return;
+  if (columns.has("sold_at")) updates.push("`sold_at` = NULL");
+  if (!updates.length || !columns.has("id")) return;
 
   const [result] = await connection.query(
     `UPDATE fleet_assets
@@ -228,6 +224,46 @@ async function restoreFinanceAssets(connection, assetIds, deleted) {
     assetIds
   );
   deleted.push({ table: "fleet_assets", restored_rows: Number(result.affectedRows || 0) });
+}
+
+async function selectInstallmentAgreements(connection) {
+  if (!(await tableExists(connection, "equipment_sale_agreements"))) return [];
+
+  const columns = await tableColumns(connection, "equipment_sale_agreements");
+  if (!columns.has("id")) return [];
+
+  const select = ["id"];
+  for (const column of ["asset_id", "credit_application_id"]) {
+    if (columns.has(column)) select.push(column);
+  }
+
+  const where = columns.has("sale_type") ? "WHERE sale_type = 'installment'" : "";
+  const [rows] = await connection.query(
+    `SELECT ${select.join(", ")}
+       FROM equipment_sale_agreements
+       ${where}
+      FOR UPDATE`
+  );
+  return rows;
+}
+
+async function selectCreditApplications(connection) {
+  if (!(await tableExists(connection, "equipment_credit_applications"))) {
+    return { rows: [], columns: new Set() };
+  }
+
+  const columns = await tableColumns(connection, "equipment_credit_applications");
+  if (!columns.has("id")) return { rows: [], columns };
+
+  const select = ["id"];
+  if (columns.has("quotation_id")) select.push("quotation_id");
+
+  const [rows] = await connection.query(
+    `SELECT ${select.join(", ")}
+       FROM equipment_credit_applications
+      FOR UPDATE`
+  );
+  return { rows, columns };
 }
 
 async function executeReset({
@@ -261,18 +297,8 @@ async function executeReset({
 
     await db.beginTransaction();
 
+    const agreements = await selectInstallmentAgreements(db);
     const agreementColumns = await tableColumns(db, "equipment_sale_agreements");
-    const agreementSelect = ["id"];
-    for (const column of ["asset_id", "credit_application_id"]) {
-      if (agreementColumns.has(column)) agreementSelect.push(column);
-    }
-
-    const [agreements] = await db.query(
-      `SELECT ${agreementSelect.join(", ")}
-         FROM equipment_sale_agreements
-        WHERE sale_type = 'installment'
-        FOR UPDATE`
-    );
     const agreementIds = agreements.map((row) => Number(row.id)).filter(Number.isInteger);
     const assetIds = agreementColumns.has("asset_id")
       ? agreements.map((row) => Number(row.asset_id)).filter(Number.isInteger)
@@ -281,22 +307,14 @@ async function executeReset({
       ? agreements.map((row) => Number(row.credit_application_id)).filter(Number.isInteger)
       : [];
 
-    const applicationColumns = await tableColumns(db, "equipment_credit_applications");
-    const applicationSelect = ["id"];
-    if (applicationColumns.has("quotation_id")) applicationSelect.push("quotation_id");
-
-    const [applications] = await db.query(
-      `SELECT ${applicationSelect.join(", ")}
-         FROM equipment_credit_applications
-        FOR UPDATE`
-    );
+    const { rows: applications } = await selectCreditApplications(db);
     const allApplicationIds = [...new Set([
       ...applicationIds,
       ...applications.map((row) => Number(row.id)).filter(Number.isInteger),
     ])];
-    const quotationIds = applicationColumns.has("quotation_id")
-      ? applications.map((row) => Number(row.quotation_id)).filter(Number.isInteger)
-      : [];
+    const quotationIds = applications
+      .map((row) => Number(row.quotation_id))
+      .filter(Number.isInteger);
 
     const [paymentRows] = agreementIds.length && (await tableExists(db, "equipment_sale_payments"))
       ? await db.query(
@@ -312,21 +330,7 @@ async function executeReset({
 
     if (agreementIds.length) {
       await deleteScopedInstallmentTable(db, "equipment_sale_payment_allocations", { agreementIds, paymentIds }, deleted);
-      for (const table of [
-        "equipment_finance_case_activity",
-        "equipment_finance_documents",
-        "equipment_finance_private_documents",
-        "equipment_finance_document_reviews",
-        "equipment_finance_delivery_authorizations",
-        "equipment_finance_delivery_confirmations",
-        "equipment_finance_correction_requests",
-        "equipment_finance_correction_ledger",
-        "equipment_installment_schedule",
-        "equipment_sale_payments",
-        "equipment_deliveries",
-        "equipment_ownership_transfers",
-        "equipment_asset_sale_locks",
-      ]) {
+      for (const table of AGREEMENT_TABLES) {
         await deleteScopedInstallmentTable(db, table, { agreementIds, applicationIds: allApplicationIds, paymentIds }, deleted);
       }
       await deleteByIds(db, "equipment_sale_agreements", "id", agreementIds, deleted);
