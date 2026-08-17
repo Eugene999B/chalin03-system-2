@@ -31,6 +31,11 @@ const APPLICATION_TABLES = [
   "equipment_credit_application_consents",
 ];
 
+const DEDICATED_INSTALLMENT_TABLES = new Set([
+  ...AGREEMENT_TABLES,
+  ...APPLICATION_TABLES,
+]);
+
 class FinanceResetError extends Error {
   constructor(statusCode, message, code = "INSTALLMENT_FINANCE_RESET_ERROR") {
     super(message);
@@ -56,6 +61,17 @@ async function tableExists(connection, tableName) {
     [tableName]
   );
   return Number(row?.count || 0) === 1;
+}
+
+async function tableColumns(connection, tableName) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?`,
+    [tableName]
+  );
+  return new Set(rows.map((row) => String(row.COLUMN_NAME)));
 }
 
 async function countRows(connection, tableName) {
@@ -140,6 +156,69 @@ async function buildDryRun(connection = pool) {
   };
 }
 
+function placeholders(values) {
+  return values.map(() => "?").join(",");
+}
+
+async function deleteByIds(connection, table, column, ids, deleted) {
+  if (!ids.length || !(await tableExists(connection, table))) return;
+  const columns = await tableColumns(connection, table);
+  if (!columns.has(column)) return;
+
+  const [result] = await connection.query(
+    `DELETE FROM ${safeIdentifier(table)} WHERE ${safeIdentifier(column)} IN (${placeholders(ids)})`,
+    ids
+  );
+  deleted.push({ table, rows: Number(result.affectedRows || 0) });
+}
+
+/**
+ * Delete an explicitly allowlisted Installment-only table without assuming a
+ * particular foreign-key name. Tables with a relationship use that relation;
+ * dedicated Finance-only tables with no relationship column can safely be
+ * emptied because they contain no shared business-domain records.
+ */
+async function deleteScopedInstallmentTable(
+  connection,
+  table,
+  { agreementIds = [], applicationIds = [], paymentIds = [] } = {},
+  deleted
+) {
+  if (!(await tableExists(connection, table))) return;
+
+  const columns = await tableColumns(connection, table);
+  const candidates = [
+    ["agreement_id", agreementIds],
+    ["application_id", applicationIds],
+    ["credit_application_id", applicationIds],
+    ["payment_id", paymentIds],
+  ];
+
+  for (const [column, ids] of candidates) {
+    if (columns.has(column) && ids.length) {
+      await deleteByIds(connection, table, column, ids, deleted);
+      return;
+    }
+  }
+
+  if (DEDICATED_INSTALLMENT_TABLES.has(table)) {
+    const [result] = await connection.query(`DELETE FROM ${safeIdentifier(table)}`);
+    deleted.push({ table, rows: Number(result.affectedRows || 0), scope: "dedicated_installment_table" });
+  }
+}
+
+async function selectOptionalColumn(connection, table, columns, baseColumns) {
+  if (!(await tableExists(connection, table))) return [];
+  const available = await tableColumns(connection, table);
+  const selected = baseColumns.filter((column) => available.has(column));
+  const safeColumns = selected.length ? selected.join(", ") : null;
+  if (!safeColumns) return [];
+  const [rows] = await connection.query(
+    `SELECT ${safeColumns} FROM ${safeIdentifier(table)} WHERE ${columns}`
+  );
+  return rows;
+}
+
 async function executeReset({
   userId,
   password,
@@ -171,20 +250,32 @@ async function executeReset({
 
     await db.beginTransaction();
 
+    const agreementColumns = await tableColumns(db, "equipment_sale_agreements");
+    const agreementSelect = ["id"];
+    for (const column of ["asset_id", "credit_application_id"]) {
+      if (agreementColumns.has(column)) agreementSelect.push(column);
+    }
+
     const [agreements] = await db.query(
-      `SELECT id, asset_id, credit_application_id
+      `SELECT ${agreementSelect.join(", ")}
          FROM equipment_sale_agreements
         WHERE sale_type = 'installment'
         FOR UPDATE`
     );
     const agreementIds = agreements.map((row) => Number(row.id)).filter(Number.isInteger);
-    const assetIds = agreements.map((row) => Number(row.asset_id)).filter(Number.isInteger);
-    const applicationIds = agreements
-      .map((row) => Number(row.credit_application_id))
-      .filter(Number.isInteger);
+    const assetIds = agreementColumns.has("asset_id")
+      ? agreements.map((row) => Number(row.asset_id)).filter(Number.isInteger)
+      : [];
+    const applicationIds = agreementColumns.has("credit_application_id")
+      ? agreements.map((row) => Number(row.credit_application_id)).filter(Number.isInteger)
+      : [];
+
+    const applicationColumns = await tableColumns(db, "equipment_credit_applications");
+    const applicationSelect = ["id"];
+    if (applicationColumns.has("quotation_id")) applicationSelect.push("quotation_id");
 
     const [applications] = await db.query(
-      `SELECT id, quotation_id
+      `SELECT ${applicationSelect.join(", ")}
          FROM equipment_credit_applications
         FOR UPDATE`
     );
@@ -192,36 +283,54 @@ async function executeReset({
       ...applicationIds,
       ...applications.map((row) => Number(row.id)).filter(Number.isInteger),
     ])];
-    const quotationIds = applications.map((row) => Number(row.quotation_id)).filter(Number.isInteger);
-    const placeholders = (values) => values.map(() => "?").join(",");
+    const quotationIds = applicationColumns.has("quotation_id")
+      ? applications.map((row) => Number(row.quotation_id)).filter(Number.isInteger)
+      : [];
+
+    const [paymentRows] = agreementIds.length && (await tableExists(db, "equipment_sale_payments"))
+      ? await db.query(
+          `SELECT id
+             FROM equipment_sale_payments
+            WHERE agreement_id IN (${placeholders(agreementIds)})
+            FOR UPDATE`,
+          agreementIds
+        )
+      : [[]];
+    const paymentIds = paymentRows.map((row) => Number(row.id)).filter(Number.isInteger);
     const deleted = [];
 
-    async function deleteByIds(table, column, ids) {
-      if (!ids.length || !(await tableExists(db, table))) return;
-      const [result] = await db.query(
-        `DELETE FROM ${safeIdentifier(table)} WHERE ${safeIdentifier(column)} IN (${placeholders(ids)})`,
-        ids
-      );
-      deleted.push({ table, rows: Number(result.affectedRows || 0) });
-    }
-
     if (agreementIds.length) {
-      for (const table of AGREEMENT_TABLES) {
-        await deleteByIds(table, "agreement_id", agreementIds);
+      await deleteScopedInstallmentTable(db, "equipment_sale_payment_allocations", { agreementIds, paymentIds }, deleted);
+      for (const table of [
+        "equipment_finance_case_activity",
+        "equipment_finance_documents",
+        "equipment_finance_private_documents",
+        "equipment_finance_document_reviews",
+        "equipment_finance_delivery_authorizations",
+        "equipment_finance_delivery_confirmations",
+        "equipment_finance_correction_requests",
+        "equipment_finance_correction_ledger",
+        "equipment_installment_schedule",
+        "equipment_sale_payments",
+        "equipment_deliveries",
+        "equipment_ownership_transfers",
+        "equipment_asset_sale_locks",
+      ]) {
+        await deleteScopedInstallmentTable(db, table, { agreementIds, applicationIds: allApplicationIds, paymentIds }, deleted);
       }
-      await deleteByIds("equipment_sale_agreements", "id", agreementIds);
+      await deleteByIds(db, "equipment_sale_agreements", "id", agreementIds, deleted);
     }
 
     if (allApplicationIds.length) {
       for (const table of APPLICATION_TABLES) {
-        await deleteByIds(table, "application_id", allApplicationIds);
+        await deleteScopedInstallmentTable(db, table, { applicationIds: allApplicationIds }, deleted);
       }
-      await deleteByIds("equipment_credit_applications", "id", allApplicationIds);
+      await deleteByIds(db, "equipment_credit_applications", "id", allApplicationIds, deleted);
     }
 
     if (quotationIds.length) {
-      await deleteByIds("equipment_sales_quotation_items", "quotation_id", quotationIds);
-      await deleteByIds("equipment_sales_quotations", "id", quotationIds);
+      await deleteByIds(db, "equipment_sales_quotation_items", "quotation_id", quotationIds, deleted);
+      await deleteByIds(db, "equipment_sales_quotations", "id", quotationIds, deleted);
     }
 
     if (assetIds.length && (await tableExists(db, "fleet_assets"))) {
