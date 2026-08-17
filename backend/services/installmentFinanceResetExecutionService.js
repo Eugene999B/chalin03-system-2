@@ -67,57 +67,70 @@ async function clearInstallmentChildTable(connection, tableName, { agreementIds,
   const columns = await getColumns(connection, tableName);
   const candidates = [
     ["agreement_id", agreementIds],
+    ["sale_agreement_id", agreementIds],
+    ["installment_agreement_id", agreementIds],
     ["application_id", applicationIds],
     ["credit_application_id", applicationIds],
     ["payment_id", paymentIds],
+    ["sale_payment_id", paymentIds],
   ];
+
   for (const [column, ids] of candidates) {
     if (columns.has(column) && ids.length) {
       await deleteByIds(connection, tableName, column, ids, deleted);
       return;
     }
   }
-  const dedicated =
-    tableName.startsWith("equipment_finance_") ||
-    tableName.startsWith("equipment_credit_application_") ||
-    tableName.startsWith("equipment_installment_") ||
-    tableName === "equipment_sale_payment_allocations" ||
-    tableName === "equipment_sale_payments" ||
-    tableName === "equipment_deliveries" ||
-    tableName === "equipment_ownership_transfers" ||
-    tableName === "equipment_asset_sale_locks";
-  if (dedicated) {
-    const [result] = await connection.query(`DELETE FROM \`${tableName}\``);
-    deleted.push({ table: tableName, rows: Number(result.affectedRows || 0), scope: "dedicated_installment_table" });
-  }
+
+  // Never fall back to DELETE without a verified scope. A missing foreign-key
+  // column is a schema mismatch, not permission to wipe the entire table.
+  return;
 }
 
-async function findRestorableValue(connection, tableName, columnName, excludedValues) {
+function valuesEqual(left, right) {
+  return String(left).toLowerCase() === String(right).toLowerCase();
+}
+
+async function findRestorableValue(connection, tableName, columnName, excludedValues, assetIds = []) {
   const columns = await getColumns(connection, tableName);
   const meta = columns.get(columnName);
   if (!meta) return null;
 
+  const excluded = (excludedValues || []).map((value) => String(value).toLowerCase());
+  const idFilter = assetIds.length ? `AND id NOT IN (${placeholders(assetIds)})` : "";
+
+  if (columns.has("id")) {
+    const [rows] = await connection.query(
+      `SELECT \`${columnName}\` AS value
+         FROM \`${tableName}\`
+        WHERE \`${columnName}\` IS NOT NULL
+          ${idFilter}
+        GROUP BY \`${columnName}\`
+        ORDER BY COUNT(*) DESC, \`${columnName}\` ASC
+        LIMIT 20`,
+      assetIds
+    );
+    const observed = rows.find((row) => !excluded.includes(String(row.value).toLowerCase()));
+    if (observed?.value !== undefined && observed?.value !== null) return String(observed.value);
+  }
+
   const type = String(meta.COLUMN_TYPE || "");
-  if (type.startsWith("enum(")) {
-    const values = [...type.matchAll(/'((?:[^'\\]|\\.)*)'/g)].map((match) => match[1].replace(/\\'/g, "'"));
-    const candidate = values.find((value) => !excludedValues.includes(value));
+  if (/^enum\(/i.test(type)) {
+    const values = [...type.matchAll(/'((?:[^'\\]|\\.)*)'/g)]
+      .map((match) => match[1].replace(/\\'/g, "'"));
+    const preferred = ["available", "active", "in_stock", "instock", "idle", "ready", "free", "unsold", "stock", "open"];
+    const preferredValue = preferred.find((candidate) =>
+      values.some((value) => valuesEqual(value, candidate) && !excluded.includes(candidate))
+    );
+    if (preferredValue) return values.find((value) => valuesEqual(value, preferredValue));
+    const candidate = values.find((value) => !excluded.includes(value.toLowerCase()));
     if (candidate) return candidate;
   }
 
   if (meta.COLUMN_DEFAULT !== null && meta.COLUMN_DEFAULT !== undefined) {
     const candidate = String(meta.COLUMN_DEFAULT);
-    if (candidate && !excludedValues.includes(candidate)) return candidate;
+    if (candidate && !excluded.includes(candidate.toLowerCase())) return candidate;
   }
-
-  const [[existing]] = await connection.query(
-    `SELECT \`${columnName}\` AS value
-       FROM \`${tableName}\`
-      WHERE \`${columnName}\` IS NOT NULL
-        AND \`${columnName}\` NOT IN (${placeholders(excludedValues)})
-      LIMIT 1`,
-    excludedValues
-  );
-  if (existing?.value !== undefined && existing?.value !== null) return String(existing.value);
 
   return null;
 }
@@ -127,10 +140,10 @@ async function restoreFinanceAssets(connection, assetIds, deleted) {
   const columns = await getColumns(connection, "fleet_assets");
   const updates = [];
   const params = [];
-  const excludedStatuses = ["sold", "reserved", "installment"];
+  const excludedStatuses = ["sold", "reserved", "installment", "rented", "hire"];
 
   if (columns.has("sale_status")) {
-    const saleStatus = await findRestorableValue(connection, "fleet_assets", "sale_status", excludedStatuses);
+    const saleStatus = await findRestorableValue(connection, "fleet_assets", "sale_status", excludedStatuses, assetIds);
     if (saleStatus !== null) {
       updates.push("`sale_status` = ?");
       params.push(saleStatus);
@@ -138,9 +151,9 @@ async function restoreFinanceAssets(connection, assetIds, deleted) {
   }
 
   if (columns.has("current_status")) {
-    const currentStatus = await findRestorableValue(connection, "fleet_assets", "current_status", excludedStatuses);
+    const currentStatus = await findRestorableValue(connection, "fleet_assets", "current_status", excludedStatuses, assetIds);
     if (currentStatus !== null) {
-      updates.push("`current_status` = CASE WHEN `current_status` IN (?, ?, ?) THEN ? ELSE `current_status` END");
+      updates.push("`current_status` = CASE WHEN LOWER(`current_status`) IN (?, ?, ?, ?, ?) THEN ? ELSE `current_status` END");
       params.push(...excludedStatuses, currentStatus);
     }
   }
@@ -171,14 +184,17 @@ async function selectAgreements(connection) {
   return { rows, columns };
 }
 
-async function selectApplications(connection) {
-  if (!(await tableExists(connection, "equipment_credit_applications"))) return { rows: [], columns: new Map() };
+async function selectApplications(connection, applicationIds) {
+  if (!applicationIds.length || !(await tableExists(connection, "equipment_credit_applications"))) {
+    return { rows: [], columns: new Map() };
+  }
   const columns = await getColumns(connection, "equipment_credit_applications");
   if (!columns.has("id")) return { rows: [], columns };
   const select = ["id"];
   if (columns.has("quotation_id")) select.push("quotation_id");
   const [rows] = await connection.query(
-    `SELECT ${select.join(", ")} FROM equipment_credit_applications FOR UPDATE`
+    `SELECT ${select.join(", ")} FROM equipment_credit_applications WHERE id IN (${placeholders(applicationIds)}) FOR UPDATE`,
+    applicationIds
   );
   return { rows, columns };
 }
@@ -215,11 +231,8 @@ async function executeReset({ userId, password, confirmation, dryRunFingerprint,
       ? agreements.map((row) => Number(row.credit_application_id)).filter(Number.isInteger)
       : [];
 
-    const { rows: applications } = await selectApplications(db);
-    const applicationIds = [...new Set([
-      ...agreementApplicationIds,
-      ...applications.map((row) => Number(row.id)).filter(Number.isInteger),
-    ])];
+    const { rows: applications } = await selectApplications(db, [...new Set(agreementApplicationIds)]);
+    const applicationIds = [...new Set(agreementApplicationIds)];
     const quotationIds = applications
       .map((row) => Number(row.quotation_id))
       .filter(Number.isInteger);
