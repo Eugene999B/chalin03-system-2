@@ -10,6 +10,12 @@ Production business-control system for **Chalin 03 Company Limited**, prepared b
 
 ---
 
+## Installment reset rebuild
+
+The Installment Finance workspace now uses a single transactional deletion engine for the workspace reset and for explicit Installment customer/excavator deletion. Shared records remain protected unless they are explicitly Installment-owned and have no external references. Destructive operations require the original System Administrator and exact confirmation text.
+
+---
+
 ## 1. Current production state
 
 | Component | Current production value |
