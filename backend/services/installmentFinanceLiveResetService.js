@@ -172,12 +172,6 @@ async function deleteByIds(connection, table, column, ids, deleted) {
   deleted.push({ table, rows: Number(result.affectedRows || 0) });
 }
 
-/**
- * Delete an explicitly allowlisted Installment-only table without assuming a
- * particular foreign-key name. Tables with a relationship use that relation;
- * dedicated Finance-only tables with no relationship column can safely be
- * emptied because they contain no shared business-domain records.
- */
 async function deleteScopedInstallmentTable(
   connection,
   table,
@@ -205,6 +199,35 @@ async function deleteScopedInstallmentTable(
     const [result] = await connection.query(`DELETE FROM ${safeIdentifier(table)}`);
     deleted.push({ table, rows: Number(result.affectedRows || 0), scope: "dedicated_installment_table" });
   }
+}
+
+async function restoreFinanceAssets(connection, assetIds, deleted) {
+  if (!assetIds.length || !(await tableExists(connection, "fleet_assets"))) return;
+
+  const columns = await tableColumns(connection, "fleet_assets");
+  const updates = [];
+
+  if (columns.has("sale_status")) {
+    updates.push("`sale_status` = 'available'");
+  }
+  if (columns.has("current_status")) {
+    updates.push(
+      "`current_status` = CASE WHEN `current_status` IN ('sold', 'reserved', 'installment') THEN 'available' ELSE `current_status` END"
+    );
+  }
+  if (columns.has("sold_at")) {
+    updates.push("`sold_at` = NULL");
+  }
+
+  if (!updates.length) return;
+
+  const [result] = await connection.query(
+    `UPDATE fleet_assets
+        SET ${updates.join(", ")}
+      WHERE id IN (${placeholders(assetIds)})`,
+    assetIds
+  );
+  deleted.push({ table: "fleet_assets", restored_rows: Number(result.affectedRows || 0) });
 }
 
 async function executeReset({
@@ -321,20 +344,7 @@ async function executeReset({
       await deleteByIds(db, "equipment_sales_quotations", "id", quotationIds, deleted);
     }
 
-    if (assetIds.length && (await tableExists(db, "fleet_assets"))) {
-      const [result] = await db.query(
-        `UPDATE fleet_assets
-            SET sale_status = 'available',
-                current_status = CASE
-                  WHEN current_status IN ('sold', 'reserved', 'installment') THEN 'available'
-                  ELSE current_status
-                END,
-                sold_at = NULL
-          WHERE id IN (${placeholders(assetIds)})`,
-        assetIds
-      );
-      deleted.push({ table: "fleet_assets", restored_rows: Number(result.affectedRows || 0) });
-    }
+    await restoreFinanceAssets(db, assetIds, deleted);
 
     await db.commit();
 
