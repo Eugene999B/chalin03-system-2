@@ -33,6 +33,15 @@ test("reset scope is Installment-only and preserves shared business data", () =>
   assert.doesNotMatch(service, /DROP\s+TABLE/i);
 });
 
+test("execute path inspects live columns instead of assuming agreement/application schemas", () => {
+  assert.ok(service.includes("information_schema.COLUMNS"));
+  assert.ok(service.includes("tableColumns"));
+  assert.ok(service.includes("credit_application_id"));
+  assert.ok(service.includes("payment_id"));
+  assert.ok(service.includes("dedicated_installment_table"));
+  assert.ok(service.includes("applicationColumns.has(\"quotation_id\")"));
+});
+
 test("routes require original System Administrator and management permission", () => {
   assert.ok(routes.includes('requirePermission("fleet.assets.manage")'));
   assert.ok(routes.includes("isOriginalSystemAdministrator"));
