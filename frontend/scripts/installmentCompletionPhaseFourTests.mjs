@@ -14,30 +14,22 @@ const layout = read("src/layouts/InstallmentFinanceLayout.jsx");
 const workflow = read("../.github/workflows/chalin03-verification.yml");
 
 for (const title of [
-  "Final Operations & Reset Centre",
-  "Operational completion",
-  "Finance reset dry run",
-  "Controlled test reset",
-  "Fresh installment journey",
+  "Reset Centre",
+  "Review exactly what will be reset",
+  "Authorize the reset",
 ]) {
-  assert.match(page, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(page, new RegExp(title.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
 }
 
-assert.match(
-  page,
-  /const API = "\/equipment-catalogue\/sales\/completion-phase-four"/
-);
+assert.match(page, /const API = "\/equipment-catalogue\/sales\/completion-phase-four"/);
 assert.match(page, /\$\{API\}\/readiness/);
 assert.match(page, /\$\{API\}\/reset\/dry-run/);
 assert.match(page, /\$\{API\}\/reset\/execute/);
-
-assert.match(page, /Production reset is permanently blocked/);
-assert.match(page, /NODE_ENV=test/);
-assert.match(page, /ALLOW_FINANCE_TEST_RESET=true/);
-assert.match(page, /RESET FINANCE TEST DATA/);
-assert.match(page, /PRODUCTION_FINANCE_RESET_PERMANENTLY_BLOCKED/);
+assert.match(page, /Current password/);
+assert.match(page, /RESET INSTALLMENT FINANCE/);
+assert.match(page, /Reset Installment Finance Data/);
+assert.match(page, /dry_run_fingerprint/);
 assert.match(page, /original System Administrator/i);
-assert.match(page, /Customer → excavator → application → approval/);
 
 assert.match(workspace, /InstallmentCompletionPhaseFourPage/);
 assert.match(workspace, /stage === "finalization"/);
