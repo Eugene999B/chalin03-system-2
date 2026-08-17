@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const { pool } = require("../config/db");
 const { RESET_CONFIRMATION, buildDryRun } = require("./installmentFinanceResetScopeServiceV2");
-const { clearEverythingInInstallment } = require("./installmentCompletePurgeServiceV3");
+const { resetInstallmentTransaction } = require("./installmentUnifiedDeletionServiceV1");
 
 async function verifyPassword(db, userId, password) {
   const [[user]] = await db.query("SELECT id,password_hash,is_active FROM users WHERE id=? LIMIT 1", [userId]);
@@ -13,15 +13,14 @@ async function verifyPassword(db, userId, password) {
   }
 }
 
-async function executeReset({ userId, password, confirmation, dryRunFingerprint, connection = null } = {}) {
+async function executeReset({ userId, password, confirmation, dryRunFingerprint } = {}) {
   if (String(confirmation || "").trim() !== RESET_CONFIRMATION) {
     const error = new Error(`Type ${RESET_CONFIRMATION} exactly to confirm the Installment reset.`);
     error.statusCode = 400;
     error.code = "RESET_CONFIRMATION_REQUIRED";
     throw error;
   }
-  const ownsConnection = !connection;
-  const db = connection || await pool.getConnection();
+  const db = await pool.getConnection();
   try {
     await verifyPassword(db, userId, password);
     const dryRun = await buildDryRun(db);
@@ -31,23 +30,16 @@ async function executeReset({ userId, password, confirmation, dryRunFingerprint,
       error.code = "RESET_DRY_RUN_STALE";
       throw error;
     }
-    await db.beginTransaction();
-    const result = await clearEverythingInInstallment(db);
-    await db.commit();
-    return {
-      status: "success",
-      mode: "installment_reset",
-      dry_run_fingerprint: dryRun.fingerprint,
-      deleted: result.deleted,
-      cleared_installment_ids: result.ids,
-      message: "Installment Finance data was completely cleared using explicit Installment ownership. Hiring and other modules remain protected.",
-    };
-  } catch (error) {
-    try { await db.rollback(); } catch (_) {}
-    throw error;
-  } finally {
-    if (ownsConnection) db.release();
-  }
+  } finally { db.release(); }
+
+  const result = await resetInstallmentTransaction();
+  return {
+    ...result,
+    mode: "installment_reset",
+    dry_run_fingerprint: dryRunFingerprint,
+    cleared_installment_ids: result.scope,
+    message: "Installment Finance was reset through the same transactional deletion engine used by individual customer and excavator deletes. Shared non-Installment records remain protected.",
+  };
 }
 
 module.exports = { executeReset };
