@@ -13,36 +13,36 @@ const page = read("frontend", "src", "pages", "InstallmentCompletionPhaseFourPag
 const RESET_CONFIRMATION = "RESET INSTALLMENT FINANCE";
 
 test("live Installment reset requires the exact confirmation phrase", () => {
-  assert.match(service, new RegExp(RESET_CONFIRMATION.replace(/ /g, "\\s+")));
-  assert.match(service, /confirmation/);
+  assert.ok(service.includes(RESET_CONFIRMATION));
+  assert.ok(service.includes("confirmation"));
 });
 
 test("live Installment reset requires current password and fresh dry-run fingerprint", () => {
-  assert.match(service, /bcrypt\\.compare/);
-  assert.match(service, /dryRunFingerprint/);
-  assert.match(service, /RESET_DRY_RUN_STALE/);
+  assert.ok(service.includes("bcrypt.compare"));
+  assert.ok(service.includes("dryRunFingerprint"));
+  assert.ok(service.includes("RESET_DRY_RUN_STALE"));
 });
 
 test("reset scope is Installment-only and preserves shared business data", () => {
-  assert.match(service, /equipment_credit_applications/);
-  assert.match(service, /equipment_sale_agreements/);
-  assert.match(service, /equipment_installment_schedule/);
-  assert.match(service, /shared customer identities/);
-  assert.match(service, /excavator master records and photographs/);
-  assert.doesNotMatch(service, /TRUNCATE\\s+TABLE/i);
-  assert.doesNotMatch(service, /DROP\\s+TABLE/i);
+  assert.ok(service.includes("equipment_credit_applications"));
+  assert.ok(service.includes("equipment_sale_agreements"));
+  assert.ok(service.includes("equipment_installment_schedule"));
+  assert.ok(service.includes("shared customer identities"));
+  assert.ok(service.includes("excavator master records and photographs"));
+  assert.doesNotMatch(service, /TRUNCATE\s+TABLE/i);
+  assert.doesNotMatch(service, /DROP\s+TABLE/i);
 });
 
 test("routes require original System Administrator and management permission", () => {
-  assert.match(routes, /requirePermission\("fleet\\.assets\\.manage"\)/);
-  assert.match(routes, /isOriginalSystemAdministrator/);
-  assert.match(routes, /password: req\.body\?\.password/);
-  assert.match(routes, /dryRunFingerprint: req\.body\?\.dry_run_fingerprint/);
+  assert.ok(routes.includes('requirePermission("fleet.assets.manage")'));
+  assert.ok(routes.includes("isOriginalSystemAdministrator"));
+  assert.ok(routes.includes("password: req.body?.password"));
+  assert.ok(routes.includes("dryRunFingerprint: req.body?.dry_run_fingerprint"));
 });
 
 test("UI requires password and exact confirmation before reset", () => {
-  assert.match(page, /Current password/);
-  assert.match(page, /RESET INSTALLMENT FINANCE/);
-  assert.match(page, /Reset Installment Finance Data/);
-  assert.match(page, /dry_run_fingerprint/);
+  assert.ok(page.includes("Current password"));
+  assert.ok(page.includes("RESET INSTALLMENT FINANCE"));
+  assert.ok(page.includes("Reset Installment Finance Data"));
+  assert.ok(page.includes("dry_run_fingerprint"));
 });
