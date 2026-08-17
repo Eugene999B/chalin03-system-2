@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import InstallmentEntityDeleteDialog from "../components/InstallmentEntityDeleteDialog";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
 const API = "/equipment-catalogue/sales/phase-one/customers";
-const DELETE_API = "/equipment-catalogue/sales/completion-phase-four/entity/customer";
 
 const EMPTY_CUSTOMER = { customer_name: "", customer_type: "individual", phone: "", whatsapp_phone: "", email: "", address: "", contact_person: "", risk_notes: "", is_active: true };
-
 function money(value) { return `GHS ${Number(value || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 function errorMessage(error, fallback) { return error?.response?.data?.message || error?.message || fallback; }
 function Field({ title, children, wide = false }) { return <label className={`finance-simple__field ${wide ? "is-wide" : ""}`}><span>{title}</span>{children}</label>; }
@@ -23,12 +22,10 @@ export default function EquipmentFinanceCustomerCentrePage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [deleteImpact, setDeleteImpact] = useState(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_CUSTOMER);
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
@@ -39,7 +36,6 @@ export default function EquipmentFinanceCustomerCentrePage() {
     catch (error) { setProblem(errorMessage(error, "Could not load Finance customers.")); }
     finally { setLoading(false); }
   }, []);
-
   useEffect(() => { load(); }, [load]);
 
   const visibleCustomers = useMemo(() => {
@@ -50,116 +46,41 @@ export default function EquipmentFinanceCustomerCentrePage() {
 
   function setValue(field, value) { setForm((current) => ({ ...current, [field]: value })); }
   function openCreate() { setSelectedCustomer(null); setEditing({ id: null }); setForm(EMPTY_CUSTOMER); setConfirmDuplicate(false); setProblem(""); }
-  function openEdit(customer) {
-    setSelectedCustomer(null); setEditing(customer);
-    setForm({ customer_name: customer.customer_name || "", customer_type: customer.customer_type || "individual", phone: customer.phone || "", whatsapp_phone: customer.whatsapp_phone || "", email: customer.email || "", address: customer.address || "", contact_person: customer.contact_person || "", risk_notes: customer.risk_notes || "", is_active: Boolean(customer.is_active) });
-    setConfirmDuplicate(false); setProblem("");
-  }
-
-  async function save(event) {
-    event.preventDefault(); setSaving(true); setProblem(""); setNotice("");
-    try {
-      const response = editing?.id ? await axiosClient.put(`${API}/${editing.id}`, { ...form, confirm_duplicate: confirmDuplicate }) : await axiosClient.post(API, { ...form, confirm_duplicate: confirmDuplicate });
-      setEditing(null); setNotice(response.data?.message || "Finance customer saved."); await load();
-    } catch (error) {
-      const duplicates = error?.response?.data?.duplicates || [];
-      setProblem(duplicates.length ? `${errorMessage(error, "A similar customer exists.")} Similar: ${duplicates.map((item) => `${item.customer_name} (${item.phone || "no phone"})`).join(", ")}` : errorMessage(error, "Could not save the Finance customer."));
-    } finally { setSaving(false); }
-  }
-
-  async function prepareDelete(customer) {
-    if (!isOriginalAdmin) { setProblem("Only the original System Administrator can delete an Installment customer."); return; }
-    setProblem(""); setNotice(""); setSelectedCustomer(null);
-    try {
-      const response = await axiosClient.post(`${DELETE_API}/${customer.id}/impact`);
-      setDeleteImpact({ customer, ...(response.data?.impact || {}) });
-      setDeleteConfirmation("");
-    } catch (error) { setProblem(errorMessage(error, "Could not prepare the customer deletion impact.")); }
-  }
-
-  async function executeDelete() {
-    if (!deleteImpact) return;
-    const expected = `DELETE INSTALLMENT CUSTOMER ${deleteImpact.entity_id}`;
-    if (deleteConfirmation.trim() !== expected) { setProblem(`Type ${expected} exactly to confirm.`); return; }
-    setDeleting(true); setProblem(""); setNotice("");
-    try {
-      const response = await axiosClient.post(`${DELETE_API}/${deleteImpact.entity_id}/delete`, { confirmation: deleteConfirmation });
-      setDeleteImpact(null); setDeleteConfirmation(""); setNotice(response.data?.message || "Installment customer deleted."); await load();
-    } catch (error) { setProblem(errorMessage(error, "The Installment customer could not be deleted.")); }
-    finally { setDeleting(false); }
-  }
+  function openEdit(customer) { setSelectedCustomer(null); setEditing(customer); setForm({ customer_name: customer.customer_name || "", customer_type: customer.customer_type || "individual", phone: customer.phone || "", whatsapp_phone: customer.whatsapp_phone || "", email: customer.email || "", address: customer.address || "", contact_person: customer.contact_person || "", risk_notes: customer.risk_notes || "", is_active: Boolean(customer.is_active) }); setConfirmDuplicate(false); setProblem(""); }
+  async function save(event) { event.preventDefault(); setSaving(true); setProblem(""); setNotice(""); try { const response = editing?.id ? await axiosClient.put(`${API}/${editing.id}`, { ...form, confirm_duplicate: confirmDuplicate }) : await axiosClient.post(API, { ...form, confirm_duplicate: confirmDuplicate }); setEditing(null); setNotice(response.data?.message || "Finance customer saved."); await load(); } catch (error) { const duplicates = error?.response?.data?.duplicates || []; setProblem(duplicates.length ? `${errorMessage(error, "A similar customer exists.")} Similar: ${duplicates.map((item) => `${item.customer_name} (${item.phone || "no phone"})`).join(", ")}` : errorMessage(error, "Could not save the Finance customer.")); } finally { setSaving(false); } }
 
   const totalOutstanding = customers.reduce((sum, customer) => sum + Number(customer.outstanding_balance || 0), 0);
 
   return (
     <main className="finance-simple finance-simplified">
-      <header className="finance-simple__hero">
-        <div><p>Search first, open one record</p><h1>Finance Customer Centre</h1><span>Find the customer you need, then open that profile. Destructive deletion clears the Installment integration transactionally and only removes the shared master when it is explicitly Installment-owned and no other module references it.</span></div>
-        <div className="finance-simple__hero-actions"><Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=start">Start New Installment</Link>{canManage ? <button className="is-primary" type="button" onClick={openCreate}>+ Add Customer</button> : null}</div>
-      </header>
+      <header className="finance-simple__hero"><div><p>Search first, open one record</p><h1>Finance Customer Centre</h1><span>Find the customer you need, then open that profile. Destructive deletion clears the Installment integration transactionally and only removes the shared master when it is explicitly Installment-owned and unreferenced.</span></div><div className="finance-simple__hero-actions"><Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=start">Start New Installment</Link>{canManage ? <button className="is-primary" type="button" onClick={openCreate}>+ Add Customer</button> : null}</div></header>
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
-
-      <section className="finance-simple__metrics">
-        <article className="finance-simple__metric"><span>Active customers</span><strong>{customers.length}</strong></article>
-        <article className="finance-simple__metric"><span>Credit applications</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_application_count || 0), 0)}</strong></article>
-        <article className="finance-simple__metric"><span>Installment agreements</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_agreement_count || 0), 0)}</strong></article>
-        <article className="finance-simple__metric"><span>Outstanding portfolio</span><strong>{money(totalOutstanding)}</strong></article>
-      </section>
-
+      <section className="finance-simple__metrics"><article className="finance-simple__metric"><span>Active customers</span><strong>{customers.length}</strong></article><article className="finance-simple__metric"><span>Credit applications</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_application_count || 0), 0)}</strong></article><article className="finance-simple__metric"><span>Installment agreements</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_agreement_count || 0), 0)}</strong></article><article className="finance-simple__metric"><span>Outstanding portfolio</span><strong>{money(totalOutstanding)}</strong></article></section>
       <section className="finance-simple__section">
         <div className="finance-simple__toolbar"><div><p className="finance-simple__eyebrow">Choose customer</p><h2>{visibleCustomers.length} result(s)</h2></div><input aria-label="Search Finance customer register" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, code, email or address" autoComplete="off" /></div>
         {loading ? <div className="finance-simple__empty">Loading Finance customers…</div> : null}
         {!loading && !visibleCustomers.length ? <div className="finance-simple__empty">No matching customers. Add the first customer to begin.</div> : null}
-        <div className="finance-simple__customer-grid">
-          {visibleCustomers.map((customer) => (
-            <article className="finance-simple__customer finance-simplified__customer-row" key={customer.id}>
-              <div className="finance-simplified__customer-summary"><span className="finance-simple__pill">{customer.customer_code}</span><h3>{customer.customer_name}</h3><p>{customer.phone || "No phone recorded"}</p><small>{customer.customer_type || "individual"}</small></div>
-              <div className="finance-simplified__customer-balance"><span>Outstanding balance</span><strong>{money(customer.outstanding_balance)}</strong><small>{customer.finance_agreement_count || 0} agreement(s)</small></div>
-              <div className="finance-simplified__customer-actions"><button className="is-primary" type="button" onClick={() => setSelectedCustomer(customer)}>View Details</button><Link className="finance-simple__button" to={`/equipment-installment-finance/applications?stage=start&customer=${customer.id}`}>Start Installment</Link>{isOriginalAdmin ? <button className="is-danger" type="button" onClick={() => prepareDelete(customer)}>Delete</button> : null}</div>
-            </article>
-          ))}
-        </div>
+        <div className="finance-simple__customer-grid">{visibleCustomers.map((customer) => <article className="finance-simple__customer finance-simplified__customer-row" key={customer.id}>
+          <div className="finance-simplified__customer-summary"><span className="finance-simple__pill">{customer.customer_code}</span><h3>{customer.customer_name}</h3><p>{customer.phone || "No phone recorded"}</p><small>{customer.customer_type || "individual"}</small></div>
+          <div className="finance-simplified__customer-balance"><span>Outstanding balance</span><strong>{money(customer.outstanding_balance)}</strong><small>{customer.finance_agreement_count || 0} agreement(s)</small></div>
+          <div className="finance-simplified__customer-actions"><button className="is-primary" type="button" onClick={() => setSelectedCustomer(customer)}>View Details</button><Link className="finance-simple__button" to={`/equipment-installment-finance/applications?stage=start&customer=${customer.id}`}>Start Installment</Link>{isOriginalAdmin ? <button className="is-danger" type="button" onClick={() => setDeleteTarget(customer)}>Delete</button> : null}</div>
+        </article>)}</div>
       </section>
 
-      {selectedCustomer ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelectedCustomer(null)}>
-          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Finance customer details" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Selected customer</p><h2>{selectedCustomer.customer_name}</h2><span className="finance-simple__muted">{selectedCustomer.customer_code} · {selectedCustomer.customer_type || "individual"}</span></div><button type="button" onClick={() => setSelectedCustomer(null)}>Close</button></div>
-            <div className="finance-simple__summary"><article><span>Phone</span><strong>{selectedCustomer.phone || "Not recorded"}</strong></article><article><span>WhatsApp</span><strong>{selectedCustomer.whatsapp_phone || "Not recorded"}</strong></article><article><span>Email</span><strong>{selectedCustomer.email || "Not recorded"}</strong></article><article><span>Contact person</span><strong>{selectedCustomer.contact_person || "Not recorded"}</strong></article><article><span>Applications</span><strong>{selectedCustomer.finance_application_count || 0}</strong></article><article><span>Agreements</span><strong>{selectedCustomer.finance_agreement_count || 0}</strong></article><article><span>Outstanding</span><strong>{money(selectedCustomer.outstanding_balance)}</strong></article></div>
-            <div className="finance-simple__section"><h3>Address</h3><p>{selectedCustomer.address || "No address recorded."}</p>{selectedCustomer.risk_notes ? <details><summary>Show internal risk / service note</summary><p>{selectedCustomer.risk_notes}</p></details> : null}</div>
-            <div className="finance-simple__sticky-actions"><span>Destructive actions clear only Installment-linked data.</span><div>{canManage ? <button type="button" onClick={() => openEdit(selectedCustomer)}>Edit Customer</button> : null}{isOriginalAdmin ? <button className="is-danger" type="button" onClick={() => prepareDelete(selectedCustomer)}>Delete Customer</button> : null}<Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${selectedCustomer.id}`}>Start Installment</Link></div></div>
-          </section>
-        </div>
-      ) : null}
+      {selectedCustomer ? <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelectedCustomer(null)}><section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Finance customer details" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Selected customer</p><h2>{selectedCustomer.customer_name}</h2><span className="finance-simple__muted">{selectedCustomer.customer_code} · {selectedCustomer.customer_type || "individual"}</span></div><button type="button" onClick={() => setSelectedCustomer(null)}>Close</button></div>
+        <div className="finance-simple__summary"><article><span>Phone</span><strong>{selectedCustomer.phone || "Not recorded"}</strong></article><article><span>WhatsApp</span><strong>{selectedCustomer.whatsapp_phone || "Not recorded"}</strong></article><article><span>Email</span><strong>{selectedCustomer.email || "Not recorded"}</strong></article><article><span>Contact person</span><strong>{selectedCustomer.contact_person || "Not recorded"}</strong></article><article><span>Applications</span><strong>{selectedCustomer.finance_application_count || 0}</strong></article><article><span>Agreements</span><strong>{selectedCustomer.finance_agreement_count || 0}</strong></article><article><span>Outstanding</span><strong>{money(selectedCustomer.outstanding_balance)}</strong></article></div>
+        <div className="finance-simple__section"><h3>Address</h3><p>{selectedCustomer.address || "No address recorded."}</p>{selectedCustomer.risk_notes ? <details><summary>Show internal risk / service note</summary><p>{selectedCustomer.risk_notes}</p></details> : null}</div>
+        <div className="finance-simple__sticky-actions"><span>Destructive actions clear only Installment-linked data.</span><div>{canManage ? <button type="button" onClick={() => openEdit(selectedCustomer)}>Edit Customer</button> : null}{isOriginalAdmin ? <button className="is-danger" type="button" onClick={() => setDeleteTarget(selectedCustomer)}>Delete Customer</button> : null}<Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${selectedCustomer.id}`}>Start Installment</Link></div></div>
+      </section></div> : null}
 
-      {deleteImpact ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => !deleting && setDeleteImpact(null)}>
-          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Delete Installment customer" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Permanent Installment deletion</p><h2>Delete {deleteImpact.customer?.customer_name}</h2><span className="finance-simple__muted">Customer #{deleteImpact.entity_id}</span></div><button type="button" disabled={deleting} onClick={() => setDeleteImpact(null)}>Close</button></div>
-            <div className="finance-simple__section"><p>This operation removes the customer's Installment applications, agreements, schedules, payments, deliveries, documents and other linked Finance records in one transaction. The shared customer master is deleted only when it is explicitly Installment-owned and has no external references.</p><div className="finance-simple__summary"><article><span>Installment-owned</span><strong>{deleteImpact.explicitly_installment_owned ? "Yes" : "No"}</strong></article><article><span>External references</span><strong>{(deleteImpact.external_references || []).reduce((sum, item) => sum + Number(item.rows || 0), 0)}</strong></article><article><span>Protected references</span><strong>{(deleteImpact.protected_external_references || []).reduce((sum, item) => sum + Number(item.rows || 0), 0)}</strong></article><article><span>Master deletion</span><strong>{deleteImpact.master_delete_eligible ? "Allowed" : "Preserved"}</strong></article></div></div>
-            <div className="finance-simple__section"><label className="finance-simple__field"><span>Type exactly: <code>DELETE INSTALLMENT CUSTOMER {deleteImpact.entity_id}</code></span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" disabled={deleting} /></label></div>
-            <div className="finance-simple__sticky-actions"><span>Runs transactionally and rolls back on failure.</span><div><button type="button" disabled={deleting} onClick={() => setDeleteImpact(null)}>Cancel</button><button className="is-danger" type="button" disabled={deleting || deleteConfirmation.trim() !== `DELETE INSTALLMENT CUSTOMER ${deleteImpact.entity_id}`} onClick={executeDelete}>{deleting ? "Deleting…" : "Delete permanently"}</button></div></div>
-          </section>
-        </div>
-      ) : null}
+      {deleteTarget ? <InstallmentEntityDeleteDialog entityType="customer" entityId={deleteTarget.id} name={deleteTarget.customer_name} onClose={() => setDeleteTarget(null)} onDeleted={(result) => { setDeleteTarget(null); setNotice(result?.message || "Installment customer deleted."); load(); }} /> : null}
 
-      {editing ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}><section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={editing.id ? "Edit Finance customer" : "Add Finance customer"} onMouseDown={(event) => event.stopPropagation()}>
-          <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Customer profile</p><h2>{editing.id ? "Edit Customer" : "Add Customer"}</h2><span className="finance-simple__muted">Search and duplicate protection apply across the whole Equipment Business.</span></div><button type="button" onClick={() => setEditing(null)}>Close</button></div>
-          <form onSubmit={save}><div className="finance-simple__grid">
-            <Field title="Full name"><input value={form.customer_name} onChange={(event) => setValue("customer_name", event.target.value)} required /></Field>
-            <Field title="Customer type"><select value={form.customer_type} onChange={(event) => setValue("customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Company</option><option value="contractor">Contractor</option><option value="government">Government</option></select></Field>
-            <Field title="Phone"><input inputMode="tel" value={form.phone} onChange={(event) => setValue("phone", event.target.value)} required /></Field>
-            <Field title="WhatsApp phone"><input inputMode="tel" value={form.whatsapp_phone} onChange={(event) => setValue("whatsapp_phone", event.target.value)} /></Field>
-            <Field title="Email"><input type="email" value={form.email} onChange={(event) => setValue("email", event.target.value)} /></Field>
-            <Field title="Contact person"><input value={form.contact_person} onChange={(event) => setValue("contact_person", event.target.value)} /></Field>
-            <Field title="Address" wide><textarea value={form.address} onChange={(event) => setValue("address", event.target.value)} /></Field>
-            <Field title="Internal risk / service note" wide><textarea value={form.risk_notes} onChange={(event) => setValue("risk_notes", event.target.value)} /></Field>
-            <label className="finance-simple__check is-wide"><input type="checkbox" checked={confirmDuplicate} onChange={(event) => setConfirmDuplicate(event.target.checked)} /><span><strong>Confirm this is a different customer</strong><small>Use only after checking any similar name or phone warning.</small></span></label>
-          </div><div className="finance-simple__sticky-actions"><span>{editing.id ? "Updating existing profile" : "Creating reusable Finance profile"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Customer"}</button></div></div></form>
-        </section></div>
-      ) : null}
+      {editing ? <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}><section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={editing.id ? "Edit Finance customer" : "Add Finance customer"} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Customer profile</p><h2>{editing.id ? "Edit Customer" : "Add Customer"}</h2><span className="finance-simple__muted">Search and duplicate protection apply across the whole Equipment Business.</span></div><button type="button" onClick={() => setEditing(null)}>Close</button></div>
+        <form onSubmit={save}><div className="finance-simple__grid"><Field title="Full name"><input value={form.customer_name} onChange={(event) => setValue("customer_name", event.target.value)} required /></Field><Field title="Customer type"><select value={form.customer_type} onChange={(event) => setValue("customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Company</option><option value="contractor">Contractor</option><option value="government">Government</option></select></Field><Field title="Phone"><input inputMode="tel" value={form.phone} onChange={(event) => setValue("phone", event.target.value)} required /></Field><Field title="WhatsApp phone"><input inputMode="tel" value={form.whatsapp_phone} onChange={(event) => setValue("whatsapp_phone", event.target.value)} /></Field><Field title="Email"><input type="email" value={form.email} onChange={(event) => setValue("email", event.target.value)} /></Field><Field title="Contact person"><input value={form.contact_person} onChange={(event) => setValue("contact_person", event.target.value)} /></Field><Field title="Address" wide><textarea value={form.address} onChange={(event) => setValue("address", event.target.value)} /></Field><Field title="Internal risk / service note" wide><textarea value={form.risk_notes} onChange={(event) => setValue("risk_notes", event.target.value)} /></Field><label className="finance-simple__check is-wide"><input type="checkbox" checked={confirmDuplicate} onChange={(event) => setConfirmDuplicate(event.target.checked)} /><span><strong>Confirm this is a different customer</strong><small>Use only after checking any similar name or phone warning.</small></span></label></div><div className="finance-simple__sticky-actions"><span>{editing.id ? "Updating existing profile" : "Creating reusable Finance profile"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Customer"}</button></div></div></form>
+      </section></div> : null}
     </main>
   );
 }
