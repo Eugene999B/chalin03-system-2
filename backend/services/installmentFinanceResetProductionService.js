@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const { pool } = require("../config/db");
-const { RESET_CONFIRMATION, buildDryRun } = require("./installmentFinanceLiveResetService");
+const { RESET_CONFIRMATION, buildDryRun } = require("./installmentFinanceResetScopeServiceV2");
 const { clearEverythingInInstallment } = require("./installmentCompletePurgeServiceV3");
 
 async function verifyPassword(db, userId, password) {
@@ -40,7 +40,7 @@ async function executeReset({ userId, password, confirmation, dryRunFingerprint,
       dry_run_fingerprint: dryRun.fingerprint,
       deleted: result.deleted,
       cleared_installment_ids: result.ids,
-      message: "Installment Finance data was completely cleared. Unreferenced Installment test customers and excavators were removed; records still referenced by Hiring or another module were preserved.",
+      message: "Installment Finance data was completely cleared using explicit Installment ownership. Hiring and other modules remain protected.",
     };
   } catch (error) {
     try { await db.rollback(); } catch (_) {}

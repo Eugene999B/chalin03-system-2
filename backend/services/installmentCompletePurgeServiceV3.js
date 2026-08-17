@@ -1,260 +1,59 @@
 const { pool } = require("../config/db");
 
+const OWNERSHIP_TABLE = "installment_reset_ownership";
+const INSTALLMENT_WORKSPACE = "equipment_installment_finance";
 const INSTALLMENT_TABLES = [
-  "equipment_finance_case_activity",
-  "equipment_finance_documents",
-  "equipment_finance_private_documents",
-  "equipment_finance_document_reviews",
-  "equipment_finance_delivery_authorizations",
-  "equipment_finance_delivery_confirmations",
-  "equipment_finance_correction_requests",
-  "equipment_finance_correction_ledger",
-  "equipment_installment_schedule",
-  "equipment_sale_payment_allocations",
-  "equipment_sale_payments",
-  "equipment_deliveries",
-  "equipment_ownership_transfers",
-  "equipment_asset_sale_locks",
-  "equipment_credit_application_kyc",
-  "equipment_credit_application_reviews",
-  "equipment_credit_application_affordability",
-  "equipment_credit_application_guarantors",
-  "equipment_credit_application_consents",
+  "equipment_finance_case_activity","equipment_finance_documents","equipment_finance_private_documents","equipment_finance_document_reviews","equipment_finance_delivery_authorizations","equipment_finance_delivery_confirmations","equipment_finance_correction_requests","equipment_finance_correction_ledger","equipment_installment_schedule","equipment_sale_payment_allocations","equipment_sale_payments","equipment_deliveries","equipment_ownership_transfers","equipment_asset_sale_locks","equipment_credit_application_kyc","equipment_credit_application_reviews","equipment_credit_application_affordability","equipment_credit_application_guarantors","equipment_credit_application_consents",
 ];
+const CUSTOMER_COLUMNS=["customer_id","customerId","customerID","client_id","clientId"];
+const ASSET_COLUMNS=["asset_id","assetId","equipment_id","equipmentId","excavator_id","excavatorId","fleet_asset_id","fleetAssetId"];
+const APP_COLUMNS=["application_id","applicationId","credit_application_id","creditApplicationId"];
+const AGREEMENT_COLUMNS=["agreement_id","agreementId","sale_agreement_id","installment_agreement_id"];
+const uniq=v=>[...new Set(v.map(Number).filter(Number.isInteger))];
+const ph=v=>v.map(()=>"?").join(",");
 
-const MASTER_TABLES = [
-  "customers",
-  "equipment_customers",
-  "customer_profiles",
-  "equipment_customer_profiles",
-  "excavators",
-  "equipment_excavators",
-  "equipment",
-  "equipment_assets",
-  "fleet_assets",
-];
+async function exists(db,t){const[[r]]=await db.query("SELECT COUNT(*) AS count FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?",[t]);return Number(r?.count||0)===1;}
+async function cols(db,t){if(!(await exists(db,t)))return new Set();const[rows]=await db.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?",[t]);return new Set(rows.map(r=>String(r.COLUMN_NAME)));}
+async function requireOwnershipTable(db){if(!(await exists(db,OWNERSHIP_TABLE))){const e=new Error("Installment reset ownership migration is not deployed yet.");e.code="INSTALLMENT_RESET_OWNERSHIP_MIGRATION_REQUIRED";e.statusCode=503;throw e;}}
 
-const CUSTOMER_COLUMNS = ["customer_id", "customerId", "customerID", "client_id", "clientId"];
-const ASSET_COLUMNS = ["asset_id", "assetId", "equipment_id", "equipmentId", "excavator_id", "excavatorId", "fleet_asset_id", "fleetAssetId"];
-const APP_COLUMNS = ["application_id", "applicationId", "credit_application_id", "creditApplicationId"];
-const AGREEMENT_COLUMNS = ["agreement_id", "agreementId", "sale_agreement_id", "installment_agreement_id"];
-const uniq = (values) => [...new Set(values.map(Number).filter(Number.isInteger))];
-const ph = (values) => values.map(() => "?").join(",");
-
-async function exists(db, table) {
-  const [[row]] = await db.query(
-    "SELECT COUNT(*) AS count FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?",
-    [table]
-  );
-  return Number(row?.count || 0) === 1;
+async function syncActivityOwnership(db){
+  await db.query(`INSERT IGNORE INTO ${OWNERSHIP_TABLE} (workspace_code,entity_type,entity_id,ownership_source)
+    SELECT DISTINCT ?, 'fleet_asset', CAST(entity_id AS UNSIGNED), ? FROM activity_log
+    WHERE entity_type='fleet_asset' AND entity_id REGEXP '^[0-9]+$'
+      AND (action_type='equipment.finance.machine.register' OR action='EQUIPMENT_FINANCE_MACHINE_REGISTERED')
+      AND (workspace_code=? OR workspace_code IS NULL)`,[INSTALLMENT_WORKSPACE,"activity_log_installment_machine_registration",INSTALLMENT_WORKSPACE]);
+  await db.query(`INSERT IGNORE INTO ${OWNERSHIP_TABLE} (workspace_code,entity_type,entity_id,ownership_source)
+    SELECT DISTINCT ?, 'customer', CAST(entity_id AS UNSIGNED), ? FROM activity_log
+    WHERE entity_id REGEXP '^[0-9]+$' AND entity_type IN ('customer','customers','customer_profile','customer_identity')
+      AND (LOWER(COALESCE(action_type,'')) LIKE '%customer%register%' OR LOWER(COALESCE(action_type,'')) LIKE '%customer%create%'
+        OR LOWER(COALESCE(action,'')) LIKE '%customer%register%' OR LOWER(COALESCE(action,'')) LIKE '%customer%create%')
+      AND (workspace_code=? OR workspace_code IS NULL)`,[INSTALLMENT_WORKSPACE,"activity_log_installment_customer_registration",INSTALLMENT_WORKSPACE]);
 }
+async function ownershipIds(db,type){await requireOwnershipTable(db);const[rows]=await db.query(`SELECT entity_id FROM ${OWNERSHIP_TABLE} WHERE workspace_code=? AND entity_type=?`,[INSTALLMENT_WORKSPACE,type]);return uniq(rows.map(r=>r.entity_id));}
+async function deleteBy(db,t,c,ids,deleted){if(!ids.length||!(await exists(db,t)))return 0;const cs=await cols(db,t);if(!cs.has(c))return 0;const[r]=await db.query(`DELETE FROM \`${t}\` WHERE \`${c}\` IN (${ph(ids)})`,ids);if(r.affectedRows)deleted.push({table:t,rows:Number(r.affectedRows),column:c});return Number(r.affectedRows||0);}
 
-async function cols(db, table) {
-  if (!(await exists(db, table))) return new Set();
-  const [rows] = await db.query(
-    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?",
-    [table]
-  );
-  return new Set(rows.map((row) => String(row.COLUMN_NAME)));
-}
-
-async function deleteBy(db, table, column, ids, deleted) {
-  if (!ids.length || !(await exists(db, table))) return;
-  const tableColumns = await cols(db, table);
-  if (!tableColumns.has(column)) return;
-  const [result] = await db.query(
-    `DELETE FROM \`${table}\` WHERE \`${column}\` IN (${ph(ids)})`,
-    ids
-  );
-  if (result.affectedRows) deleted.push({ table, rows: Number(result.affectedRows), column });
-}
-
-async function collect(db) {
-  const ids = { customers: [], assets: [], applications: [], agreements: [], payments: [], quotations: [] };
-
-  for (const table of INSTALLMENT_TABLES) {
-    if (!(await exists(db, table))) continue;
-    const tableColumns = await cols(db, table);
-    const select = [...new Set([
-      ...CUSTOMER_COLUMNS,
-      ...ASSET_COLUMNS,
-      ...APP_COLUMNS,
-      ...AGREEMENT_COLUMNS,
-      "payment_id",
-      "sale_payment_id",
-      "quotation_id",
-    ])].filter((column) => tableColumns.has(column));
-    if (!select.length) continue;
-
-    const [rows] = await db.query(
-      `SELECT ${select.map((column) => `\`${column}\``).join(",")} FROM \`${table}\``
-    );
-    for (const row of rows) {
-      for (const column of CUSTOMER_COLUMNS) if (row[column] != null) ids.customers.push(row[column]);
-      for (const column of ASSET_COLUMNS) if (row[column] != null) ids.assets.push(row[column]);
-      for (const column of APP_COLUMNS) if (row[column] != null) ids.applications.push(row[column]);
-      for (const column of AGREEMENT_COLUMNS) if (row[column] != null) ids.agreements.push(row[column]);
-      for (const column of ["payment_id", "sale_payment_id"]) if (row[column] != null) ids.payments.push(row[column]);
-      if (row.quotation_id != null) ids.quotations.push(row.quotation_id);
-    }
-  }
-
-  if (await exists(db, "equipment_sale_agreements")) {
-    const tableColumns = await cols(db, "equipment_sale_agreements");
-    if (tableColumns.has("id")) {
-      const select = [
-        "id",
-        ...["customer_id", "customerId", "asset_id", "assetId", "equipment_id", "excavator_id", "credit_application_id", "application_id"].filter((column) => tableColumns.has(column)),
-      ];
-      const typeColumn = ["sale_type", "saleType", "sale_mode", "saleMode", "payment_type", "paymentType", "finance_type", "financeType"].find((column) => tableColumns.has(column));
-      const where = typeColumn
-        ? `WHERE LOWER(CAST(\`${typeColumn}\` AS CHAR)) IN ('installment','instalment','finance','financed','credit')`
-        : "";
-      const [rows] = await db.query(
-        `SELECT ${select.map((column) => `\`${column}\``).join(",")} FROM equipment_sale_agreements ${where}`
-      );
-      for (const row of rows) {
-        ids.agreements.push(row.id);
-        for (const column of ["customer_id", "customerId"]) if (row[column] != null) ids.customers.push(row[column]);
-        for (const column of ["asset_id", "assetId", "equipment_id", "excavator_id"]) if (row[column] != null) ids.assets.push(row[column]);
-        for (const column of ["credit_application_id", "application_id"]) if (row[column] != null) ids.applications.push(row[column]);
-      }
-    }
-  }
-
-  ids.customers = uniq(ids.customers);
-  ids.assets = uniq(ids.assets);
-  ids.applications = uniq(ids.applications);
-  ids.agreements = uniq(ids.agreements);
-  ids.payments = uniq(ids.payments);
-  ids.quotations = uniq(ids.quotations);
-
-  if (ids.applications.length && await exists(db, "equipment_credit_applications")) {
-    const tableColumns = await cols(db, "equipment_credit_applications");
-    const select = [
-      "id",
-      ...["customer_id", "customerId", "asset_id", "assetId", "equipment_id", "excavator_id", "quotation_id"].filter((column) => tableColumns.has(column)),
-    ];
-    const [rows] = await db.query(
-      `SELECT ${select.map((column) => `\`${column}\``).join(",")} FROM equipment_credit_applications WHERE id IN (${ph(ids.applications)})`,
-      ids.applications
-    );
-    for (const row of rows) {
-      for (const column of ["customer_id", "customerId"]) if (row[column] != null) ids.customers.push(row[column]);
-      for (const column of ["asset_id", "assetId", "equipment_id", "excavator_id"]) if (row[column] != null) ids.assets.push(row[column]);
-      if (row.quotation_id != null) ids.quotations.push(row.quotation_id);
-    }
-  }
-
-  ids.customers = uniq(ids.customers);
-  ids.assets = uniq(ids.assets);
-  ids.applications = uniq(ids.applications);
-  ids.agreements = uniq(ids.agreements);
-  ids.payments = uniq(ids.payments);
-  ids.quotations = uniq(ids.quotations);
+async function collect(db){
+  const ids={customers:[],assets:[],applications:[],agreements:[],payments:[],quotations:[]};
+  for(const t of INSTALLMENT_TABLES){if(!(await exists(db,t)))continue;const c=await cols(db,t);const s=[...new Set([...CUSTOMER_COLUMNS,...ASSET_COLUMNS,...APP_COLUMNS,...AGREEMENT_COLUMNS,"payment_id","sale_payment_id","quotation_id"])].filter(x=>c.has(x));if(!s.length)continue;const[rows]=await db.query(`SELECT ${s.map(x=>`\`${x}\``).join(",")} FROM \`${t}\``);for(const row of rows){for(const x of CUSTOMER_COLUMNS)if(row[x]!=null)ids.customers.push(row[x]);for(const x of ASSET_COLUMNS)if(row[x]!=null)ids.assets.push(row[x]);for(const x of APP_COLUMNS)if(row[x]!=null)ids.applications.push(row[x]);for(const x of AGREEMENT_COLUMNS)if(row[x]!=null)ids.agreements.push(row[x]);for(const x of ["payment_id","sale_payment_id"])if(row[x]!=null)ids.payments.push(row[x]);if(row.quotation_id!=null)ids.quotations.push(row.quotation_id);}}
+  if(await exists(db,"equipment_sale_agreements")){const c=await cols(db,"equipment_sale_agreements");if(c.has("id")){const s=["id",...["customer_id","customerId","asset_id","assetId","equipment_id","excavator_id","credit_application_id","application_id"].filter(x=>c.has(x))];const type=["sale_type","saleType","sale_mode","saleMode","payment_type","paymentType","finance_type","financeType"].find(x=>c.has(x));const where=type?`WHERE LOWER(CAST(\`${type}\` AS CHAR)) IN ('installment','instalment','finance','financed','credit')`:"";const[rows]=await db.query(`SELECT ${s.map(x=>`\`${x}\``).join(",")} FROM equipment_sale_agreements ${where}`);for(const row of rows){ids.agreements.push(row.id);for(const x of ["customer_id","customerId"])if(row[x]!=null)ids.customers.push(row[x]);for(const x of ["asset_id","assetId","equipment_id","excavator_id"])if(row[x]!=null)ids.assets.push(row[x]);for(const x of ["credit_application_id","application_id"])if(row[x]!=null)ids.applications.push(row[x]);}}}
+  ids.customers=uniq(ids.customers);ids.assets=uniq(ids.assets);ids.applications=uniq(ids.applications);ids.agreements=uniq(ids.agreements);ids.payments=uniq(ids.payments);ids.quotations=uniq(ids.quotations);
+  if(ids.applications.length&&await exists(db,"equipment_credit_applications")){const c=await cols(db,"equipment_credit_applications");const s=["id",...["customer_id","customerId","asset_id","assetId","equipment_id","excavator_id","quotation_id"].filter(x=>c.has(x))];const[rows]=await db.query(`SELECT ${s.map(x=>`\`${x}\``).join(",")} FROM equipment_credit_applications WHERE id IN (${ph(ids.applications)})`,ids.applications);for(const row of rows){for(const x of ["customer_id","customerId"])if(row[x]!=null)ids.customers.push(row[x]);for(const x of ["asset_id","assetId","equipment_id","excavator_id"])if(row[x]!=null)ids.assets.push(row[x]);if(row.quotation_id!=null)ids.quotations.push(row.quotation_id);}}
+  await syncActivityOwnership(db);
+  ids.customers=uniq(await ownershipIds(db,"customer"));
+  ids.assets=uniq(await ownershipIds(db,"fleet_asset"));
   return ids;
 }
-
-async function deleteScoped(db, table, ids, deleted) {
-  if (!(await exists(db, table))) return;
-  const tableColumns = await cols(db, table);
-  const scopes = [
-    ["agreement_id", ids.agreements],
-    ["sale_agreement_id", ids.agreements],
-    ["installment_agreement_id", ids.agreements],
-    ["application_id", ids.applications],
-    ["credit_application_id", ids.applications],
-    ["payment_id", ids.payments],
-    ["sale_payment_id", ids.payments],
-  ];
-  for (const [column, values] of scopes) {
-    if (tableColumns.has(column) && values.length) {
-      await deleteBy(db, table, column, values, deleted);
-      return;
-    }
-  }
+async function deleteScoped(db,t,ids,deleted){if(!(await exists(db,t)))return;const c=await cols(db,t);for(const[col,v]of[["agreement_id",ids.agreements],["sale_agreement_id",ids.agreements],["installment_agreement_id",ids.agreements],["application_id",ids.applications],["credit_application_id",ids.applications],["payment_id",ids.payments],["sale_payment_id",ids.payments]])if(c.has(col)&&v.length){await deleteBy(db,t,col,v,deleted);return;}}
+function protectedModuleReference(t){const n=String(t||"").toLowerCase();return /(^|_)(hire|hiring|rental|mining|spare|inventory|payroll|auth|activity|audit|migration|branch|accounting)(_|$)/.test(n);}
+async function externalReferenceSummary(db,table,ids){if(!ids.length)return{protected:0,other:0};const[refs]=await db.query("SELECT TABLE_NAME,COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE REFERENCED_TABLE_SCHEMA=DATABASE() AND REFERENCED_TABLE_NAME=? AND REFERENCED_COLUMN_NAME='id' AND TABLE_NAME<>?",[table,table]);let protectedCount=0,other=0;for(const ref of refs){if(!(await exists(db,ref.TABLE_NAME)))continue;const c=await cols(db,ref.TABLE_NAME);if(!c.has(ref.COLUMN_NAME))continue;const[[r]]=await db.query(`SELECT COUNT(*) AS count FROM \`${ref.TABLE_NAME}\` WHERE \`${ref.COLUMN_NAME}\` IN (${ph(ids)})`,ids);if(!Number(r?.count||0))continue;if(protectedModuleReference(ref.TABLE_NAME))protectedCount+=Number(r.count);else other+=Number(r.count);}return{protected:protectedCount,other};}
+async function clearOwnershipRows(db,type,ids,deleted){if(!ids.length)return;const[r]=await db.query(`DELETE FROM ${OWNERSHIP_TABLE} WHERE workspace_code=? AND entity_type=? AND entity_id IN (${ph(ids)})`,[INSTALLMENT_WORKSPACE,type,...ids]);if(r.affectedRows)deleted.push({table:OWNERSHIP_TABLE,rows:Number(r.affectedRows),entity_type:type});}
+async function removeOwnedMasters(db,ids,deleted){await requireOwnershipTable(db);const customerIds=ids.customers;const assetIds=ids.assets;if(await exists(db,"equipment_media"))await deleteBy(db,"equipment_media","asset_id",assetIds,deleted);
+  const deletedCustomers=[];const deletedAssets=[];
+  if(customerIds.length&&await exists(db,"customers")){const ref=await externalReferenceSummary(db,"customers",customerIds);if(ref.protected>0)deleted.push({table:"customers",rows:0,skipped:"shared_or_protected_references",protected_references:ref.protected,other_references:ref.other});else if(ref.other===0){const n=await deleteBy(db,"customers","id",customerIds,deleted);if(n)deletedCustomers.push(...customerIds);}else deleted.push({table:"customers",rows:0,skipped:"remaining_non_installment_references",other_references:ref.other});}
+  if(assetIds.length&&await exists(db,"fleet_assets")){const ref=await externalReferenceSummary(db,"fleet_assets",assetIds);if(ref.protected>0)deleted.push({table:"fleet_assets",rows:0,skipped:"shared_or_protected_references",protected_references:ref.protected,other_references:ref.other});else if(ref.other===0){const n=await deleteBy(db,"fleet_assets","id",assetIds,deleted);if(n)deletedAssets.push(...assetIds);}else deleted.push({table:"fleet_assets",rows:0,skipped:"remaining_non_installment_references",other_references:ref.other});}
+  await clearOwnershipRows(db,"customer",deletedCustomers,deleted);await clearOwnershipRows(db,"fleet_asset",deletedAssets,deleted);
 }
-
-async function orphanIds(db, table) {
-  if (!(await exists(db, table))) return [];
-  const tableColumns = await cols(db, table);
-  if (!tableColumns.has("id")) return [];
-
-  const [refs] = await db.query(
-    "SELECT DISTINCT TABLE_NAME, COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE REFERENCED_TABLE_SCHEMA=DATABASE() AND REFERENCED_TABLE_NAME=? AND REFERENCED_COLUMN_NAME='id' AND TABLE_NAME<>?",
-    [table, table]
-  );
-
-  const predicates = [];
-  const parameters = [];
-  for (const ref of refs) {
-    if (!(await exists(db, ref.TABLE_NAME))) continue;
-    const refColumns = await cols(db, ref.TABLE_NAME);
-    if (!refColumns.has(ref.COLUMN_NAME)) continue;
-    predicates.push(
-      `NOT EXISTS (SELECT 1 FROM \`${ref.TABLE_NAME}\` child WHERE child.\`${ref.COLUMN_NAME}\` = parent.id)`
-    );
-  }
-
-  const where = predicates.length ? `WHERE ${predicates.join(" AND ")}` : "";
-  const [rows] = await db.query(`SELECT parent.id FROM \`${table}\` parent ${where}`);
-  return rows.map((row) => Number(row.id)).filter(Number.isInteger);
-}
-
-async function removeUnreferencedMasters(db, deleted) {
-  for (const table of MASTER_TABLES) {
-    const ids = await orphanIds(db, table);
-    if (!ids.length) continue;
-    await deleteBy(db, table, "id", ids, deleted);
-  }
-}
-
-async function clearEverythingInInstallment(db, deleted = []) {
-  const ids = await collect(db);
-
-  if (ids.agreements.length && await exists(db, "equipment_sale_payments")) {
-    const paymentColumns = await cols(db, "equipment_sale_payments");
-    if (paymentColumns.has("agreement_id")) {
-      const [rows] = await db.query(
-        `SELECT id FROM equipment_sale_payments WHERE agreement_id IN (${ph(ids.agreements)})`,
-        ids.agreements
-      );
-      ids.payments = uniq([...ids.payments, ...rows.map((row) => row.id)]);
-    }
-  }
-
-  await deleteBy(db, "equipment_sale_payment_allocations", "payment_id", ids.payments, deleted);
-  for (const table of INSTALLMENT_TABLES) await deleteScoped(db, table, ids, deleted);
-  await deleteBy(db, "equipment_sale_agreements", "id", ids.agreements, deleted);
-  await deleteBy(db, "equipment_credit_applications", "id", ids.applications, deleted);
-  await deleteBy(db, "equipment_sales_quotation_items", "quotation_id", ids.quotations, deleted);
-  await deleteBy(db, "equipment_sales_quotations", "id", ids.quotations, deleted);
-
-  // Child rows are gone; now determine orphaned master rows with set-based SQL.
-  // This avoids the previous per-row/per-reference query explosion that caused 30s request timeouts.
-  await removeUnreferencedMasters(db, deleted);
-
-  return { ids, deleted };
-}
-
-async function clearEverythingInInstallmentTransaction(connection = null) {
-  const owns = !connection;
-  const db = connection || await pool.getConnection();
-  try {
-    await db.beginTransaction();
-    const result = await clearEverythingInInstallment(db);
-    await db.commit();
-    return result;
-  } catch (error) {
-    try { await db.rollback(); } catch (_) {}
-    throw error;
-  } finally {
-    if (owns) db.release();
-  }
-}
-
-module.exports = {
-  clearEverythingInInstallment,
-  clearEverythingInInstallmentTransaction,
-  collectInstallmentScope: collect,
-};
+async function clearEverythingInInstallment(db,deleted=[]){await requireOwnershipTable(db);const ids=await collect(db);if(ids.agreements.length&&await exists(db,"equipment_sale_payments")){const c=await cols(db,"equipment_sale_payments");if(c.has("agreement_id")){const[r]=await db.query(`SELECT id FROM equipment_sale_payments WHERE agreement_id IN (${ph(ids.agreements)})`,ids.agreements);ids.payments=uniq([...ids.payments,...r.map(x=>x.id)]);}}
+  await deleteBy(db,"equipment_sale_payment_allocations","payment_id",ids.payments,deleted);for(const t of INSTALLMENT_TABLES)await deleteScoped(db,t,ids,deleted);await deleteBy(db,"equipment_sale_agreements","id",ids.agreements,deleted);await deleteBy(db,"equipment_credit_applications","id",ids.applications,deleted);await deleteBy(db,"equipment_sales_quotation_items","quotation_id",ids.quotations,deleted);await deleteBy(db,"equipment_sales_quotations","id",ids.quotations,deleted);await removeOwnedMasters(db,ids,deleted);return{ids,deleted};}
+async function clearEverythingInInstallmentTransaction(connection=null){const owns=!connection;const db=connection||await pool.getConnection();try{await db.beginTransaction();const r=await clearEverythingInInstallment(db);await db.commit();return r;}catch(e){try{await db.rollback();}catch(_){}throw e;}finally{if(owns)db.release();}}
+module.exports={clearEverythingInInstallment,clearEverythingInInstallmentTransaction,collectInstallmentScope:collect};
