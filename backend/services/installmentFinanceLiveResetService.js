@@ -49,7 +49,7 @@ function safeIdentifier(value) {
   if (!/^[A-Za-z0-9_]+$/.test(text)) {
     throw new FinanceResetError(500, "Unsafe Installment reset table identifier.");
   }
-  return `\\`${text}\\``;
+  return `\`${text}\``;
 }
 
 async function tableExists(connection, tableName) {
@@ -90,8 +90,8 @@ async function getColumnType(connection, tableName, columnName) {
 
 function parseEnumValues(columnType) {
   const text = String(columnType || "");
-  if (!/^enum\\(/i.test(text)) return [];
-  return [...text.matchAll(/'((?:\\\\'|[^'])*)'/g)].map((match) => match[1].replace(/\\\\'/g, "'"));
+  if (!/^enum\(/i.test(text)) return [];
+  return [...text.matchAll(/'((?:\\'|[^'])*)'/g)].map((match) => match[1].replace(/\\'/g, "'"));
 }
 
 async function chooseSafeStatusValue(connection, tableName, columnName, assetIds, blockedValues) {
