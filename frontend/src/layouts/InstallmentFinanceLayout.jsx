@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
+import InstallmentMobileEnhancements from "../components/InstallmentMobileEnhancements";
 import { useAuth } from "../context/AuthContext";
 import {
   EQUIPMENT_DIVISIONS,
@@ -11,6 +12,7 @@ import "../styles/equipmentFinanceLifecycleProfessional.css";
 import "../styles/equipmentFinanceSignatureShell.css";
 import "../styles/equipmentFinanceSignaturePolish.css";
 import "../styles/equipmentFinanceThreePageRouteSignature.css";
+import "../styles/installmentMobileProfessional.css";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
@@ -276,17 +278,20 @@ export default function InstallmentFinanceLayout() {
   ensureFinanceUiCompatibilityPermissions(user, location.pathname);
 
   return (
-    <BusinessWorkspaceLayout
-      workspaceCode="equipment_installment_finance"
-      workspaceName="Equipment Installment Finance"
-      icon="🏦"
-      theme="finance-signature"
-      independenceLabel=""
-      description=""
-      contextHeading="Company-wide Finance portfolio — no Hire-location selection"
-      workspaceEyebrow="Current Equipment Business division"
-      separationBadge="No access to Hire jobs or contracts"
-      navigationSections={navigationSections}
-    />
+    <>
+      <InstallmentMobileEnhancements />
+      <BusinessWorkspaceLayout
+        workspaceCode="equipment_installment_finance"
+        workspaceName="Equipment Installment Finance"
+        icon="🏦"
+        theme="finance-signature"
+        independenceLabel=""
+        description=""
+        contextHeading="Company-wide Finance portfolio — no Hire-location selection"
+        workspaceEyebrow="Current Equipment Business division"
+        separationBadge="No access to Hire jobs or contracts"
+        navigationSections={navigationSections}
+      />
+    </>
   );
 }
