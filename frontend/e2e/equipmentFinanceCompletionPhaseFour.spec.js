@@ -71,7 +71,7 @@ test("Installment reset requires review, password and exact confirmation", async
   await expect(page.getByRole("heading", { name: "Reset Centre" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Prepare Reset Review" })).toBeVisible();
   await page.getByRole("button", { name: "Prepare Reset Review" }).click();
-  await expect(page.getByText("Reset fingerprint")).toBeVisible();
+  await expect(page.getByText("Reset fingerprint", { exact: true })).toBeVisible();
   expect(dryRunRequests).toBe(1);
 
   const password = page.getByLabel("Current password");
