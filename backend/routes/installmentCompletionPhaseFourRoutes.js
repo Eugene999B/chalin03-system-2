@@ -8,12 +8,18 @@ const {
   RESET_CONFIRMATION,
   buildDryRun,
 } = require("../services/installmentFinanceLiveResetService");
-const { executeReset } = require("../services/installmentFinanceResetExecutionService");
+const { executeReset } = require("../services/installmentFinanceResetProductionService");
 const { getInstallmentCompletionReadiness } = require("../services/installmentCompletionPhaseFourService");
 
 const router = express.Router();
 
 function sendError(res, error, fallback) {
+  console.error("Installment Finance reset request failed", {
+    code: error?.code,
+    statusCode: error?.statusCode,
+    message: error?.message,
+    stack: error?.stack,
+  });
   return res.status(Number(error.statusCode || 500)).json({
     status: "error",
     code: error.code || "INSTALLMENT_FINANCE_RESET_ERROR",
