@@ -7,8 +7,8 @@ const {
   FINANCE_WORKSPACE,
   RESET_CONFIRMATION,
   buildDryRun,
-  executeReset,
 } = require("../services/installmentFinanceLiveResetService");
+const { executeReset } = require("../services/installmentFinanceResetExecutionService");
 const { getInstallmentCompletionReadiness } = require("../services/installmentCompletionPhaseFourService");
 
 const router = express.Router();
