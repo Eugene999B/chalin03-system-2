@@ -7,7 +7,7 @@ const {
   FINANCE_WORKSPACE,
   RESET_CONFIRMATION,
   buildDryRun,
-} = require("../services/installmentFinanceLiveResetService");
+} = require("../services/installmentFinanceResetScopeServiceV2");
 const { executeReset } = require("../services/installmentFinanceResetProductionService");
 const { getInstallmentCompletionReadiness } = require("../services/installmentCompletionPhaseFourService");
 
