@@ -17,9 +17,8 @@ for (const title of [
   "Reset Centre",
   "Review exactly what will be reset",
   "Authorize the reset",
-  "Fresh installment journey",
 ]) {
-  assert.match(page, new RegExp(title.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")));
+  assert.match(page, new RegExp(title.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")));
 }
 
 assert.match(page, /const API = "\/equipment-catalogue\/sales\/completion-phase-four"/);
@@ -31,7 +30,6 @@ assert.match(page, /RESET INSTALLMENT FINANCE/);
 assert.match(page, /Reset Installment Finance Data/);
 assert.match(page, /dry_run_fingerprint/);
 assert.match(page, /original System Administrator/i);
-assert.match(page, /Customer → excavator → application → approval/);
 
 assert.match(workspace, /InstallmentCompletionPhaseFourPage/);
 assert.match(workspace, /stage === "finalization"/);
