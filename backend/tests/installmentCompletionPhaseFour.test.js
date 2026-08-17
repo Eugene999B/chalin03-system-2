@@ -14,8 +14,10 @@ const page = read("frontend", "src", "pages", "InstallmentCompletionPhaseFourPag
 const RESET_CONFIRMATION = "RESET INSTALLMENT FINANCE";
 
 test("live Installment reset requires the exact confirmation phrase", () => {
-  assert.ok(executor.includes(RESET_CONFIRMATION));
-  assert.ok(executor.includes("confirmation"));
+  assert.ok(service.includes(RESET_CONFIRMATION));
+  assert.ok(service.includes("confirmation"));
+  assert.ok(executor.includes("RESET_CONFIRMATION"));
+  assert.ok(routes.includes("RESET_CONFIRMATION"));
 });
 
 test("live Installment reset requires current password and fresh dry-run fingerprint", () => {
