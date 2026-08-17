@@ -27,3 +27,7 @@ WHERE registration.entity_id REGEXP '^[0-9]+$'
   AND registration.entity_type IN ('customer','customers','customer_profile','customer_identity')
   AND (LOWER(COALESCE(registration.action_type,'')) LIKE '%customer%register%' OR LOWER(COALESCE(registration.action_type,'')) LIKE '%customer%create%' OR LOWER(COALESCE(registration.action,'')) LIKE '%customer%register%' OR LOWER(COALESCE(registration.action,'')) LIKE '%customer%create%')
   AND (registration.workspace_code = 'equipment_installment_finance' OR registration.workspace_code IS NULL);
+
+INSERT INTO schema_migrations (migration_name, description)
+SELECT '20260817_installment_reset_ownership', 'Explicit Installment ownership registry for deterministic reset cleanup.'
+WHERE NOT EXISTS (SELECT 1 FROM schema_migrations WHERE migration_name = '20260817_installment_reset_ownership');
