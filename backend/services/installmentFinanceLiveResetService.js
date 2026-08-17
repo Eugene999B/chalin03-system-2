@@ -75,6 +75,74 @@ async function tableColumns(connection, tableName) {
   return new Set(rows.map((row) => String(row.COLUMN_NAME)));
 }
 
+async function getColumnType(connection, tableName, columnName) {
+  const [[row]] = await connection.query(
+    `SELECT COLUMN_TYPE, DATA_TYPE, IS_NULLABLE
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1`,
+    [tableName, columnName]
+  );
+  return row || null;
+}
+
+function parseEnumValues(columnType) {
+  const text = String(columnType || "");
+  if (!/^enum\(/i.test(text)) return [];
+  return [...text.matchAll(/'((?:\\'|[^'])*)'/g)].map((match) => match[1].replace(/\\'/g, "'"));
+}
+
+async function chooseSafeStatusValue(connection, tableName, columnName, assetIds, blockedValues) {
+  if (!(await tableExists(connection, tableName))) return null;
+  const columns = await tableColumns(connection, tableName);
+  if (!columns.has(columnName) || !columns.has("id")) return null;
+
+  const definition = await getColumnType(connection, tableName, columnName);
+  const blocked = new Set((blockedValues || []).map((value) => String(value).toLowerCase()));
+  const idFilter = assetIds.length ? `AND id NOT IN (${assetIds.map(() => "?").join(",")})` : "";
+  const params = assetIds.length ? assetIds : [];
+
+  const [rows] = await connection.query(
+    `SELECT ${safeIdentifier(columnName)} AS value, COUNT(*) AS count
+       FROM ${safeIdentifier(tableName)}
+      WHERE ${safeIdentifier(columnName)} IS NOT NULL
+        ${idFilter}
+      GROUP BY ${safeIdentifier(columnName)}
+      ORDER BY count DESC, value ASC
+      LIMIT 20`,
+    params
+  );
+
+  const observed = rows.find((row) => !blocked.has(String(row.value).toLowerCase()));
+  if (observed && observed.value !== null && observed.value !== undefined) {
+    return String(observed.value);
+  }
+
+  const enumValues = parseEnumValues(definition?.COLUMN_TYPE);
+  const preferred = [
+    "available",
+    "active",
+    "in_stock",
+    "instock",
+    "idle",
+    "ready",
+    "free",
+    "unsold",
+    "stock",
+    "open",
+  ];
+
+  const normalized = new Map(enumValues.map((value) => [value.toLowerCase(), value]));
+  for (const candidate of preferred) {
+    if (normalized.has(candidate) && !blocked.has(candidate)) return normalized.get(candidate);
+  }
+
+  const firstAllowed = enumValues.find((value) => !blocked.has(value.toLowerCase()));
+  return firstAllowed || null;
+}
+
 async function countRows(connection, tableName) {
   if (!(await tableExists(connection, tableName))) return 0;
   const [[row]] = await connection.query(`SELECT COUNT(*) AS count FROM ${safeIdentifier(tableName)}`);
@@ -206,22 +274,45 @@ async function restoreFinanceAssets(connection, assetIds, deleted) {
   if (!assetIds.length || !(await tableExists(connection, "fleet_assets"))) return;
 
   const columns = await tableColumns(connection, "fleet_assets");
-  const updates = [];
+  const assignments = [];
+  const params = [];
 
-  if (columns.has("sale_status")) updates.push("`sale_status` = 'available'");
-  if (columns.has("current_status")) {
-    updates.push(
-      "`current_status` = CASE WHEN `current_status` IN ('sold', 'reserved', 'installment') THEN 'available' ELSE `current_status` END"
+  if (columns.has("sale_status")) {
+    const saleStatus = await chooseSafeStatusValue(
+      connection,
+      "fleet_assets",
+      "sale_status",
+      assetIds,
+      ["sold", "reserved", "installment", "rented", "hire"]
     );
+    if (saleStatus !== null) {
+      assignments.push("`sale_status` = ?");
+      params.push(saleStatus);
+    }
   }
-  if (columns.has("sold_at")) updates.push("`sold_at` = NULL");
-  if (!updates.length || !columns.has("id")) return;
+
+  if (columns.has("current_status")) {
+    const currentStatus = await chooseSafeStatusValue(
+      connection,
+      "fleet_assets",
+      "current_status",
+      assetIds,
+      ["sold", "reserved", "installment", "rented", "hire"]
+    );
+    if (currentStatus !== null) {
+      assignments.push("`current_status` = ?");
+      params.push(currentStatus);
+    }
+  }
+
+  if (columns.has("sold_at")) assignments.push("`sold_at` = NULL");
+  if (!assignments.length || !columns.has("id")) return;
 
   const [result] = await connection.query(
     `UPDATE fleet_assets
-        SET ${updates.join(", ")}
+        SET ${assignments.join(", ")}
       WHERE id IN (${placeholders(assetIds)})`,
-    assetIds
+    [...params, ...assetIds]
   );
   deleted.push({ table: "fleet_assets", restored_rows: Number(result.affectedRows || 0) });
 }
