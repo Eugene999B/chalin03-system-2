@@ -1,3 +1,7 @@
+SELECT migration_name
+FROM schema_migrations
+WHERE migration_name = '20260817_installment_reset_ownership';
+
 SELECT COUNT(*) AS missing_ownership_columns
 FROM (
   SELECT 'workspace_code' AS c UNION ALL
