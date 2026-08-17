@@ -70,25 +70,31 @@ router.post(
         dryRunFingerprint: req.body?.dry_run_fingerprint,
       });
 
-      await writeAuditEvent({
-        req,
-        userId: req.user?.id,
-        workspaceCode: FINANCE_WORKSPACE,
-        action: "EQUIPMENT_INSTALLMENT_FINANCE_RESET_EXECUTED",
-        actionType: "equipment_installment_finance.reset.executed",
-        entityType: "equipment_installment_finance_reset",
-        entityId: result.dry_run_fingerprint,
-        outcome: "completed",
-        severity: "critical",
-        details: "Installment Finance transactional data was reset after password re-authentication and exact confirmation.",
-        metadata: {
-          dry_run_fingerprint: result.dry_run_fingerprint,
-          deleted: result.deleted,
-          confirmation_phrase: RESET_CONFIRMATION,
-        },
-      });
+      let auditWarning = null;
+      try {
+        await writeAuditEvent({
+          req,
+          userId: req.user?.id,
+          workspaceCode: FINANCE_WORKSPACE,
+          action: "EQUIPMENT_INSTALLMENT_FINANCE_RESET_EXECUTED",
+          actionType: "equipment_installment_finance.reset.executed",
+          entityType: "equipment_installment_finance_reset",
+          entityId: result.dry_run_fingerprint,
+          outcome: "completed",
+          severity: "critical",
+          details: "Installment Finance transactional data was reset after password re-authentication and exact confirmation.",
+          metadata: {
+            dry_run_fingerprint: result.dry_run_fingerprint,
+            deleted: result.deleted,
+            confirmation_phrase: RESET_CONFIRMATION,
+          },
+        });
+      } catch (auditError) {
+        auditWarning = "The reset completed, but the audit record could not be written.";
+        console.error("Installment Finance reset audit write failed after successful commit", auditError);
+      }
 
-      return res.json(result);
+      return res.json({ ...result, audit_warning: auditWarning });
     } catch (error) {
       return sendError(res, error, "Installment Finance reset was blocked.");
     }
