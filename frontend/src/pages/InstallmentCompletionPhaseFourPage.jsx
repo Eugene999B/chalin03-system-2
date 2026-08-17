@@ -100,7 +100,7 @@ export default function InstallmentCompletionPhaseFourPage() {
         <div>
           <p className="finance-completion-four__eyebrow">Installment Finance</p>
           <h1>Reset Centre</h1>
-          <p>Reset Installment Finance testing data only. Shared customer, excavator and other business data is preserved.</p>
+          <p>Clear Installment Finance testing data, including records explicitly owned by Installment. Shared records used by Hiring, Mining, Spare Parts or other modules remain protected.</p>
         </div>
         <div className="finance-completion-four__seal" aria-label="Installment reset protection">
           <strong>C03</strong>
@@ -145,7 +145,7 @@ export default function InstallmentCompletionPhaseFourPage() {
                 <div className="finance-completion-four__table-list">
                   {(dryRun.impact || []).map((item) => <article key={item.table}><strong>{item.table}</strong><span>{number(item.rows)} rows</span><small>Installment reset scope</small></article>)}
                 </div>
-                <div className="finance-completion-four__preserves"><strong>Preserved</strong><ul>{(dryRun.preserves || []).map((item) => <li key={item}>{item}</li>)}</ul></div>
+                <div className="finance-completion-four__preserves"><strong>Protected outside Installment</strong><ul>{(dryRun.preserves || []).map((item) => <li key={item}>{item}</li>)}</ul></div>
               </div>
             ) : (
               <div className="finance-completion-four__empty">The review is read-only. No records are changed until you complete Step 2.</div>
