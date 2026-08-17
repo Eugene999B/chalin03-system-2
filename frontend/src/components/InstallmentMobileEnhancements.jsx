@@ -19,7 +19,9 @@ function enhancePhotoField(field) {
   if (!input) return;
 
   const title = String(field.querySelector(":scope > span")?.textContent || "").toLowerCase();
-  if (!title.includes("photo")) return;
+  const isExcavatorPhotoField =
+    title.includes("full machine photos") || title.includes("add more photos");
+  if (!isExcavatorPhotoField) return;
 
   field.dataset.installmentPhotoPicker = "true";
   input.setAttribute("aria-hidden", "true");
