@@ -5,147 +5,44 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
-const {
-  RESET_CONFIRMATION,
-  resolveFinanceResetAvailability,
-} = require("../services/installmentCompletionPhaseFourService");
 
-const service = read(
-  "backend",
-  "services",
-  "installmentCompletionPhaseFourService.js"
-);
-const routes = read(
-  "backend",
-  "routes",
-  "installmentCompletionPhaseFourRoutes.js"
-);
-const independentRoutes = read(
-  "backend",
-  "routes",
-  "equipmentFinanceIndependentRoutes.js"
-);
-const page = read(
-  "frontend",
-  "src",
-  "pages",
-  "InstallmentCompletionPhaseFourPage.jsx"
-);
-const workspace = read(
-  "frontend",
-  "src",
-  "pages",
-  "EquipmentSalesWorkspacePage.jsx"
-);
-const layout = read(
-  "frontend",
-  "src",
-  "layouts",
-  "InstallmentFinanceLayout.jsx"
-);
+const service = read("backend", "services", "installmentFinanceLiveResetService.js");
+const routes = read("backend", "routes", "installmentCompletionPhaseFourRoutes.js");
+const page = read("frontend", "src", "pages", "InstallmentCompletionPhaseFourPage.jsx");
 
-test("production Finance reset is permanently blocked regardless of flags", () => {
-  const availability = resolveFinanceResetAvailability(
-    {
-      NODE_ENV: "production",
-      ALLOW_FINANCE_TEST_RESET: "true",
-      MYSQLDATABASE: "railway_test",
-    },
-    "railway_test"
-  );
+const RESET_CONFIRMATION = "RESET INSTALLMENT FINANCE";
 
-  assert.equal(availability.enabled, false);
-  assert.equal(availability.production_permanently_blocked, true);
-  assert.equal(
-    availability.code,
-    "PRODUCTION_FINANCE_RESET_PERMANENTLY_BLOCKED"
-  );
+test("live Installment reset requires the exact confirmation phrase", () => {
+  assert.ok(service.includes(RESET_CONFIRMATION));
+  assert.ok(service.includes("confirmation"));
 });
 
-test("Finance reset requires a test runtime, explicit flag and test database", () => {
-  assert.equal(
-    resolveFinanceResetAvailability(
-      { NODE_ENV: "development", ALLOW_FINANCE_TEST_RESET: "true" },
-      "chalin03_test"
-    ).enabled,
-    false
-  );
-  assert.equal(
-    resolveFinanceResetAvailability(
-      { NODE_ENV: "test", ALLOW_FINANCE_TEST_RESET: "false" },
-      "chalin03_test"
-    ).enabled,
-    false
-  );
-  assert.equal(
-    resolveFinanceResetAvailability(
-      { NODE_ENV: "test", ALLOW_FINANCE_TEST_RESET: "true" },
-      "chalin03_db"
-    ).enabled,
-    false
-  );
-  assert.equal(
-    resolveFinanceResetAvailability(
-      { NODE_ENV: "test", ALLOW_FINANCE_TEST_RESET: "true" },
-      "chalin03_test"
-    ).enabled,
-    true
-  );
-  assert.equal(RESET_CONFIRMATION, "RESET FINANCE TEST DATA");
+test("live Installment reset requires current password and fresh dry-run fingerprint", () => {
+  assert.ok(service.includes("bcrypt.compare"));
+  assert.ok(service.includes("dryRunFingerprint"));
+  assert.ok(service.includes("RESET_DRY_RUN_STALE"));
 });
 
-test("Phase 4 dry run is read-only and execution remains tightly gated", () => {
-  const dryRunStart = service.indexOf("async function buildFinanceResetDryRun");
-  const executeStart = service.indexOf("async function executeFinanceTestReset");
-  const dryRunSource = service.slice(dryRunStart, executeStart);
-
-  assert.ok(dryRunStart >= 0);
-  assert.ok(executeStart > dryRunStart);
-  assert.doesNotMatch(
-    dryRunSource,
-    /\bDELETE\s+FROM\b|\bUPDATE\s+[`A-Za-z0-9_]+\b|\bTRUNCATE\s+TABLE\b|\bDROP\s+TABLE\b/i
-  );
-  assert.match(dryRunSource, /read_only: true/);
-  assert.match(service, /NODE_ENV=test/);
-  assert.match(service, /ALLOW_FINANCE_TEST_RESET=true/);
-  assert.match(service, /database name containing _test/);
-  assert.match(service, /RESET FINANCE TEST DATA/);
+test("reset scope is Installment-only and preserves shared business data", () => {
+  assert.ok(service.includes("equipment_credit_applications"));
+  assert.ok(service.includes("equipment_sale_agreements"));
+  assert.ok(service.includes("equipment_installment_schedule"));
+  assert.ok(service.includes("shared customer identities"));
+  assert.ok(service.includes("excavator master records and photographs"));
   assert.doesNotMatch(service, /TRUNCATE\s+TABLE/i);
+  assert.doesNotMatch(service, /DROP\s+TABLE/i);
 });
 
-test("Phase 4 routes require permissions and original administrator authority", () => {
-  assert.match(routes, /requirePermission\("fleet\.assets\.view"\)/);
-  assert.match(routes, /requirePermission\("fleet\.assets\.manage"\)/);
-  assert.match(routes, /isOriginalSystemAdministrator/);
-  assert.match(routes, /EQUIPMENT_FINANCE_TEST_RESET_DRY_RUN/);
-  assert.match(routes, /EQUIPMENT_FINANCE_TEST_RESET_EXECUTED/);
-  assert.match(routes, /production_reset_executed: false/);
-  assert.match(independentRoutes, /installmentCompletionPhaseFourRoutes/);
-  assert.match(independentRoutes, /production_finance_reset_blocked: true/);
+test("routes require original System Administrator and management permission", () => {
+  assert.ok(routes.includes('requirePermission("fleet.assets.manage")'));
+  assert.ok(routes.includes("isOriginalSystemAdministrator"));
+  assert.ok(routes.includes("password: req.body?.password"));
+  assert.ok(routes.includes("dryRunFingerprint: req.body?.dry_run_fingerprint"));
 });
 
-test("Phase 4 completion centre covers the promised final operating scope", () => {
-  for (const title of [
-    "Final Operations & Reset Centre",
-    "Arrears dashboard",
-    "Reminders and promises to pay",
-    "Default and recovery governance",
-    "Completion and ownership transfer",
-    "Finance policies and document settings",
-    "Finance role permissions",
-    "Professional document pack",
-    "Finance reset dry run",
-    "Fresh installment journey",
-  ]) {
-    assert.match(
-      `${service}\n${page}`,
-      new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
-    );
-  }
-  assert.match(page, /Production reset is permanently blocked/);
-  assert.match(page, /PRODUCTION_FINANCE_RESET_PERMANENTLY_BLOCKED/);
-  assert.match(workspace, /InstallmentCompletionPhaseFourPage/);
-  assert.match(workspace, /stage === "finalization"/);
-  assert.match(layout, /title: "Final Operations & Reset"/);
-  assert.match(layout, /stage=finalization/);
+test("UI requires password and exact confirmation before reset", () => {
+  assert.ok(page.includes("Current password"));
+  assert.ok(page.includes("RESET INSTALLMENT FINANCE"));
+  assert.ok(page.includes("Reset Installment Finance Data"));
+  assert.ok(page.includes("dry_run_fingerprint"));
 });

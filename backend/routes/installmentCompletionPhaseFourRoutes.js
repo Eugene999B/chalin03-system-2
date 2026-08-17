@@ -5,17 +5,18 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   FINANCE_WORKSPACE,
-  buildFinanceResetDryRun,
-  executeFinanceTestReset,
-  getInstallmentCompletionReadiness,
-} = require("../services/installmentCompletionPhaseFourService");
+  RESET_CONFIRMATION,
+  buildDryRun,
+  executeReset,
+} = require("../services/installmentFinanceLiveResetService");
+const { getInstallmentCompletionReadiness } = require("../services/installmentCompletionPhaseFourService");
 
 const router = express.Router();
 
 function sendError(res, error, fallback) {
   return res.status(Number(error.statusCode || 500)).json({
     status: "error",
-    code: error.code || "INSTALLMENT_COMPLETION_PHASE_FOUR_ERROR",
+    code: error.code || "INSTALLMENT_FINANCE_RESET_ERROR",
     message: error.message || fallback,
   });
 }
@@ -25,8 +26,7 @@ function requireOriginalAdministrator(req, res, next) {
   return res.status(403).json({
     status: "error",
     code: "ORIGINAL_SYSTEM_ADMINISTRATOR_REQUIRED",
-    message:
-      "Only the original System Administrator can request a Finance test reset.",
+    message: "Only the original System Administrator can reset Installment Finance data.",
   });
 }
 
@@ -47,31 +47,12 @@ router.post(
   "/completion-phase-four/reset/dry-run",
   requirePermission("fleet.assets.manage"),
   requireOriginalAdministrator,
-  async (req, res) => {
+  async (_req, res) => {
     try {
-      const dryRun = await buildFinanceResetDryRun();
-      await writeAuditEvent({
-        req,
-        userId: req.user?.id,
-        workspaceCode: FINANCE_WORKSPACE,
-        action: "EQUIPMENT_FINANCE_TEST_RESET_DRY_RUN",
-        actionType: "EQUIPMENT_FINANCE_TEST_RESET_DRY_RUN",
-        entityType: "equipment_finance_reset",
-        entityId: dryRun.fingerprint,
-        outcome: "reviewed",
-        severity: "warning",
-        details:
-          "Reviewed the read-only Finance reset impact. No production or business data was changed.",
-        metadata: {
-          fingerprint: dryRun.fingerprint,
-          database: dryRun.database,
-          production_reset_executed: false,
-          read_only: true,
-        },
-      });
+      const dryRun = await buildDryRun();
       return res.json({ status: "success", dry_run: dryRun });
     } catch (error) {
-      return sendError(res, error, "Could not prepare the Finance reset dry run.");
+      return sendError(res, error, "Could not prepare the Installment reset dry run.");
     }
   }
 );
@@ -82,31 +63,34 @@ router.post(
   requireOriginalAdministrator,
   async (req, res) => {
     try {
-      const result = await executeFinanceTestReset({
+      const result = await executeReset({
+        userId: req.user?.id,
+        password: req.body?.password,
         confirmation: req.body?.confirmation,
+        dryRunFingerprint: req.body?.dry_run_fingerprint,
       });
+
       await writeAuditEvent({
         req,
         userId: req.user?.id,
         workspaceCode: FINANCE_WORKSPACE,
-        action: "EQUIPMENT_FINANCE_TEST_RESET_EXECUTED",
-        actionType: "EQUIPMENT_FINANCE_TEST_RESET_EXECUTED",
-        entityType: "equipment_finance_reset",
+        action: "EQUIPMENT_INSTALLMENT_FINANCE_RESET_EXECUTED",
+        actionType: "equipment_installment_finance.reset.executed",
+        entityType: "equipment_installment_finance_reset",
         entityId: result.dry_run_fingerprint,
         outcome: "completed",
         severity: "critical",
-        details:
-          "Reset Finance records inside an explicitly named non-production test database.",
+        details: "Installment Finance transactional data was reset after password re-authentication and exact confirmation.",
         metadata: {
-          database: result.database,
+          dry_run_fingerprint: result.dry_run_fingerprint,
           deleted: result.deleted,
-          production_reset_executed: false,
-          test_database_only: true,
+          confirmation_phrase: RESET_CONFIRMATION,
         },
       });
+
       return res.json(result);
     } catch (error) {
-      return sendError(res, error, "Finance test reset was blocked.");
+      return sendError(res, error, "Installment Finance reset was blocked.");
     }
   }
 );
