@@ -2,8 +2,7 @@ const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { getInstallmentCompletionReadiness } = require("../services/installmentCompletionPhaseFourService");
-const { recover } = require("./installmentLegacyRecoveryMiddlewareV13");
-const authoritativeInstallmentRoutes = require("./installmentDeepDeleteRoutesV10");
+const authoritativeInstallmentRoutes = require("./installmentDeepDeleteRoutesV13");
 
 const router = express.Router();
 
@@ -36,12 +35,8 @@ router.get(
   }
 );
 
-// The reset/delete endpoints below are deliberately delegated to the same
-// authoritative route used by the complete Installment purge. This eliminates
-// the old duplicate Phase Four handlers that could report a different scope or
-// block legacy trial customers after their child Finance rows were removed.
-// Legacy ownership recovery runs before impact/delete/reset and is idempotent.
-router.use(recover);
+// One authoritative Phase Four delete/reset engine. No request-time schema
+// migration or separate legacy-recovery middleware is required.
 router.use(authoritativeInstallmentRoutes);
 
 module.exports = router;
