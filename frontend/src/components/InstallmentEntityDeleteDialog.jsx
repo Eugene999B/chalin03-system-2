@@ -30,6 +30,7 @@ export default function InstallmentEntityDeleteDialog({ entityType, entityId, na
 
   async function execute() {
     if (!impact?.trial_record) { setError("This record is not identified as an Installment trial record."); return; }
+    if (impact?.blocking_references?.length) { setError("Deletion is blocked by a shared business record shown below."); return; }
     if (confirmation.trim() !== expected) { setError(`Type ${expected} exactly to confirm.`); return; }
     setDeleting(true); setError("");
     try {
@@ -40,7 +41,9 @@ export default function InstallmentEntityDeleteDialog({ entityType, entityId, na
   }
 
   const scope = impact?.scope || {};
-  const protectedRefs = impact?.protected_references || [];
+  const blockingRefs = impact?.blocking_references || [];
+  const internalRefs = impact?.internal_references || [];
+  const canDelete = Boolean(impact?.trial_record && !blockingRefs.length);
   return (
     <div className="installment-delete-dialog__backdrop" role="presentation" onMouseDown={() => !deleting && onClose?.()}>
       <section className="installment-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="installment-delete-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -52,21 +55,22 @@ export default function InstallmentEntityDeleteDialog({ entityType, entityId, na
         {loading ? <div className="installment-delete-dialog__body"><p>Tracing the complete Installment integration…</p></div> : null}
         {!loading && impact ? <>
           <div className="installment-delete-dialog__body">
-            <div className="installment-delete-dialog__warning"><strong>{impact.trial_record ? "Installment trial detected." : "Delete blocked."}</strong><p>{impact.message}</p></div>
+            <div className={`installment-delete-dialog__warning ${canDelete ? "is-safe" : ""}`}><strong>{!impact.trial_record ? "Delete blocked." : canDelete ? "Ready to delete this Installment trial." : "Shared record protection is active."}</strong><p>{impact.message}</p></div>
             <div className="installment-delete-dialog__grid">
-              <div className="installment-delete-dialog__stat"><span>Ownership</span><strong>{impact.evidence?.explicitly_owned ? "Explicit" : impact.evidence?.legacy_activity ? "Legacy evidence" : "Linked"}</strong></div>
+              <div className="installment-delete-dialog__stat"><span>Installment provenance</span><strong>{impact.evidence?.explicitly_owned ? "Explicit" : impact.evidence?.legacy_activity ? "Legacy evidence" : impact.evidence?.installment_links ? "Linked finance" : "None"}</strong></div>
               <div className="installment-delete-dialog__stat"><span>Applications</span><strong>{scope.applications?.length || 0}</strong></div>
               <div className="installment-delete-dialog__stat"><span>Agreements</span><strong>{scope.agreements?.length || 0}</strong></div>
               <div className="installment-delete-dialog__stat"><span>Payments</span><strong>{scope.payments?.length || 0}</strong></div>
               <div className="installment-delete-dialog__stat"><span>Customers</span><strong>{scope.customers?.length || 0}</strong></div>
               <div className="installment-delete-dialog__stat"><span>Excavators</span><strong>{scope.assets?.length || 0}</strong></div>
-              <div className="installment-delete-dialog__stat"><span>Other references</span><strong>{impact.external_references?.length || 0}</strong></div>
-              <div className="installment-delete-dialog__stat"><span>Master deletion</span><strong>{impact.master_delete_eligible ? "Allowed" : "Preserved"}</strong></div>
+              <div className="installment-delete-dialog__stat"><span>Installment references</span><strong>{internalRefs.length}</strong></div>
+              <div className="installment-delete-dialog__stat"><span>Shared blockers</span><strong>{blockingRefs.length}</strong></div>
             </div>
-            {protectedRefs.length ? <div><strong>Protected integrations</strong><ul className="installment-delete-dialog__refs">{protectedRefs.map((item) => <li key={`${item.table}-${item.column}`}>{item.table}: {item.rows} reference(s)</li>)}</ul></div> : null}
-            <label className="installment-delete-dialog__confirm"><span>Type exactly: <code>{expected}</code></span><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" disabled={deleting || !impact.trial_record} /></label>
+            {blockingRefs.length ? <div className="installment-delete-dialog__reference-box"><strong>Deletion blocked by shared integration</strong><ul className="installment-delete-dialog__refs">{blockingRefs.map((item) => <li key={`${item.table}-${item.column}`}>{item.table}.{item.column} — {item.rows} row(s)</li>)}</ul></div> : null}
+            {internalRefs.length ? <div className="installment-delete-dialog__reference-box is-internal"><strong>Will be deleted as part of Installment cleanup</strong><ul className="installment-delete-dialog__refs">{internalRefs.map((item) => <li key={`${item.table}-${item.column}`}>{item.table}.{item.column} — {item.rows} row(s)</li>)}</ul></div> : null}
+            <label className="installment-delete-dialog__confirm"><span>Type exactly: <code>{expected}</code></span><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" disabled={deleting || !canDelete} /></label>
           </div>
-          <footer className="installment-delete-dialog__actions"><span className="installment-delete-dialog__muted">Transactional deletion. A failure rolls the whole operation back.</span><div><button type="button" disabled={deleting} onClick={onClose}>Cancel</button><button className="is-danger" type="button" disabled={deleting || !impact.trial_record || confirmation.trim() !== expected} onClick={execute}>{deleting ? "Deleting…" : `Delete ${label}`}</button></div></footer>
+          <footer className="installment-delete-dialog__actions"><span className="installment-delete-dialog__muted">Transactional deletion. A failure rolls the whole operation back.</span><div><button type="button" disabled={deleting} onClick={onClose}>Cancel</button><button className="is-danger" type="button" disabled={deleting || !canDelete || confirmation.trim() !== expected} onClick={execute}>{deleting ? "Deleting…" : `Delete ${label}`}</button></div></footer>
         </> : null}
       </section>
     </div>
