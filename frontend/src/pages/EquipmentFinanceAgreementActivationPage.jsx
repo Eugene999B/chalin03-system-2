@@ -2,106 +2,58 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
-import { useWorkspaceContext } from "../context/WorkspaceContext";
-import "../styles/equipmentFinanceAgreementActivation.css";
+import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
 const API = "/equipment-catalogue/sales/agreement-activations";
-const ACTIVATION_ROLES = new Set(["finance_manager", "finance_accountant"]);
+const ACTIVATION_ROLES = new Set([
+  "finance_manager",
+  "finance_accountant",
+  "equipment_business_manager",
+  "equipment_business_accountant",
+]);
 
-const money = (value) =>
-  `GHS ${Number(value || 0).toLocaleString("en-GH", {
+function money(value) {
+  return `GHS ${Number(value || 0).toLocaleString("en-GH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
 
-const label = (value) =>
-  String(value || "Not available")
+function label(value) {
+  return String(value || "")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
-
-const errorMessage = (error, fallback) =>
-  error?.response?.data?.message || error?.message || fallback;
-
-const today = () =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Accra",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-
-function initialForm(candidate = {}) {
-  return {
-    first_due_date: candidate.proposed_first_due_date
-      ? String(candidate.proposed_first_due_date).slice(0, 10)
-      : today(),
-    grace_days: "0",
-    activation_notes: "",
-    terms_accepted: false,
-  };
 }
 
-function StatusPill({ value }) {
-  return (
-    <span className={`finance-activation__status is-${String(value || "unknown")}`}>
-      {label(value)}
-    </span>
-  );
+function dateValue(value, fallback = "Not recorded") {
+  return value ? String(value).slice(0, 10) : fallback;
 }
 
-function Field({ title, hint, children, wide = false }) {
-  return (
-    <label className={`finance-activation__field ${wide ? "is-wide" : ""}`}>
-      <span>{title}</span>
-      {children}
-      {hint ? <small>{hint}</small> : null}
-    </label>
-  );
-}
-
-function Drawer({ title, subtitle, onClose, children }) {
-  return (
-    <div
-      className="finance-activation__backdrop"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <section
-        className="finance-activation__drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <p>Equipment Installment Finance</p>
-            <h2>{title}</h2>
-            <span>{subtitle}</span>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close activation dialog">
-            ×
-          </button>
-        </header>
-        <div className="finance-activation__drawer-body">{children}</div>
-      </section>
-    </div>
-  );
+function errorMessage(error, fallback) {
+  return error?.response?.data?.message || error?.message || fallback;
 }
 
 export default function EquipmentFinanceAgreementActivationPage() {
   const { user, workspaceRole } = useAuth();
-  const { selectedContext, selectedContextId, automaticAccess } = useWorkspaceContext();
-  const activeRole = String(
-    workspaceRole || user?.workspace_role || user?.access_role || user?.role || ""
-  )
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-  const isSystemAdministrator = Boolean(user?.is_original_system_administrator);
-  const canActivate = isSystemAdministrator || ACTIVATION_ROLES.has(activeRole);
-
-  const [readiness, setReadiness] = useState({ ready: null });
+  const activeRoles = [
+    workspaceRole,
+    user?.workspace_role,
+    user?.access_role,
+    user?.role,
+    user?.base_role,
+    ...(Array.isArray(user?.roles) ? user.roles : []),
+  ]
+    .map((value) => String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_"))
+    .filter(Boolean);
+  const canActivate =
+    Boolean(user?.is_original_system_administrator) ||
+    activeRoles.some(
+      (role) =>
+        ["admin", "administrator", "manager", "system_admin", "system_administrator", "super_admin"].includes(role) ||
+        ACTIVATION_ROLES.has(role)
+    );
+  const [readiness, setReadiness] = useState({ ready: null, missing_tables: [] });
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,14 +61,8 @@ export default function EquipmentFinanceAgreementActivationPage() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("awaiting");
-  const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [form, setForm] = useState(() => initialForm());
-
-  const locationName =
-    selectedContext?.name ||
-    (automaticAccess && !selectedContextId
-      ? "All authorised Finance locations"
-      : "Choose a Finance location");
+  const [selected, setSelected] = useState(null);
+  const [form, setForm] = useState({ grace_days: "0", activation_notes: "", terms_accepted: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,41 +71,23 @@ export default function EquipmentFinanceAgreementActivationPage() {
       const readinessResponse = await axiosClient.get(`${API}/readiness`);
       const nextReadiness = readinessResponse.data?.readiness || { ready: true };
       setReadiness(nextReadiness);
-      if (!nextReadiness.ready || !selectedContextId) {
-        setCandidates([]);
-        return;
-      }
-
+      if (!nextReadiness.ready) return;
       const response = await axiosClient.get(`${API}/candidates`);
       setCandidates(response.data?.candidates || []);
     } catch (error) {
       const responseReadiness = error?.response?.data?.readiness;
-      if (
-        error?.response?.data?.code ===
-          "EQUIPMENT_FINANCE_ACTIVATION_FOUNDATION_REQUIRED" ||
-        responseReadiness?.ready === false
-      ) {
-        setReadiness(responseReadiness || { ready: false });
-        setCandidates([]);
-        return;
-      }
-      setProblem(errorMessage(error, "Could not load approved Finance applications."));
+      if (responseReadiness?.ready === false) setReadiness(responseReadiness);
+      else setProblem(errorMessage(error, "Could not load approved Finance applications."));
     } finally {
       setLoading(false);
     }
-  }, [selectedContextId]);
+  }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (!notice) return undefined;
-    const timer = window.setTimeout(() => setNotice(""), 6000);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
-
-  const visibleCandidates = useMemo(() => {
+  const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
     return candidates.filter((candidate) => {
       const activated = Boolean(candidate.agreement_id);
@@ -173,386 +101,181 @@ export default function EquipmentFinanceAgreementActivationPage() {
         candidate.quotation_number,
         candidate.asset_code,
         candidate.asset_name,
-      ].some((value) => String(value || "").toLowerCase().includes(term));
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term));
     });
   }, [candidates, search, statusFilter]);
 
-  const summary = useMemo(
-    () => ({
-      awaiting: candidates.filter((candidate) => !candidate.agreement_id).length,
-      activated: candidates.filter((candidate) => candidate.agreement_id).length,
-      exposure: candidates
-        .filter((candidate) => !candidate.agreement_id)
-        .reduce((total, candidate) => total + Number(candidate.financed_amount || 0), 0),
-    }),
-    [candidates]
-  );
-
-  function openActivation(candidate) {
-    if (!selectedContextId) {
-      setProblem("Choose a specific Finance location before activating an agreement.");
-      return;
-    }
+  function open(candidate) {
     if (!canActivate) {
-      setProblem(
-        "Only the Finance Manager, Finance Accountant or protected System Administrator can activate agreements."
-      );
+      setProblem("Only an authorised Finance manager or accountant can activate the agreement.");
       return;
     }
+    setSelected(candidate);
+    setForm({ grace_days: "0", activation_notes: "", terms_accepted: false });
     setProblem("");
-    setSelectedCandidate(candidate);
-    setForm(initialForm(candidate));
   }
 
-  async function activateAgreement(event) {
+  async function activate(event) {
     event.preventDefault();
-    if (!selectedCandidate || !form.terms_accepted) {
-      setProblem("Confirm the approved Finance agreement terms before activation.");
+    if (!selected || !form.terms_accepted) {
+      setProblem("Confirm the approved agreement terms before activation.");
       return;
     }
-
     setSaving(true);
     setProblem("");
     try {
-      const response = await axiosClient.post(`${API}/${selectedCandidate.id}`, form);
-      setSelectedCandidate(null);
+      const response = await axiosClient.post(`${API}/${selected.id}`, form);
+      setSelected(null);
+      const nextAction = response.data?.next_action?.label;
       setNotice(
-        response.data?.message ||
-          "Finance agreement and schedule activated without recording payment or reserving equipment."
+        [response.data?.message || "Agreement created with its exact installment schedule.", nextAction]
+          .filter(Boolean)
+          .join(" ")
       );
       await load();
     } catch (error) {
-      setProblem(errorMessage(error, "Could not activate the Finance agreement."));
+      setProblem(errorMessage(error, "Could not activate the agreement."));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <main className="finance-activation">
-      <section className="finance-activation__hero">
+    <main className="finance-simple finance-simplified">
+      <header className="finance-simple__hero">
         <div>
-          <p>Approved application to Finance agreement</p>
-          <h1>Activate the agreement without crossing into Hire work</h1>
-          <span>{locationName}</span>
+          <p>Search, select, then activate</p>
+          <h1>Activate Agreement</h1>
+          <span>
+            Find the approved application first. The complete price, deposit, schedule and advisory
+            details appear only after the correct application is selected.
+          </span>
         </div>
-        <div className="finance-activation__hero-actions">
-          <Link to="/equipment-installment-finance/applications">
-            Credit applications
-          </Link>
-          <Link to="/equipment-installment-finance">Finance accounts</Link>
-          <button type="button" onClick={load} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
+        <div className="finance-simple__hero-actions">
+          <Link className="finance-simple__button" to="/equipment-installment-finance/applications">Back to Applications</Link>
+          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">Help</Link>
         </div>
-      </section>
+      </header>
 
-      <section className="finance-activation__boundary">
-        <span aria-hidden="true">🔐</span>
-        <div>
-          <strong>Agreement activation is Finance-only</strong>
-          <p>
-            This stage creates one approved Finance agreement and its installment
-            schedule. It does not collect money, reserve a machine, alter the fleet
-            register, create a Hire job, create delivery evidence, transfer ownership or
-            send SMS.
-          </p>
-        </div>
-      </section>
-
-      {problem ? <div className="finance-activation__alert is-error">{problem}</div> : null}
-      {notice ? <div className="finance-activation__alert is-success">{notice}</div> : null}
-
-      {!selectedContextId ? (
-        <div className="finance-activation__alert is-warning">
-          Choose one Finance location before loading or activating agreements. The
-          administrator-wide location view is read-only for this action.
-        </div>
-      ) : null}
-
-      {!canActivate ? (
-        <div className="finance-activation__alert is-info">
-          Your Finance role may review this queue but cannot activate agreements. A
-          Finance Manager or Finance Accountant must complete this independent step.
-        </div>
-      ) : null}
+      {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+      {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
       {readiness.ready === false ? (
-        <section className="finance-activation__foundation">
-          <span aria-hidden="true">🏗️</span>
-          <div>
-            <p>Activation foundation awaiting controlled migration</p>
-            <h2>Finance agreement activation is not active in this database yet</h2>
-            <span>
-              Apply and verify the additive agreement-activation migration after the
-              required backups. Until then, no agreement can be created from this page.
-            </span>
-            {readiness.missing_columns?.length ? (
-              <small>Missing columns: {readiness.missing_columns.join(", ")}</small>
-            ) : null}
-            {readiness.missing_triggers?.length ? (
-              <small>Missing triggers: {readiness.missing_triggers.join(", ")}</small>
-            ) : null}
+        <section className="finance-simple__section">
+          <h2>Agreement activation is not ready</h2>
+          <p>Missing: {(readiness.missing_tables || []).join(", ")}</p>
+        </section>
+      ) : null}
+
+      {readiness.ready === true && !selected ? (
+        <section className="finance-simple__section">
+          <div className="finance-simple__toolbar">
+            <div><p className="finance-simple__eyebrow">Choose approved application</p><h2>{visible.length} result(s)</h2></div>
+            <div className="finance-simple__actions">
+              <input
+                aria-label="Search agreement activation candidates"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Application, customer, phone, offer or excavator"
+                autoComplete="off"
+              />
+              <select aria-label="Filter agreement activation status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value="awaiting">Awaiting activation</option>
+                <option value="activated">Already activated</option>
+                <option value="all">All applications</option>
+              </select>
+            </div>
+          </div>
+          {loading ? <div className="finance-simple__empty">Loading approved applications…</div> : null}
+          {!loading && !visible.length ? <div className="finance-simple__empty">No approved application matches the current search.</div> : null}
+          <div className="finance-simplified__compact-register">
+            {visible.map((candidate) => {
+              const blocked = Boolean(candidate.activation_blockers?.length) || candidate.activation_ready === false;
+              return (
+                <article className={`finance-simplified__compact-record ${blocked ? "is-warning" : ""}`} key={candidate.id}>
+                  <div>
+                    <small>{candidate.application_number}</small>
+                    <h3>{candidate.customer_name}</h3>
+                    <p>{candidate.asset_code} — {candidate.asset_name}</p>
+                  </div>
+                  <div className="finance-simplified__compact-fact">
+                    <span>Financed amount</span>
+                    <strong>{money(candidate.financed_amount)}</strong>
+                  </div>
+                  <div className="finance-simplified__compact-fact">
+                    <span>Status</span>
+                    <strong>{candidate.agreement_id ? "Activated" : blocked ? "Requires attention" : "Ready"}</strong>
+                  </div>
+                  <div className="finance-simplified__compact-record-actions">
+                    <button className="is-primary" type="button" disabled={Boolean(candidate.agreement_id) || !canActivate || !candidate.activation_ready} onClick={() => open(candidate)}>
+                      {candidate.agreement_id ? "Agreement Created" : "Create Agreement"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
 
-      {readiness.ready === true ? (
-        <>
-          <section className="finance-activation__metrics">
-            <article>
-              <span>⏳</span>
+      {selected ? (
+        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelected(null)}>
+          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Activate Finance agreement" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="finance-simple__section-header">
               <div>
-                <small>Awaiting activation</small>
-                <strong>{summary.awaiting}</strong>
-                <p>Approved applications without an agreement</p>
+                <p className="finance-simple__eyebrow">Selected application</p>
+                <h2>{selected.application_number}</h2>
+                <span className="finance-simple__muted">{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span>
               </div>
-            </article>
-            <article>
-              <span>✅</span>
-              <div>
-                <small>Activated</small>
-                <strong>{summary.activated}</strong>
-                <p>Applications already linked to an agreement</p>
-              </div>
-            </article>
-            <article>
-              <span>💼</span>
-              <div>
-                <small>Awaiting financed amount</small>
-                <strong>{money(summary.exposure)}</strong>
-                <p>Approved exposure not yet activated</p>
-              </div>
-            </article>
-          </section>
+              <button type="button" onClick={() => setSelected(null)}>Close</button>
+            </div>
 
-          <section className="finance-activation__toolbar">
-            <label>
-              <span>Search approved applications</span>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Application, customer, quotation or machine"
-              />
-            </label>
-            <label>
-              <span>Queue</span>
-              <select
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option value="awaiting">Awaiting activation</option>
-                <option value="activated">Already activated</option>
-                <option value="all">All approved applications</option>
-              </select>
-            </label>
-          </section>
+            <div className="finance-simple__summary">
+              <article><span>Automatic Installment Offer</span><strong>{selected.quotation_number || "Not recorded"}</strong></article>
+              <article><span>Total price</span><strong>{money(selected.quoted_total)}</strong></article>
+              <article><span>Deposit</span><strong>{money(selected.approved_deposit)}</strong></article>
+              <article><span>Financed amount</span><strong>{money(selected.financed_amount)}</strong></article>
+              <article><span>Payments</span><strong>{selected.installment_count} · {label(selected.payment_frequency)}</strong></article>
+              <article><span>Periodic payment</span><strong>{money(selected.periodic_amount)}</strong></article>
+              <article><span>First due</span><strong>{dateValue(selected.proposed_first_due_date, "Incomplete approved terms")}</strong></article>
+              <article><span>Final due</span><strong>{dateValue(selected.final_due_date, "Incomplete approved terms")}</strong></article>
+              <article><span>KYC advisory</span><strong>{label(selected.kyc_status || "not recorded")}</strong></article>
+              <article><span>Affordability advisory</span><strong>{label(selected.affordability_status || "not recorded")}</strong></article>
+            </div>
 
-          {loading ? (
-            <div className="finance-activation__loading">Loading activation queue…</div>
-          ) : null}
+            {selected.activation_blockers?.length ? (
+              <div className="finance-simple__notice is-error">{selected.activation_blockers.join(" ")}</div>
+            ) : null}
 
-          {!loading && selectedContextId ? (
-            <section className="finance-activation__queue" aria-label="Finance agreement activation queue">
-              <header>
-                <div>
-                  <p>Controlled activation queue</p>
-                  <h2>{visibleCandidates.length} approved application(s)</h2>
+            <form onSubmit={activate}>
+              <div className="finance-simple__grid">
+                <div className="finance-simple__field">
+                  <span>Approved first installment due date</span>
+                  <strong>{dateValue(selected.proposed_first_due_date)}</strong>
+                  <small>The approved date is preserved exactly during agreement creation.</small>
                 </div>
-                <small>Finance Manager or Finance Accountant approval step</small>
-              </header>
-
-              {!visibleCandidates.length ? (
-                <div className="finance-activation__empty">
-                  <span aria-hidden="true">📄</span>
-                  <h3>No approved applications in this queue</h3>
-                  <p>
-                    Complete KYC, affordability and independent approval before an
-                    application appears here.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="finance-activation__cards">
-                {visibleCandidates.map((candidate) => (
-                  <article className="finance-activation__card" key={candidate.id}>
-                    <div className="finance-activation__card-top">
-                      <div>
-                        <small>{candidate.application_number}</small>
-                        <h3>{candidate.customer_name}</h3>
-                        <p>
-                          {candidate.asset_code || "Equipment"} · {candidate.asset_name || "Machine"}
-                        </p>
-                      </div>
-                      <StatusPill value={candidate.agreement_id ? "activated" : "approved"} />
-                    </div>
-
-                    <div className="finance-activation__statuses">
-                      <span>KYC <StatusPill value={candidate.kyc_status} /></span>
-                      <span>Affordability <StatusPill value={candidate.affordability_status} /></span>
-                      <span>Risk <StatusPill value={candidate.risk_band} /></span>
-                    </div>
-
-                    <div className="finance-activation__facts">
-                      <div><span>Quotation</span><strong>{candidate.quotation_number || "—"}</strong></div>
-                      <div><span>Quoted total</span><strong>{money(candidate.quoted_total)}</strong></div>
-                      <div><span>Approved deposit</span><strong>{money(candidate.approved_deposit)}</strong></div>
-                      <div><span>Financed amount</span><strong>{money(candidate.financed_amount)}</strong></div>
-                      <div><span>Frequency</span><strong>{label(candidate.payment_frequency)}</strong></div>
-                      <div><span>Installments</span><strong>{candidate.installment_count || "—"}</strong></div>
-                    </div>
-
-                    <div className="finance-activation__safeguards">
-                      <span>✓ No Hire job</span>
-                      <span>✓ No payment</span>
-                      <span>✓ No machine lock</span>
-                      <span>✓ No SMS</span>
-                    </div>
-
-                    <div className="finance-activation__card-actions">
-                      <Link to="/equipment-installment-finance/applications">
-                        Review application file
-                      </Link>
-                      {candidate.agreement_id ? (
-                        <Link to="/equipment-installment-finance">
-                          Open Finance account
-                        </Link>
-                      ) : canActivate ? (
-                        <button
-                          className="is-primary"
-                          type="button"
-                          onClick={() => openActivation(candidate)}
-                        >
-                          Activate Finance agreement
-                        </button>
-                      ) : (
-                        <button type="button" disabled>
-                          Manager or accountant required
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                <label className="finance-simple__field">
+                  <span>Grace days</span>
+                  <input type="number" min="0" max="90" value={form.grace_days} onChange={(event) => setForm((current) => ({ ...current, grace_days: event.target.value }))} />
+                </label>
+                <label className="finance-simple__field is-wide">
+                  <span>Activation note</span>
+                  <textarea value={form.activation_notes} onChange={(event) => setForm((current) => ({ ...current, activation_notes: event.target.value }))} />
+                </label>
+                <label className="finance-simple__check is-wide">
+                  <input type="checkbox" checked={form.terms_accepted} onChange={(event) => setForm((current) => ({ ...current, terms_accepted: event.target.checked }))} />
+                  <span><strong>Approved terms confirmed</strong><small>I confirm the customer, excavator, price, deposit and approved payment plan.</small></span>
+                </label>
               </div>
-            </section>
-          ) : null}
-        </>
-      ) : null}
-
-      {selectedCandidate ? (
-        <Drawer
-          title="Activate Finance agreement"
-          subtitle={`${selectedCandidate.application_number} · ${selectedCandidate.customer_name}`}
-          onClose={() => setSelectedCandidate(null)}
-        >
-          <form className="finance-activation__form" onSubmit={activateAgreement}>
-            <section className="finance-activation__review">
-              <h3>Approved terms being activated</h3>
-              <div>
-                <span>Machine</span>
-                <strong>
-                  {selectedCandidate.asset_code} · {selectedCandidate.asset_name}
-                </strong>
+              <div className="finance-simple__sticky-actions">
+                <span>Agreement and schedule only.</span>
+                <div><button type="button" onClick={() => setSelected(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Creating…" : "Create Agreement"}</button></div>
               </div>
-              <div><span>Quoted total</span><strong>{money(selectedCandidate.quoted_total)}</strong></div>
-              <div><span>Approved deposit</span><strong>{money(selectedCandidate.approved_deposit)}</strong></div>
-              <div><span>Financed amount</span><strong>{money(selectedCandidate.financed_amount)}</strong></div>
-              <div><span>Schedule</span><strong>{selectedCandidate.installment_count} × {label(selectedCandidate.payment_frequency)}</strong></div>
-            </section>
-
-            <div className="finance-activation__form-grid">
-              <Field
-                title="First installment due date"
-                hint="Must be today or later and should match the approved quotation."
-              >
-                <input
-                  required
-                  type="date"
-                  min={today()}
-                  value={form.first_due_date}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      first_due_date: event.target.value,
-                    }))
-                  }
-                />
-              </Field>
-              <Field title="Grace days" hint="0 to 90 days after each due date.">
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  max="90"
-                  value={form.grace_days}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      grace_days: event.target.value,
-                    }))
-                  }
-                />
-              </Field>
-              <Field
-                title="Activation notes"
-                hint="Record any approved operational clarification."
-                wide
-              >
-                <textarea
-                  rows="4"
-                  value={form.activation_notes}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      activation_notes: event.target.value,
-                    }))
-                  }
-                />
-              </Field>
-            </div>
-
-            <label className="finance-activation__confirmation">
-              <input
-                type="checkbox"
-                checked={form.terms_accepted}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    terms_accepted: event.target.checked,
-                  }))
-                }
-              />
-              <span>
-                <strong>I confirm the approved Finance terms</strong>
-                <small>
-                  This creates the Finance agreement and schedule only. It records no
-                  payment, reserves no machine and creates no Hire work.
-                </small>
-              </span>
-            </label>
-
-            <div className="finance-activation__warning">
-              <strong>Machine remains unreserved</strong>
-              <p>
-                A later controlled deposit-and-reservation step must verify payment before
-                the equipment is committed to this agreement.
-              </p>
-            </div>
-
-            <div className="finance-activation__form-actions">
-              <button type="button" onClick={() => setSelectedCandidate(null)}>
-                Cancel
-              </button>
-              <button
-                className="is-primary"
-                type="submit"
-                disabled={saving || !form.terms_accepted}
-              >
-                {saving ? "Activating…" : "Activate agreement and schedule"}
-              </button>
-            </div>
-          </form>
-        </Drawer>
+            </form>
+          </section>
+        </div>
       ) : null}
     </main>
   );

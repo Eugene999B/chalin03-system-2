@@ -326,6 +326,16 @@ async function agreementRecord(connection, agreementId, locationId, lock = false
   return rows[0] || null;
 }
 
+function assertLegacyCommercialAgreement(agreement) {
+  if (agreement?.activation_source === "approved_credit_application") {
+    throw new HttpError(
+      409,
+      "Use the controlled Equipment Installment Finance workflow for approved-credit payments, delivery, ownership and customer messages.",
+      "EQUIPMENT_FINANCE_CONTROLLED_WORKFLOW_REQUIRED"
+    );
+  }
+}
+
 async function refreshAgreement(connection, agreementId) {
   const [paymentRows] = await connection.query(
     `SELECT COALESCE(SUM(amount), 0) AS paid
@@ -1043,6 +1053,7 @@ router.post("/agreements/:id/payments", requirePermission("fleet.assets.manage")
     const paymentData = await withTransaction(async (connection) => {
       const agreement = await agreementRecord(connection, agreementId, req.hireLocationScope.locationId, true);
       if (!agreement) throw new HttpError(404, "Agreement was not found.");
+      assertLegacyCommercialAgreement(agreement);
       if (["cancelled", "defaulted"].includes(agreement.agreement_status)) throw new HttpError(409, "Payments cannot be added to this agreement.");
       if (amount > Number(agreement.outstanding_balance || 0) + 0.01) throw new HttpError(400, "Payment exceeds the outstanding balance.");
       if (Number(agreement.outstanding_balance || 0) - amount <= 0.01) category = "settlement";
@@ -1119,6 +1130,7 @@ router.post("/agreements/:id/delivery", requirePermission("fleet.assets.manage")
     const deliveryId = await withTransaction(async (connection) => {
       const agreement = await agreementRecord(connection, agreementId, req.hireLocationScope.locationId, true);
       if (!agreement) throw new HttpError(404, "Agreement was not found.");
+      assertLegacyCommercialAgreement(agreement);
       if (!deliveryAllowed(agreement)) throw new HttpError(409, "The payment threshold for delivery has not been reached.", "DELIVERY_PAYMENT_THRESHOLD_NOT_MET");
       const [existing] = await connection.query("SELECT id FROM equipment_deliveries WHERE agreement_id = ? LIMIT 1 FOR UPDATE", [agreement.id]);
       if (existing.length) throw new HttpError(409, "Delivery has already been recorded for this agreement.");
@@ -1156,6 +1168,7 @@ router.post("/agreements/:id/ownership-transfer", requirePermission("fleet.asset
     const transferId = await withTransaction(async (connection) => {
       const agreement = await agreementRecord(connection, agreementId, req.hireLocationScope.locationId, true);
       if (!agreement) throw new HttpError(404, "Agreement was not found.");
+      assertLegacyCommercialAgreement(agreement);
       if (Number(agreement.outstanding_balance || 0) > 0.01) throw new HttpError(409, "Ownership cannot transfer while a balance remains.", "OWNERSHIP_BALANCE_REMAINS");
       if (agreement.delivery_status !== "delivered") throw new HttpError(409, "Record equipment delivery before ownership transfer.");
       const [existing] = await connection.query("SELECT id FROM equipment_ownership_transfers WHERE agreement_id = ? LIMIT 1 FOR UPDATE", [agreement.id]);
@@ -1189,6 +1202,7 @@ router.post("/agreements/:id/sms", requirePermission("fleet.assets.manage"), asy
     if (!agreementId || reminderType === undefined) throw new HttpError(400, "Choose a valid Equipment Sales SMS type.");
     const agreement = await agreementRecord(pool, agreementId, req.hireLocationScope.locationId);
     if (!agreement) throw new HttpError(404, "Agreement was not found.");
+    assertLegacyCommercialAgreement(agreement);
     const result = await sendAgreementSms(req, agreement, reminderType, req.body.message);
     return res.status(result.ok ? 200 : 202).json({ status: result.ok ? "success" : "warning", message: result.ok ? "Equipment Sales SMS submitted." : result.reason || result.message || "SMS delivery could not be confirmed.", sms: result });
   } catch (error) {

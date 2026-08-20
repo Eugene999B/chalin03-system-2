@@ -107,7 +107,7 @@ async function writeAuditEvent({
   const columns = await getTableColumns(connection, "activity_log");
 
   if (columns.size === 0) {
-    return;
+    return null;
   }
 
   const requestContext = getRequestAuditContext(req);
@@ -136,18 +136,19 @@ async function writeAuditEvent({
   );
 
   if (availableEntries.length === 0) {
-    return;
+    return null;
   }
 
   const columnNames = availableEntries.map(([column]) => `\`${column}\``);
   const placeholders = availableEntries.map(() => "?");
   const params = availableEntries.map(([, value]) => value);
 
-  await connection.query(
+  const [result] = await connection.query(
     `INSERT INTO activity_log (${columnNames.join(", ")})
      VALUES (${placeholders.join(", ")})`,
     params
   );
+  return Number(result?.insertId || 0) || null;
 }
 
 module.exports = {

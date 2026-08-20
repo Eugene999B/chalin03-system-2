@@ -65,6 +65,9 @@ const EquipmentSalesWorkspacePage = lazy(() =>
 const EquipmentSalesReportsPage = lazy(() =>
   import("./pages/EquipmentSalesReportsPage")
 );
+const EquipmentBusinessWorkforcePage = lazy(() =>
+  import("./pages/EquipmentBusinessWorkforcePage")
+);
 const HireCommercialControlPage = lazy(() =>
   import("./pages/HireCommercialControlPage")
 );
@@ -87,6 +90,9 @@ const WorkspaceAdministrationPage = lazy(() =>
 const EmploymentDocumentsPage = lazy(() => import("./pages/EmploymentDocumentsPage"));
 const DocumentSignatureSettingsPage = lazy(() =>
   import("./pages/DocumentSignatureSettingsPage")
+);
+const PayrollProcessingCentrePage = lazy(() =>
+  import("./pages/PayrollProcessingCentrePage")
 );
 
 const businessWorkRoles = ["admin", "manager", "cashier"];
@@ -344,6 +350,13 @@ export default function App() {
               )}
             />
             <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
+              )}
+            />
+            <Route
               path="employment-documents"
               element={permissionOnlyPage(
                 "workers.documents.view",
@@ -466,6 +479,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -611,10 +631,24 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -711,10 +745,24 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route

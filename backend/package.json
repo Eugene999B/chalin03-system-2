@@ -5,13 +5,42 @@
   "main": "server.js",
   "scripts": {
     "start": "node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
+    "maintenance:legacy-startup-repairs": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
     "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
+    "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
+    "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
+    "migrate:equipment-finance:phase1-schema:production": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js",
+    "migrate:equipment-finance:phase1-repair:production": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js",
+    "migrate:equipment-finance:phase3-application:production": "node scripts/runEquipmentFinancePhaseThreeApplicationStartup.js",
+    "migrate:equipment-finance:phase3-agreement:production": "node scripts/runEquipmentFinanceAgreementCreationStartup.js",
+    "migrate:equipment-finance:opening-deposit-foundation:production": "node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js",
+    "migrate:equipment-finance:phase4:production": "node scripts/runEquipmentFinancePhaseFourStartup.js",
+    "migrate:equipment-finance:phase5a:production": "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
+    "migrate:equipment-finance:phase5b:production": "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
+    "migrate:equipment-finance:phase5-unified-documents:production": "node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js",
+    "migrate:equipment-finance:phase5c:production": "node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js",
+    "migrate:equipment-finance:phase5d:production": "node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js",
+    "migrate:equipment-finance:phase6:production": "node scripts/runEquipmentFinancePhaseSixStartup.js",
+    "migrate:equipment-finance:phase6-performance:production": "node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js",
+    "repair:equipment-finance-terms-approval:20260806:production": "node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js",
+    "reset:equipment-finance:restart:production": "node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js",
+    "reset:equipment-finance:excavators:production": "node scripts/runUserAuthorizedInstallmentExcavatorCleanup20260805.js",
+    "reset:equipment-finance:excavators:startup-safe": "node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js",
+    "repair:kwabena-main-store-quantities:20260806:production": "node scripts/runKwabenaProductQuantityCorrection20260806.js",
+    "repair:customer-merge-audit-dates:20260805:production": "node scripts/runCustomerMergeAuditDateSanitizer20260805.js",
+    "repair:customer-merges:20260805:production": "node scripts/runAutomaticCustomerMergeRollback20260805.js",
+    "repair:exact-name-receipt-owners:20260805:production": "node scripts/runExactNameReceiptOwnerRecovery20260805.js",
+    "repair:missing-credit-debts:20260805:production": "node scripts/runMissingCreditDebtBackfill20260805.js",
+    "repair:zero-payment-credit-debt-visibility:20260805:production": "node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js",
+    "repair:master-mickey-july31-exact-debt:20260805:production": "node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js",
+    "repair:unpaid-receipt-identity-isolation:20260805:production": "node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js"
   },
   "engines": {
     "node": ">=20"
@@ -19,8 +48,7 @@
   "keywords": [
     "chalin03",
     "sales",
-    "inventory",
-    "mysql"
+    "inventory"
   ],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
