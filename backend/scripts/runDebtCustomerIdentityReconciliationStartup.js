@@ -22,17 +22,12 @@ async function main() {
       return;
     }
 
-    const [mismatchRows] = await connection.query(
-      `SELECT
-         COUNT(DISTINCT s.id) AS affected_sales,
-         COUNT(DISTINCT d.id) AS affected_debts
+    const [saleMismatchRows] = await connection.query(
+      `SELECT COUNT(*) AS affected_sales
        FROM sales s
        INNER JOIN customers c
          ON c.id = s.customer_id
         AND c.branch_id = s.branch_id
-       INNER JOIN debts d
-         ON d.sale_id = s.id
-        AND d.branch_id = s.branch_id
        WHERE s.customer_id IS NOT NULL
          AND (
            COALESCE(NULLIF(TRIM(s.customer_name), ''), '') <> COALESCE(NULLIF(TRIM(c.name), ''), '')
@@ -40,8 +35,21 @@ async function main() {
          )`
     );
 
-    const affectedSales = Number(mismatchRows[0]?.affected_sales || 0);
-    const affectedDebts = Number(mismatchRows[0]?.affected_debts || 0);
+    const [debtMismatchRows] = await connection.query(
+      `SELECT COUNT(*) AS affected_debts
+       FROM debts d
+       INNER JOIN customers c
+         ON c.id = d.customer_id
+        AND c.branch_id = d.branch_id
+       WHERE d.customer_id IS NOT NULL
+         AND (
+           COALESCE(NULLIF(TRIM(d.customer_name), ''), '') <> COALESCE(NULLIF(TRIM(c.name), ''), '')
+           OR COALESCE(NULLIF(TRIM(d.customer_phone), ''), '') <> COALESCE(NULLIF(TRIM(c.phone), ''), '')
+         )`
+    );
+
+    const affectedSales = Number(saleMismatchRows[0]?.affected_sales || 0);
+    const affectedDebts = Number(debtMismatchRows[0]?.affected_debts || 0);
 
     if (affectedSales > 0) {
       await connection.query(
@@ -49,9 +57,6 @@ async function main() {
          INNER JOIN customers c
            ON c.id = s.customer_id
           AND c.branch_id = s.branch_id
-         INNER JOIN debts d
-           ON d.sale_id = s.id
-          AND d.branch_id = s.branch_id
          SET
            s.customer_name = c.name,
            s.customer_phone = c.phone
@@ -59,6 +64,23 @@ async function main() {
            AND (
              COALESCE(NULLIF(TRIM(s.customer_name), ''), '') <> COALESCE(NULLIF(TRIM(c.name), ''), '')
              OR COALESCE(NULLIF(TRIM(s.customer_phone), ''), '') <> COALESCE(NULLIF(TRIM(c.phone), ''), '')
+           )`
+      );
+    }
+
+    if (affectedDebts > 0) {
+      await connection.query(
+        `UPDATE debts d
+         INNER JOIN customers c
+           ON c.id = d.customer_id
+          AND c.branch_id = d.branch_id
+         SET
+           d.customer_name = c.name,
+           d.customer_phone = c.phone
+         WHERE d.customer_id IS NOT NULL
+           AND (
+             COALESCE(NULLIF(TRIM(d.customer_name), ''), '') <> COALESCE(NULLIF(TRIM(c.name), ''), '')
+             OR COALESCE(NULLIF(TRIM(d.customer_phone), ''), '') <> COALESCE(NULLIF(TRIM(c.phone), ''), '')
            )`
       );
     }
