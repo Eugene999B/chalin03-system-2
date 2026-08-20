@@ -1,0 +1,86 @@
+.finance-simple__dialog-backdrop {
+  padding: 1.25rem;
+}
+
+/* Keep long Installment forms compact on desktop. The form scrolls inside the dialog. */
+.finance-simple__dialog {
+  width: min(760px, calc(100vw - 2.5rem));
+  height: min(78dvh, 760px);
+  max-height: calc(100dvh - 2.5rem);
+  border-radius: 1rem;
+}
+
+.finance-simple__dialog > .finance-simple__section-header {
+  flex: 0 0 auto;
+  min-height: 72px;
+}
+
+.finance-simple__dialog > form {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.finance-simple__dialog > form > .finance-simple__grid,
+.finance-simple__dialog > form > .finance-simple__photo-grid {
+  flex: 0 0 auto;
+}
+
+.finance-simple__dialog > form {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.finance-simple__dialog > form > .finance-simple__sticky-actions,
+.finance-simple__dialog > form > .finance-simple__actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #dbe4dd;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 -8px 22px rgba(20, 45, 29, 0.1);
+}
+
+@media (min-width: 721px) {
+  .finance-simple__dialog > form > .finance-simple__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+    margin-top: 0.7rem;
+    padding: 0 1rem 0.5rem;
+  }
+
+  .finance-simple__dialog > form > .finance-simple__photo-grid {
+    padding: 0 1rem 0.5rem;
+  }
+
+  .finance-simple__dialog .finance-simple__field > span {
+    font-size: 0.82rem;
+  }
+
+  .finance-simple__dialog input,
+  .finance-simple__dialog select,
+  .finance-simple__dialog textarea {
+    min-height: 40px;
+    padding: 0.58rem 0.7rem;
+  }
+
+  .finance-simple__dialog textarea {
+    min-height: 76px;
+  }
+}
+
+@media (max-width: 720px) {
+  .finance-simple__dialog-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .finance-simple__dialog {
+    width: 100%;
+    height: min(90dvh, 760px);
+    max-height: 90dvh;
+    border-radius: 1rem 1rem 0 0;
+  }
+}
