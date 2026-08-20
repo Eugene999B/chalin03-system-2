@@ -1,4 +1,5 @@
 @import "./installmentExcavatorModalPosition.css";
+@import "./installmentDialogContentCenter.css";
 
 .finance-simple__dialog-backdrop {
   padding: 24px;
