@@ -15,6 +15,32 @@ function canonicalCustomerKey(record) {
     .toLowerCase()}`;
 }
 
+function buildCanonicalCustomerFilter(alias, selection) {
+  const params = [];
+  if (selection.customerId) {
+    params.push(selection.customerId);
+    return {
+      sql: ` AND ${alias}.customer_id = ?`,
+      params,
+    };
+  }
+
+  const clauses = [];
+  if (selection.phone) {
+    clauses.push(`${alias}.customer_phone = ?`);
+    params.push(selection.phone);
+  }
+  if (clauses.length === 0 && selection.name) {
+    clauses.push(`${alias}.customer_name = ?`);
+    params.push(selection.name);
+  }
+
+  return {
+    sql: clauses.length > 0 ? ` AND (${clauses.join(" OR ")})` : "",
+    params,
+  };
+}
+
 test("customer identity is keyed by customer ID before phone", () => {
   const ansah = {
     customer_id: 101,
@@ -37,4 +63,15 @@ test("missing customer ID may fall back to phone", () => {
     canonicalCustomerKey({ customer_phone: "0241111111" }),
     "phone:0241111111"
   );
+});
+
+test("selected customer ID is exclusive and never broadened by phone", () => {
+  const result = buildCanonicalCustomerFilter("d", {
+    customerId: 101,
+    phone: "0240000000",
+    name: "Emmanuel Ansah",
+  });
+
+  assert.equal(result.sql, " AND d.customer_id = ?");
+  assert.deepEqual(result.params, [101]);
 });
