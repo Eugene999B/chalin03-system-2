@@ -14,6 +14,7 @@ import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
+import "./styles/installmentExcavatorModalFinal.css";
 
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
