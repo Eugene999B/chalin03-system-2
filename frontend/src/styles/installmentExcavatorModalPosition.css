@@ -1,0 +1,47 @@
+/* Final positioning contract for the Installment Excavator registration/edit dialog. */
+.finance-simple__dialog-backdrop[role="presentation"] {
+  position: fixed !important;
+  z-index: 100000 !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  padding: 24px !important;
+  display: grid !important;
+  place-items: center !important;
+  justify-content: center !important;
+  align-items: center !important;
+  overflow: hidden !important;
+  transform: none !important;
+  translate: none !important;
+}
+
+.finance-simple__dialog-backdrop[role="presentation"] > .finance-simple__dialog[role="dialog"] {
+  position: relative !important;
+  inset: auto !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  margin: 0 auto !important;
+  transform: none !important;
+  translate: none !important;
+  justify-self: center !important;
+  align-self: center !important;
+}
+
+@media (max-width: 720px) {
+  .finance-simple__dialog-backdrop[role="presentation"] {
+    place-items: end center !important;
+    align-items: end !important;
+    padding: 0 !important;
+  }
+
+  .finance-simple__dialog-backdrop[role="presentation"] > .finance-simple__dialog[role="dialog"] {
+    width: 100% !important;
+    max-width: 680px !important;
+    margin: 0 auto !important;
+    border-radius: 18px 18px 0 0 !important;
+    align-self: end !important;
+  }
+}
