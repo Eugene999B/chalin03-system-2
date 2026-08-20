@@ -92,13 +92,12 @@ function getSelection(req) {
 function buildCustomerFilter(alias, selection, params) {
   if (selection.scope === "all") return "";
 
-  const clauses = [];
-
   if (selection.customerId) {
-    clauses.push(`${alias}.customer_id = ?`);
     params.push(selection.customerId);
+    return ` AND ${alias}.customer_id = ?`;
   }
 
+  const clauses = [];
   if (selection.phone) {
     clauses.push(`${alias}.customer_phone = ?`);
     params.push(selection.phone);
@@ -148,11 +147,11 @@ function periodLabel(range) {
 }
 
 function customerKey(record) {
-  const phone = cleanText(record?.customer_phone, 80).toLowerCase();
-  if (phone) return `phone:${phone}`;
-
   const customerId = positiveId(record?.customer_id);
   if (customerId) return `id:${customerId}`;
+
+  const phone = cleanText(record?.customer_phone, 80).toLowerCase();
+  if (phone) return `phone:${phone}`;
 
   return `name:${cleanText(
     record?.customer_name || "Customer",
@@ -703,9 +702,9 @@ router.get("/customers", async (req, res) => {
     if (reportType === "debt") {
       sql = `
         SELECT
-          MAX(d.customer_id) AS customer_id,
-          d.customer_name,
-          d.customer_phone,
+          d.customer_id,
+          MAX(d.customer_name) AS customer_name,
+          MAX(d.customer_phone) AS customer_phone,
           COUNT(*) AS record_count,
           COALESCE(SUM(d.balance), 0) AS outstanding_balance
         FROM debts d
@@ -713,16 +712,16 @@ router.get("/customers", async (req, res) => {
       `;
       sql += buildDateFilter("d", "created_at", range, params);
       sql += `
-        GROUP BY d.customer_name, d.customer_phone
-        ORDER BY d.customer_name ASC, d.customer_phone ASC
+        GROUP BY d.customer_id
+        ORDER BY customer_name ASC, customer_phone ASC, d.customer_id ASC
         LIMIT 500
       `;
     } else {
       sql = `
         SELECT
-          MAX(s.customer_id) AS customer_id,
-          s.customer_name,
-          s.customer_phone,
+          s.customer_id,
+          MAX(s.customer_name) AS customer_name,
+          MAX(s.customer_phone) AS customer_phone,
           COUNT(*) AS record_count,
           COALESCE(SUM(CASE
             WHEN COALESCE(s.is_voided, 0) = 0
@@ -733,8 +732,8 @@ router.get("/customers", async (req, res) => {
       `;
       sql += buildDateFilter("s", "created_at", range, params);
       sql += `
-        GROUP BY s.customer_name, s.customer_phone
-        ORDER BY s.customer_name ASC, s.customer_phone ASC
+        GROUP BY s.customer_id
+        ORDER BY customer_name ASC, customer_phone ASC, s.customer_id ASC
         LIMIT 500
       `;
     }
