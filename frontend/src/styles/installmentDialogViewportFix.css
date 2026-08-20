@@ -99,6 +99,102 @@
   backdrop-filter: blur(10px);
 }
 
+/* Dedicated alignment contract for the Register/Edit Excavator dialog.
+   Generic workspace styles must not be allowed to offset or clip its form fields. */
+.finance-simple__dialog[aria-label="Register excavator"],
+.finance-simple__dialog[aria-label="Edit excavator"] {
+  direction: ltr;
+  text-align: left;
+  align-self: center;
+  justify-self: center;
+  transform: none !important;
+  left: auto !important;
+  right: auto !important;
+  inset-inline: auto !important;
+  overflow: hidden;
+}
+
+.finance-simple__dialog[aria-label="Register excavator"] > form,
+.finance-simple__dialog[aria-label="Edit excavator"] > form {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 20px 28px 28px !important;
+  box-sizing: border-box !important;
+  align-self: stretch !important;
+  direction: ltr;
+}
+
+.finance-simple__dialog[aria-label="Register excavator"] > form > .finance-simple__grid,
+.finance-simple__dialog[aria-label="Edit excavator"] > form > .finance-simple__grid {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  align-items: start;
+  justify-items: stretch;
+  direction: ltr;
+  overflow: visible;
+}
+
+.finance-simple__dialog[aria-label="Register excavator"] .finance-simple__field,
+.finance-simple__dialog[aria-label="Edit excavator"] .finance-simple__field {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: relative;
+  inset-inline: auto !important;
+  transform: none !important;
+  direction: ltr;
+  text-align: left;
+}
+
+.finance-simple__dialog[aria-label="Register excavator"] .finance-simple__field > span,
+.finance-simple__dialog[aria-label="Edit excavator"] .finance-simple__field > span {
+  display: block;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 0 !important;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  text-align: left;
+  direction: ltr;
+}
+
+.finance-simple__dialog[aria-label="Register excavator"] .finance-simple__field > input,
+.finance-simple__dialog[aria-label="Register excavator"] .finance-simple__field > select,
+.finance-simple__dialog[aria-label="Register excavator"] .finance-simple__field > textarea,
+.finance-simple__dialog[aria-label="Edit excavator"] .finance-simple__field > input,
+.finance-simple__dialog[aria-label="Edit excavator"] .finance-simple__field > select,
+.finance-simple__dialog[aria-label="Edit excavator"] .finance-simple__field > textarea {
+  display: block;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  transform: none !important;
+  box-sizing: border-box !important;
+}
+
+.finance-simple__dialog[aria-label="Register excavator"] .finance-simple__field.is-wide,
+.finance-simple__dialog[aria-label="Edit excavator"] .finance-simple__field.is-wide {
+  grid-column: 1 / -1 !important;
+}
+
+@media (min-width: 721px) {
+  .finance-simple__dialog[aria-label="Register excavator"],
+  .finance-simple__dialog[aria-label="Edit excavator"] {
+    width: min(920px, calc(100vw - 64px));
+    height: min(82vh, 780px);
+    max-height: calc(100vh - 48px);
+  }
+}
+
 @media (max-width: 720px) {
   .finance-simple__dialog-backdrop {
     align-items: flex-end;
@@ -151,5 +247,16 @@
     bottom: -16px;
     margin: 0 -16px -16px;
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .finance-simple__dialog[aria-label="Register excavator"] > form,
+  .finance-simple__dialog[aria-label="Edit excavator"] > form {
+    padding: 14px 16px 16px !important;
+  }
+
+  .finance-simple__dialog[aria-label="Register excavator"] > form > .finance-simple__grid,
+  .finance-simple__dialog[aria-label="Edit excavator"] > form > .finance-simple__grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
   }
 }
