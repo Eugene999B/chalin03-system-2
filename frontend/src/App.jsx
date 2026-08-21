@@ -16,6 +16,7 @@ import PageErrorBoundary from "./components/PageErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
+import InventoryTraceabilityPage from "./pages/InventoryTraceabilityPage";
 import NewSalePage from "./pages/NewSalePage";
 import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
@@ -216,6 +217,10 @@ export default function App() {
             <Route
               path="products"
               element={rolePage(businessWorkRoles, <ProductsPage />)}
+            />
+            <Route
+              path="inventory-traceability"
+              element={rolePage(adminManagerRoles, <InventoryTraceabilityPage />)}
             />
             <Route
               path="new-sale"

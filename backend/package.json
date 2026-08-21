@@ -9,6 +9,7 @@
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
+    "migrate:inventory-loss-prevention:production": "node scripts/runInventoryLossPreventionProductionMigrations.js",
     "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
     "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",

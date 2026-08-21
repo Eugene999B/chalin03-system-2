@@ -9,6 +9,10 @@ const { markClosingStale } = require("../services/dailyClosingSecurityService");
 const { listActiveReturnReservations } = require("../services/operationalApprovalService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateReturnCreateRequest } = require("../validation/financialRequestValidators");
+const {
+  lockReturnUnitSelection,
+  markReturnUnitsQuarantined,
+} = require("../services/inventoryReturnTraceabilityService");
 
 const router = express.Router();
 
@@ -225,6 +229,9 @@ router.get(
           SUM(si.quantity) AS quantity_sold,
           MAX(si.unit_price) AS unit_price,
           SUM(si.line_total) AS line_total,
+          MAX(p.inventory_tracking_mode) AS inventory_tracking_mode,
+          MAX(p.inventory_traceability_state) AS inventory_traceability_state,
+          MAX(p.inventory_product_code) AS inventory_product_code,
           COALESCE((
             SELECT SUM(r.quantity)
             FROM returns r
@@ -234,6 +241,7 @@ router.get(
           ), 0) AS returned_quantity
          FROM sale_items si
          INNER JOIN sales s ON si.sale_id = s.id
+         INNER JOIN products p ON p.id = si.product_id AND p.branch_id = s.branch_id
          WHERE si.sale_id = ?
          AND s.branch_id = ?
          GROUP BY si.sale_id, si.product_id, si.product_name
@@ -276,6 +284,12 @@ router.get(
           active_refund_request_codes: reservations.map((reservation) => reservation.request_code),
           physical_remaining_quantity: physicalRemaining,
           remaining_quantity: availableQuantity,
+          inventory_tracking_mode: item.inventory_tracking_mode || "quantity",
+          inventory_traceability_state: item.inventory_traceability_state || "off",
+          inventory_product_code: item.inventory_product_code || null,
+          serialized_return_requires_unit_ids:
+            item.inventory_tracking_mode === "serialized" &&
+            item.inventory_traceability_state === "enforced",
         };
       });
 
@@ -451,6 +465,7 @@ router.post(
         refund_reference,
         approver_username,
         approver_password,
+        unit_ids = [],
       } = req.validated.body;
 
       if (!sale_id || !product_id || !quantity || !cleanText(reason)) {
@@ -573,7 +588,11 @@ router.post(
       }
 
       const [products] = await connection.query(
-        `SELECT id, branch_id, name
+        `SELECT
+          id, branch_id, name,
+          inventory_tracking_mode,
+          inventory_traceability_state,
+          inventory_product_code
          FROM products
          WHERE id = ?
          AND branch_id = ?
@@ -638,6 +657,14 @@ router.post(
           message: `You cannot return ${cleanQuantity}. Only ${remainingQuantity} remaining from this sale.`,
         });
       }
+
+      const returnTraceabilitySelection = await lockReturnUnitSelection(connection, {
+        branchId,
+        saleId: cleanSaleId,
+        product: products[0],
+        quantity: cleanQuantity,
+        unitCodes: unit_ids || [],
+      });
 
       const estimatedReturnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
       const finalRefundAmount = cleanReturnType === "refund"
@@ -724,6 +751,17 @@ router.post(
         ]
       );
 
+      const quarantinedUnits = await markReturnUnitsQuarantined(connection, {
+        branchId,
+        returnId: returnResult.insertId,
+        saleId: cleanSaleId,
+        productId: cleanProductId,
+        unitCodes: returnTraceabilitySelection.unit_codes,
+        actorUserId: req.user.id,
+        reason: cleanReason,
+        requestId: req.requestId || req.id || req.approvalExecution?.request_code || null,
+      });
+
       await connection.query(
         `UPDATE products
          SET quantity = quantity + ?
@@ -757,6 +795,8 @@ router.post(
           refund_method: finalRefundMethod,
           refund_reference: cleanRefundReference || null,
           approved_by: approver?.id || null,
+          unit_ids: quarantinedUnits.map((unit) => unit.unit_code),
+          serialized_quarantine: quarantinedUnits.length > 0,
         },
       });
 
@@ -778,6 +818,8 @@ router.post(
           quantity: cleanQuantity,
           refund_amount: finalRefundAmount,
           refund_method: finalRefundMethod,
+          unit_ids: quarantinedUnits.map((unit) => unit.unit_code),
+          serialized_quarantine: quarantinedUnits.length > 0,
           affected_closing_id: affectedClosing?.id || null,
         };
         const [approvalUpdate] = await connection.query(
@@ -803,7 +845,10 @@ router.post(
 
       return res.status(201).json({
         status: "success",
-        message: "Return recorded successfully. Stock has been increased.",
+        message:
+          quarantinedUnits.length > 0
+            ? "Return recorded successfully. Physical serialized units are in quarantine and are not sellable until inspection clears them."
+            : "Return recorded successfully. Stock has been increased.",
         return_record: {
           branch_id: branchId,
           sale_id: cleanSaleId,
@@ -818,6 +863,8 @@ router.post(
           refund_reference: cleanRefundReference || null,
           approved_by: approver?.full_name || null,
           approval_request_id: req.approvalExecution?.request_id || null,
+          unit_ids: quarantinedUnits.map((unit) => unit.unit_code),
+          serialized_quarantine: quarantinedUnits.length > 0,
         },
         affected_closing: affectedClosing,
       });
@@ -826,9 +873,14 @@ router.post(
 
       console.error("Create return error:", error);
 
-      return res.status(500).json({
+      const statusCode = Number(error.statusCode || 500);
+      return res.status(statusCode).json({
         status: "error",
-        message: "Something went wrong while recording return.",
+        code: error.code || "RETURN_CREATE_ERROR",
+        message:
+          statusCode >= 500
+            ? "Something went wrong while recording return."
+            : error.message,
       });
     } finally {
       connection.release();

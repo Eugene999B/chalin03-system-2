@@ -1,0 +1,70 @@
+.inventory-traceability-hub {
+  display: grid;
+  gap: 1rem;
+}
+
+.inventory-traceability-hub__tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.inventory-traceability-hub__tabs > button {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.85rem;
+  border: 1px solid #dbe3ee;
+  border-radius: 15px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inventory-traceability-hub__tabs > button:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
+.inventory-traceability-hub__tabs > button.is-active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+}
+
+.inventory-traceability-hub__tabs > button > span {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: #e2e8f0;
+  font-weight: 900;
+}
+
+.inventory-traceability-hub__tabs > button.is-active > span {
+  background: #2563eb;
+  color: #fff;
+}
+
+.inventory-traceability-hub__tabs > button > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.inventory-traceability-hub__tabs strong {
+  font-size: 0.96rem;
+}
+
+.inventory-traceability-hub__tabs small {
+  color: #64748b;
+  line-height: 1.35;
+}
+
+@media (max-width: 980px) {
+  .inventory-traceability-hub__tabs {
+    grid-template-columns: 1fr;
+  }
+}
