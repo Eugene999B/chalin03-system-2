@@ -1,6 +1,3 @@
-@import "./installmentExcavatorModalPosition.css";
-@import "./installmentDialogContentCenter.css";
-
 .finance-simple__dialog-backdrop {
   padding: 24px;
 }
@@ -102,8 +99,7 @@
   backdrop-filter: blur(10px);
 }
 
-/* Dedicated alignment contract for the Register/Edit Excavator dialog.
-   Generic workspace styles must not be allowed to offset or clip its form fields. */
+/* Dedicated alignment contract for the legacy Installment dialog surfaces. */
 .finance-simple__dialog[aria-label="Register excavator"],
 .finance-simple__dialog[aria-label="Edit excavator"] {
   direction: ltr;
