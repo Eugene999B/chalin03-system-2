@@ -17,14 +17,26 @@ function label(value) { return String(value || "").replaceAll("_", " ").replace(
 function errorMessage(error, fallback) { return error?.response?.data?.message || error?.message || fallback; }
 function dateInput(value) { return value ? String(value).slice(0, 10) : ""; }
 
+async function imageToProtectedDataUrl(file) {
+  if (!file?.type?.startsWith("image/")) throw new Error("Choose a valid image.");
+  const source = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("Could not read the selected image.")); reader.readAsDataURL(file); });
+  const image = await new Promise((resolve, reject) => { const item = new Image(); item.onload = () => resolve(item); item.onerror = () => reject(new Error("Could not prepare the selected image.")); item.src = source; });
+  let maximumWidth = 1280; let maximumHeight = 960; let quality = 0.72;
+  for (let pass = 0; pass < 12; pass += 1) {
+    const scale = Math.min(maximumWidth / image.width, maximumHeight / image.height, 1);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext("2d"); context.fillStyle = "#ffffff"; context.fillRect(0, 0, width, height); context.drawImage(image, 0, 0, width, height);
+    const output = canvas.toDataURL("image/webp", quality); const bytes = Math.ceil((output.length - output.indexOf(",") - 1) * 0.75);
+    if (bytes <= 47 * 1024) return output;
+    quality = Math.max(0.35, quality - 0.06); maximumWidth = Math.round(maximumWidth * 0.88); maximumHeight = Math.round(maximumHeight * 0.88);
+  }
+  throw new Error("The picture is still too large after safe resizing. Choose a clearer, smaller photo.");
+}
+
 function ModalField({ title, children, wide = false, hint = "" }) {
-  return (
-    <label className={`excavator-registration-modal__field${wide ? " excavator-registration-modal__field--wide" : ""}`}>
-      <span>{title}</span>
-      {children}
-      {hint ? <small>{hint}</small> : null}
-    </label>
-  );
+  return <label className={`excavator-registration-modal__field${wide ? " excavator-registration-modal__field--wide" : ""}`}><span>{title}</span>{children}{hint ? <small>{hint}</small> : null}</label>;
 }
 
 function ExcavatorRegistrationDialog({ editing, form, photos, locations, saving, onClose, onSave, onValue, onAddPhotos, onUpdatePhoto, onRemovePhoto }) {
@@ -34,7 +46,6 @@ function ExcavatorRegistrationDialog({ editing, form, photos, locations, saving,
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, [editing]);
-
   if (!editing || typeof document === "undefined") return null;
   const isEdit = Boolean(editing.id);
   return createPortal(
@@ -48,8 +59,7 @@ function ExcavatorRegistrationDialog({ editing, form, photos, locations, saving,
           </div>
           <button className="excavator-registration-modal__close" type="button" onClick={onClose}>Close</button>
         </header>
-
-        <form className="excavator-registration-modal__body" onSubmit={onSave}>
+        <form id="excavator-registration-form" className="excavator-registration-modal__body" onSubmit={onSave}>
           <div className="excavator-registration-modal__grid">
             <ModalField title="Equipment code"><input value={form.asset_code} onChange={(event) => onValue("asset_code", event.target.value)} required autoFocus /></ModalField>
             <ModalField title="Machine name"><input value={form.asset_name} onChange={(event) => onValue("asset_name", event.target.value)} required /></ModalField>
@@ -79,30 +89,9 @@ function ExcavatorRegistrationDialog({ editing, form, photos, locations, saving,
             <ModalField title="Notes" wide><textarea value={form.notes} onChange={(event) => onValue("notes", event.target.value)} /></ModalField>
             <ModalField title={isEdit ? "Add more photos" : "Full machine photos"} wide hint={isEdit ? "Existing photos stay in the protected record. New photos are appended." : "A main full-machine photo is required."}><input type="file" accept="image/*" capture="environment" multiple onChange={onAddPhotos} /></ModalField>
           </div>
-
-          {photos.length ? (
-            <div className="excavator-registration-modal__photos">
-              {photos.map((photo, index) => (
-                <article className="excavator-registration-modal__photo" key={`${photo.file_name}-${index}`}>
-                  <div className="excavator-registration-modal__photo-preview"><img src={photo.data_url} alt={photo.evidence_type} /></div>
-                  <div className="excavator-registration-modal__photo-controls">
-                    <select value={photo.evidence_type} onChange={(event) => onUpdatePhoto(index, "evidence_type", event.target.value)}>{PHOTO_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}</select>
-                    <label className="excavator-registration-modal__check"><input type="radio" name="primary-photo" checked={photo.is_primary} onChange={() => onUpdatePhoto(index, "is_primary", true)} /><span>Main photo</span></label>
-                    <button className="excavator-registration-modal__remove" type="button" onClick={() => onRemovePhoto(index)}>Remove</button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : null}
+          {photos.length ? <div className="excavator-registration-modal__photos">{photos.map((photo, index) => <article className="excavator-registration-modal__photo" key={`${photo.file_name}-${index}`}><div className="excavator-registration-modal__photo-preview"><img src={photo.data_url} alt={photo.evidence_type} /></div><div className="excavator-registration-modal__photo-controls"><select value={photo.evidence_type} onChange={(event) => onUpdatePhoto(index, "evidence_type", event.target.value)}>{PHOTO_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}</select><label className="excavator-registration-modal__check"><input type="radio" name="primary-photo" checked={photo.is_primary} onChange={() => onUpdatePhoto(index, "is_primary", true)} /><span>Main photo</span></label><button className="excavator-registration-modal__remove" type="button" onClick={() => onRemovePhoto(index)}>Remove</button></div></article>)}</div> : null}
         </form>
-
-        <footer className="excavator-registration-modal__footer">
-          <span className="excavator-registration-modal__footer-copy">{isEdit ? "Editable because no installment has started." : "Create a new protected excavator file."}</span>
-          <div className="excavator-registration-modal__footer-actions">
-            <button className="excavator-registration-modal__button" type="button" onClick={onClose}>Cancel</button>
-            <button className="excavator-registration-modal__button excavator-registration-modal__button--primary" type="submit" form="excavator-registration-form" disabled={saving}> {saving ? "Saving…" : "Save Excavator"} </button>
-          </div>
-        </footer>
+        <footer className="excavator-registration-modal__footer"><span className="excavator-registration-modal__footer-copy">{isEdit ? "Editable because no installment has started." : "Create a new protected excavator file."}</span><div className="excavator-registration-modal__footer-actions"><button className="excavator-registration-modal__button" type="button" onClick={onClose}>Cancel</button><button className="excavator-registration-modal__button excavator-registration-modal__button--primary" type="submit" form="excavator-registration-form" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></footer>
       </section>
     </div>,
     document.body
@@ -132,60 +121,20 @@ export default function EquipmentFinanceExcavatorsPage() {
   const visibleMachines = useMemo(() => { const term = search.trim().toLowerCase(); if (!term) return machines; return machines.filter((machine) => [machine.asset_code, machine.asset_name, machine.make, machine.model, machine.serial_number, machine.chassis_number, machine.registration_number].filter(Boolean).some((value) => String(value).toLowerCase().includes(term))); }, [machines, search]);
   function setValue(field, value) { setForm((current) => ({ ...current, [field]: value })); }
   function openCreate() { setEditing({ id: null }); setForm({ ...EMPTY_MACHINE }); setPhotos([]); setProblem(""); }
-  function openEdit(machine) {
-    if (!machine.editability?.editable) { setProblem(machine.editability?.reason || "This excavator can no longer be edited from the register."); return; }
-    setEditing(machine);
-    setForm({ ...EMPTY_MACHINE, asset_code: machine.asset_code || "", asset_name: machine.asset_name || "", asset_type: machine.asset_type || "Excavator", equipment_category: machine.equipment_category || "Earthmoving Equipment", make: machine.make || "", model: machine.model || "", model_year: machine.model_year || "", serial_number: machine.serial_number || "", chassis_number: machine.chassis_number || "", engine_number: machine.engine_number || "", registration_number: machine.registration_number || "", colour: machine.colour || "", capacity_description: machine.capacity_description || "", condition_status: machine.condition_status || "good", ownership_type: machine.ownership_type || "company_owned", operational_purpose: machine.operational_purpose || "sale_only", meter_type: machine.meter_type || "hour_meter", current_meter: machine.current_meter ?? "0", fuel_type: machine.fuel_type || "Diesel", acquisition_date: dateInput(machine.acquisition_date), acquisition_cost: machine.acquisition_cost ?? "0", target_selling_price: machine.target_selling_price ?? "", minimum_selling_price: machine.minimum_selling_price ?? "0", supplier_name: machine.supplier_name || "", acquisition_reference: machine.acquisition_reference || "", customs_reference: machine.customs_reference || "", title_document_reference: machine.title_document_reference || "", insurance_reference: machine.insurance_reference || "", insurance_expiry: dateInput(machine.insurance_expiry), registration_expiry: dateInput(machine.registration_expiry), equipment_origin_location_id: machine.hire_location_id || "", notes: machine.notes || "" });
-    setPhotos([]); setProblem("");
-  }
-  async function addPhotos(event) {
-    const files = [...(event.target.files || [])]; event.target.value = ""; if (!files.length) return; setProblem("");
-    try {
-      const prepared = [];
-      for (let index = 0; index < files.length; index += 1) {
-        const dataUrl = await imageToProtectedDataUrl(files[index]);
-        const position = photos.length + index;
-        prepared.push({ data_url: dataUrl, file_name: files[index].name, evidence_type: position === 0 && !editing?.id ? "main" : "other", is_primary: position === 0 && !editing?.id, caption: "" });
-      }
-      setPhotos((current) => [...current, ...prepared].slice(0, 20));
-    } catch (error) { setProblem(error.message); }
-  }
+  function openEdit(machine) { if (!machine.editability?.editable) { setProblem(machine.editability?.reason || "This excavator can no longer be edited from the register."); return; } setEditing(machine); setForm({ ...EMPTY_MACHINE, asset_code: machine.asset_code || "", asset_name: machine.asset_name || "", asset_type: machine.asset_type || "Excavator", equipment_category: machine.equipment_category || "Earthmoving Equipment", make: machine.make || "", model: machine.model || "", model_year: machine.model_year || "", serial_number: machine.serial_number || "", chassis_number: machine.chassis_number || "", engine_number: machine.engine_number || "", registration_number: machine.registration_number || "", colour: machine.colour || "", capacity_description: machine.capacity_description || "", condition_status: machine.condition_status || "good", ownership_type: machine.ownership_type || "company_owned", operational_purpose: machine.operational_purpose || "sale_only", meter_type: machine.meter_type || "hour_meter", current_meter: machine.current_meter ?? "0", fuel_type: machine.fuel_type || "Diesel", acquisition_date: dateInput(machine.acquisition_date), acquisition_cost: machine.acquisition_cost ?? "0", target_selling_price: machine.target_selling_price ?? "", minimum_selling_price: machine.minimum_selling_price ?? "0", supplier_name: machine.supplier_name || "", acquisition_reference: machine.acquisition_reference || "", customs_reference: machine.customs_reference || "", title_document_reference: machine.title_document_reference || "", insurance_reference: machine.insurance_reference || "", insurance_expiry: dateInput(machine.insurance_expiry), registration_expiry: dateInput(machine.registration_expiry), equipment_origin_location_id: machine.hire_location_id || "", notes: machine.notes || "" }); setPhotos([]); setProblem(""); }
+  async function addPhotos(event) { const files = [...(event.target.files || [])]; event.target.value = ""; if (!files.length) return; setProblem(""); try { const prepared = []; for (let index = 0; index < files.length; index += 1) { const dataUrl = await imageToProtectedDataUrl(files[index]); const position = photos.length + index; prepared.push({ data_url: dataUrl, file_name: files[index].name, evidence_type: position === 0 && !editing?.id ? "main" : "other", is_primary: position === 0 && !editing?.id, caption: "" }); } setPhotos((current) => [...current, ...prepared].slice(0, 20)); } catch (error) { setProblem(error.message); } }
   function updatePhoto(index, field, value) { setPhotos((current) => current.map((photo, photoIndex) => { if (field === "is_primary" && value && photoIndex !== index) return { ...photo, is_primary: false }; return photoIndex === index ? { ...photo, [field]: value } : photo; })); }
-  async function save(event) {
-    event.preventDefault();
-    if (!editing?.id && !photos.some((photo) => photo.is_primary)) { setProblem("Add one full main excavator photo before saving."); return; }
-    setSaving(true); setProblem(""); setNotice("");
-    try {
-      const response = editing?.id ? await axiosClient.put(`${MACHINE_API}/${editing.id}`, { ...form, photos }) : await axiosClient.post(MACHINE_API, { ...form, photos });
-      setEditing(null); setForm({ ...EMPTY_MACHINE }); setPhotos([]); setNotice(response.data?.message || "Excavator saved."); await load();
-    } catch (error) { setProblem(errorMessage(error, "Could not save the excavator.")); } finally { setSaving(false); }
-  }
+  async function save(event) { event.preventDefault(); if (!editing?.id && !photos.some((photo) => photo.is_primary)) { setProblem("Add one full main excavator photo before saving."); return; } setSaving(true); setProblem(""); setNotice(""); try { const response = editing?.id ? await axiosClient.put(`${MACHINE_API}/${editing.id}`, { ...form, photos }) : await axiosClient.post(MACHINE_API, { ...form, photos }); setEditing(null); setForm({ ...EMPTY_MACHINE }); setPhotos([]); setNotice(response.data?.message || "Excavator saved."); await load(); } catch (error) { setProblem(errorMessage(error, "Could not save the excavator.")); } finally { setSaving(false); } }
   const totalValue = machines.reduce((sum, machine) => sum + Number(machine.target_selling_price || 0), 0);
 
-  return (
-    <main className="finance-simple">
-      <header className="finance-simple__hero"><div><p>One source of truth</p><h1>Excavators</h1><span>The old register and Finance Equipment Reference are now one page. View complete photos and values here; edit only before an installment application begins. Delete is available only to the original System Administrator and clears the complete Installment integration first.</span></div><div className="finance-simple__hero-actions"><Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=start">Start New Installment</Link>{canManage ? <button className="is-primary" type="button" onClick={openCreate}>+ Register Excavator</button> : null}</div></header>
-      {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
-      {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
-      <section className="finance-simple__metrics"><article className="finance-simple__metric"><span>Registered excavators</span><strong>{machines.length}</strong></article><article className="finance-simple__metric"><span>Finance-ready</span><strong>{machines.filter((item) => item.readiness?.ready).length}</strong></article><article className="finance-simple__metric"><span>Available for installment</span><strong>{machines.filter((item) => item.readiness?.ready && item.sale_status === "available" && Number(item.active_application_count || 0) === 0).length}</strong></article><article className="finance-simple__metric"><span>Total sale value</span><strong>{money(totalValue)}</strong></article></section>
-      <section className="finance-simple__section"><div className="finance-simple__toolbar"><div><p className="finance-simple__eyebrow">Machine register</p><h2>{visibleMachines.length} machine(s)</h2></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search code, make, model, serial or chassis" /></div>
-        {loading ? <div className="finance-simple__empty">Loading excavators…</div> : null}
-        {!loading && !visibleMachines.length ? <div className="finance-simple__empty">No matching excavator records.</div> : null}
-        <div className="finance-simple__machine-grid">{visibleMachines.map((machine) => { const primary = machine.media?.find((item) => item.is_primary)?.file_url || machine.main_image_url; const canEdit = Boolean(machine.editability?.editable); return <article className="finance-simple__machine" key={machine.id}>
-          <button className="finance-simple__machine-image" type="button" onClick={() => primary && setViewerPhoto({ url: primary, title: machine.asset_name })} aria-label={`View full photo of ${machine.asset_name}`}>{primary ? <img src={primary} alt={machine.asset_name} /> : <span>🚜</span>}</button>
-          <div className="finance-simple__machine-body"><div className="finance-simple__card-head"><div><span className="finance-simple__pill">{machine.asset_code}</span><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ")}</p></div><span className={`finance-simple__pill ${machine.readiness?.ready ? "is-good" : "is-warning"}`}>{machine.readiness?.ready ? "Finance ready" : "Needs evidence"}</span></div>
-            <div className="finance-simple__facts"><div><span>Sale value</span><strong>{money(machine.target_selling_price)}</strong></div><div><span>Minimum price</span><strong>{money(machine.minimum_selling_price)}</strong></div><div><span>Serial / chassis</span><strong>{machine.serial_number || machine.chassis_number || "Missing"}</strong></div><div><span>Physical yard</span><strong>{machine.location_name || "Company-wide / not assigned"}</strong></div><div><span>Photos</span><strong>{machine.media?.length || 0}</strong></div><div><span>Sale status</span><strong>{label(machine.sale_status)}</strong></div></div>
-            {!machine.readiness?.ready ? <div className="finance-simple__notice is-info">Missing: {(machine.readiness?.missing || []).join(", ")}</div> : null}
-            <div className="finance-simple__card-actions">{machine.media?.map((photo) => <button type="button" key={photo.id} onClick={() => setViewerPhoto({ url: photo.file_url, title: `${machine.asset_name} — ${label(photo.evidence_type)}` })}>{label(photo.evidence_type)}</button>).slice(0, 3)}{canManage ? <button type="button" disabled={!canEdit} onClick={() => openEdit(machine)}>{canEdit ? "Edit details" : "Editing locked"}</button> : null}{isOriginalAdmin ? <button className="is-danger" type="button" onClick={() => setDeleteTarget(machine)}>Delete</button> : null}{machine.readiness?.ready && machine.sale_status === "available" && Number(machine.active_application_count || 0) === 0 ? <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&asset=${machine.id}`}>Start Installment</Link> : null}</div>
-            {!canEdit ? <small>{machine.editability?.reason}</small> : null}
-          </div></article>; })}</div>
-      </section>
-
-      {deleteTarget ? <InstallmentEntityDeleteDialog entityType="asset" entityId={deleteTarget.id} name={deleteTarget.asset_name} onClose={() => setDeleteTarget(null)} onDeleted={(result) => { setDeleteTarget(null); setNotice(result?.message || "Installment excavator deleted."); load(); }} /> : null}
-
-      <ExcavatorRegistrationDialog editing={editing} form={form} photos={photos} locations={locations} saving={saving} onClose={() => setEditing(null)} onSave={save} onValue={setValue} onAddPhotos={addPhotos} onUpdatePhoto={updatePhoto} onRemovePhoto={(index) => setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))} />
-
-      {viewerPhoto ? <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setViewerPhoto(null)}><section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={viewerPhoto.title} onMouseDown={(event) => event.stopPropagation()}><div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Complete uncropped photo</p><h2>{viewerPhoto.title}</h2></div><button type="button" onClick={() => setViewerPhoto(null)}>Close</button></div><div className="finance-simple__photo-viewer"><img src={viewerPhoto.url} alt={viewerPhoto.title} /></div></section></div> : null}
-    </main>
-  );
+  return <main className="finance-simple">
+    <header className="finance-simple__hero"><div><p>One source of truth</p><h1>Excavators</h1><span>The old register and Finance Equipment Reference are now one page. View complete photos and values here; edit only before an installment application begins. Delete is available only to the original System Administrator and clears the complete Installment integration first.</span></div><div className="finance-simple__hero-actions"><Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=start">Start New Installment</Link>{canManage ? <button className="is-primary" type="button" onClick={openCreate}>+ Register Excavator</button> : null}</div></header>
+    {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+    {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
+    <section className="finance-simple__metrics"><article className="finance-simple__metric"><span>Registered excavators</span><strong>{machines.length}</strong></article><article className="finance-simple__metric"><span>Finance-ready</span><strong>{machines.filter((item) => item.readiness?.ready).length}</strong></article><article className="finance-simple__metric"><span>Available for installment</span><strong>{machines.filter((item) => item.readiness?.ready && item.sale_status === "available" && Number(item.active_application_count || 0) === 0).length}</strong></article><article className="finance-simple__metric"><span>Total sale value</span><strong>{money(totalValue)}</strong></article></section>
+    <section className="finance-simple__section"><div className="finance-simple__toolbar"><div><p className="finance-simple__eyebrow">Machine register</p><h2>{visibleMachines.length} machine(s)</h2></div><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search code, make, model, serial or chassis" /></div>{loading ? <div className="finance-simple__empty">Loading excavators…</div> : null}{!loading && !visibleMachines.length ? <div className="finance-simple__empty">No matching excavator records.</div> : null}<div className="finance-simple__machine-grid">{visibleMachines.map((machine) => { const primary = machine.media?.find((item) => item.is_primary)?.file_url || machine.main_image_url; const canEdit = Boolean(machine.editability?.editable); return <article className="finance-simple__machine" key={machine.id}><button className="finance-simple__machine-image" type="button" onClick={() => primary && setViewerPhoto({ url: primary, title: machine.asset_name })} aria-label={`View full photo of ${machine.asset_name}`}>{primary ? <img src={primary} alt={machine.asset_name} /> : <span>🚜</span>}</button><div className="finance-simple__machine-body"><div className="finance-simple__card-head"><div><span className="finance-simple__pill">{machine.asset_code}</span><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ")}</p></div><span className={`finance-simple__pill ${machine.readiness?.ready ? "is-good" : "is-warning"}`}>{machine.readiness?.ready ? "Finance ready" : "Needs evidence"}</span></div><div className="finance-simple__facts"><div><span>Sale value</span><strong>{money(machine.target_selling_price)}</strong></div><div><span>Minimum price</span><strong>{money(machine.minimum_selling_price)}</strong></div><div><span>Serial / chassis</span><strong>{machine.serial_number || machine.chassis_number || "Missing"}</strong></div><div><span>Physical yard</span><strong>{machine.location_name || "Company-wide / not assigned"}</strong></div><div><span>Photos</span><strong>{machine.media?.length || 0}</strong></div><div><span>Sale status</span><strong>{label(machine.sale_status)}</strong></div></div>{!machine.readiness?.ready ? <div className="finance-simple__notice is-info">Missing: {(machine.readiness?.missing || []).join(", ")}</div> : null}<div className="finance-simple__card-actions">{machine.media?.map((photo) => <button type="button" key={photo.id} onClick={() => setViewerPhoto({ url: photo.file_url, title: `${machine.asset_name} — ${label(photo.evidence_type)}` })}>{label(photo.evidence_type)}</button>).slice(0, 3)}{canManage ? <button type="button" disabled={!canEdit} onClick={() => openEdit(machine)}>{canEdit ? "Edit details" : "Editing locked"}</button> : null}{isOriginalAdmin ? <button className="is-danger" type="button" onClick={() => setDeleteTarget(machine)}>Delete</button> : null}{machine.readiness?.ready && machine.sale_status === "available" && Number(machine.active_application_count || 0) === 0 ? <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&asset=${machine.id}`}>Start Installment</Link> : null}</div>{!canEdit ? <small>{machine.editability?.reason}</small> : null}</div></article>; })}</div></section>
+    {deleteTarget ? <InstallmentEntityDeleteDialog entityType="asset" entityId={deleteTarget.id} name={deleteTarget.asset_name} onClose={() => setDeleteTarget(null)} onDeleted={(result) => { setDeleteTarget(null); setNotice(result?.message || "Installment excavator deleted."); load(); }} /> : null}
+    <ExcavatorRegistrationDialog editing={editing} form={form} photos={photos} locations={locations} saving={saving} onClose={() => setEditing(null)} onSave={save} onValue={setValue} onAddPhotos={addPhotos} onUpdatePhoto={updatePhoto} onRemovePhoto={(index) => setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))} />
+    {viewerPhoto ? <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setViewerPhoto(null)}><section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={viewerPhoto.title} onMouseDown={(event) => event.stopPropagation()}><div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Complete uncropped photo</p><h2>{viewerPhoto.title}</h2></div><button type="button" onClick={() => setViewerPhoto(null)}>Close</button></div><div className="finance-simple__photo-viewer"><img src={viewerPhoto.url} alt={viewerPhoto.title} /></div></section></div> : null}
+  </main>;
 }
