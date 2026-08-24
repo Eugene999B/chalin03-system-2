@@ -3,7 +3,6 @@
 const middlewarePath = require.resolve("../middleware/equipmentCatalogueIntegrityMiddleware");
 const catalogueRoutes = require("../routes/equipmentCatalogueRoutes");
 const financeRoutes = require("../routes/equipmentFinanceIndependentRoutes");
-const { ensureEquipmentSalesSchema } = require("../services/equipmentSalesSchemaService");
 
 const middleware = require(middlewarePath);
 const original = middleware.enforceEquipmentCatalogueWriteIntegrity;
@@ -26,28 +25,10 @@ if (!middleware.__chalin03DepositBoundaryInstalled) {
   middleware.enforceEquipmentCatalogueWriteIntegrity = async function depositBoundary(req, res, next) {
     if (!isDepositBoundary(req)) return original(req, res, next);
 
-    try {
-      // Opening Deposit has its own exact Finance schema gate. Require only
-      // the shared catalogue core here so unrelated legacy/commercial tables
-      // cannot block the Finance deposit request before its safeguards run.
-      await ensureEquipmentSalesSchema({ requireFull: false });
-    } catch (error) {
-      console.error(
-        "Equipment Sales core foundation preparation failed for Finance Deposit:",
-        error
-      );
-      return res.status(503).json({
-        status: "error",
-        code: "EQUIPMENT_SALES_FOUNDATION_STARTUP_FAILED",
-        message:
-          "The Finance deposit service could not verify the shared equipment foundation safely.",
-        request_id: req.requestId || null,
-      });
-    }
-
-    // Continue through the normal Equipment Catalogue router. The approved
-    // Finance router is mounted above on /sales/deposit-reservations, so Express
-    // retains its normal route lifecycle and error handling.
+    // Deposit/Reservation is an independent Finance workflow. Do not make it
+    // depend on the broader Equipment Sales commercial foundation. The Finance
+    // route mounted below performs its own exact schema, trigger and migration
+    // readiness checks before any financial mutation is allowed.
     return next();
   };
 
