@@ -1,6 +1,6 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "deploy": {
-    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/forceEquipmentFinancePhaseFourMigration.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinanceDepositAgreementFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/verifyEquipmentFinanceDepositReadiness.js"
+    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm run migrate:equipment-finance:production"
   }
 }
