@@ -310,20 +310,27 @@ function verifyPhaseFourDepositReservationResults(results, migrationName) {
     throw new Error(`Migration record ${migrationName} was not verified.`);
   }
 
-  const expectedTriggers = new Set([
+  const expectedTriggers = [
     "trg_equipment_finance_payment_gate_before_insert",
     "trg_equipment_finance_reservation_gate_before_insert",
     "trg_equipment_finance_commitment_gate_before_update",
-  ]);
+  ];
   assertExactNames(
     triggerRows,
     "TRIGGER_NAME",
-    [...expectedTriggers],
+    expectedTriggers,
     "Phase 4 deposit-reservation triggers"
   );
-  if (getNumericValue(indexRows, "missing_deposit_reservation_indexes") !== 0) {
-    throw new Error("Phase 4 verifier found missing deposit-reservation indexes.");
+
+  if (
+    indexRows.length !== 1 ||
+    Number(indexRows[0]?.NON_UNIQUE) !== 0 ||
+    indexRows[0]?.INDEX_NAME !== "uq_equipment_finance_payment_idempotency" ||
+    indexRows[0]?.indexed_columns !== "idempotency_key"
+  ) {
+    throw new Error("Phase 4 verifier found an invalid or missing deposit idempotency index.");
   }
+
   if (getNumericValue(invalidRows, "invalid_controlled_reservations") !== 0) {
     throw new Error("Phase 4 verifier found invalid controlled reservations.");
   }
