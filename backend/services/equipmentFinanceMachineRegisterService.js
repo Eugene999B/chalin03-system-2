@@ -184,8 +184,8 @@ function normalizeMachine(input, { partial = false } = {}) {
   }
 
   for (const [key, fallback, label] of [
-    ["current_meter", 0, "Current meter"],
-    ["acquisition_cost", 0, "Acquisition cost"],
+    ["current_meter", null, "Current meter"],
+    ["acquisition_cost", null, "Acquisition cost"],
     ["target_selling_price", 0, "Target selling price"],
     ["minimum_selling_price", 0, "Minimum selling price"],
   ]) {
