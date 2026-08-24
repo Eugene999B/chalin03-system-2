@@ -1,0 +1,6 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm run migrate:equipment-finance:production"
+  }
+}
