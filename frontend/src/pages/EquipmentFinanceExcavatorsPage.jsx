@@ -19,20 +19,40 @@ function dateInput(value) { return value ? String(value).slice(0, 10) : ""; }
 
 async function imageToProtectedDataUrl(file) {
   if (!file?.type?.startsWith("image/")) throw new Error("Choose a valid image.");
+  if (Number(file.size || 0) > 25 * 1024 * 1024) throw new Error("The selected picture is larger than 25 MB.");
   const source = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error("Could not read the selected image.")); reader.readAsDataURL(file); });
   const image = await new Promise((resolve, reject) => { const item = new Image(); item.onload = () => resolve(item); item.onerror = () => reject(new Error("Could not prepare the selected image.")); item.src = source; });
-  let maximumWidth = 1280; let maximumHeight = 960; let quality = 0.72;
-  for (let pass = 0; pass < 12; pass += 1) {
-    const scale = Math.min(maximumWidth / image.width, maximumHeight / image.height, 1);
-    const width = Math.max(1, Math.round(image.width * scale));
-    const height = Math.max(1, Math.round(image.height * scale));
-    const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
-    const context = canvas.getContext("2d"); context.fillStyle = "#ffffff"; context.fillRect(0, 0, width, height); context.drawImage(image, 0, 0, width, height);
-    const output = canvas.toDataURL("image/webp", quality); const bytes = Math.ceil((output.length - output.indexOf(",") - 1) * 0.75);
-    if (bytes <= 47 * 1024) return output;
-    quality = Math.max(0.35, quality - 0.06); maximumWidth = Math.round(maximumWidth * 0.88); maximumHeight = Math.round(maximumHeight * 0.88);
+  let maximumWidth = 1800;
+  let maximumHeight = 1400;
+  const qualitySteps = [0.88, 0.82, 0.76, 0.70, 0.64, 0.58, 0.52, 0.46];
+  let bestOutput = null;
+  for (let pass = 0; pass < 14; pass += 1) {
+    const scale = Math.min(maximumWidth / image.naturalWidth, maximumHeight / image.naturalHeight, 1);
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) throw new Error("This browser cannot prepare the selected picture.");
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+    for (const quality of qualitySteps) {
+      const output = canvas.toDataURL("image/webp", quality);
+      const comma = output.indexOf(",");
+      const bytes = comma >= 0 ? Math.ceil((output.length - comma - 1) * 0.75) : Number.MAX_SAFE_INTEGER;
+      bestOutput = { output, bytes, width, height };
+      if (bytes <= 192 * 1024) return output;
+    }
+    maximumWidth = Math.max(760, Math.floor(maximumWidth * 0.88));
+    maximumHeight = Math.max(600, Math.floor(maximumHeight * 0.88));
   }
-  throw new Error("The picture is still too large after safe resizing. Choose a clearer, smaller photo.");
+  if (!bestOutput) throw new Error("The picture could not be prepared.");
+  if (bestOutput.bytes > 192 * 1024) throw new Error("The picture could not be compressed safely. Please choose another image.");
+  return bestOutput.output;
 }
 
 function ModalField({ title, children, wide = false, hint = "" }) {
