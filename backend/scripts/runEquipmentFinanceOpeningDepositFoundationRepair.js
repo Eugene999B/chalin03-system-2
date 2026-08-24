@@ -104,8 +104,22 @@ function splitSqlScript(sqlText) {
   return statements;
 }
 
+function migrationDirectory() {
+  const candidates = [
+    path.resolve(__dirname, "../database/migrations"),
+    path.resolve(__dirname, "../../database/migrations"),
+  ];
+  const existing = candidates.find((directory) => fs.existsSync(directory));
+  if (!existing) {
+    throw new Error(
+      `Approved Opening Deposit migration directory is missing. Checked: ${candidates.join(", ")}`
+    );
+  }
+  return existing;
+}
+
 function readMigrationFile(filename) {
-  const filePath = path.resolve(__dirname, "../../database/migrations", filename);
+  const filePath = path.join(migrationDirectory(), filename);
   if (!fs.existsSync(filePath)) {
     throw new Error(`Approved Opening Deposit SQL file is missing: ${filePath}`);
   }
@@ -206,9 +220,7 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
     );
     validateRepair(verifierResults);
 
-    console.log(
-      `Verified ${MIGRATION_RECORD} on ${databaseName}.`
-    );
+    console.log(`Verified ${MIGRATION_RECORD} on ${databaseName}.`);
     return {
       applied: true,
       database_name: databaseName,
