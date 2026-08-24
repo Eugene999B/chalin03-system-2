@@ -22,6 +22,24 @@ const {
 
 const router = express.Router();
 
+const EDIT_TEXT_FIELDS = new Set([
+  "asset_code", "asset_name", "asset_type", "equipment_category", "make", "model",
+  "serial_number", "chassis_number", "engine_number", "registration_number", "colour",
+  "capacity_description", "supplier_name", "acquisition_reference", "customs_reference",
+  "title_document_reference", "insurance_reference", "fuel_type", "notes",
+]);
+const EDIT_ENUM_FIELDS = {
+  operational_purpose: new Set(["sale_only", "sale_or_hire"]),
+  condition_status: new Set(["excellent", "good", "fair", "damaged", "under_inspection"]),
+  ownership_type: new Set(["company_owned", "leased", "consignment", "customer_owned"]),
+  meter_type: new Set(["hour_meter", "odometer"]),
+};
+const EDIT_NUMBER_FIELDS = new Set([
+  "model_year", "current_meter", "acquisition_cost", "target_selling_price",
+  "minimum_selling_price", "standard_hire_rate",
+]);
+const EDIT_DATE_FIELDS = new Set(["acquisition_date", "insurance_expiry", "registration_expiry"]);
+
 function userId(req) {
   const id = Number(req.user?.id || 0);
   return Number.isInteger(id) && id > 0 ? id : null;
@@ -30,6 +48,45 @@ function userId(req) {
 function positiveId(value) {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function cleanEditPayload(input = {}) {
+  const source = input && typeof input === "object" ? input : {};
+  const output = {};
+
+  for (const field of EDIT_TEXT_FIELDS) {
+    if (source[field] === undefined) continue;
+    output[field] = String(source[field] ?? "").trim();
+  }
+
+  for (const [field, allowed] of Object.entries(EDIT_ENUM_FIELDS)) {
+    if (source[field] === undefined || source[field] === null || source[field] === "") continue;
+    const normalized = String(source[field]).trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (allowed.has(normalized)) output[field] = normalized;
+  }
+
+  for (const field of EDIT_NUMBER_FIELDS) {
+    if (source[field] === undefined || source[field] === null || source[field] === "") continue;
+    const text = typeof source[field] === "string" ? source[field].replace(/,/g, "").trim() : source[field];
+    const number = Number(text);
+    if (Number.isFinite(number) && number >= 0) output[field] = number;
+  }
+
+  for (const field of EDIT_DATE_FIELDS) {
+    if (source[field] === undefined || source[field] === null || source[field] === "") continue;
+    const text = String(source[field]).trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) output[field] = text;
+  }
+
+  // Only pass a location when the edit form explicitly supplies a real positive id.
+  // Unchanged/invalid legacy locations are preserved by the machine service instead.
+  if (source.equipment_origin_location_id !== undefined) {
+    const locationId = positiveId(source.equipment_origin_location_id);
+    if (locationId) output.equipment_origin_location_id = locationId;
+  }
+
+  if (Array.isArray(source.photos)) output.photos = source.photos;
+  return output;
 }
 
 function sendError(res, error, fallback) {
@@ -142,7 +199,8 @@ router.post("/", requirePermission("fleet.assets.manage"), async (req, res) => {
 router.put("/:assetId", requirePermission("fleet.assets.manage"), async (req, res) => {
   try {
     await assertMachineStillEditable(req.params.assetId);
-    const input = await normalizePhotoPayload(req.body || {});
+    const cleanedPayload = cleanEditPayload(req.body || {});
+    const input = await normalizePhotoPayload(cleanedPayload);
     const machine = await updateFinanceMachine({
       assetId: req.params.assetId,
       input,
