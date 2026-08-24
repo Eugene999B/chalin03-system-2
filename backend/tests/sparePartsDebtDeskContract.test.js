@@ -27,7 +27,6 @@ test("Debt Desk resolves canonical customer identity without deleting snapshots"
     routes,
     /COALESCE\(NULLIF\(c\.name, ''\), NULLIF\(d\.customer_name, ''\), NULLIF\(s\.customer_name, ''\)/
   );
-  assert.match(routes, /COALESCE\(d\.customer_id, s\.customer_id\)/);
   assert.match(routes, /debt_customer_name_snapshot/);
   assert.match(routes, /sale_customer_name/);
   assert.match(legacyPage, /Current customer names shown/);
@@ -36,6 +35,7 @@ test("Debt Desk resolves canonical customer identity without deleting snapshots"
   assert.match(identityRepair, /PLACEHOLDER_NAMES/);
   assert.match(identityRepair, /CASH CUSTOMER/);
   assert.match(identityRepair, /matches\.length === 1/);
+  assert.match(identityRepair, /SET customer_id = \?/);
   assert.doesNotMatch(routes, DEBT_DELETE);
   assert.doesNotMatch(routes, RUNTIME_DDL);
   assert.doesNotMatch(identityRepair, DEBT_DELETE);
