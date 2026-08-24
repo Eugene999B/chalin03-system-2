@@ -1,0 +1,1 @@
+trigger fleet_assets values validation
