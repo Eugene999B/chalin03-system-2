@@ -192,9 +192,11 @@ test("equipment pictures remain auditable instead of being deleted", () => {
   assert.doesNotMatch(catalogueRoutes, /DELETE\s+FROM\s+equipment_media/i);
 });
 
-test("secure mobile equipment photos are compressed, validated and checksummed", () => {
-  assert.match(catalogueIntegrityMiddleware, /MAX_PROTECTED_PHOTO_BYTES = 44 \* 1024/);
-  assert.match(catalogueIntegrityMiddleware, /image\\\/\(\?:jpeg\|png\|webp\)/);
+test("secure equipment photos accept image data, preserve full images and use a sane quality ceiling", () => {
+  assert.match(catalogueIntegrityMiddleware, /MAX_PROTECTED_PHOTO_BYTES = 192 \* 1024/);
+  assert.match(catalogueIntegrityMiddleware, /data:\(image\\\/\[\^;\]\+\);base64/);
+  assert.match(catalogueIntegrityMiddleware, /mimeType\.startsWith\("image\/"\)/);
+  assert.match(catalogueIntegrityMiddleware, /300000/);
   assert.match(catalogueIntegrityMiddleware, /crypto\.createHash\("sha256"\)/);
   assert.match(catalogueIntegrityMiddleware, /database-data-url:/);
   assert.match(catalogueIntegrityMiddleware, /EQUIPMENT_SECURE_PHOTO_UPLOADED/);
