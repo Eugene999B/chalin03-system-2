@@ -12,7 +12,6 @@ const STALE_SESSION_RETRY_KEY = "__chalin03StaleSessionRetried";
 const FINANCE_APPLICATION_PATH =
   "/equipment-catalogue/sales/credit-applications";
 const FINANCE_READINESS_PATH = `${FINANCE_APPLICATION_PATH}/readiness`;
-const FINANCE_READINESS_TIMEOUT_MS = 8000;
 const FINANCE_APPLICATION_TIMEOUT_MS = 12000;
 const PUBLIC_SESSION_PATHS = new Set([
   "/auth/login",
@@ -58,9 +57,7 @@ function applyFinanceApplicationDeadline(config) {
   if (!isFinanceApplicationRead(config)) return config;
   const path = cleanRequestPath(config?.url);
   const deadline =
-    path === FINANCE_READINESS_PATH
-      ? FINANCE_READINESS_TIMEOUT_MS
-      : FINANCE_APPLICATION_TIMEOUT_MS;
+    path === FINANCE_READINESS_PATH ? 8000 : FINANCE_APPLICATION_TIMEOUT_MS;
   const configuredTimeout = Number(config.timeout);
   config.timeout =
     Number.isFinite(configuredTimeout) && configuredTimeout > 0
@@ -69,14 +66,30 @@ function applyFinanceApplicationDeadline(config) {
   return config;
 }
 
+function bypassFinanceDepositReadinessCache(config) {
+  const path = cleanRequestPath(config?.url);
+  if (
+    String(config?.method || "get").toLowerCase() !== "get" ||
+    path !== "/equipment-catalogue/sales/deposit-reservations/readiness"
+  ) {
+    return config;
+  }
+  config.params = {
+    ...(config.params || {}),
+    _chalin03_readiness: Date.now(),
+  };
+  config.headers = {
+    ...(config.headers || {}),
+    "Cache-Control": "no-cache, no-store, max-age=0",
+    Pragma: "no-cache",
+  };
+  return config;
+}
+
 function getStoredUser() {
   try {
     const storedUser = localStorage.getItem(USER_KEY);
-
-    if (!storedUser) {
-      return null;
-    }
-
+    if (!storedUser) return null;
     return JSON.parse(storedUser);
   } catch {
     return null;
@@ -89,21 +102,16 @@ function getStoredWorkspaceContextId(workspaceCode) {
     equipment_hire: "chalin03_active_context_equipment_hire",
   };
   const key = keyMap[workspaceCode];
-
   if (!key) return "";
-
   const value = Number(localStorage.getItem(key));
   return Number.isInteger(value) && value > 0 ? String(value) : "";
 }
 
 function getStoredSessionInfo() {
   const user = getStoredUser();
-
   const workspaceCode =
     user?.workspace_code || user?.active_workspace?.code || "spare_parts";
-
   const isSparePartsWorkspace = workspaceCode === "spare_parts";
-
   const branchId = isSparePartsWorkspace
     ? user?.branch_id ||
       user?.default_branch_id ||
@@ -111,7 +119,6 @@ function getStoredSessionInfo() {
       user?.selected_branch?.branch_id ||
       ""
     : "";
-
   const branchCode = isSparePartsWorkspace
     ? user?.branch_code ||
       user?.code ||
@@ -119,7 +126,6 @@ function getStoredSessionInfo() {
       user?.selected_branch?.code ||
       ""
     : "";
-
   const branchName = isSparePartsWorkspace
     ? user?.branch_name ||
       user?.name ||
@@ -127,13 +133,7 @@ function getStoredSessionInfo() {
       user?.selected_branch?.name ||
       ""
     : "";
-
-  return {
-    workspaceCode,
-    branchId,
-    branchCode,
-    branchName,
-  };
+  return { workspaceCode, branchId, branchCode, branchName };
 }
 
 function clearStoredSession() {
@@ -154,7 +154,6 @@ function buildCachedProfileResponse(error, cachedUser) {
       : workspaceCode === "equipment_hire"
       ? "Equipment Hire"
       : "Spare Parts");
-
   return {
     data: {
       status: "degraded",
@@ -177,7 +176,6 @@ function buildCachedProfileResponse(error, cachedUser) {
 
 axiosClient.interceptors.request.use((config) => {
   assertSparePartsInstallmentRequestAllowed(config);
-
   const token = localStorage.getItem(TOKEN_KEY) || "";
   const publicSessionRequest = isPublicSessionRequest(config);
   const requestToken = publicSessionRequest ? "" : token;
@@ -188,20 +186,15 @@ axiosClient.interceptors.request.use((config) => {
     ? ""
     : getStoredWorkspaceContextId(workspaceCode);
 
-  // Keep the exact token used by this request. A late 401 from an older desktop
-  // session must never be allowed to erase a newer successful login.
   config[REQUEST_TOKEN_KEY] = requestToken;
-
   if (requestToken) {
     config.headers.Authorization = `Bearer ${requestToken}`;
   } else if (config.headers?.Authorization) {
     delete config.headers.Authorization;
   }
-
   if (workspaceCode) {
     config.headers["X-Chalin03-Workspace"] = String(workspaceCode);
   }
-
   if (financeScreen) {
     config.headers["X-Chalin03-Division"] = "installment_finance";
     if (config.headers?.["X-Chalin03-Context-Id"]) {
@@ -210,20 +203,11 @@ axiosClient.interceptors.request.use((config) => {
   } else if (workspaceContextId) {
     config.headers["X-Chalin03-Context-Id"] = workspaceContextId;
   }
+  if (branchId) config.headers["X-Chalin03-Branch-Id"] = String(branchId);
+  if (branchCode) config.headers["X-Chalin03-Branch-Code"] = String(branchCode);
+  if (branchName) config.headers["X-Chalin03-Branch-Name"] = String(branchName);
 
-  // Branch headers are sent only for the Spare Parts workspace.
-  if (branchId) {
-    config.headers["X-Chalin03-Branch-Id"] = String(branchId);
-  }
-
-  if (branchCode) {
-    config.headers["X-Chalin03-Branch-Code"] = String(branchCode);
-  }
-
-  if (branchName) {
-    config.headers["X-Chalin03-Branch-Name"] = String(branchName);
-  }
-
+  bypassFinanceDepositReadinessCache(config);
   return applyFinanceApplicationDeadline(config);
 });
 
@@ -250,9 +234,7 @@ axiosClient.interceptors.response.use(
     const requestToken = String(error.config?.[REQUEST_TOKEN_KEY] || "");
     const activeToken = String(localStorage.getItem(TOKEN_KEY) || "");
     const cachedUser = getStoredUser();
-    const isOwnerRecoveryRequest = requestUrl.includes(
-      "/release2-final/owner/"
-    );
+    const isOwnerRecoveryRequest = requestUrl.includes("/release2-final/owner/");
     const isOwnerRecoveryPage = window.location.pathname === "/owner-recovery";
     const isStaleSessionResponse =
       statusCode === 401 &&
@@ -275,8 +257,6 @@ axiosClient.interceptors.response.use(
       const alreadyRetried = Boolean(error.config?.[STALE_SESSION_RETRY_KEY]);
       const requestWasAborted = Boolean(error.config?.signal?.aborted);
       if (!alreadyRetried && !requestWasAborted) {
-        // Retry once with the current token. Never return an unresolved promise:
-        // that previously left loading flags permanently true without an error.
         return axiosClient.request({
           ...error.config,
           [STALE_SESSION_RETRY_KEY]: true,
@@ -287,7 +267,6 @@ axiosClient.interceptors.response.use(
           },
         });
       }
-
       return Promise.reject(
         new axios.CanceledError(
           "A stale authenticated request was replaced by the current session."
@@ -296,10 +275,6 @@ axiosClient.interceptors.response.use(
     }
 
     if (isTemporaryProfileFailure) {
-      // Login has already been cryptographically accepted and the server-issued
-      // user/branch response is stored. A temporary profile refresh failure must
-      // not throw a fresh desktop login back to the login page. Real 401/403/404
-      // security rejections never enter this fallback.
       try {
         sessionStorage.setItem(
           "chalin03_session_warning",
@@ -309,11 +284,11 @@ axiosClient.interceptors.response.use(
       } catch {
         // Session continuity does not depend on warning storage.
       }
-
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
 
-    if (statusCode === 401 &&
+    if (
+      statusCode === 401 &&
       !isOwnerRecoveryRequest &&
       !isOwnerRecoveryPage &&
       !isChangePasswordCredentialFailure
@@ -330,12 +305,8 @@ axiosClient.interceptors.response.use(
             "Your session ended after 8 hours or at 12:00 a.m. Ghana time. Please login again."
         );
       }
-
-      // A request without an authenticated token, or one using the current
-      // token, may clear the current session. A stale request is handled above.
       if (!requestToken || requestToken === activeToken) {
         clearStoredSession();
-
         if (window.location.pathname !== "/login") {
           window.location.href = "/login";
         }
