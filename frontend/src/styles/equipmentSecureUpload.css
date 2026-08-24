@@ -10,7 +10,7 @@
 
 .equipment-secure-upload__preview {
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   margin-top: 10px;
@@ -22,12 +22,14 @@
 }
 
 .equipment-secure-upload__preview img {
-  width: 86px;
-  height: 72px;
+  width: 96px;
+  height: 78px;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  padding: 4px;
   border-radius: 12px;
-  background: #dce6ef;
+  background: #071d35;
 }
 
 .equipment-secure-upload__preview img:not([src]) {
@@ -72,12 +74,12 @@
 
 @media (max-width: 560px) {
   .equipment-secure-upload__preview {
-    grid-template-columns: 74px minmax(0, 1fr);
+    grid-template-columns: 82px minmax(0, 1fr);
     border-radius: 14px;
   }
 
   .equipment-secure-upload__preview img {
-    width: 74px;
-    height: 66px;
+    width: 82px;
+    height: 70px;
   }
 }
