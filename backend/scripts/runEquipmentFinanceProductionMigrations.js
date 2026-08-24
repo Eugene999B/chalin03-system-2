@@ -19,11 +19,13 @@ const PRODUCTION_MIGRATION_PLAN = Object.freeze([
       "invalid_credit_application_rows",
       "orphan_credit_evidence_rows",
     ],
+    verificationType: "numeric-problems",
   },
   {
     name: "20260729_equipment_finance_agreement_activation",
     migration: "20260729_equipment_finance_agreement_activation.sql",
     verifier: "20260729_equipment_finance_agreement_activation_verify.sql",
+    migrationRecord: "20260729_equipment_finance_agreement_activation",
     expectedProblems: [
       "missing_activation_columns",
       "missing_activation_indexes",
@@ -35,11 +37,13 @@ const PRODUCTION_MIGRATION_PLAN = Object.freeze([
       "forbidden_hire_link_columns",
       "activation_migration_record_missing",
     ],
+    verificationType: "numeric-problems",
   },
   {
     name: "20260729_equipment_finance_deposit_reservation",
     migration: "20260729_equipment_finance_deposit_reservation.sql",
     verifier: "20260729_equipment_finance_deposit_reservation_verify.sql",
+    migrationRecord: "20260729_equipment_finance_deposit_reservation",
     expectedProblems: [
       "missing_deposit_reservation_columns",
       "missing_deposit_reservation_indexes",
@@ -54,6 +58,27 @@ const PRODUCTION_MIGRATION_PLAN = Object.freeze([
       "forbidden_deposit_hire_link_columns",
       "deposit_reservation_migration_record_missing",
     ],
+    verificationType: "numeric-problems",
+  },
+  {
+    name: "20260805_equipment_finance_opening_deposit_foundation_repair",
+    migration: "20260805_equipment_finance_opening_deposit_foundation_repair.sql",
+    verifier: "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql",
+    migrationRecord: "20260805_equipment_finance_opening_deposit_foundation_repair",
+    expectedProblems: [
+      "missing_opening_deposit_columns",
+      "missing_opening_deposit_indexes",
+      "duplicate_opening_deposit_idempotency_keys",
+    ],
+    verificationType: "numeric-problems",
+  },
+  {
+    name: "20260803_equipment_finance_phase4_deposit_reservation_integrity",
+    migration: "20260803_equipment_finance_phase4_deposit_reservation_integrity.sql",
+    verifier: "20260803_equipment_finance_phase4_deposit_reservation_integrity_verify.sql",
+    migrationRecord: "20260803_equipment_finance_phase4_deposit_reservation_integrity",
+    expectedProblems: ["invalid_controlled_reservations"],
+    verificationType: "phase4",
   },
   {
     name: "20260729_equipment_finance_final_lifecycle",
@@ -72,6 +97,7 @@ const PRODUCTION_MIGRATION_PLAN = Object.freeze([
       "uncontrolled_finance_ownership_statuses",
       "controlled_finance_assets_active_on_hire",
     ],
+    verificationType: "numeric-problems",
   },
 ]);
 
@@ -192,31 +218,72 @@ function assertZeroProblemResult(rows, key, migrationName) {
   }
 }
 
+function assertMigrationRecord(rows, migrationName) {
+  if (
+    !Array.isArray(rows) ||
+    rows.length !== 1 ||
+    rows[0]?.migration_name !== migrationName
+  ) {
+    throw new Error(`${migrationName} migration record was not verified.`);
+  }
+}
+
+function assertExactNames(rows, key, requiredNames, label) {
+  const actual = new Set((rows || []).map((row) => String(row[key] || "")));
+  const missing = requiredNames.filter((name) => !actual.has(name));
+  if (missing.length > 0) {
+    throw new Error(`${label} is missing: ${missing.join(", ")}.`);
+  }
+}
+
+function validatePhaseFourVerifier(results, migrationName) {
+  if (results.length !== 4) {
+    throw new Error(
+      `${migrationName} verifier returned ${results.length} result sets instead of 4.`
+    );
+  }
+
+  const [migrationRows, triggerRows, indexRows, invalidReservationRows] = results;
+  assertMigrationRecord(migrationRows, migrationName);
+  assertExactNames(
+    triggerRows,
+    "TRIGGER_NAME",
+    [
+      "trg_equipment_finance_payment_gate_before_insert",
+      "trg_equipment_finance_reservation_gate_before_insert",
+      "trg_equipment_finance_commitment_gate_before_update",
+    ],
+    "Phase 4 Finance triggers"
+  );
+  assertExactNames(
+    indexRows,
+    "INDEX_NAME",
+    ["uq_equipment_finance_payment_idempotency"],
+    "Phase 4 Finance payment idempotency index"
+  );
+  assertZeroProblemResult(
+    invalidReservationRows,
+    "invalid_controlled_reservations",
+    migrationName
+  );
+}
+
 function validateVerifierResults(planItem, results) {
-  const expectedLength =
-    planItem.expectedProblems.length + (planItem.migrationRecord ? 1 : 0);
+  const expectedLength = planItem.expectedProblems.length + 1;
   if (results.length !== expectedLength) {
     throw new Error(
       `${planItem.name} verifier returned ${results.length} result sets instead of ${expectedLength}.`
     );
   }
 
-  let problemOffset = 0;
-  if (planItem.migrationRecord) {
-    const migrationRows = results[0];
-    if (
-      migrationRows.length !== 1 ||
-      migrationRows[0]?.migration_name !== planItem.migrationRecord
-    ) {
-      throw new Error(
-        `${planItem.name} migration record ${planItem.migrationRecord} was not verified.`
-      );
-    }
-    problemOffset = 1;
+  if (planItem.verificationType === "phase4") {
+    validatePhaseFourVerifier(results, planItem.name);
+    return;
   }
 
+  assertMigrationRecord(results[0], planItem.migrationRecord);
   planItem.expectedProblems.forEach((key, index) => {
-    assertZeroProblemResult(results[index + problemOffset], key, planItem.name);
+    assertZeroProblemResult(results[index + 1], key, planItem.name);
   });
 }
 
