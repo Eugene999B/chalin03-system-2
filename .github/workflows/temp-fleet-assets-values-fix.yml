@@ -1,0 +1,55 @@
+name: Temporary fleet_assets values fix
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.ref == 'fix/remove-fleet-assets-stray-zero'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/remove-fleet-assets-stray-zero
+          fetch-depth: 0
+      - name: Remove stray fleet_assets VALUES zero
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('backend/services/equipmentFinanceMachineRegisterService.js')
+          text = path.read_text(encoding='utf-8')
+          old = '         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, TRUE, ?, ?\n'
+          new = '         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected stray-zero VALUES pattern exactly once, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+      - name: Validate SQL shape
+        shell: python
+        run: |
+          from pathlib import Path
+          text = Path('backend/services/equipmentFinanceMachineRegisterService.js').read_text(encoding='utf-8')
+          start = text.index('       ) VALUES (', text.index('INSERT INTO fleet_assets'))
+          end = text.index('       )`,', start)
+          values = text[start:end]
+          expressions = [x.strip() for x in values.split('VALUES (',1)[1].rsplit(')',1)[0].split(',')]
+          if len(expressions) != 39:
+              raise SystemExit(f'expected 39 VALUES expressions, found {len(expressions)}')
+          print('fleet_assets VALUES expression count:', len(expressions))
+      - name: Syntax check
+        run: node --check backend/services/equipmentFinanceMachineRegisterService.js
+      - name: Remove helper and commit only service change
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/temp-fleet-assets-values-fix.yml
+          git add backend/services/equipmentFinanceMachineRegisterService.js
+          git diff --cached --check
+          git commit -m 'fix: correct fleet_assets VALUES expression count'
+          git push origin HEAD:fix/remove-fleet-assets-stray-zero
