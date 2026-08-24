@@ -1,34 +1,79 @@
+/* Canonical equipment media presentation: full machine first, details underneath. */
+.equipment-catalogue .equipment-card__image {
+  aspect-ratio: 16 / 10;
+  min-height: 220px;
+}
 
-/* Equipment catalogue: always show the complete machine photo. */
 .equipment-catalogue .equipment-card__image img,
 .equipment-catalogue .equipment-detail__cover img,
 .equipment-catalogue .equipment-detail__gallery article img {
-  object-fit: contain;
-  object-position: center;
+  object-fit: contain !important;
+  object-position: center !important;
 }
 
 .equipment-catalogue .equipment-card__image img {
-  padding: 10px;
-  background: #eef3f7;
-}
-
-.equipment-catalogue .equipment-detail__cover {
-  grid-template-columns: 1fr;
-}
-
-.equipment-catalogue .equipment-detail__cover img {
   width: 100%;
-  height: clamp(320px, 52vh, 620px);
-  min-height: 320px;
-  padding: 18px;
+  height: 100%;
+  padding: 12px;
   background: #071d35;
 }
 
-.equipment-catalogue .equipment-detail__cover > div {
-  padding: 22px 24px 26px;
+.equipment-catalogue .equipment-detail__cover {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto auto !important;
+  min-height: 0 !important;
 }
 
-.equipment-catalogue .equipment-detail__gallery article img {
-  padding: 4px;
-  background: #eef3f7;
+.equipment-catalogue .equipment-detail__cover img {
+  width: 100% !important;
+  height: clamp(300px, 48vh, 560px) !important;
+  min-height: 300px !important;
+  padding: 18px !important;
+  background: #071d35 !important;
+}
+
+.equipment-catalogue .equipment-detail__cover > div {
+  width: 100%;
+  padding: 20px 24px 24px;
+}
+
+.equipment-catalogue .equipment-detail__gallery > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.equipment-catalogue .equipment-detail__gallery article {
+  display: grid;
+  grid-template-columns: 1fr !important;
+  min-height: 0 !important;
+}
+
+.equipment-catalogue .equipment-detail__gallery article img,
+.equipment-catalogue .equipment-detail__gallery article > span {
+  width: 100% !important;
+  height: 160px !important;
+  min-height: 160px !important;
+  padding: 8px;
+  background: #071d35;
+}
+
+.equipment-catalogue .equipment-detail__gallery article > div {
+  padding: 10px 12px 14px;
+}
+
+@media (max-width: 760px) {
+  .equipment-catalogue .equipment-detail__gallery > div {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .equipment-catalogue .equipment-detail__cover img {
+    height: 300px !important;
+    min-height: 300px !important;
+  }
+
+  .equipment-catalogue .equipment-detail__gallery > div {
+    grid-template-columns: 1fr;
+  }
 }
