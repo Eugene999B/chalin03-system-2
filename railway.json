@@ -6,7 +6,7 @@
     "buildCommand": null
   },
   "deploy": {
-    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm run migrate:equipment-finance:opening-deposit-foundation:production && npm run migrate:equipment-finance:phase4:production && npm run verify:equipment-finance:deposit-readiness",
+    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm run migrate:equipment-finance:opening-deposit-bootstrap:production && npm run verify:equipment-finance:deposit-readiness",
     "startCommand": null
   }
 }
