@@ -35,9 +35,7 @@ const RELEASES = Object.freeze([
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
   if (!String(value || "").trim()) {
-    throw new Error(
-      `Missing required database variable ${primaryName}${fallbackName ? ` or ${fallbackName}` : ""}.`
-    );
+    throw new Error(`Missing required database variable ${primaryName}${fallbackName ? ` or ${fallbackName}` : ""}.`);
   }
   return value;
 }
@@ -45,15 +43,8 @@ function requiredEnv(primaryName, fallbackName) {
 function getSslConfig(env = process.env) {
   if (String(env.DB_SSL || "").trim().toLowerCase() !== "true") return undefined;
   const encodedCa = String(env.DB_SSL_CA_BASE64 || "").trim();
-  if (encodedCa) {
-    return {
-      ca: Buffer.from(encodedCa, "base64").toString("utf8"),
-      rejectUnauthorized: true,
-    };
-  }
-  const disabled = ["0", "false", "no", "off"].includes(
-    String(env.DB_SSL_REJECT_UNAUTHORIZED || "true").trim().toLowerCase()
-  );
+  if (encodedCa) return { ca: Buffer.from(encodedCa, "base64").toString("utf8"), rejectUnauthorized: true };
+  const disabled = ["0", "false", "no", "off"].includes(String(env.DB_SSL_REJECT_UNAUTHORIZED || "true").trim().toLowerCase());
   return { rejectUnauthorized: !disabled };
 }
 
@@ -72,54 +63,13 @@ function connectionOptions() {
 }
 
 function hasExecutableSql(sqlText) {
-  return String(sqlText || "")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:--|#).*$/, ""))
-    .join("\n")
-    .trim().length > 0;
-}
-
-function splitSqlScript(sqlText) {
-  const statements = [];
-  let delimiter = ";";
-  let buffer = "";
-
-  for (const line of String(sqlText || "").replace(/\r\n/g, "\n").split("\n")) {
-    const delimiterMatch = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
-    if (delimiterMatch) {
-      if (hasExecutableSql(buffer)) {
-        throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
-      }
-      buffer = "";
-      delimiter = delimiterMatch[1];
-      continue;
-    }
-    buffer += `${line}\n`;
-    const trimmed = buffer.trimEnd();
-    if (!trimmed.endsWith(delimiter)) continue;
-    const statement = trimmed.slice(0, -delimiter.length).trim();
-    if (statement) statements.push(statement);
-    buffer = "";
-  }
-
-  if (hasExecutableSql(buffer)) {
-    throw new Error("SQL script ended with an incomplete statement.");
-  }
-  return statements;
+  return String(sqlText || "").replace(/\/\*[\s\S]*?\*\//g, " ").split(/\r?\n/).map((line) => line.replace(/^\s*(?:--|#).*$/, "")).join("\n").trim().length > 0;
 }
 
 function migrationDirectory() {
-  const candidates = [
-    path.resolve(__dirname, "../database/migrations"),
-    path.resolve(__dirname, "../../database/migrations"),
-  ];
+  const candidates = [path.resolve(__dirname, "../database/migrations"), path.resolve(__dirname, "../../database/migrations")];
   const existing = candidates.find((directory) => fs.existsSync(directory));
-  if (!existing) {
-    throw new Error(
-      `Approved Phase 4 migration directory is missing. Checked: ${candidates.join(", ")}`
-    );
-  }
+  if (!existing) throw new Error(`Approved Phase 4 migration directory is missing. Checked: ${candidates.join(", ")}`);
   return existing;
 }
 
@@ -129,32 +79,27 @@ function readMigrationFile(filename) {
   return fs.readFileSync(filePath, "utf8");
 }
 
-async function verifyDatabaseIdentity(connection) {
-  const [[row]] = await connection.query("SELECT DATABASE() AS database_name");
-  const databaseName = String(row?.database_name || "").trim();
-  const expected = String(process.env.CHALIN03_EXPECTED_DATABASE || "").trim();
-  if (!databaseName || !expected) {
-    throw new Error("Set CHALIN03_EXPECTED_DATABASE to the exact Railway production database name.");
+function splitSqlScript(sqlText) {
+  const statements = [];
+  let delimiter = ";";
+  let buffer = "";
+  for (const line of String(sqlText || "").replace(/\r\n/g, "\n").split("\n")) {
+    const delimiterMatch = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
+    if (delimiterMatch) {
+      if (hasExecutableSql(buffer)) throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
+      buffer = "";
+      delimiter = delimiterMatch[1];
+      continue;
+    }
+    buffer += `${line}\n`;
+    const trimmed = buffer.trimEnd();
+    if (!trimmed.endsWith(delimiter)) continue;
+    const statement = trimmed.slice(0, -delimiter.length).trim();
+    if (hasExecutableSql(statement)) statements.push(statement);
+    buffer = "";
   }
-  if (databaseName !== expected) {
-    throw new Error(`Connected database ${databaseName} does not match CHALIN03_EXPECTED_DATABASE.`);
-  }
-  return databaseName;
-}
-
-async function migrationRecordExists(connection, record) {
-  const [[tableRow]] = await connection.query(
-    `SELECT COUNT(*) AS present
-     FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'schema_migrations'`
-  );
-  if (Number(tableRow?.present || 0) !== 1) return false;
-  const [[row]] = await connection.query(
-    "SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?",
-    [record]
-  );
-  return Number(row?.applied || 0) === 1;
+  if (hasExecutableSql(buffer)) throw new Error("SQL script ended with an incomplete statement.");
+  return statements;
 }
 
 async function executeStatements(connection, statements, label) {
@@ -169,6 +114,15 @@ async function executeStatements(connection, statements, label) {
     }
   }
   return results;
+}
+
+async function verifyDatabaseIdentity(connection) {
+  const [[row]] = await connection.query("SELECT DATABASE() AS database_name");
+  const databaseName = String(row?.database_name || "").trim();
+  const expected = String(process.env.CHALIN03_EXPECTED_DATABASE || "").trim();
+  if (!databaseName || !expected) throw new Error("Set CHALIN03_EXPECTED_DATABASE to the exact Railway production database name.");
+  if (databaseName !== expected) throw new Error(`Connected database ${databaseName} does not match CHALIN03_EXPECTED_DATABASE.`);
+  return databaseName;
 }
 
 function validateCorrectionSchema(results, record) {
@@ -225,13 +179,21 @@ async function runEquipmentFinancePhaseFourStartup() {
     if (!lockAcquired) throw new Error("Could not acquire the Phase 4 migration lock.");
 
     for (const release of RELEASES) {
-      const applied = await migrationRecordExists(connection, release.record);
-      if (!applied) {
-        console.log(`Applying ${release.record} on ${databaseName}.`);
-        await executeStatements(connection, splitSqlScript(readMigrationFile(release.migration)), `Equipment Finance Phase 4 migration ${release.record}`);
+      let ready = false;
+      try {
+        const verifierResults = await executeStatements(connection, splitSqlScript(readMigrationFile(release.verifier)), `Equipment Finance Phase 4 verifier ${release.record}`);
+        release.validate(verifierResults, release.record);
+        ready = true;
+      } catch (verificationError) {
+        console.log(`Phase 4 live-state verification for ${release.record} is incomplete: ${verificationError.message}`);
       }
-      const verifierResults = await executeStatements(connection, splitSqlScript(readMigrationFile(release.verifier)), `Equipment Finance Phase 4 verifier ${release.record}`);
-      release.validate(verifierResults, release.record);
+
+      if (!ready) {
+        console.log(`Applying approved idempotent Phase 4 repair for ${release.record} on ${databaseName}.`);
+        await executeStatements(connection, splitSqlScript(readMigrationFile(release.migration)), `Equipment Finance Phase 4 migration ${release.record}`);
+        const verifierResults = await executeStatements(connection, splitSqlScript(readMigrationFile(release.verifier)), `Equipment Finance Phase 4 verifier ${release.record}`);
+        release.validate(verifierResults, release.record);
+      }
       console.log(`Verified ${release.record} on ${databaseName}.`);
     }
 
@@ -258,7 +220,6 @@ module.exports = {
   REQUIRED_TABLES,
   executeStatements,
   hasExecutableSql,
-  migrationRecordExists,
   runEquipmentFinancePhaseFourStartup,
   splitSqlScript,
   validateBalanceGuard,
