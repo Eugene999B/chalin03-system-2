@@ -119,6 +119,13 @@
 
 .excavator-registration-modal__field small { color: #738078; font-size: 11px; }
 
+/* Customs reference is intentionally optional in the registration workflow. */
+.excavator-registration-modal__grid > .excavator-registration-modal__field:nth-child(23) > span::after {
+  content: " (Optional)";
+  color: #718078;
+  font-weight: 700;
+}
+
 .excavator-registration-modal__field input,
 .excavator-registration-modal__field select,
 .excavator-registration-modal__field textarea {
