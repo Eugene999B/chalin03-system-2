@@ -3,6 +3,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import "../styles/equipmentCatalogue.css";
+import "../styles/equipmentCatalogueImageFix.css";
 
 const PURPOSES = [
   ["hire_only", "Hire only"],
