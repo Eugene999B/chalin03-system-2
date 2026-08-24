@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node scripts/runDebtCustomerIdentityReconciliationStartup.js && node scripts/bootstrapInstallmentResetOwnership.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node -r ./services/exportWorkbookSafetyBootstrap.js -r ./scripts/installmentDeepDeleteRouteBootstrap.js server.js",
+    "start": "node scripts/runDebtCustomerIdentityReconciliationStartup.js && node scripts/bootstrapInstallmentResetOwnership.js && node -r ./services/exportWorkbookSafetyBootstrap.js -r ./scripts/installmentDeepDeleteRouteBootstrap.js server.js",
     "maintenance:legacy-startup-repairs": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
@@ -49,17 +49,16 @@
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2",
     "bcryptjs": "^3.0.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.0.0",
-    "exceljs": "npm:@excel.js/exceljs@0.9.0",
-    "express": "^4.18.0",
+    "cors": "^4.18.0",
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.0",
     "mysql2": "^3.0.0",
     "pdfkit": "^0.19.1",
     "qrcode": "^1.5.1",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "dotenv": "^16.0.0",
+    "exceljs": "npm:@excel.js/exceljs@0.9.0"
   },
   "devDependencies": { "nodemon": "^3.0.3" }
 }
