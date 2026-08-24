@@ -29,8 +29,25 @@ const REQUIRED_MIGRATION = "20260803_equipment_finance_phase4_deposit_reservatio
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
-  if (!String(value || "").trim()) throw new Error(`Missing required database variable ${primaryName}${fallbackName ? ` or ${fallbackName}` : ""}.`);
+  if (!String(value || "").trim()) {
+    throw new Error(`Missing required database variable ${primaryName}${fallbackName ? ` or ${fallbackName}` : ""}.`);
+  }
   return value;
+}
+
+function getSslConfig(env = process.env) {
+  if (String(env.DB_SSL || "").trim().toLowerCase() !== "true") return undefined;
+  const encodedCa = String(env.DB_SSL_CA_BASE64 || "").trim();
+  if (encodedCa) {
+    return {
+      ca: Buffer.from(encodedCa, "base64").toString("utf8"),
+      rejectUnauthorized: true,
+    };
+  }
+  const disabled = ["0", "false", "no", "off"].includes(
+    String(env.DB_SSL_REJECT_UNAUTHORIZED || "true").trim().toLowerCase()
+  );
+  return { rejectUnauthorized: !disabled };
 }
 
 function connectionOptions() {
@@ -40,7 +57,7 @@ function connectionOptions() {
     user: requiredEnv("DB_USER", "MYSQLUSER"),
     password: requiredEnv("DB_PASSWORD", "MYSQLPASSWORD"),
     database: requiredEnv("DB_NAME", "MYSQLDATABASE"),
-    ssl: String(process.env.DB_SSL || "").trim().toLowerCase() === "true" ? { rejectUnauthorized: true } : undefined,
+    ssl: getSslConfig(),
     connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
     timezone: "Z",
   };
@@ -64,7 +81,9 @@ async function main() {
     const foundColumns = new Set(columnRows.map((row) => `${row.TABLE_NAME}.${row.COLUMN_NAME}`));
     const missingColumns = [];
     for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
-      for (const column of columns) if (!foundColumns.has(`${table}.${column}`)) missingColumns.push(`${table}.${column}`);
+      for (const column of columns) {
+        if (!foundColumns.has(`${table}.${column}`)) missingColumns.push(`${table}.${column}`);
+      }
     }
 
     const [triggerRows] = await connection.query(
@@ -81,7 +100,10 @@ async function main() {
     if (Number(schemaMigrationsTable?.present || 0) !== 1) {
       missingMigrations = [REQUIRED_MIGRATION];
     } else {
-      const [[migrationRow]] = await connection.query("SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?", [REQUIRED_MIGRATION]);
+      const [[migrationRow]] = await connection.query(
+        "SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?",
+        [REQUIRED_MIGRATION]
+      );
       if (Number(migrationRow?.applied || 0) !== 1) missingMigrations = [REQUIRED_MIGRATION];
     }
 
