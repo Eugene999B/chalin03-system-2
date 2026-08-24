@@ -1,5 +1,3 @@
-const fs = require("node:fs");
-const path = require("node:path");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
@@ -8,17 +6,16 @@ const REQUIRED_COLUMNS = Object.freeze({
     "credit_application_id",
     "activation_source",
     "equipment_commitment_status",
-    "deposit_required",
-    "deposit_received",
+    "deposit_completed_at",
+    "deposit_completed_by",
     "reservation_activated_at",
     "reservation_activated_by",
   ],
   equipment_sale_payments: [
     "credit_application_id",
     "payment_stage",
-    "payment_category",
-    "idempotency_key",
     "reservation_effect",
+    "idempotency_key",
   ],
 });
 
