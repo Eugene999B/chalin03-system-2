@@ -26,6 +26,62 @@ function meaningfulSnapshot(value) {
     : null;
 }
 
+function isPlaceholderCustomer(customer) {
+  return !customer || PLACEHOLDER_NAMES.has(normalize(customer.name));
+}
+
+async function findUniqueCustomerBySnapshot(connection, branchId, name, phone) {
+  const snapshotName = meaningfulSnapshot(name);
+  const snapshotPhone = String(phone || "").trim();
+  if (!snapshotName && !snapshotPhone) return null;
+
+  if (snapshotName) {
+    const [matches] = await connection.query(
+      `SELECT id, name, phone
+       FROM customers
+       WHERE branch_id = ?
+         AND UPPER(TRIM(name)) = ?
+         AND UPPER(TRIM(name)) NOT IN (
+           'CASH CUSTOMER',
+           'CASH SALE',
+           'WALK-IN CUSTOMER',
+           'WALK IN CUSTOMER',
+           'WALKIN CUSTOMER',
+           'CUSTOMER',
+           'UNNAMED CUSTOMER'
+         )
+       ORDER BY id ASC`,
+      [branchId, normalize(snapshotName)]
+    );
+
+    if (matches.length === 1) return matches[0];
+  }
+
+  if (snapshotPhone) {
+    const [phoneMatches] = await connection.query(
+      `SELECT id, name, phone
+       FROM customers
+       WHERE branch_id = ?
+         AND UPPER(TRIM(phone)) = UPPER(TRIM(?))
+         AND UPPER(TRIM(name)) NOT IN (
+           'CASH CUSTOMER',
+           'CASH SALE',
+           'WALK-IN CUSTOMER',
+           'WALK IN CUSTOMER',
+           'WALKIN CUSTOMER',
+           'CUSTOMER',
+           'UNNAMED CUSTOMER'
+         )
+       ORDER BY id ASC`,
+      [branchId, snapshotPhone]
+    );
+
+    if (phoneMatches.length === 1) return phoneMatches[0];
+  }
+
+  return null;
+}
+
 async function main() {
   const connection = await pool.getConnection();
 
@@ -40,7 +96,7 @@ async function main() {
     );
 
     const tables = new Set(tableRows.map((row) => row.TABLE_NAME));
-    if (!("sales" && ["sales", "customers", "debts"].every((table) => tables.has(table)))) {
+    if (!["sales", "customers", "debts"].every((table) => tables.has(table))) {
       await connection.rollback();
       console.log(
         "Debt customer identity reconciliation skipped: required tables are not present."
@@ -72,11 +128,6 @@ async function main() {
     let synchronizedDebtSnapshots = 0;
 
     for (const row of candidateRows) {
-      const debtName = meaningfulSnapshot(row.debt_customer_name);
-      const saleName = meaningfulSnapshot(row.sale_customer_name);
-      const debtPhone = String(row.debt_customer_phone || "").trim();
-      const salePhone = String(row.sale_customer_phone || "").trim();
-
       const [[debtCustomer]] = row.debt_customer_id
         ? await connection.query(
             `SELECT id, name, phone
@@ -96,89 +147,59 @@ async function main() {
           )
         : [[null]];
 
-      const debtPlaceholder =
-        normalize(debtCustomer?.name) &&
-        PLACEHOLDER_NAMES.has(normalize(debtCustomer.name));
-      const salePlaceholder =
-        normalize(saleCustomer?.name) &&
-        PLACEHOLDER_NAMES.has(normalize(saleCustomer.name));
-      const snapshotName = debtName || saleName;
-      const snapshotPhone = debtPhone || salePhone;
-
-      if (!snapshotName) continue;
-
-      const [matches] = await connection.query(
-        `SELECT id, name, phone
-         FROM customers
-         WHERE branch_id = ?
-           AND UPPER(TRIM(name)) = ?
-           AND UPPER(TRIM(name)) NOT IN (
-             'CASH CUSTOMER',
-             'CASH SALE',
-             'WALK-IN CUSTOMER',
-             'WALK IN CUSTOMER',
-             'WALKIN CUSTOMER',
-             'CUSTOMER',
-             'UNNAMED CUSTOMER'
-           )
-         ORDER BY id ASC`,
-        [row.branch_id, normalize(snapshotName)]
-      );
-
-      let canonical = null;
-      if (matches.length === 1) {
-        canonical = matches[0];
-      } else if (snapshotPhone) {
-        const [phoneMatches] = await connection.query(
-          `SELECT id, name, phone
-           FROM customers
-           WHERE branch_id = ?
-             AND UPPER(TRIM(phone)) = UPPER(TRIM(?))
-             AND UPPER(TRIM(name)) NOT IN (
-               'CASH CUSTOMER',
-               'CASH SALE',
-               'WALK-IN CUSTOMER',
-               'WALK IN CUSTOMER',
-               'WALKIN CUSTOMER',
-               'CUSTOMER',
-               'UNNAMED CUSTOMER'
-             )
-           ORDER BY id ASC`,
-          [row.branch_id, snapshotPhone]
-        );
-        if (phoneMatches.length === 1) canonical = phoneMatches[0];
-      }
-
-      if (!canonical) continue;
-
-      const hasConflictingPlaceholderLink =
-        (debtPlaceholder && Number(row.debt_customer_id) !== Number(canonical.id)) ||
-        (salePlaceholder && Number(row.sale_customer_id) !== Number(canonical.id));
-      const hasSplitIdentity =
+      const debtIsPlaceholder = isPlaceholderCustomer(debtCustomer);
+      const saleIsPlaceholder = isPlaceholderCustomer(saleCustomer);
+      const splitIdentity =
         row.debt_customer_id &&
         row.sale_customer_id &&
         Number(row.debt_customer_id) !== Number(row.sale_customer_id);
 
-      if (hasConflictingPlaceholderLink || hasSplitIdentity) {
-        if (Number(row.debt_customer_id || 0) !== Number(canonical.id)) {
-          await connection.query(
-            `UPDATE debts
-             SET customer_id = ?
-             WHERE id = ? AND branch_id = ?`,
-            [canonical.id, row.debt_id, row.branch_id]
-          );
-          repairedDebtLinks += 1;
-        }
+      let canonical = null;
 
-        if (row.sale_id && Number(row.sale_customer_id || 0) !== Number(canonical.id)) {
-          await connection.query(
-            `UPDATE sales
-             SET customer_id = ?
-             WHERE id = ? AND branch_id = ?`,
-            [canonical.id, row.sale_id, row.branch_id]
+      if (!debtIsPlaceholder && !splitIdentity) {
+        canonical = debtCustomer;
+      } else if (!saleIsPlaceholder && !splitIdentity) {
+        canonical = saleCustomer;
+      } else {
+        canonical = await findUniqueCustomerBySnapshot(
+          connection,
+          row.branch_id,
+          row.debt_customer_name,
+          row.debt_customer_phone
+        );
+        if (!canonical) {
+          canonical = await findUniqueCustomerBySnapshot(
+            connection,
+            row.branch_id,
+            row.sale_customer_name,
+            row.sale_customer_phone
           );
-          synchronizedSales += 1;
         }
+      }
+
+      if (!canonical) {
+        // Never guess when the database cannot identify one unique real customer.
+        continue;
+      }
+
+      if (Number(row.debt_customer_id || 0) !== Number(canonical.id)) {
+        await connection.query(
+          `UPDATE debts
+           SET customer_id = ?
+           WHERE id = ? AND branch_id = ?`,
+          [canonical.id, row.debt_id, row.branch_id]
+        );
+        repairedDebtLinks += 1;
+      }
+
+      if (row.sale_id && Number(row.sale_customer_id || 0) !== Number(canonical.id)) {
+        await connection.query(
+          `UPDATE sales
+           SET customer_id = ?
+           WHERE id = ? AND branch_id = ?`,
+          [canonical.id, row.sale_id, row.branch_id]
+        );
+        synchronizedSales += 1;
       }
 
       await connection.query(
