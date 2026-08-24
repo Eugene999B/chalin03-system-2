@@ -1,0 +1,64 @@
+name: One-time Excavator Edit Repair
+
+on:
+  push:
+    branches: [production]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: contains(github.event.head_commit.message, 'prepare one-time excavator edit compatibility repair')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production
+        uses: actions/checkout@v4
+        with:
+          ref: production
+          fetch-depth: 0
+
+      - name: Patch unchanged historical location handling
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('backend/services/equipmentFinanceMachineRegisterService.js')
+          s = p.read_text()
+          old = '''    const locationId = input?.equipment_origin_location_id === undefined ? undefined : positiveId(input.equipment_origin_location_id); const connection = await pool.getConnection();
+    try {'''
+          new = '''    const locationId = input?.equipment_origin_location_id === undefined ? undefined : positiveId(input.equipment_origin_location_id); const connection = await pool.getConnection();
+    try {'''
+          if old not in s:
+            raise SystemExit('expected edit block was not found')
+          marker = '''    const updates = { ...machine, updated_by: userId || null };
+    if (locationId !== undefined) { const location = await locationRecord(connection, locationId); updates.hire_location_id = locationId || null; updates.current_location = location?.name || null; }
+'''
+          replacement = '''    const updates = { ...machine, updated_by: userId || null };
+    if (Object.prototype.hasOwnProperty.call(input || {}, "equipment_origin_location_id")) {
+      const requestedLocationId = positiveId(input.equipment_origin_location_id);
+      if (requestedLocationId === null) {
+        updates.hire_location_id = null;
+        updates.current_location = null;
+      } else if (Number(existing.hire_location_id || 0) === requestedLocationId) {
+        // Preserve an unchanged historical location even when that yard is no longer active.
+        updates.hire_location_id = existing.hire_location_id;
+        updates.current_location = existing.current_location;
+      } else {
+        const location = await locationRecord(connection, requestedLocationId);
+        updates.hire_location_id = requestedLocationId;
+        updates.current_location = location?.name || null;
+      }
+    }
+'''
+          if marker not in s:
+            raise SystemExit('expected location update block was not found')
+          p.write_text(s.replace(marker, replacement, 1))
+
+      - name: Commit repair and remove temporary runner
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/services/equipmentFinanceMachineRegisterService.js .github/workflows/one-time-excavator-edit-fix.yml
+          git commit -m "fix: allow editing machines with unchanged historical yard"
+          git push origin production
