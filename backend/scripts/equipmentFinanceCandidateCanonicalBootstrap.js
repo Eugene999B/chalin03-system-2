@@ -4,7 +4,6 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const candidateRoutes = require("../routes/equipmentFinanceOpeningDepositCandidateCompatibilityRoutes");
-const financeDepositRoutes = require("../routes/equipmentFinanceDepositReservationRoutes");
 
 if (!candidateRoutes.__chalin03CanonicalCandidatesInstalled) {
   const canonicalRouter = express.Router();
@@ -15,20 +14,10 @@ if (!candidateRoutes.__chalin03CanonicalCandidatesInstalled) {
     async (_req, res) => {
       const connection = await pool.getConnection();
       try {
-        // Use the exact same authoritative repair/verification path as the
-        // actual Record Deposit transaction. Candidates must never have a
-        // weaker or duplicated readiness contract.
-        await financeDepositRoutes.ensureDepositFoundationReady();
-        const readiness = await financeDepositRoutes.schemaStatus(connection);
-        if (!readiness.ready) {
-          return res.status(503).json({
-            status: "error",
-            code: "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
-            message: "Finance deposit and reservation controls are not ready.",
-            readiness,
-          });
-        }
-
+        // Candidates are a read-only view. Do not block the page on the
+        // mutation-only Finance deposit readiness gate. The actual POST
+        // /deposit endpoint remains fully protected by its strict schema,
+        // trigger, permission, locking, idempotency and transaction checks.
         const candidates = await candidateRoutes.listCandidates(connection);
         return res.json({
           status: "success",
@@ -47,19 +36,15 @@ if (!candidateRoutes.__chalin03CanonicalCandidatesInstalled) {
         console.error("Canonical Finance deposit candidates query failed.", {
           code: String(error?.code || "").slice(0, 80),
           errno: Number(error?.errno || 0) || null,
-          readiness: error?.readiness || null,
         });
         const status = Number(error?.statusCode || 500);
         return res.status(status >= 500 ? status : 500).json({
           status: "error",
           code: error?.code || "EQUIPMENT_FINANCE_DEPOSIT_CANDIDATE_QUERY_FAILED",
           message:
-            error?.readiness
-              ? "Finance deposit controls are not ready."
-              : error?.code === "ER_NO_SUCH_TABLE" || error?.code === "ER_BAD_FIELD_ERROR"
-                ? "Finance deposit agreements could not be loaded because a required production field is unavailable."
-                : "Could not load Finance deposit agreements.",
-          ...(error?.readiness ? { readiness: error.readiness } : {}),
+            error?.code === "ER_NO_SUCH_TABLE" || error?.code === "ER_BAD_FIELD_ERROR"
+              ? "Finance deposit agreements could not be loaded because a required production field is unavailable."
+              : "Could not load Finance deposit agreements.",
         });
       } finally {
         connection.release();
