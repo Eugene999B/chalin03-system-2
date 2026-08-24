@@ -19,6 +19,18 @@ const PRODUCTION_MIGRATION_PLAN = Object.freeze([
     verifier: "20260725_post_phase1_audit_signoff_readiness_verify.sql",
     verificationType: "audit-readiness",
   },
+  {
+    name: "20260805_equipment_finance_opening_deposit_foundation_repair",
+    migration: "20260805_equipment_finance_opening_deposit_foundation_repair.sql",
+    verifier: "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql",
+    verificationType: "opening-deposit-foundation",
+  },
+  {
+    name: "20260803_equipment_finance_phase4_deposit_reservation_integrity",
+    migration: "20260803_equipment_finance_phase4_deposit_reservation_integrity.sql",
+    verifier: "20260803_equipment_finance_phase4_deposit_reservation_integrity_verify.sql",
+    verificationType: "phase4-deposit-reservation",
+  },
 ]);
 
 function booleanValue(value) {
@@ -260,6 +272,63 @@ function verifyAuditReadinessResults(results, migrationName) {
   );
 }
 
+function verifyOpeningDepositFoundationResults(results, migrationName) {
+  if (results.length !== 4) {
+    throw new Error(
+      `Opening Deposit verifier returned ${results.length} result sets instead of 4.`
+    );
+  }
+  const [migrationRows, columnRows, indexRows, duplicateRows] = results;
+  if (
+    migrationRows.length !== 1 ||
+    migrationRows[0]?.migration_name !== migrationName
+  ) {
+    throw new Error(`Migration record ${migrationName} was not verified.`);
+  }
+  if (getNumericValue(columnRows, "missing_opening_deposit_columns") !== 0) {
+    throw new Error("Opening Deposit verifier found missing columns.");
+  }
+  if (getNumericValue(indexRows, "missing_opening_deposit_indexes") !== 0) {
+    throw new Error("Opening Deposit verifier found missing indexes.");
+  }
+  if (getNumericValue(duplicateRows, "duplicate_opening_deposit_idempotency_keys") !== 0) {
+    throw new Error("Opening Deposit verifier found duplicate idempotency keys.");
+  }
+}
+
+function verifyPhaseFourDepositReservationResults(results, migrationName) {
+  if (results.length !== 4) {
+    throw new Error(
+      `Phase 4 deposit-reservation verifier returned ${results.length} result sets instead of 4.`
+    );
+  }
+  const [migrationRows, triggerRows, indexRows, invalidRows] = results;
+  if (
+    migrationRows.length !== 1 ||
+    migrationRows[0]?.migration_name !== migrationName
+  ) {
+    throw new Error(`Migration record ${migrationName} was not verified.`);
+  }
+
+  const expectedTriggers = new Set([
+    "trg_equipment_finance_payment_gate_before_insert",
+    "trg_equipment_finance_reservation_gate_before_insert",
+    "trg_equipment_finance_commitment_gate_before_update",
+  ]);
+  assertExactNames(
+    triggerRows,
+    "TRIGGER_NAME",
+    [...expectedTriggers],
+    "Phase 4 deposit-reservation triggers"
+  );
+  if (getNumericValue(indexRows, "missing_deposit_reservation_indexes") !== 0) {
+    throw new Error("Phase 4 verifier found missing deposit-reservation indexes.");
+  }
+  if (getNumericValue(invalidRows, "invalid_controlled_reservations") !== 0) {
+    throw new Error("Phase 4 verifier found invalid controlled reservations.");
+  }
+}
+
 function validateVerifierResults(planItem, results) {
   if (planItem.verificationType === "financial-control") {
     verifyFinancialControlResults(results, planItem.name);
@@ -267,6 +336,14 @@ function validateVerifierResults(planItem, results) {
   }
   if (planItem.verificationType === "audit-readiness") {
     verifyAuditReadinessResults(results, planItem.name);
+    return;
+  }
+  if (planItem.verificationType === "opening-deposit-foundation") {
+    verifyOpeningDepositFoundationResults(results, planItem.name);
+    return;
+  }
+  if (planItem.verificationType === "phase4-deposit-reservation") {
+    verifyPhaseFourDepositReservationResults(results, planItem.name);
     return;
   }
   throw new Error(`Unknown verifier type: ${planItem.verificationType}`);
@@ -317,11 +394,11 @@ async function runProductionMigrations() {
     if (!databaseName) throw new Error("No production database is selected.");
 
     const expectedDatabase = String(
-      process.env.CHALIN03_EXPECTED_DATABASE || ""
+      process.env.CHALIN03_EXPECTED_DATABASE || process.env.DB_NAME || process.env.MYSQLDATABASE || ""
     ).trim();
     if (expectedDatabase && expectedDatabase !== databaseName) {
       throw new Error(
-        `Connected database ${databaseName} does not match CHALIN03_EXPECTED_DATABASE.`
+        `Connected database ${databaseName} does not match the configured production database ${expectedDatabase}.`
       );
     }
 
