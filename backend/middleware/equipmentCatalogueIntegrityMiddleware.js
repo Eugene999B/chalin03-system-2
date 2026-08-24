@@ -48,7 +48,7 @@ const ALLOWED_PHOTO_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
-const MAX_PROTECTED_PHOTO_BYTES = 44 * 1024;
+const MAX_PROTECTED_PHOTO_BYTES = 192 * 1024;
 
 let foundationPromise = null;
 
@@ -134,7 +134,7 @@ function dispatchEquipmentSalesRouter(req, res, next) {
 
 function decodeProtectedPhoto(dataUrl) {
   const match = String(dataUrl || "").match(
-    /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/i
+    /^data:(image\/[^;]+);base64,([A-Za-z0-9+/=]+)$/i
   );
 
   if (!match) {
@@ -144,8 +144,8 @@ function decodeProtectedPhoto(dataUrl) {
   }
 
   const mimeType = match[1].toLowerCase();
-  if (!ALLOWED_PHOTO_MIME_TYPES.has(mimeType)) {
-    const error = new Error("Use a JPEG, PNG or WebP equipment picture.");
+  if (!mimeType.startsWith("image/")) {
+    const error = new Error("Choose a supported image picture.");
     error.code = "INVALID_EQUIPMENT_PHOTO_TYPE";
     throw error;
   }
@@ -158,15 +158,17 @@ function decodeProtectedPhoto(dataUrl) {
   }
   if (buffer.length > MAX_PROTECTED_PHOTO_BYTES) {
     const error = new Error(
-      "The protected equipment picture is too large. Choose it again so Chalin can compress it."
+      "The prepared equipment picture is too large. Choose it again so Chalin can compress it."
     );
     error.code = "EQUIPMENT_PHOTO_TOO_LARGE";
     throw error;
   }
 
   const normalizedDataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
-  if (Buffer.byteLength(normalizedDataUrl, "utf8") > 64000) {
-    const error = new Error("The protected equipment picture exceeds safe storage size.");
+  if (Buffer.byteLength(normalizedDataUrl, "utf8") > 300000) {
+    const error = new Error(
+      "The protected equipment picture exceeds safe storage size."
+    );
     error.code = "EQUIPMENT_PHOTO_STORAGE_LIMIT";
     throw error;
   }

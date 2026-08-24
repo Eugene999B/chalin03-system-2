@@ -13,22 +13,32 @@ const legacyPage = read("frontend", "src", "pages", "LegacyDebtsPage.jsx");
 const tools = read("frontend", "src", "components", "TopDebtDeskTools.jsx");
 const css = read("frontend", "src", "styles", "debtDesk.css");
 const toolsCss = read("frontend", "src", "styles", "topDebtDeskTools.css");
+const identityRepair = read(
+  "backend",
+  "scripts",
+  "runDebtCustomerIdentityReconciliationStartup.js"
+);
 
 const DEBT_DELETE = /DELETE\s+FROM\s+(?:debts|debt_payments)\b/i;
 const RUNTIME_DDL = /\b(?:CREATE|ALTER|DROP|TRUNCATE)\s+(?:TABLE|DATABASE)\b/i;
 
-test("Debt Desk resolves the current sale identity without deleting snapshots", () => {
+test("Debt Desk resolves canonical customer identity without deleting snapshots", () => {
   assert.match(
     routes,
-    /COALESCE\(NULLIF\(s\.customer_name, ''\), NULLIF\(c\.name, ''\), NULLIF\(d\.customer_name, ''\)/
+    /COALESCE\(NULLIF\(c\.name, ''\), NULLIF\(d\.customer_name, ''\), NULLIF\(s\.customer_name, ''\)/
   );
   assert.match(routes, /debt_customer_name_snapshot/);
   assert.match(routes, /sale_customer_name/);
   assert.match(legacyPage, /Current customer names shown/);
   assert.match(legacyPage, /Original snapshots remain preserved\s+for audit/);
   assert.match(legacyPage, /identity_changed/);
+  assert.match(identityRepair, /PLACEHOLDER_NAMES/);
+  assert.match(identityRepair, /CASH CUSTOMER/);
+  assert.match(identityRepair, /matches\.length === 1/);
+  assert.match(identityRepair, /SET customer_id = \?/);
   assert.doesNotMatch(routes, DEBT_DELETE);
   assert.doesNotMatch(routes, RUNTIME_DDL);
+  assert.doesNotMatch(identityRepair, DEBT_DELETE);
 });
 
 test("customer-first navigation retains the proven detail and payment fallbacks", () => {
