@@ -1,0 +1,62 @@
+name: Temporary Professional Readiness Fix
+
+on:
+  push:
+    branches:
+      - fix/professional-machine-register-schema-readiness
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch readiness constants
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("backend/services/equipmentFinanceProfessionalService.js")
+          text = path.read_text(encoding="utf-8")
+
+          old_tables = '''const REQUIRED_TABLES = Object.freeze([\n  "equipment_finance_settings",\n  "equipment_finance_settings_history",\n  "equipment_finance_document_signatures",\n  "equipment_finance_issued_documents",\n  "equipment_finance_payment_alerts",\n]);'''
+
+          new_tables = '''const REQUIRED_TABLES = Object.freeze([\n  "equipment_finance_settings",\n  "equipment_finance_settings_history",\n  "equipment_finance_document_signatures",\n  "equipment_finance_issued_documents",\n  "equipment_finance_payment_alerts",\n  "equipment_media",\n  "equipment_sales_enquiries",\n  "equipment_sales_quotations",\n  "equipment_sales_quotation_items",\n  "equipment_sale_agreements",\n  "equipment_asset_sale_locks",\n  "equipment_installment_schedule",\n  "equipment_sale_payments",\n  "equipment_sale_payment_allocations",\n  "equipment_deliveries",\n  "equipment_ownership_transfers",\n  "equipment_sales_reminder_log",\n  "equipment_legacy_installment_migrations",\n]);'''
+
+          old_columns = '''  fleet_assets: [\n    "registration_number",\n    "customs_reference",\n    "title_document_reference",\n    "insurance_reference",\n    "minimum_selling_price",\n  ],'''
+
+          new_columns = '''  fleet_assets: [\n    "registration_number",\n    "customs_reference",\n    "title_document_reference",\n    "insurance_reference",\n    "minimum_selling_price",\n    "equipment_category",\n    "model_year",\n    "chassis_number",\n    "engine_number",\n    "colour",\n    "capacity_description",\n    "condition_status",\n    "operational_purpose",\n    "sale_status",\n    "hire_location_id",\n    "acquisition_date",\n    "acquisition_cost",\n    "target_selling_price",\n    "standard_hire_rate",\n    "supplier_name",\n    "acquisition_reference",\n  ],'''
+
+          if text.count(old_tables) != 1:
+              raise SystemExit("expected REQUIRED_TABLES block exactly once")
+          if text.count(old_columns) != 1:
+              raise SystemExit("expected fleet_assets REQUIRED_COLUMNS block exactly once")
+
+          path.write_text(text.replace(old_tables, new_tables).replace(old_columns, new_columns), encoding="utf-8")
+
+      - name: Check service syntax
+        run: node --check backend/services/equipmentFinanceProfessionalService.js
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
+
+      - name: Commit only the intended service change and remove this workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temp-professional-readiness-fix.yml
+          git add backend/services/equipmentFinanceProfessionalService.js
+          git diff --cached --check
+          git commit -m "fix: harden professional machine schema readiness"
+          git push origin HEAD:fix/professional-machine-register-schema-readiness
