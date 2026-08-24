@@ -11,12 +11,12 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.pull_request.head.ref == 'fix/remove-fleet-assets-stray-zero'
+    if: github.event.pull_request.head.ref == 'fix/fleet-assets-zero'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/remove-fleet-assets-stray-zero
+          ref: fix/fleet-assets-zero
           fetch-depth: 0
       - name: Remove stray fleet_assets VALUES zero
         shell: python
@@ -52,4 +52,4 @@ jobs:
           git add backend/services/equipmentFinanceMachineRegisterService.js
           git diff --cached --check
           git commit -m 'fix: correct fleet_assets VALUES expression count'
-          git push origin HEAD:fix/remove-fleet-assets-stray-zero
+          git push origin HEAD:fix/fleet-assets-zero
