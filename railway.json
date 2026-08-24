@@ -1,6 +1,12 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile",
+    "buildCommand": null
+  },
   "deploy": {
-    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm run migrate:equipment-finance:production"
+    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && npm run migrate:equipment-finance:production",
+    "startCommand": null
   }
 }
