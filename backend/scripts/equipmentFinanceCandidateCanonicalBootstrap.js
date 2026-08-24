@@ -2,6 +2,7 @@
 
 const express = require("express");
 const { pool } = require("../config/db");
+const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const candidateRoutes = require("../routes/equipmentFinanceOpeningDepositCandidateCompatibilityRoutes");
 
@@ -23,16 +24,23 @@ async function listReadOnlyCandidates(connection) {
       candidateRoutes.tableColumns(connection, "hire_contract_assets"),
     ]);
 
-  const requiredBase = ["id", "customer_id", "asset_id", "sale_type", "agreement_status"];
-  const missingBase = requiredBase.filter((column) => !agreementColumns.has(column));
-  if (missingBase.length || !applicationColumns.has("id")) {
+  const requiredBase = [
+    "id",
+    "customer_id",
+    "asset_id",
+    "sale_type",
+    "agreement_status",
+    "credit_application_id",
+    "activation_source",
+  ];
+  if (requiredBase.some((column) => !agreementColumns.has(column)) || !applicationColumns.has("id")) {
     return [];
   }
 
   const select = [
     columnExpression(agreementColumns, "agreement", "id", "NULL", "agreement_id"),
     columnExpression(agreementColumns, "agreement", "agreement_number"),
-    columnExpression(agreementColumns, "agreement_status"),
+    columnExpression(agreementColumns, "agreement", "agreement_status"),
     columnExpression(agreementColumns, "agreement", "equipment_commitment_status"),
     columnExpression(agreementColumns, "agreement", "credit_application_id", "NULL", "application_id"),
     columnExpression(agreementColumns, "agreement", "customer_id"),
@@ -97,13 +105,9 @@ async function listReadOnlyCandidates(connection) {
   ].filter(Boolean);
 
   const where = [
-    agreementColumns.has("sale_type") ? "agreement.sale_type = 'installment'" : "1 = 0",
-    agreementColumns.has("activation_source")
-      ? "agreement.activation_source = 'approved_credit_application'"
-      : "1 = 0",
-    agreementColumns.has("agreement_status")
-      ? "agreement.agreement_status IN ('approved','active')"
-      : "1 = 0",
+    "agreement.sale_type = 'installment'",
+    "agreement.activation_source = 'approved_credit_application'",
+    "agreement.agreement_status IN ('approved','active')",
   ];
 
   const [rows] = await connection.query(
@@ -132,51 +136,69 @@ async function listReadOnlyCandidates(connection) {
   );
 }
 
-if (!candidateRoutes.__chalin03CanonicalCandidatesInstalled) {
-  const canonicalRouter = express.Router();
+async function directCandidatesHandler(req, res, next) {
+  const connection = await pool.getConnection();
+  try {
+    const candidates = await listReadOnlyCandidates(connection);
+    return res.json({
+      status: "success",
+      candidates,
+      scope: "company_wide",
+      hire_location_selection_required: false,
+      compatibility_mode: true,
+      safeguards: {
+        hire_work_created: false,
+        delivery_created: false,
+        ownership_transferred: false,
+        sms_sent: false,
+      },
+    });
+  } catch (error) {
+    console.error("Direct Finance deposit candidates query failed.", {
+      code: String(error?.code || "").slice(0, 80),
+      errno: Number(error?.errno || 0) || null,
+    });
+    return next(error);
+  } finally {
+    connection.release();
+  }
+}
 
-  canonicalRouter.get(
-    "/deposit-reservations/candidates",
-    requirePermission("fleet.assets.view"),
-    async (_req, res) => {
-      const connection = await pool.getConnection();
-      try {
-        const candidates = await listReadOnlyCandidates(connection);
-        return res.json({
-          status: "success",
-          candidates,
-          scope: "company_wide",
-          hire_location_selection_required: false,
-          compatibility_mode: true,
-          safeguards: {
-            hire_work_created: false,
-            delivery_created: false,
-            ownership_transferred: false,
-            sms_sent: false,
-          },
-        });
-      } catch (error) {
-        console.error("Canonical Finance deposit candidates query failed.", {
-          code: String(error?.code || "").slice(0, 80),
-          errno: Number(error?.errno || 0) || null,
-        });
-        return res.status(500).json({
-          status: "error",
-          code: error?.code || "EQUIPMENT_FINANCE_DEPOSIT_CANDIDATE_QUERY_FAILED",
-          message: "Could not load Finance deposit agreements.",
-        });
-      } finally {
-        connection.release();
-      }
+function installDirectCandidateBoundary() {
+  if (express.application.__chalin03DirectCandidateBoundaryInstalled) return;
+
+  const originalUse = express.application.use;
+  express.application.use = function patchedUse(firstArg, ...rest) {
+    if (
+      firstArg === "/api/equipment-catalogue" &&
+      !this.__chalin03DirectCandidateRouteInserted
+    ) {
+      this.__chalin03DirectCandidateRouteInserted = true;
+      const direct = function directCandidateBoundary(req, res, next) {
+        const path = String(req.path || req.originalUrl || "").split("?")[0];
+        if (
+          String(req.method || "").toUpperCase() === "GET" &&
+          /\/api\/equipment-catalogue\/sales\/deposit-reservations\/candidates$/.test(path)
+        ) {
+          return requireAuth(req, res, () =>
+            requirePermission("fleet.assets.view")(req, res, () =>
+              directCandidatesHandler(req, res, next)
+            )
+          );
+        }
+        return next();
+      };
+      return originalUse.call(this, firstArg, direct, ...rest);
     }
-  );
+    return originalUse.call(this, firstArg, ...rest);
+  };
 
-  candidateRoutes.stack.unshift(...canonicalRouter.stack);
-
-  Object.defineProperty(candidateRoutes, "__chalin03CanonicalCandidatesInstalled", {
+  Object.defineProperty(express.application, "__chalin03DirectCandidateBoundaryInstalled", {
     value: true,
     configurable: false,
     enumerable: false,
     writable: false,
   });
 }
+
+installDirectCandidateBoundary();
