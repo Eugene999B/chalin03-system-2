@@ -1,0 +1,103 @@
+name: One-time Deposit Middleware Fix
+
+on:
+  push:
+    branches: [production]
+    paths:
+      - .github/workflows/one-time-deposit-middleware-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: !contains(github.event.head_commit.message, '[one-time-deposit-middleware-fix]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production
+        uses: actions/checkout@v4
+        with:
+          ref: production
+          fetch-depth: 0
+
+      - name: Patch the actual 503 gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/middleware/equipmentCatalogueIntegrityMiddleware.js')
+          text = path.read_text()
+
+          old = '''async function enforceEquipmentCatalogueWriteIntegrity(req, res, next) {
+  try {
+    await ensureFoundationOnce();
+  } catch (error) {
+    console.error("Equipment Sales foundation preparation failed:", error);
+    return res.status(503).json({
+      status: "error",
+      code: "EQUIPMENT_SALES_FOUNDATION_STARTUP_FAILED",
+      message:
+        "Equipment Sales could not be prepared safely. Existing Hire and Spare Parts operations remain available.",
+    });
+  }
+
+  if (isEquipmentSalesRequest(req)) {
+    return dispatchEquipmentSalesRouter(req, res, next);
+  }
+'''
+
+          new = '''async function enforceEquipmentCatalogueWriteIntegrity(req, res, next) {
+  const requestPath = String(req.path || "");
+  const originalUrl = String(req.originalUrl || req.url || "");
+  const isDepositReservationRequest =
+    /^\\/sales\\/deposit-reservations(?:\\/|$)/.test(requestPath) ||
+    /\\/api\\/equipment-catalogue\\/sales\\/deposit-reservations(?:\\/|$)/.test(originalUrl) ||
+    /\\/sales\\/deposit-reservations(?:\\/|$)/.test(originalUrl);
+
+  // Deposit/Reservation has its own Finance-specific readiness, permission,
+  // locking, idempotency and transaction controls. It must not be blocked by
+  // the broader Equipment Sales foundation check.
+  if (isDepositReservationRequest) {
+    return dispatchEquipmentSalesRouter(req, res, next);
+  }
+
+  try {
+    await ensureFoundationOnce();
+  } catch (error) {
+    console.error("Equipment Sales foundation preparation failed:", error);
+    return res.status(503).json({
+      status: "error",
+      code: "EQUIPMENT_SALES_FOUNDATION_STARTUP_FAILED",
+      message:
+        "Equipment Sales could not be prepared safely. Existing Hire and Spare Parts operations remain available.",
+    });
+  }
+
+  if (isEquipmentSalesRequest(req)) {
+    return dispatchEquipmentSalesRouter(req, res, next);
+  }
+'''
+
+          if text.count(old) != 1:
+              raise SystemExit('Expected middleware gate was not found exactly once.')
+
+          path.write_text(text.replace(old, new, 1))
+          print('Deposit middleware 503 gate fixed.')
+          PY
+
+      - name: Verify exact patch
+        shell: bash
+        run: |
+          grep -n "isDepositReservationRequest" backend/middleware/equipmentCatalogueIntegrityMiddleware.js
+          grep -n "ensureFoundationOnce" backend/middleware/equipmentCatalogueIntegrityMiddleware.js
+
+      - name: Commit fix and remove workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/one-time-deposit-middleware-fix.yml
+          git add backend/middleware/equipmentCatalogueIntegrityMiddleware.js .github/workflows/one-time-deposit-middleware-fix.yml
+          git commit -m "fix(finance): bypass broad equipment foundation for deposit reservations [one-time-deposit-middleware-fix]"
+          git push origin HEAD:production
