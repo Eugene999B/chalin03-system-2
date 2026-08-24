@@ -4,8 +4,17 @@ const MAX_PROTECTED_IMAGE_BYTES = 47 * 1024;
 const INSTALL_MARKER = Symbol.for(
   "chalin03.equipmentFinanceImageCompatibilityInstalled"
 );
+const MACHINE_PATCH_MARKER = Symbol.for(
+  "chalin03.equipmentFinanceMachineEditCompatibilityInstalled"
+);
 
-// Accepted protected evidence MIME family: image/jpeg|jpg|png|webp.
+const LEGACY_SAFE_ENUMS = {
+  operational_purpose: new Set(["sale_only", "sale_or_hire"]),
+  condition_status: new Set(["excellent", "good", "fair", "damaged", "under_inspection"]),
+  ownership_type: new Set(["company_owned", "leased", "consignment", "customer_owned"]),
+  meter_type: new Set(["hour_meter", "odometer"]),
+};
+
 function parseDataImage(value) {
   const match = String(value || "").match(
     /^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=]+)$/i
@@ -142,6 +151,56 @@ function installFinanceImageCompatibility() {
     }
     return originalUpdateSettings({ ...input, body });
   };
+
+  const machineService = require("./equipmentFinanceMachineRegisterService");
+  if (!machineService[MACHINE_PATCH_MARKER]) {
+    const originalUpdateMachine = machineService.updateFinanceMachine;
+    machineService.updateFinanceMachine = async (input = {}) => {
+      const nextInput = { ...(input || {}) };
+      const machineId = Number(input.assetId || 0);
+      if (machineId > 0) {
+        try {
+          const [rows] = await require("../config/db").pool.query(
+            "SELECT hire_location_id FROM fleet_assets WHERE id = ? LIMIT 1",
+            [machineId]
+          );
+          const existingLocationId = Number(rows[0]?.hire_location_id || 0);
+          const requestedLocationId = Number(input?.input?.equipment_origin_location_id || 0);
+          if (
+            requestedLocationId > 0 &&
+            existingLocationId > 0 &&
+            requestedLocationId === existingLocationId
+          ) {
+            const cleaned = { ...(input.input || {}) };
+            delete cleaned.equipment_origin_location_id;
+            delete cleaned.hire_location_id;
+            nextInput.input = cleaned;
+          }
+        } catch {
+          // The underlying update route remains authoritative if compatibility lookup fails.
+        }
+      }
+
+      const cleaned = { ...(nextInput.input || {}) };
+      for (const [field, allowed] of Object.entries(LEGACY_SAFE_ENUMS)) {
+        if (
+          Object.prototype.hasOwnProperty.call(cleaned, field) &&
+          cleaned[field] !== undefined &&
+          cleaned[field] !== null &&
+          cleaned[field] !== ""
+        ) {
+          const normalized = String(cleaned[field]).trim().toLowerCase().replace(/[\s-]+/g, "_");
+          if (!allowed.has(normalized)) delete cleaned[field];
+        }
+      }
+      nextInput.input = cleaned;
+      return originalUpdateMachine(nextInput);
+    };
+    Object.defineProperty(machineService, MACHINE_PATCH_MARKER, {
+      value: true,
+      enumerable: false,
+    });
+  }
 
   Object.defineProperty(service, INSTALL_MARKER, {
     value: true,
