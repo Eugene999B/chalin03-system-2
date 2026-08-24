@@ -82,6 +82,48 @@ async function findUniqueCustomerBySnapshot(connection, branchId, name, phone) {
   return null;
 }
 
+async function repairFalseCashDebts(connection) {
+  const [rows] = await connection.query(
+    `SELECT
+       d.id,
+       d.branch_id,
+       d.amount_owed,
+       d.amount_paid,
+       d.balance,
+       d.status,
+       s.payment_type,
+       s.total AS sale_total,
+       s.amount_paid AS sale_amount_paid,
+       s.balance AS sale_balance
+     FROM debts d
+     INNER JOIN sales s
+       ON s.id = d.sale_id
+      AND s.branch_id = d.branch_id
+     WHERE d.balance > 0
+       AND s.payment_type IN ('cash', 'momo', 'bank')
+       AND s.balance <= 0
+       AND s.amount_paid >= s.total
+     FOR UPDATE`
+  );
+
+  let repaired = 0;
+  for (const row of rows) {
+    await connection.query(
+      `UPDATE debts
+       SET amount_paid = amount_owed,
+           balance = 0,
+           status = 'paid'
+       WHERE id = ?
+         AND branch_id = ?
+         AND balance > 0`,
+      [row.id, row.branch_id]
+    );
+    repaired += 1;
+  }
+
+  return repaired;
+}
+
 async function main() {
   const connection = await pool.getConnection();
 
@@ -103,6 +145,8 @@ async function main() {
       );
       return;
     }
+
+    const repairedFalseCashDebts = await repairFalseCashDebts(connection);
 
     const [candidateRows] = await connection.query(
       `SELECT
@@ -223,7 +267,7 @@ async function main() {
 
     await connection.commit();
     console.log(
-      `Debt customer identity reconciliation completed: repaired ${repairedDebtLinks} debt link(s), synchronized ${synchronizedDebtSnapshots} debt snapshot(s), synchronized ${synchronizedSales} sale link/snapshot update(s).`
+      `Debt customer identity reconciliation completed: repaired ${repairedDebtLinks} debt link(s), synchronized ${synchronizedDebtSnapshots} debt snapshot(s), synchronized ${synchronizedSales} sale link/snapshot update(s), closed ${repairedFalseCashDebts} false open cash/retail debt row(s).`
     );
   } catch (error) {
     try {
