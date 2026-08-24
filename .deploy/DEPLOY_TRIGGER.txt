@@ -2,7 +2,7 @@ CHALIN 03 DEPLOYMENT TRIGGER
 
 Mode: NORMAL PRODUCTION
 Branch: production
-Trigger sequence: 24
-Triggered at: 2026-08-24T15:16:00Z
+Trigger sequence: 25
+Triggered at: 2026-08-24T15:18:00Z
 
-This file exists only to create a harmless Git commit after changing Railway and Cloudflare back to the production branch. The deployment includes the controlled Railway pre-deploy Finance migration command and packaged database migration files; no application or business data mutation occurs outside the approved migration runner.
+This file exists only to create a harmless Git commit after changing Railway and Cloudflare back to the production branch. The deployment includes the controlled Railway pre-deploy Finance migration command and the complete packaged Finance migration/verifier set; no application or business data mutation occurs outside the approved migration runner.
