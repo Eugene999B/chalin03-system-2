@@ -10,6 +10,12 @@ const {
   assertFinanceMutationSafe,
   refreshFinanceAgreementFromEvidence,
 } = require("../services/equipmentFinanceReconciliationService");
+const {
+  runEquipmentFinanceOpeningDepositFoundationRepair,
+} = require("../scripts/runEquipmentFinanceOpeningDepositFoundationRepair");
+const {
+  runEquipmentFinancePhaseFourStartup,
+} = require("../scripts/runEquipmentFinancePhaseFourStartup");
 
 const router = express.Router();
 
@@ -221,7 +227,36 @@ async function schemaStatus(connection = pool) {
   };
 }
 
+let depositFoundationRepairPromise = null;
+async function ensureDepositFoundationReady() {
+  const current = await schemaStatus(pool);
+  if (current.ready) return current;
+
+  if (!depositFoundationRepairPromise) {
+    depositFoundationRepairPromise = (async () => {
+      await runEquipmentFinanceOpeningDepositFoundationRepair();
+      await runEquipmentFinancePhaseFourStartup();
+      const verified = await schemaStatus(pool);
+      if (!verified.ready) {
+        const error = new DepositError(
+          503,
+          "Finance deposit controls are not ready after the approved production repair.",
+          "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED"
+        );
+        error.readiness = verified;
+        throw error;
+      }
+      return verified;
+    })().finally(() => {
+      depositFoundationRepairPromise = null;
+    });
+  }
+
+  return depositFoundationRepairPromise;
+}
+
 async function assertSchemaReady(connection = pool) {
+  await ensureDepositFoundationReady();
   const status = await schemaStatus(connection);
   if (!status.ready) {
     const error = new DepositError(
@@ -381,7 +416,7 @@ function assertAssetCanBeReserved(agreement) {
   if (!Boolean(Number(agreement.asset_is_active))) {
     throw new DepositError(409, "The equipment is not active in the fleet register.");
   }
-  if (!['sale_only', 'sale_or_hire'].includes(agreement.operational_purpose)) {
+  if (!["sale_only", "sale_or_hire"].includes(agreement.operational_purpose)) {
     throw new DepositError(409, "The equipment is not authorised for sale.");
   }
   if (Number(agreement.active_hire_count || 0) > 0) {
@@ -490,7 +525,7 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
 
 router.get("/candidates", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
-    await assertSchemaReady(pool);
+    await ensureDepositFoundationReady();
     const [rows] = await pool.query(
       `SELECT
          agreement.*,
@@ -561,6 +596,7 @@ router.post(
   async (req, res) => {
     try {
       assertDepositOfficer(req);
+      await ensureDepositFoundationReady();
       await assertSchemaReady(pool);
       const agreementId = positiveId(req.params.agreementId);
       const amount = money(req.body.amount, 0);
@@ -926,4 +962,3 @@ module.exports.REQUIRED_TRIGGERS = REQUIRED_TRIGGERS;
 module.exports.money = money;
 module.exports.rolesFor = rolesFor;
 module.exports.schemaStatus = schemaStatus;
-
