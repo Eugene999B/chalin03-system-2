@@ -78,8 +78,6 @@ function cleanEditPayload(input = {}) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(text)) output[field] = text;
   }
 
-  // Only pass a location when the edit form explicitly supplies a real positive id.
-  // Unchanged/invalid legacy locations are preserved by the machine service instead.
   if (source.equipment_origin_location_id !== undefined) {
     const locationId = positiveId(source.equipment_origin_location_id);
     if (locationId) output.equipment_origin_location_id = locationId;
@@ -87,6 +85,26 @@ function cleanEditPayload(input = {}) {
 
   if (Array.isArray(source.photos)) output.photos = source.photos;
   return output;
+}
+
+function mergeWithExistingMachine(existing, cleaned, originalInput) {
+  const merged = { ...cleaned };
+  const fields = [
+    ...EDIT_TEXT_FIELDS,
+    ...Object.keys(EDIT_ENUM_FIELDS),
+    ...EDIT_NUMBER_FIELDS,
+    ...EDIT_DATE_FIELDS,
+  ];
+  for (const field of fields) {
+    if (merged[field] !== undefined) continue;
+    if (existing[field] !== undefined && existing[field] !== null) merged[field] = existing[field];
+  }
+  if (merged.model_year === undefined && existing.model_year !== undefined) merged.model_year = existing.model_year;
+  if (merged.equipment_origin_location_id === undefined && existing.hire_location_id != null) {
+    merged.equipment_origin_location_id = existing.hire_location_id;
+  }
+  if (!Array.isArray(merged.photos) && Array.isArray(originalInput?.photos)) merged.photos = originalInput.photos;
+  return merged;
 }
 
 function sendError(res, error, fallback) {
@@ -198,9 +216,10 @@ router.post("/", requirePermission("fleet.assets.manage"), async (req, res) => {
 
 router.put("/:assetId", requirePermission("fleet.assets.manage"), async (req, res) => {
   try {
-    await assertMachineStillEditable(req.params.assetId);
+    const existing = await assertMachineStillEditable(req.params.assetId);
     const cleanedPayload = cleanEditPayload(req.body || {});
-    const input = await normalizePhotoPayload(cleanedPayload);
+    const mergedPayload = mergeWithExistingMachine(existing, cleanedPayload, req.body || {});
+    const input = await normalizePhotoPayload(mergedPayload);
     const machine = await updateFinanceMachine({
       assetId: req.params.assetId,
       input,
