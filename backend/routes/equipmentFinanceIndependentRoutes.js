@@ -29,7 +29,6 @@ const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes
 const equipmentCreditOptionalDecisionRoutes = require("./equipmentCreditOptionalDecisionRoutes");
 const equipmentFinanceDraftRecoveryRoutes = require("./equipmentFinanceDraftRecoveryRoutes");
 const equipmentFinanceAgreementActivationRoutes = require("./equipmentFinanceAgreementActivationRoutes");
-const equipmentFinanceOpeningDepositCandidateCompatibilityRoutes = require("./equipmentFinanceOpeningDepositCandidateCompatibilityRoutes");
 const equipmentFinanceDepositReservationRoutes = require("./equipmentFinanceDepositReservationRoutes");
 const equipmentFinanceDocumentCompletionRoutes = require("./equipmentFinanceDocumentCompletionRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
@@ -143,7 +142,6 @@ router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 router.use(equipmentFinanceRuntimeHotfixRoutes);
 router.use(equipmentFinanceDraftRuntimeRoutes);
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
-router.use(equipmentFinanceOpeningDepositCandidateCompatibilityRoutes);
 router.use("/deposit-reservations", equipmentFinanceDepositReservationRoutes);
 router.use("/finance-corrections", equipmentFinanceCorrectionRoutes);
 router.use("/private-documents", equipmentFinancePrivateDocumentsRoutes);
