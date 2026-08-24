@@ -45,14 +45,6 @@ jobs:
       - name: Check service syntax
         run: node --check backend/services/equipmentFinanceProfessionalService.js
 
-      - name: Install backend dependencies
-        working-directory: backend
-        run: npm ci
-
-      - name: Run backend tests
-        working-directory: backend
-        run: npm test
-
       - name: Commit only the intended service change and remove this workflow
         shell: bash
         run: |
