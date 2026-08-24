@@ -184,10 +184,11 @@ function normalizeMachine(input, { partial = false } = {}) {
   }
 
   for (const [key, fallback, label] of [
-    ["current_meter", null, "Current meter"],
-    ["acquisition_cost", null, "Acquisition cost"],
+    ["current_meter", 0, "Current meter"],
+    ["acquisition_cost", 0, "Acquisition cost"],
     ["target_selling_price", 0, "Target selling price"],
     ["minimum_selling_price", 0, "Minimum selling price"],
+    ["standard_hire_rate", 0, "Standard hire rate"],
   ]) {
     if (partial && input[key] === undefined) continue;
     const value = nonNegativeNumber(input[key], fallback);
@@ -350,7 +351,7 @@ async function createFinanceMachine({ input, userId, req }) {
          created_by, updated_by
        ) VALUES (
          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', 'available',
-         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, TRUE, ?, ?
+         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, TRUE, ?, ?
        )`,
       [
         machine.asset_code,
@@ -380,6 +381,7 @@ async function createFinanceMachine({ input, userId, req }) {
         machine.acquisition_cost,
         machine.target_selling_price,
         machine.minimum_selling_price,
+        machine.standard_hire_rate,
         machine.supplier_name,
         machine.acquisition_reference,
         machine.customs_reference,
