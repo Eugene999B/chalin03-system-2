@@ -1,11 +1,11 @@
 import axios from "axios";
 import "../styles/equipmentSecureUpload.css";
 
-const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
-const MAX_STORED_BYTES = 44 * 1024;
-const INITIAL_MAX_DIMENSION = 1200;
-const MIN_DIMENSION = 520;
-const QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.44, 0.36];
+const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
+const MAX_STORED_BYTES = 192 * 1024;
+const INITIAL_MAX_DIMENSION = 1800;
+const MIN_DIMENSION = 640;
+const QUALITY_STEPS = [0.86, 0.78, 0.70, 0.62, 0.54, 0.46, 0.38];
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PROTECTED_MIME_TYPE = "image/jpeg";
 const FINANCE_IMAGE_TIMEOUT_MS = 12000;
@@ -63,11 +63,12 @@ function scaledSize(width, height, maximumDimension) {
 
 async function optimizeEquipmentPhoto(file) {
   if (!file) throw new Error("Choose an equipment picture first.");
-  if (!ALLOWED_TYPES.has(String(file.type || "").toLowerCase())) {
-    throw new Error("Use a JPEG, PNG or WebP picture.");
+  const sourceType = String(file.type || "").toLowerCase();
+  if (!sourceType.startsWith("image/")) {
+    throw new Error("Choose a supported image picture.");
   }
   if (file.size > MAX_SOURCE_BYTES) {
-    throw new Error("The original picture is larger than 15 MB.");
+    throw new Error("The original picture is larger than 25 MB.");
   }
 
   const sourceUrl = await fileToDataUrl(file);
@@ -134,8 +135,10 @@ function setReactInputValue(input, value) {
 
 function secureUrlInput(fileInput) {
   const form = fileInput.closest("form");
-  const urlInput = form?.querySelector('input[type="url"]');
+  if (form) form.noValidate = true;
+  const urlInput = form?.querySelector('input[data-equipment-secure-url], input[type="url"]');
   if (!urlInput) return null;
+  urlInput.setAttribute("data-equipment-secure-url", "true");
   urlInput.closest(".equipment-catalogue__field")?.classList.add(
     "equipment-secure-upload__legacy-url"
   );
@@ -154,7 +157,7 @@ function prepareEquipmentPhotoField(fileInput) {
   const hint = field.querySelector("small");
   if (hint) {
     hint.textContent =
-      "Take a photo or choose one. Chalin compresses it securely for mobile use and PDF documents.";
+      "Choose or take a picture. Chalin converts, rotates and compresses it while keeping the complete machine visible.";
   }
   secureUrlInput(fileInput);
 }
