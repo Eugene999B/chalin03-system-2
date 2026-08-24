@@ -21,14 +21,15 @@ const MAX_PHOTO_BYTES = 48 * 1024;
 function cleanText(value, maxLength = 1000) { return String(value ?? "").trim().slice(0, maxLength); }
 function nullableText(value, maxLength = 1000) { return cleanText(value, maxLength) || null; }
 function positiveId(value) { const number = Number(value); return Number.isInteger(number) && number > 0 ? number : null; }
+function numericText(value) { return typeof value === "string" ? value.replace(/,/g, "").trim() : value; }
 function nonNegativeNumber(value, fallback = null) {
   if (value === undefined || value === null || value === "") return fallback;
-  const number = Number(value);
+  const number = Number(numericText(value));
   return Number.isFinite(number) && number >= 0 ? Number(number.toFixed(2)) : undefined;
 }
 function nonNegativeInteger(value, fallback = null) {
   if (value === undefined || value === null || value === "") return fallback;
-  const number = Number(value);
+  const number = Number(numericText(value));
   return Number.isInteger(number) && number >= 0 ? number : undefined;
 }
 function enumValue(value, allowed, fallback = null) {
