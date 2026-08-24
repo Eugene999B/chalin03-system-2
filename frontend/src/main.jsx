@@ -55,24 +55,84 @@ async function removeDevelopmentServiceWorkerCaches() {
 
       await Promise.all(
         cacheNames
-          .filter((cacheName) => String(cacheName).startsWith("chalin03-"))
+          .filter((cacheName) =>
+            String(cacheName).startsWith("chalin03-")
+          )
           .map((cacheName) => caches.delete(cacheName))
       );
     }
 
     if (registrations.length > 0) {
-      console.log("✅ Development service workers and old local caches were removed");
+      console.log(
+        "✅ Development service workers and old local caches were removed"
+      );
     }
   } catch (error) {
-    console.warn("⚠️ Could not fully clear development service-worker caches:", error);
+    console.warn(
+      "⚠️ Could not fully clear development service-worker caches:",
+      error
+    );
   }
 }
 
 function requestAssetRecovery(reason) {
   if (typeof window.__chalin03RecoverFromAssetMismatch === "function") {
     window.__chalin03RecoverFromAssetMismatch(reason);
+    return;
   }
+
+  window.location.reload();
 }
 
-window.__chalin03RemoveDevelopmentServiceWorkerCaches = removeDevelopmentServiceWorkerCaches;
-window.__chalin03RequestAssetRecovery = requestAssetRecovery;
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
+      requestAssetRecovery("service-worker-asset-mismatch");
+    }
+  });
+
+  window.addEventListener("load", () => {
+    if (import.meta.env.PROD) {
+      const hadActiveController = Boolean(navigator.serviceWorker.controller);
+      let reloadingForUpdate = false;
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadActiveController || reloadingForUpdate) {
+          return;
+        }
+
+        reloadingForUpdate = true;
+        window.location.reload();
+      });
+
+      navigator.serviceWorker
+        .register(
+          `/sw.js?release=${encodeURIComponent(APP_SHELL_RELEASE)}`,
+          {
+            scope: "/",
+            updateViaCache: "none",
+          }
+        )
+        .then((registration) => {
+          registration.waiting?.postMessage({
+            type: "CHALIN03_SKIP_WAITING",
+          });
+
+          registration.update().catch(() => {
+            // The active worker remains available if an update check is offline.
+          });
+
+          console.log(
+            `✅ Chalin 03 service worker registered (${APP_SHELL_RELEASE})`
+          );
+        })
+        .catch((error) => {
+          console.error("❌ Service worker registration failed:", error);
+        });
+
+      return;
+    }
+
+    removeDevelopmentServiceWorkerCaches();
+  });
+}
