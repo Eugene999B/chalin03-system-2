@@ -3,10 +3,10 @@ const BUILD_ASSET_PREFIX = "/assets/";
 const SHELL_KEY = "/__chalin03_app_shell__";
 const release =
   new URL(self.location.href).searchParams.get("release") ||
-  "browser-cache-integrity-v35";
+  "browser-cache-integrity-v36";
 const safeRelease =
   String(release).replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 96) ||
-  "browser-cache-integrity-v35";
+  "browser-cache-integrity-v36";
 const CACHE_NAME = `${CACHE_PREFIX}app-shell-${safeRelease}`;
 const CORE_ASSETS = [
   "/site.webmanifest",
@@ -158,8 +158,6 @@ async function networkBuildAsset(request) {
       );
     }
 
-    // Vite build files are network-only in the worker. The edge/browser may
-    // cache immutable hashes, but HTML can never be stored under a .js/.css URL.
     return response;
   } catch {
     await notifyClientsOfAssetMismatch(request, null);
