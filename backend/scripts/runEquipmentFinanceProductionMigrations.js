@@ -194,7 +194,7 @@ function splitSqlScript(sqlText) {
 }
 
 function migrationDirectory() {
-  return path.resolve(__dirname, "../../database/migrations");
+  return path.resolve(__dirname, "../../..", "database/migrations");
 }
 
 function readSqlFile(filename) {
