@@ -2,6 +2,8 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { runEquipmentFinanceOpeningDepositFoundationRepair } = require("../scripts/runEquipmentFinanceOpeningDepositFoundationRepair");
+const { runEquipmentFinancePhaseFourStartup } = require("../scripts/runEquipmentFinancePhaseFourStartup");
 
 const router = express.Router();
 
@@ -127,6 +129,46 @@ async function controlFoundationStatus(connection) {
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
   };
+}
+
+let lazyFoundationRepairPromise = null;
+
+async function ensureDepositFoundationReady() {
+  const connection = await pool.getConnection();
+  try {
+    const status = await controlFoundationStatus(connection);
+    if (status.ready) return status;
+  } finally {
+    connection.release();
+  }
+
+  if (!lazyFoundationRepairPromise) {
+    lazyFoundationRepairPromise = (async () => {
+      await runEquipmentFinanceOpeningDepositFoundationRepair();
+      await runEquipmentFinancePhaseFourStartup();
+    })().finally(() => {
+      lazyFoundationRepairPromise = null;
+    });
+  }
+
+  await lazyFoundationRepairPromise;
+
+  const verificationConnection = await pool.getConnection();
+  try {
+    const finalStatus = await controlFoundationStatus(verificationConnection);
+    if (!finalStatus.ready) {
+      const error = new CandidateCompatibilityError(
+        503,
+        "Finance deposit controls could not be verified after the approved foundation repair.",
+        "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
+        finalStatus
+      );
+      throw error;
+    }
+    return finalStatus;
+  } finally {
+    verificationConnection.release();
+  }
 }
 
 async function activeLockMap(connection, assetIds, columns) {
@@ -436,6 +478,15 @@ async function listCandidates(connection) {
   });
 }
 
+router.use("/deposit-reservations", async (req, _res, next) => {
+  try {
+    await ensureDepositFoundationReady();
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+});
+
 router.get(
   "/deposit-reservations/candidates",
   requirePermission("fleet.assets.view"),
@@ -499,5 +550,6 @@ module.exports.activeLockMap = activeLockMap;
 module.exports.candidateShape = candidateShape;
 module.exports.columnExpression = columnExpression;
 module.exports.controlFoundationStatus = controlFoundationStatus;
+module.exports.ensureDepositFoundationReady = ensureDepositFoundationReady;
 module.exports.listCandidates = listCandidates;
 module.exports.tableColumns = tableColumns;
