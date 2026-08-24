@@ -202,19 +202,31 @@ async function schemaStatus(connection = pool) {
     (triggerName) => !installedTriggers.has(triggerName)
   );
 
-  const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
-  const [migrationRows] = await connection.query(
-    `SELECT migration_name
-     FROM schema_migrations
-     WHERE migration_name IN (${migrationPlaceholders})`,
-    REQUIRED_MIGRATIONS
+  let missingMigrations = [];
+  const [[schemaMigrationsTable]] = await connection.query(
+    `SELECT COUNT(*) AS present
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'schema_migrations'`
   );
-  const installedMigrations = new Set(
-    migrationRows.map((row) => row.migration_name)
-  );
-  const missingMigrations = REQUIRED_MIGRATIONS.filter(
-    (migrationName) => !installedMigrations.has(migrationName)
-  );
+
+  if (Number(schemaMigrationsTable?.present || 0) !== 1) {
+    missingMigrations = [...REQUIRED_MIGRATIONS];
+  } else {
+    const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
+    const [migrationRows] = await connection.query(
+      `SELECT migration_name
+       FROM schema_migrations
+       WHERE migration_name IN (${migrationPlaceholders})`,
+      REQUIRED_MIGRATIONS
+    );
+    const installedMigrations = new Set(
+      migrationRows.map((row) => row.migration_name)
+    );
+    missingMigrations = REQUIRED_MIGRATIONS.filter(
+      (migrationName) => !installedMigrations.has(migrationName)
+    );
+  }
 
   return {
     ready:
