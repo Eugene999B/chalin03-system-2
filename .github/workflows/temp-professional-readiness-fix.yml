@@ -1,19 +1,22 @@
 name: Temporary Professional Readiness Fix
 
 on:
-  push:
+  pull_request:
+    types: [opened, synchronize]
     branches:
-      - fix/professional-machine-register-schema-readiness
+      - main
 
 permissions:
   contents: write
 
 jobs:
   patch:
+    if: github.event.pull_request.head.ref == 'fix/professional-machine-register-schema-readiness'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: fix/professional-machine-register-schema-readiness
           fetch-depth: 0
 
       - name: Patch readiness constants
