@@ -4,6 +4,7 @@ const { pool } = require("../config/db");
 const financeDepositRoutes = require("../routes/equipmentFinanceDepositReservationRoutes");
 const { runEquipmentFinanceOpeningDepositFoundationRepair } = require("./runEquipmentFinanceOpeningDepositFoundationRepair");
 const { runEquipmentFinancePhaseFourStartup } = require("./runEquipmentFinancePhaseFourStartup");
+const middleware = require("../middleware/equipmentCatalogueIntegrityMiddleware");
 
 let repairPromise = null;
 
@@ -29,9 +30,7 @@ async function verifyReady() {
   return repairPromise;
 }
 
-module.exports = function installEquipmentFinanceDepositReadinessBootstrap({ middleware }) {
-  if (!middleware || middleware.__chalin03DepositReadinessBootstrapInstalled) return;
-
+if (!middleware.__chalin03DepositReadinessBootstrapInstalled) {
   const original = middleware.enforceEquipmentCatalogueWriteIntegrity;
   middleware.enforceEquipmentCatalogueWriteIntegrity = async function depositReadinessBootstrap(
     req,
@@ -74,4 +73,6 @@ module.exports = function installEquipmentFinanceDepositReadinessBootstrap({ mid
     enumerable: false,
     writable: false,
   });
-};
+}
+
+module.exports = { verifyReady };
