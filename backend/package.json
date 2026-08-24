@@ -18,6 +18,7 @@
     "migrate:equipment-finance:phase3-application:production": "node scripts/runEquipmentFinancePhaseThreeApplicationStartup.js",
     "migrate:equipment-finance:phase3-agreement:production": "node scripts/runEquipmentFinanceAgreementCreationStartup.js",
     "migrate:equipment-finance:opening-deposit-foundation:production": "node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js",
+    "migrate:equipment-finance:opening-deposit-bootstrap:production": "node scripts/runEquipmentFinanceOpeningDepositProductionBootstrap.js",
     "migrate:equipment-finance:phase4:production": "node scripts/runEquipmentFinancePhaseFourStartup.js",
     "verify:equipment-finance:deposit-readiness": "node scripts/verifyEquipmentFinanceDepositReadiness.js",
     "migrate:equipment-finance:phase5a:production": "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
