@@ -121,21 +121,6 @@ async function verifyDatabaseIdentity(connection) {
   return databaseName;
 }
 
-async function migrationRecordExists(connection) {
-  const [[tableRow]] = await connection.query(
-    `SELECT COUNT(*) AS present
-     FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'schema_migrations'`
-  );
-  if (Number(tableRow?.present || 0) !== 1) return false;
-  const [[row]] = await connection.query(
-    "SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?",
-    [MIGRATION_RECORD]
-  );
-  return Number(row?.applied || 0) === 1;
-}
-
 async function executeStatements(connection, statements, label) {
   const results = [];
   for (let index = 0; index < statements.length; index += 1) {
@@ -159,9 +144,11 @@ async function verify(connection) {
   if (results.length !== 2) throw new Error(`Deposit agreement foundation verifier returned ${results.length} result sets; expected 2.`);
   const missingColumns = Number(results[0]?.[0]?.missing_deposit_agreement_columns || 0);
   const missingRecord = Number(results[1]?.[0]?.deposit_agreement_foundation_migration_record_missing || 0);
-  if (missingColumns !== 0 || missingRecord !== 0) {
-    throw new Error(`Deposit agreement foundation verification failed: missing_columns=${missingColumns}, missing_migration_record=${missingRecord}.`);
-  }
+  return {
+    ready: missingColumns === 0 && missingRecord === 0,
+    missingColumns,
+    missingRecord,
+  };
 }
 
 async function runEquipmentFinanceDepositAgreementFoundationRepair() {
@@ -173,8 +160,14 @@ async function runEquipmentFinanceDepositAgreementFoundationRepair() {
     lockAcquired = Number(lockRow?.acquired || 0) === 1;
     if (!lockAcquired) throw new Error("Could not acquire the Deposit agreement foundation migration lock.");
 
-    if (!(await migrationRecordExists(connection))) {
-      console.log(`Applying ${MIGRATION_RECORD} on ${databaseName}.`);
+    // Source-of-truth is the live schema, not the bookkeeping row. The SQL is
+    // additive and idempotent, so repair whenever the verifier says the actual
+    // agreement foundation is incomplete, even when the migration name exists.
+    const before = await verify(connection);
+    if (!before.ready) {
+      console.log(
+        `Deposit agreement foundation incomplete on ${databaseName}: missing_columns=${before.missingColumns}, missing_migration_record=${before.missingRecord}. Reapplying approved idempotent repair.`
+      );
       await executeStatements(
         connection,
         splitSqlScript(readMigrationFile(MIGRATION_FILE)),
@@ -182,7 +175,13 @@ async function runEquipmentFinanceDepositAgreementFoundationRepair() {
       );
     }
 
-    await verify(connection);
+    const after = await verify(connection);
+    if (!after.ready) {
+      throw new Error(
+        `Deposit agreement foundation verification failed after repair: missing_columns=${after.missingColumns}, missing_migration_record=${after.missingRecord}.`
+      );
+    }
+
     console.log(`Verified ${MIGRATION_RECORD} on ${databaseName}.`);
     return { applied: true, database_name: databaseName };
   } finally {
