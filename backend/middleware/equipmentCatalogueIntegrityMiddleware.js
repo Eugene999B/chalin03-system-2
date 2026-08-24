@@ -105,6 +105,18 @@ function isEquipmentSalesRequest(req) {
   return /^\/sales(?:\/|$)/.test(String(req.path || ""));
 }
 
+function isDepositReservationRequest(req) {
+  const values = [req.path, req.originalUrl, req.url]
+    .map((value) => String(value || "").split("?")[0]);
+
+  return values.some(
+    (value) =>
+      /^\/sales\/deposit-reservations(?:\/|$)/.test(value) ||
+      /\/api\/equipment-catalogue\/sales\/deposit-reservations(?:\/|$)/.test(value) ||
+      /\/equipment-catalogue\/sales\/deposit-reservations(?:\/|$)/.test(value)
+  );
+}
+
 async function ensureFoundationOnce() {
   if (!foundationPromise) {
     foundationPromise = ensureEquipmentSalesSchema().catch((error) => {
@@ -369,6 +381,10 @@ async function handleSecurePhotoUpload(req, res, match) {
 }
 
 async function enforceEquipmentCatalogueWriteIntegrity(req, res, next) {
+  if (isDepositReservationRequest(req)) {
+    return dispatchEquipmentSalesRouter(req, res, next);
+  }
+
   try {
     await ensureFoundationOnce();
   } catch (error) {
