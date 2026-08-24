@@ -1,0 +1,39 @@
+/* Desktop-only Excavators card repair: full photo first, details underneath. */
+@media (min-width: 721px) {
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: none !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine > .finance-simple__machine-image {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    height: clamp(320px, 34vw, 460px) !important;
+    min-height: 320px !important;
+    aspect-ratio: 16 / 10 !important;
+    padding: 1rem !important;
+    display: grid !important;
+    place-items: center !important;
+    background: #eef3ef !important;
+    overflow: hidden !important;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine > .finance-simple__machine-image img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    object-position: center center !important;
+    transform: none !important;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine-body {
+    width: 100% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 1.05rem 1.1rem 1.15rem !important;
+  }
+}
