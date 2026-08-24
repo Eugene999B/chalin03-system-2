@@ -183,8 +183,8 @@ function sendAuditLockedResponse(res, lock, actionText) {
 
 function currentIdentitySelect() {
   return `
-    COALESCE(NULLIF(s.customer_name, ''), NULLIF(c.name, ''), NULLIF(d.customer_name, ''), 'Unnamed Customer') AS customer_name,
-    COALESCE(NULLIF(s.customer_phone, ''), NULLIF(c.phone, ''), NULLIF(d.customer_phone, '')) AS customer_phone,
+    COALESCE(NULLIF(c.name, ''), NULLIF(d.customer_name, ''), NULLIF(s.customer_name, ''), 'Unnamed Customer') AS customer_name,
+    COALESCE(NULLIF(c.phone, ''), NULLIF(d.customer_phone, ''), NULLIF(s.customer_phone, '')) AS customer_phone,
     c.location AS customer_location,
     d.customer_name AS debt_customer_name_snapshot,
     d.customer_phone AS debt_customer_phone_snapshot,
@@ -200,25 +200,15 @@ async function loadDebtDeskAccounts(branchId, { includePaid = false } = {}) {
        CONCAT('customer-', COALESCE(s.customer_id, d.customer_id)) AS customer_key,
        COALESCE(s.customer_id, d.customer_id) AS customer_id,
        COALESCE(
-         MAX(CASE
-           WHEN NULLIF(s.customer_name, '') IS NOT NULL
-            AND TRIM(s.customer_name) <> TRIM(COALESCE(d.customer_name, ''))
-           THEN s.customer_name
-         END),
          MAX(NULLIF(c.name, '')),
-         MAX(NULLIF(s.customer_name, '')),
          MAX(NULLIF(d.customer_name, '')),
+         MAX(NULLIF(s.customer_name, '')),
          'Unnamed Customer'
        ) AS customer_name,
        COALESCE(
-         MAX(CASE
-           WHEN NULLIF(s.customer_phone, '') IS NOT NULL
-            AND TRIM(s.customer_phone) <> TRIM(COALESCE(d.customer_phone, ''))
-           THEN s.customer_phone
-         END),
          MAX(NULLIF(c.phone, '')),
-         MAX(NULLIF(s.customer_phone, '')),
-         MAX(NULLIF(d.customer_phone, ''))
+         MAX(NULLIF(d.customer_phone, '')),
+         MAX(NULLIF(s.customer_phone, ''))
        ) AS customer_phone,
        MAX(c.location) AS customer_location,
        COUNT(d.id) AS debt_count,
