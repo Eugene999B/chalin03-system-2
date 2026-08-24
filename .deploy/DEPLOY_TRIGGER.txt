@@ -2,7 +2,7 @@ CHALIN 03 DEPLOYMENT TRIGGER
 
 Mode: NORMAL PRODUCTION
 Branch: production
-Trigger sequence: 21
-Triggered at: 2026-08-24T15:05:00Z
+Trigger sequence: 22
+Triggered at: 2026-08-24T15:10:00Z
 
 This file exists only to create a harmless Git commit after changing Railway and Cloudflare back to the production branch. Editing the trigger sequence causes both platforms to deploy the selected branch without changing application or database behaviour.
