@@ -52,13 +52,6 @@ if (!independentRoutes.__chalin03ParentDepositRepairInstalled) {
     }
   );
 
-  installRouteFirst(
-    independentRoutes,
-    "/deposit-reservations/candidates",
-    [],
-    (req, res, next) => next()
-  );
-
   const candidateLayer = candidateRoutes.stack.find(
     (layer) => layer?.route?.path === "/deposit-reservations/candidates"
   );
