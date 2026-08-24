@@ -1,1 +1,0 @@
-Temporary Stage 2 note: readiness endpoint must remain read-only and report schema state without performing migrations.
