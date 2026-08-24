@@ -1,0 +1,46 @@
+name: One-time Excavator Register Repair
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply standard hire rate binding fix
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('backend/services/equipmentFinanceMachineRegisterService.js')
+          text = path.read_text(encoding='utf-8')
+          old_numbers = '''    [\"current_meter\", 0, \"Current meter\"],\n    [\"acquisition_cost\", 0, \"Acquisition cost\"],\n    [\"target_selling_price\", 0, \"Target selling price\"],\n    [\"minimum_selling_price\", 0, \"Minimum selling price\"],'''
+          new_numbers = '''    [\"current_meter\", 0, \"Current meter\"],\n    [\"acquisition_cost\", 0, \"Acquisition cost\"],\n    [\"target_selling_price\", 0, \"Target selling price\"],\n    [\"minimum_selling_price\", 0, \"Minimum selling price\"],\n    [\"standard_hire_rate\", 0, \"Standard hire rate\"],'''
+          old_params = '''        machine.acquisition_cost,\n        machine.target_selling_price,\n        machine.minimum_selling_price,\n        machine.supplier_name,'''
+          new_params = '''        machine.acquisition_cost,\n        machine.target_selling_price,\n        machine.minimum_selling_price,\n        machine.standard_hire_rate,\n        machine.supplier_name,'''
+          if text.count(old_numbers) != 1:
+              raise SystemExit('expected numeric normalization block exactly once')
+          if text.count(old_params) != 1:
+              raise SystemExit('expected INSERT parameter block exactly once')
+          path.write_text(text.replace(old_numbers, new_numbers).replace(old_params, new_params), encoding='utf-8')
+      - name: Verify syntax
+        run: node --check backend/services/equipmentFinanceMachineRegisterService.js
+      - name: Commit fix and remove one-time workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/temp-excavator-register-main-fix.yml .github/repair-trigger.txt
+          git add backend/services/equipmentFinanceMachineRegisterService.js
+          git diff --cached --check
+          git commit -m 'fix: bind standard hire rate when registering machines'
+          git push origin HEAD:main
