@@ -9,7 +9,7 @@
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
-    "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
+    "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js && node scripts/runInstallmentResetOwnershipMigration.js",
     "migrate:equipment-finance:professional:production": "node scripts/runEquipmentFinanceProfessionalRebuildMigration.js",
     "migrate:equipment-finance:operational-polish:production": "node scripts/runEquipmentFinanceOperationalPolishMigration.js",
     "migrate:equipment-finance:phase1-schema:production": "node scripts/runEquipmentFinancePhaseOneSchemaStartup.js",
@@ -18,6 +18,7 @@
     "migrate:equipment-finance:phase3-agreement:production": "node scripts/runEquipmentFinanceAgreementCreationStartup.js",
     "migrate:equipment-finance:opening-deposit-foundation:production": "node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js",
     "migrate:equipment-finance:phase4:production": "node scripts/runEquipmentFinancePhaseFourStartup.js",
+    "verify:equipment-finance:deposit-readiness": "node scripts/verifyEquipmentFinanceDepositReadiness.js",
     "migrate:equipment-finance:phase5a:production": "node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js",
     "migrate:equipment-finance:phase5b:production": "node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js",
     "migrate:equipment-finance:phase5-unified-documents:production": "node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js",
@@ -45,11 +46,7 @@
   "engines": {
     "node": ">=20"
   },
-  "keywords": [
-    "chalin03",
-    "sales",
-    "inventory"
-  ],
+  "keywords": ["chalin03", "sales", "inventory"],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
   "dependencies": {
@@ -67,7 +64,5 @@
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.0"
-  }
+  "devDependencies": {"nodemon": "^3.0.0"}
 }
