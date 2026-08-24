@@ -6,7 +6,13 @@ const middleware = require(middlewarePath);
 const original = middleware.enforceEquipmentCatalogueWriteIntegrity;
 
 function isDepositBoundary(req) {
-  return /^\/sales\/deposit-reservations(?:\/|$)/.test(String(req.path || ""));
+  const path = String(req.path || "");
+  const originalUrl = String(req.originalUrl || "");
+  return (
+    /^\/sales\/deposit-reservations(?:\/|$)/.test(path) ||
+    /\/api\/equipment-catalogue\/sales\/deposit-reservations(?:\/|$)/.test(originalUrl) ||
+    /\/sales\/deposit-reservations(?:\/|$)/.test(originalUrl)
+  );
 }
 
 if (!middleware.__chalin03DepositBoundaryInstalled) {
