@@ -6,12 +6,17 @@ const middleware = require(middlewarePath);
 const original = middleware.enforceEquipmentCatalogueWriteIntegrity;
 
 function isDepositBoundary(req) {
-  const path = String(req.path || "");
-  const originalUrl = String(req.originalUrl || "");
-  return (
-    /^\/sales\/deposit-reservations(?:\/|$)/.test(path) ||
-    /\/api\/equipment-catalogue\/sales\/deposit-reservations(?:\/|$)/.test(originalUrl) ||
-    /\/sales\/deposit-reservations(?:\/|$)/.test(originalUrl)
+  const candidates = [
+    req.path,
+    req.originalUrl,
+    req.url,
+    `${req.baseUrl || ""}${req.path || ""}`,
+  ].map((value) => String(value || ""));
+
+  return candidates.some((value) =>
+    /^\/api\/equipment-catalogue\/sales\/deposit-reservations(?:\/|\?|$)/.test(value) ||
+    /^\/equipment-catalogue\/sales\/deposit-reservations(?:\/|\?|$)/.test(value) ||
+    /^\/sales\/deposit-reservations(?:\/|\?|$)/.test(value)
   );
 }
 
