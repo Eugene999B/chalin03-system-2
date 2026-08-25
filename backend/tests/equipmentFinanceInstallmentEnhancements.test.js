@@ -1,0 +1,16 @@
+const assert = require("assert");
+const fs = require("fs");
+const independent = fs.readFileSync("routes/equipmentFinanceIndependentRoutes.js", "utf8");
+const photo = fs.readFileSync("routes/equipmentFinanceCustomerPhotoCaptureRoutes.js", "utf8");
+const photoUi = fs.readFileSync("../frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx", "utf8");
+const routeUi = fs.readFileSync("../frontend/src/App.jsx", "utf8");
+const navUi = fs.readFileSync("../frontend/src/layouts/InstallmentFinanceLayout.jsx", "utf8");
+assert.match(independent, /workflow_status_label: "Under Installment"/);
+assert.match(independent, /\/sms-history/);
+assert.match(independent, /finance-payment-receipt:/);
+assert.match(photo, /sharp/);
+assert.match(photo, /resize\(700, 900/);
+assert.match(photoUi, /Passport portrait crop 35:45/);
+assert.match(routeUi, /EquipmentFinanceSmsHistoryPage/);
+assert.match(navUi, /title: "SMS History"/);
+console.log("Installment Finance enhancement regression checks passed.");

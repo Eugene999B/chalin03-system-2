@@ -214,7 +214,25 @@ router.get(
         status: req.query.status,
         limit: req.query.limit,
       });
-      return res.json({ status: "success", count: machines.length, machines });
+      const normalizedMachines = machines.map((machine) => {
+        if (machine.sale_status !== "installment_active") return machine;
+        return {
+          ...machine,
+          workflow_status: "installment",
+          workflow_status_label: "Under Installment",
+          readiness: {
+            ...(machine.readiness || {}),
+            ready: true,
+            missing: (machine.readiness?.missing || []).filter((item) => item !== "available sale status"),
+          },
+          editability: {
+            ...(machine.editability || {}),
+            editable: false,
+            reason: "This excavator is protected under an active Finance installment workflow.",
+          },
+        };
+      });
+      return res.json({ status: "success", count: normalizedMachines.length, machines: normalizedMachines });
     } catch (error) {
       return next(error);
     }
@@ -245,6 +263,39 @@ router.use("/finance-lifecycle", async (_req, res, next) => {
     });
   }
 });
+
+router.get(
+  "/sms-history",
+  requirePermission("fleet.assets.view"),
+  async (req, res, next) => {
+    try {
+      const limit = Math.min(Math.max(Number(req.query.limit || 100), 1), 200);
+      const page = Math.max(Number(req.query.page || 1), 1);
+      const offset = (page - 1) * limit;
+      const filter = `WHERE sl.source_reference LIKE 'finance:%'
+           OR sl.source_reference LIKE 'finance-payment-receipt:%'
+           OR sl.source_reference LIKE 'equipment-finance-%'`;
+      const [countRows] = await pool.query(`SELECT COUNT(*) AS total_count FROM sms_log sl ${filter}`);
+      const [logs] = await pool.query(
+        `SELECT sl.id, sl.recipient_phone, sl.message, sl.sms_type, sl.status,
+                sl.provider, sl.provider_message_id, sl.provider_status,
+                sl.status_reason, sl.segment_count, sl.estimated_credits,
+                sl.sent_at, sl.submitted_at, sl.delivery_confirmed_at,
+                sl.last_status_at, sl.source_reference, sl.created_at,
+                u.full_name AS sent_by_name, u.username AS sent_by_username
+           FROM sms_log sl
+           LEFT JOIN users u ON u.id = sl.sent_by
+          ${filter}
+          ORDER BY sl.id DESC
+          LIMIT ? OFFSET ?`,
+        [limit, offset]
+      );
+      return res.json({ status: "success", page, limit, total_count: Number(countRows[0]?.total_count || 0), logs });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
 
 router.get(
   "/finance-customers",

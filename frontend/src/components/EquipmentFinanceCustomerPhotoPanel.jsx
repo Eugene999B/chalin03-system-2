@@ -62,12 +62,12 @@ export default function EquipmentFinanceCustomerPhotoPanel() {
         <h2 id="finance-customer-photo-title">Passport Picture</h2>
         <span>
           Add a clear front-facing customer picture. The browser compresses it securely,
-          keeps the complete frame visible and sends it only when this installment
+          normalizes the portrait for agreement documents and sends it only when this installment
           application is created. It is then encrypted inside the Finance document vault.
         </span>
         <div className="finance-customer-photo__rules">
           <small>JPEG, PNG or WebP</small>
-          <small>No automatic cropping</small>
+          <small>Passport portrait crop 35:45</small>
           <small>Compressed before upload</small>
           <small>Used in customer document packs</small>
         </div>
@@ -115,7 +115,7 @@ export default function EquipmentFinanceCustomerPhotoPanel() {
           <div className="finance-customer-photo__details" role="status">
             <strong>Ready for secure upload</strong>
             <span>
-              {photo.width} × {photo.height}px · {fileSize(photo.file_size_bytes)} · Full image preserved
+              {photo.width} × {photo.height}px · {fileSize(photo.file_size_bytes)} · Passport portrait normalized
             </span>
           </div>
         ) : null}
