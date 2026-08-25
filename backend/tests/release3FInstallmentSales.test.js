@@ -52,7 +52,7 @@ test("Professional Equipment Installment Finance remains the active server-side 
 test("Legacy installment implementation remains source-only and is not used by the Professional reminder engine", () => {
   const reminder = read("backend/services/equipmentFinanceReminderEngine.js");
   assert.doesNotMatch(reminder, /installmentReminderService/);
-  assert.match(reminder, /equipmentInstallmentSchedule/);
+  assert.match(reminder, /equipment_installment_schedule/);
 });
 
 console.log("Legacy Installment retirement contract passed.");
