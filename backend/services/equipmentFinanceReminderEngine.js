@@ -10,6 +10,10 @@ const {
   describeDueDate,
 } = require("./equipmentFinanceAuthoritativePolicyService");
 
+function ghanaDate(value = new Date()) {
+  return ghanaToday(value);
+}
+
 const SCHEDULER_INTERVAL_MS = Math.max(
   60 * 60 * 1000,
   Number(process.env.EQUIPMENT_FINANCE_REMINDER_INTERVAL_MS || 60 * 60 * 1000)
