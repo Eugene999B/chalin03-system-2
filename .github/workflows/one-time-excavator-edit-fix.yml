@@ -18,47 +18,59 @@ jobs:
           ref: production
           fetch-depth: 0
 
-      - name: Patch unchanged historical location handling
+      - name: Patch Finance source of truth
         shell: python
         run: |
           from pathlib import Path
+
+          # Preserve the previously deployed historical-yard repair, idempotently.
           p = Path('backend/services/equipmentFinanceMachineRegisterService.js')
           s = p.read_text()
-          old = '''    const locationId = input?.equipment_origin_location_id === undefined ? undefined : positiveId(input.equipment_origin_location_id); const connection = await pool.getConnection();
-    try {'''
-          new = '''    const locationId = input?.equipment_origin_location_id === undefined ? undefined : positiveId(input.equipment_origin_location_id); const connection = await pool.getConnection();
-    try {'''
-          if old not in s:
-            raise SystemExit('expected edit block was not found')
-          marker = '''    const updates = { ...machine, updated_by: userId || null };
-    if (locationId !== undefined) { const location = await locationRecord(connection, locationId); updates.hire_location_id = locationId || null; updates.current_location = location?.name || null; }
-'''
-          replacement = '''    const updates = { ...machine, updated_by: userId || null };
-    if (Object.prototype.hasOwnProperty.call(input || {}, "equipment_origin_location_id")) {
-      const requestedLocationId = positiveId(input.equipment_origin_location_id);
-      if (requestedLocationId === null) {
-        updates.hire_location_id = null;
-        updates.current_location = null;
-      } else if (Number(existing.hire_location_id || 0) === requestedLocationId) {
-        // Preserve an unchanged historical location even when that yard is no longer active.
-        updates.hire_location_id = existing.hire_location_id;
-        updates.current_location = existing.current_location;
-      } else {
-        const location = await locationRecord(connection, requestedLocationId);
-        updates.hire_location_id = requestedLocationId;
-        updates.current_location = location?.name || null;
-      }
-    }
-'''
-          if marker not in s:
-            raise SystemExit('expected location update block was not found')
-          p.write_text(s.replace(marker, replacement, 1))
+          marker = '''    const updates = { ...machine, updated_by: userId || null };\n    if (locationId !== undefined) { const location = await locationRecord(connection, locationId); updates.hire_location_id = locationId || null; updates.current_location = location?.name || null; }\n'''
+          replacement = '''    const updates = { ...machine, updated_by: userId || null };\n    if (Object.prototype.hasOwnProperty.call(input || {}, "equipment_origin_location_id")) {\n      const requestedLocationId = positiveId(input.equipment_origin_location_id);\n      if (requestedLocationId === null) {\n        updates.hire_location_id = null;\n        updates.current_location = null;\n      } else if (Number(existing.hire_location_id || 0) === requestedLocationId) {\n        updates.hire_location_id = existing.hire_location_id;\n        updates.current_location = existing.current_location;\n      } else {\n        const location = await locationRecord(connection, requestedLocationId);\n        updates.hire_location_id = requestedLocationId;\n        updates.current_location = location?.name || null;\n      }\n    }\n'''
+          if marker in s:
+              p.write_text(s.replace(marker, replacement, 1))
+
+          # Fix the actual source of the Excavators readiness status.
+          p = Path('backend/services/equipmentFinanceProfessionalService.js')
+          s = p.read_text()
+          old = '  if (machine.sale_status !== "available") missing.push("available sale status");'
+          new = '  if (!["available", "installment_active"].includes(machine.sale_status)) missing.push("available sale status");'
+          if old in s:
+              s = s.replace(old, new, 1)
+          old2 = '    photo_count: media.length,\n  };'
+          new2 = '    photo_count: media.length,\n    workflow_status: machine.sale_status === "installment_active" ? "installment" : "available",\n    workflow_status_label: machine.sale_status === "installment_active" ? "Under Installment" : "Available",\n  };'
+          if old2 in s and 'workflow_status_label' not in s:
+              s = s.replace(old2, new2, 1)
+          p.write_text(s)
+
+          # Make the actual Finance lifecycle account list calculate next due from
+          # the first unpaid schedule date on/after today, not a stale agreement field.
+          p = Path('backend/routes/equipmentFinanceFinalLifecycleRoutes.js')
+          s = p.read_text()
+          old = '      agreement.next_due_date,\n      agreement.final_due_date,'
+          new = '''      (SELECT MIN(schedule.due_date)\n         FROM equipment_installment_schedule schedule\n        WHERE schedule.agreement_id = agreement.id\n          AND schedule.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')\n          AND schedule.due_date >= CURRENT_DATE) AS next_due_date,\n      agreement.final_due_date,'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # The Excavators page reads its machines from /phase-one/bootstrap.
+          # Ensure that endpoint uses the same authoritative professional-machine feed.
+          p = Path('backend/routes/equipmentFinanceIndependentRoutes.js')
+          s = p.read_text()
+          marker = 'router.use(equipmentFinancePhaseOneRoutes);'
+          insert = '''router.get(\n  "/phase-one/bootstrap",\n  requirePermission("fleet.assets.view"),\n  async (req, res, next) => {\n    try {\n      const machines = await listProfessionalMachines({\n        search: req.query.search,\n        status: req.query.status,\n        limit: req.query.limit,\n      });\n      return res.json({ status: "success", count: machines.length, machines });\n    } catch (error) {\n      return next(error);\n    }\n  }\n);\n\n'''
+          if marker in s and '"/phase-one/bootstrap"' not in s:
+              s = s.replace(marker, insert + marker, 1)
+          p.write_text(s)
 
       - name: Commit repair and remove temporary runner
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/services/equipmentFinanceMachineRegisterService.js .github/workflows/one-time-excavator-edit-fix.yml
-          git commit -m "fix: allow editing machines with unchanged historical yard"
+          git add backend/services/equipmentFinanceMachineRegisterService.js backend/services/equipmentFinanceProfessionalService.js backend/routes/equipmentFinanceFinalLifecycleRoutes.js backend/routes/equipmentFinanceIndependentRoutes.js .github/workflows/one-time-excavator-edit-fix.yml
+          git commit -m "fix: installment status and next payment date source"
+          git rm .github/workflows/one-time-excavator-edit-fix.yml
+          git commit -m "remove one-time finance repair runner"
           git push origin production
