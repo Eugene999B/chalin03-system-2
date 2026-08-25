@@ -39,14 +39,39 @@ function dateLabel(value) {
       });
 }
 
-function nextDueLabel(value) {
-  if (!value) return "—";
-  const parsed = new Date(value);
+function advanceDate(value, frequency, intervalDays = null) {
+  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (frequency === "monthly") {
+    const day = parsed.getUTCDate();
+    const next = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, 1));
+    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, lastDay));
+    return next;
+  }
+  const days = frequency === "weekly" ? 7 : frequency === "fortnightly" ? 14 : Number(intervalDays || 0);
+  if (!Number.isInteger(days) || days <= 0 || days > 365) return null;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed;
+}
+
+function nextDueLabel(account) {
+  const raw = account?.next_due_date || account?.final_due_date;
+  if (!raw) return "—";
+  let parsed = new Date(`${String(raw).slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return "—";
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const due = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-  return due < today ? "—" : dateLabel(value);
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const frequency = String(account?.payment_frequency || "").toLowerCase();
+  const intervalDays = account?.payment_interval_days;
+  let guard = 0;
+  while (parsed < today && guard < 1200) {
+    const next = advanceDate(parsed.toISOString().slice(0, 10), frequency, intervalDays);
+    if (!next) return "—";
+    parsed = next;
+    guard += 1;
+  }
+  return dateLabel(parsed.toISOString().slice(0, 10));
 }
 
 function errorMessage(error, fallback) {
@@ -305,7 +330,7 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
                 </div>
                 <div className="finance-simplified__compact-fact">
                   <span>Next due</span>
-                  <strong>{nextDueLabel(account.next_due_date)}</strong>
+                  <strong>{nextDueLabel(account)}</strong>
                 </div>
                 <div className="finance-simplified__compact-record-actions">
                   <button
@@ -347,7 +372,7 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
                   <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
                   <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
                   <article><span>Official balance</span><strong data-testid="account-detail-official-balance">{money(selected.outstanding_balance)}</strong></article>
-                  <article><span>Next due</span><strong>{nextDueLabel(selected.next_due_date)}</strong></article>
+                  <article><span>Next due</span><strong>{nextDueLabel(selected)}</strong></article>
                 </div>
 
                 <form onSubmit={recordPayment}>
