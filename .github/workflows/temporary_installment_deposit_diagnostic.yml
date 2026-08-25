@@ -1,0 +1,48 @@
+name: Temporary Installment Deposit Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/installment-deposit-500-mobile
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch unexpected Finance deposit diagnostics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('backend/routes/equipmentFinanceDepositReservationRoutes.js')
+          text = path.read_text()
+          old = '''  console.error(fallbackMessage, error);\n  return res.status(500).json({ status: "error", message: fallbackMessage });\n}'''
+          new = '''  console.error(fallbackMessage, error);\n  return res.status(500).json({\n    status: "error",\n    code: "EQUIPMENT_FINANCE_DEPOSIT_INTERNAL_ERROR",\n    message: fallbackMessage,\n    diagnostic: {\n      mysql_code: error?.code || null,\n      mysql_errno: error?.errno || null,\n      mysql_sql_state: error?.sqlState || null,\n      mysql_message: cleanText(error?.sqlMessage || error?.message || "", 800),\n      backend_revision:\n        process.env.RAILWAY_GIT_COMMIT_SHA ||\n        process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||\n        process.env.RAILWAY_GIT_COMMIT ||\n        "unknown",\n    },\n  });\n}'''
+          if old not in text:
+              raise SystemExit('Expected deposit error fallback was not found; refusing to patch.')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+      - name: Validate backend syntax and focused regression
+        working-directory: backend
+        run: |
+          npm ci --omit=dev
+          node --check routes/equipmentFinanceDepositReservationRoutes.js
+          node tests/equipmentFinanceDepositReservationContract.test.js
+          node tests/equipmentFinanceInstallmentEnhancements.test.js
+
+      - name: Remove temporary workflow and commit diagnostic
+        shell: bash
+        run: |
+          rm -f .github/workflows/temporary_installment_deposit_diagnostic.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/routes/equipmentFinanceDepositReservationRoutes.js .github/workflows/temporary_installment_deposit_diagnostic.yml
+          git commit -m "Diagnose unexpected Installment opening deposit failures" || exit 0
+          git push
