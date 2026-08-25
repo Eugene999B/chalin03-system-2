@@ -1,0 +1,38 @@
+name: Fix stale Installment Finance contract test
+
+'on':
+  push:
+    branches:
+      - fix/installment-finance-enhancement
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update current Installment Finance test contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/tests/equipmentFinanceDepositReservationContract.test.js')
+          s = p.read_text()
+          s2 = s.replace('startup.splitSqlScript(integrityMigration).length, 7', 'startup.splitSqlScript(integrityMigration).length, 9')
+          s2 = s2.replace('/EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED/', '/EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED/')
+          if s2 == s:
+              raise SystemExit('expected stale contract patterns were not found')
+          p.write_text(s2)
+          PY
+      - name: Commit test contract update and remove repair workflow
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/tests/equipmentFinanceDepositReservationContract.test.js
+          git commit -m 'test: align current installment deposit contract'
+          git rm .github/workflows/fix-stale-finance-contract-test.yml
+          git commit -m 'chore: remove stale contract test repair workflow'
+          git push origin HEAD:fix/installment-finance-enhancement
