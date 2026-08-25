@@ -9,6 +9,7 @@ const MIGRATION_FILE = "20260805_equipment_finance_opening_deposit_foundation_re
 const VERIFIER_FILE = "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql";
 const INTEGRITY_MIGRATION_RECORD = "20260803_equipment_finance_phase4_deposit_reservation_integrity";
 const INTEGRITY_MIGRATION_FILE = "20260825_equipment_finance_opening_deposit_trigger_fix.sql";
+const RESERVATION_GATE_FIX_FILE = "20260825_equipment_finance_opening_deposit_reservation_gate_fix.sql";
 const REQUIRED_TRIGGERS = Object.freeze([
   "trg_equipment_finance_payment_gate_before_insert",
   "trg_equipment_finance_reservation_gate_before_insert",
@@ -223,6 +224,7 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
       const baseFile = resolveMigrationFile(BASE_MIGRATION_FILE, { required: false });
       const repairFile = resolveMigrationFile(MIGRATION_FILE);
       const integrityFile = resolveMigrationFile(INTEGRITY_MIGRATION_FILE);
+      const reservationGateFixFile = resolveMigrationFile(RESERVATION_GATE_FIX_FILE);
 
       if (baseFile && !(await migrationRecorded(connection, BASE_MIGRATION_FILE))) {
         await executeSqlFile(connection, baseFile);
@@ -236,6 +238,8 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
 
       await executeSqlFile(connection, integrityFile);
       await recordMigration(connection, INTEGRITY_MIGRATION_RECORD);
+
+      await executeSqlFile(connection, reservationGateFixFile);
 
       const verifierFile = resolveMigrationFile(VERIFIER_FILE);
       await executeSqlFile(connection, verifierFile);
