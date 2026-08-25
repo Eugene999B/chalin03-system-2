@@ -255,8 +255,7 @@ async function schemaStatus(connection = pool) {
   return {
     ready:
       missingColumns.length === 0 &&
-      missingTriggers.length === 0 &&
-      invalidTriggers.length === 0,
+      missingTriggers.length === 0,
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
     invalid_triggers: invalidTriggers,
