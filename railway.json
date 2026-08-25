@@ -1,1 +1,11 @@
-{"$schema":"https://railway.com/railway.schema.json","build":{"builder":"RAILPACK","buildCommand":"if [ -f package.json ]; then npm ci; else cd backend && npm ci; fi"},"deploy":{"preDeployCommand":"export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && if [ -f scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js ]; then node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js; else node backend/scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js; fi","startCommand":"if [ -f package.json ]; then npm start; else cd backend && npm start; fi"}}
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "if [ -f package.json ]; then npm ci; else cd backend && npm ci; fi"
+  },
+  "deploy": {
+    "preDeployCommand": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && if [ -f scripts/runEquipmentFinanceOpeningDepositDeployRepair.js ]; then node scripts/runEquipmentFinanceOpeningDepositDeployRepair.js; else node backend/scripts/runEquipmentFinanceOpeningDepositDeployRepair.js; fi",
+    "startCommand": "if [ -f package.json ]; then npm start; else cd backend && npm start; fi"
+  }
+}
