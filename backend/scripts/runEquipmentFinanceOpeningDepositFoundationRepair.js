@@ -103,6 +103,12 @@ function readMigration(filename) {
   return fs.readFileSync(filePath, "utf8");
 }
 
+function tryReadMigration(filename) {
+  const filePath = path.join(migrationDirectory(), filename);
+  if (!fs.existsSync(filePath)) return null;
+  return fs.readFileSync(filePath, "utf8");
+}
+
 async function executeStatements(connection, statements, label) {
   const results = [];
   for (let index = 0; index < statements.length; index += 1) {
@@ -121,7 +127,6 @@ function validateFoundation(results) {
   if (results.length !== 4) {
     throw new Error(`Opening Deposit repair verifier returned ${results.length} result sets instead of 4.`);
   }
-
   const [migrationRows, columnRows, indexRows, duplicateRows] = results;
   if (migrationRows.length !== 1 || migrationRows[0]?.migration_name !== MIGRATION_RECORD) {
     throw new Error("Opening Deposit repair migration record was not verified.");
@@ -156,14 +161,12 @@ async function validateIntegrityTriggers(connection) {
         AND TRIGGER_NAME IN (${placeholders})`,
     REQUIRED_TRIGGERS
   );
-
   const expected = new Map([
     [REQUIRED_TRIGGERS[0], ["INSERT", "BEFORE"]],
     [REQUIRED_TRIGGERS[1], ["INSERT", "BEFORE"]],
     [REQUIRED_TRIGGERS[2], ["UPDATE", "BEFORE"]],
   ]);
   const found = new Map(rows.map((row) => [row.TRIGGER_NAME, row]));
-
   for (const [name, [event, timing]] of expected) {
     const row = found.get(name);
     if (!row) throw new Error(`Opening Deposit integrity trigger is missing: ${name}.`);
@@ -176,14 +179,19 @@ async function validateIntegrityTriggers(connection) {
 async function runEquipmentFinanceOpeningDepositFoundationRepair() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
-
   try {
     const databaseName = await verifyDatabaseIdentity(connection);
     const [[lockRow]] = await connection.query("SELECT GET_LOCK(?, 30) AS acquired", [MIGRATION_LOCK]);
     lockAcquired = Number(lockRow?.acquired || 0) === 1;
     if (!lockAcquired) throw new Error("Could not acquire the Opening Deposit foundation repair lock.");
 
-    await executeStatements(connection, splitSql(readMigration(BASE_MIGRATION_FILE)), "Equipment Finance controlled deposit foundation");
+    const baseSql = tryReadMigration(BASE_MIGRATION_FILE);
+    if (baseSql) {
+      await executeStatements(connection, splitSql(baseSql), "Equipment Finance controlled deposit foundation");
+    } else {
+      console.log(`Optional ${BASE_MIGRATION_FILE} is not packaged in this backend deployment; continuing with the packaged Opening Deposit repair.`);
+    }
+
     await executeStatements(connection, splitSql(readMigration(MIGRATION_FILE)), "Opening Deposit foundation repair");
     const verifierResults = await executeStatements(
       connection,
@@ -191,7 +199,6 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
       "Opening Deposit foundation verifier"
     );
     validateFoundation(verifierResults);
-
     await executeStatements(
       connection,
       splitSql(readMigration(INTEGRITY_MIGRATION_FILE)),
@@ -199,14 +206,8 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
     );
     await validateIntegrityTriggers(connection);
 
-    console.log(`Verified ${BASE_MIGRATION_FILE}, ${MIGRATION_RECORD} and ${INTEGRITY_MIGRATION_RECORD} on ${databaseName}.`);
-    return {
-      applied: true,
-      database_name: databaseName,
-      base_migration: BASE_MIGRATION_FILE,
-      migration: MIGRATION_RECORD,
-      integrity_migration: INTEGRITY_MIGRATION_RECORD,
-    };
+    console.log(`Verified ${MIGRATION_RECORD} and ${INTEGRITY_MIGRATION_RECORD} on ${databaseName}.`);
+    return { applied: true, database_name: databaseName, migration: MIGRATION_RECORD, integrity_migration: INTEGRITY_MIGRATION_RECORD };
   } finally {
     if (lockAcquired) {
       try { await connection.query("SELECT RELEASE_LOCK(?)", [MIGRATION_LOCK]); } catch {}
