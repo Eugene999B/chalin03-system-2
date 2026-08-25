@@ -307,11 +307,27 @@ function sendError(res, error, fallbackMessage) {
       ...(error.readiness ? { readiness: readinessDiagnostic(error.readiness) } : {}),
     });
   }
-  if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
+  if (["ER_NO_SUCH_TABLE"].includes(error?.code)) {
     return res.status(503).json({
       status: "error",
       code: "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
       message: "The Opening Deposit payment controls are not installed on the production database.",
+      diagnostic: {
+        mysql_code: error.code,
+        mysql_message: cleanText(error.sqlMessage || error.message, 500),
+        backend_revision:
+          process.env.RAILWAY_GIT_COMMIT_SHA ||
+          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
+          process.env.RAILWAY_GIT_COMMIT ||
+          "unknown",
+      },
+    });
+  }
+  if (["ER_BAD_FIELD_ERROR"].includes(error?.code)) {
+    return res.status(500).json({
+      status: "error",
+      code: "EQUIPMENT_FINANCE_DEPOSIT_QUERY_INVALID",
+      message: "The Opening Deposit query referenced a field that does not exist in the live database.",
       diagnostic: {
         mysql_code: error.code,
         mysql_message: cleanText(error.sqlMessage || error.message, 500),
@@ -377,17 +393,11 @@ async function loadAgreement(connection, agreementId) {
        asset.sale_status,
        asset.is_active AS asset_is_active,
        location.name AS equipment_origin_name,
-       (SELECT sale_lock.id
-          FROM equipment_asset_sale_locks sale_lock
-         WHERE sale_lock.asset_id = agreement.asset_id
-           AND sale_lock.released_at IS NULL
-         ORDER BY sale_lock.id
-         LIMIT 1) AS active_lock_id,
        (SELECT sale_lock.agreement_id
           FROM equipment_asset_sale_locks sale_lock
          WHERE sale_lock.asset_id = agreement.asset_id
            AND sale_lock.released_at IS NULL
-         ORDER BY sale_lock.id
+         ORDER BY sale_lock.locked_at
          LIMIT 1) AS active_lock_agreement_id,
        (SELECT COUNT(*)
         FROM hire_contract_assets hire_asset
@@ -561,7 +571,7 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
       message: readiness.ready
         ? "Finance deposit and reservation controls are ready."
         : "The Opening Deposit payment controls are not installed on the production database.",
-      readiness: readinessDiagnostic(readiness),
+      readiness,
     });
   } catch (error) {
     return sendError(res, error, "Could not check Finance deposit readiness.");
@@ -587,17 +597,11 @@ router.get("/candidates", requirePermission("fleet.assets.view"), async (_req, r
          asset.sale_status,
          asset.is_active AS asset_is_active,
          location.name AS equipment_origin_name,
-         (SELECT sale_lock.id
-            FROM equipment_asset_sale_locks sale_lock
-           WHERE sale_lock.asset_id = agreement.asset_id
-             AND sale_lock.released_at IS NULL
-           ORDER BY sale_lock.id
-           LIMIT 1) AS active_lock_id,
          (SELECT sale_lock.agreement_id
             FROM equipment_asset_sale_locks sale_lock
            WHERE sale_lock.asset_id = agreement.asset_id
              AND sale_lock.released_at IS NULL
-           ORDER BY sale_lock.id
+           ORDER BY sale_lock.locked_at
            LIMIT 1) AS active_lock_agreement_id,
          (SELECT COUNT(*)
           FROM hire_contract_assets hire_asset
@@ -758,11 +762,11 @@ router.post(
           [agreement.asset_id]
         );
         const [activeLockRows] = await connection.query(
-          `SELECT id, agreement_id, lock_status
+          `SELECT agreement_id, lock_status
              FROM equipment_asset_sale_locks
             WHERE asset_id = ?
               AND released_at IS NULL
-            ORDER BY id
+            ORDER BY locked_at
             FOR UPDATE`,
           [agreement.asset_id]
         );
@@ -776,7 +780,7 @@ router.post(
           operational_purpose: assetRows[0].operational_purpose,
           sale_status: assetRows[0].sale_status,
           active_hire_count: activeHireRows.length,
-          active_lock_id: activeLockRows[0]?.id || null,
+          active_lock_id: null,
           active_lock_agreement_id: conflictingLock?.agreement_id || null,
         };
         assertAssetCanBeReserved(agreement);
