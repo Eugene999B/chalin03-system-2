@@ -107,6 +107,7 @@ SELECT 2;
 test("verifier validation rejects missing, non-numeric and non-zero results", () => {
   const plan = {
     name: "example",
+    migrationRecord: "example",
     expectedProblems: ["problem_one", "problem_two"],
   };
   assert.doesNotThrow(() =>
