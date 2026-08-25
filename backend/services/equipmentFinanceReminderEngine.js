@@ -94,12 +94,11 @@ function classifyReminder(row, agreement, settings, today) {
   return null;
 }
 
-async function reminderCandidates({ today = ghanaToday(), limit = 500 } = {}) {
+async function reminderCandidates({ today = ghanaDate(), limit = 500, applyLateFees = false, sendLateFeeNotifications = true, sentBy = null } = {}) {
   await assertProfessionalSchema();
-  // Apply eligible contractual late fees once before building the reminder
-  // read-model. The application service is idempotent and reconciles the
-  // agreement after each successful fee write.
-  await applyEligibleLateFees({ today, sendNotifications: true });
+  if (applyLateFees) {
+    await applyEligibleLateFees({ today, sendNotifications: sendLateFeeNotifications, sentBy });
+  }
   const settings = await getProfessionalSettings();
   const [rows] = await pool.query(
     `SELECT schedule.id AS schedule_id, schedule.sequence_number, schedule.due_date,
@@ -162,7 +161,7 @@ async function reminderCandidates({ today = ghanaToday(), limit = 500 } = {}) {
 }
 
 async function previewProfessionalReminders(options = {}) {
-  const result = await reminderCandidates(options);
+  const result = await reminderCandidates({ ...options, applyLateFees: false, sendLateFeeNotifications: false });
   return {
     today: result.today,
     automatic_sms_enabled: Boolean(result.settings.automatic_reminders_enabled),
@@ -205,8 +204,8 @@ async function automaticLimitReason(reminder, settings) {
   return null;
 }
 
-async function runProfessionalReminderSync({ source = "scheduler", sentBy = null, bypassTime = false, today = ghanaToday() } = {}) {
-  const { settings, reminders } = await reminderCandidates({ today });
+async function runProfessionalReminderSync({ source = "scheduler", sentBy = null, bypassTime = false, today = ghanaDate() } = {}) {
+  const { settings, reminders } = await reminderCandidates({ today, applyLateFees: true, sendLateFeeNotifications: true, sentBy });
   const automatic = source === "scheduler";
   if (automatic && !settings.automatic_reminders_enabled) return { sent: 0, failed: 0, skipped: reminders.length, reason: "automatic_disabled" };
   if (!bypassTime && !insideAllowedTime(settings)) return { sent: 0, failed: 0, skipped: reminders.length, reason: "outside_reminder_hour" };
