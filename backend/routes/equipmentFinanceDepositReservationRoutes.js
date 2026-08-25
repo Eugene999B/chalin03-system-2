@@ -7,10 +7,6 @@ const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
-  assertFinanceMutationSafe,
-  refreshFinanceAgreementFromEvidence,
-} = require("../services/equipmentFinanceReconciliationService");
-const {
   runEquipmentFinanceOpeningDepositFoundationRepair,
 } = require("../scripts/runEquipmentFinanceOpeningDepositFoundationRepair");
 const {
@@ -517,6 +513,26 @@ function candidateShape(agreement) {
   };
 }
 
+async function loadControlledDepositEvidence(connection, agreementId) {
+  const [rows] = await connection.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN payment.is_voided = FALSE THEN payment.amount ELSE 0 END), 0) AS total_paid,
+       COALESCE(SUM(CASE WHEN payment.is_voided = FALSE
+                              AND payment.payment_category = 'deposit'
+                              AND payment.payment_stage = 'opening_deposit'
+                         THEN payment.amount ELSE 0 END), 0) AS controlled_deposit_received
+       FROM equipment_sale_payments payment
+      WHERE payment.agreement_id = ?`,
+    [agreementId]
+  );
+  return {
+    total_paid: Number(Number(rows[0]?.total_paid || 0).toFixed(2)),
+    controlled_deposit_received: Number(
+      Number(rows[0]?.controlled_deposit_received || 0).toFixed(2)
+    ),
+  };
+}
+
 router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     const readiness = await schemaStatus(pool);
@@ -610,11 +626,12 @@ router.post(
       assertDepositOfficer(req);
       await ensureDepositFoundationReady();
       await assertSchemaReady(pool);
+      const body = req.body || {};
       const agreementId = positiveId(req.params.agreementId);
-      const amount = money(req.body.amount, 0);
-      const method = enumValue(req.body.payment_method, PAYMENT_METHODS, undefined);
-      const confirmReservation = boolValue(req.body.confirm_reservation, false);
-      const idempotencyKey = cleanText(req.body.idempotency_key, 191);
+      const amount = money(body.amount, 0);
+      const method = enumValue(body.payment_method, PAYMENT_METHODS, undefined);
+      const confirmReservation = boolValue(body.confirm_reservation, false);
+      const idempotencyKey = cleanText(body.idempotency_key, 191);
 
       if (!agreementId || amount === undefined || confirmReservation === undefined) {
         throw new DepositError(
@@ -685,11 +702,22 @@ router.post(
         }
 
         assertControlledAgreement(agreement);
-        const currentReconciliation = await assertFinanceMutationSafe(agreement.id, {
-          connection,
-          lock: false,
-        });
-        agreement = { ...agreement, ...currentReconciliation.calculated };
+
+        const depositEvidence = await loadControlledDepositEvidence(connection, agreement.id);
+        const storedDeposit = toCents(agreement.deposit_received);
+        const evidencedDeposit = toCents(depositEvidence.controlled_deposit_received);
+        if (Math.abs(storedDeposit - evidencedDeposit) > 1) {
+          throw new DepositError(
+            409,
+            "The agreement's opening-deposit balance does not match its controlled deposit receipts. No payment was saved.",
+            "EQUIPMENT_FINANCE_DEPOSIT_EVIDENCE_RECONCILIATION_REQUIRED"
+          );
+        }
+        agreement = {
+          ...agreement,
+          amount_paid: depositEvidence.total_paid,
+          deposit_received: depositEvidence.controlled_deposit_received,
+        };
 
         const [assetRows] = await connection.query(
           `SELECT id, is_active, operational_purpose, sale_status
@@ -803,8 +831,8 @@ router.post(
               depositComplete ? "reserved" : "none",
               fromCents(amountCents),
               method,
-              nullableText(req.body.reference_number, 150),
-              nullableText(req.body.notes, 500),
+              nullableText(body.reference_number, 150),
+              nullableText(body.notes, 500),
               positiveId(req.user?.id),
               positiveId(req.user?.id),
             ]
@@ -896,11 +924,7 @@ router.post(
           );
         }
 
-        const reconciliation = await refreshFinanceAgreementFromEvidence(
-          connection,
-          agreement.id
-        );
-        const refreshed = reconciliation.agreement;
+        const refreshed = await loadAgreement(connection, agreement.id);
         await writeAuditEvent({
           connection,
           req,
