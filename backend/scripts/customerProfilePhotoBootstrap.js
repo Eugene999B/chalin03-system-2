@@ -39,12 +39,18 @@ function patchCustomerRouter(router) {
     if (!["POST", "PUT", "PATCH"].includes(req.method)) return next();
     const path = String(req.path || "");
     if (!/^\/phase-one\/customers(?:\/\d+)?\/?$/.test(path)) return next();
-    if (!requirePermission("fleet.assets.manage")(req, res, () => undefined)) return;
+
+    const permissions = Array.isArray(req.user?.effective_permissions) ? req.user.effective_permissions : [];
+    const role = String(req.user?.role || "").toLowerCase();
+    const canManage = permissions.includes("fleet.assets.manage") || ["admin", "administrator", "manager", "system_administrator", "super_admin"].includes(role);
+    if (!canManage) return res.status(403).json({ status: "error", code: "FLEET_ASSET_MANAGE_PERMISSION_REQUIRED", message: "Your account cannot manage customer profiles." });
+
     try {
       req.__customerProfilePhoto = req.body?.profile_photo_data_url === undefined ? undefined : normalizePhoto(req.body.profile_photo_data_url);
     } catch (error) {
       return res.status(error.statusCode || 400).json({ status: "error", code: error.code || "INVALID_CUSTOMER_PROFILE_PHOTO", message: error.message });
     }
+
     const originalJson = res.json.bind(res);
     res.json = async (payload) => {
       try {
@@ -138,7 +144,7 @@ function patchProfessionalService(service) {
       try {
         const html = buffer.toString("utf8");
         const photo = snapshot.agreement.customer_profile_photo_data_url;
-        const inserted = html.replace(/<h3>Parties<\/h3>/, `<h3>Parties<\/h3><div style="margin:8px 0 12px;"><img src="${photo}" alt="Customer portrait" style="width:80px;height:103px;object-fit:cover;border:1px solid #d7e1d9;border-radius:6px;" /></div>`);
+        const inserted = html.replace(/<h3>Parties<\/h3>/, `<h3>Parties</h3><div style="margin:8px 0 12px;"><img src="${photo}" alt="Customer portrait" style="width:80px;height:103px;object-fit:cover;border:1px solid #d7e1d9;border-radius:6px;" /></div>`);
         return Buffer.from(inserted, "utf8");
       } catch (error) {
         console.error("Agreement Word customer portrait warning:", error);
