@@ -48,6 +48,15 @@ function connectionOptions() {
   };
 }
 
+function hasExecutableSql(text) {
+  return String(text || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:--|#).*$/, ""))
+    .join("\n")
+    .trim().length > 0;
+}
+
 function splitSql(sqlText) {
   const statements = [];
   let delimiter = ";";
@@ -56,20 +65,24 @@ function splitSql(sqlText) {
   for (const line of String(sqlText || "").replace(/\r\n/g, "\n").split("\n")) {
     const match = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
     if (match) {
-      if (buffer.trim()) throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
+      if (hasExecutableSql(buffer)) {
+        throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
+      }
       buffer = "";
       delimiter = match[1];
       continue;
     }
+
     buffer += `${line}\n`;
     const trimmed = buffer.trimEnd();
     if (!trimmed.endsWith(delimiter)) continue;
+
     const statement = trimmed.slice(0, -delimiter.length).trim();
     if (statement) statements.push(statement);
     buffer = "";
   }
 
-  if (buffer.trim()) throw new Error("SQL script ended with an incomplete statement.");
+  if (hasExecutableSql(buffer)) throw new Error("SQL script ended with an incomplete statement.");
   return statements;
 }
 
@@ -218,4 +231,5 @@ module.exports = {
   runEquipmentFinanceOpeningDepositFoundationRepair,
   validateFoundation,
   validateIntegrityTriggers,
+  splitSql,
 };
