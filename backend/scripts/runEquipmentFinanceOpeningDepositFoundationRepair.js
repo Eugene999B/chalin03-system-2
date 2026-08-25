@@ -4,6 +4,7 @@ const mysql = require("mysql2/promise");
 require("dotenv").config();
 
 const MIGRATION_LOCK = "chalin03:equipment-finance:opening-deposit-foundation-repair";
+const BASE_MIGRATION_FILE = "20260729_equipment_finance_deposit_reservation.sql";
 const MIGRATION_RECORD = "20260805_equipment_finance_opening_deposit_foundation_repair";
 const MIGRATION_FILE = "20260805_equipment_finance_opening_deposit_foundation_repair.sql";
 const VERIFIER_FILE = "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql";
@@ -182,6 +183,7 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
     lockAcquired = Number(lockRow?.acquired || 0) === 1;
     if (!lockAcquired) throw new Error("Could not acquire the Opening Deposit foundation repair lock.");
 
+    await executeStatements(connection, splitSql(readMigration(BASE_MIGRATION_FILE)), "Equipment Finance controlled deposit foundation");
     await executeStatements(connection, splitSql(readMigration(MIGRATION_FILE)), "Opening Deposit foundation repair");
     const verifierResults = await executeStatements(
       connection,
@@ -197,10 +199,11 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
     );
     await validateIntegrityTriggers(connection);
 
-    console.log(`Verified ${MIGRATION_RECORD} and ${INTEGRITY_MIGRATION_RECORD} on ${databaseName}.`);
+    console.log(`Verified ${BASE_MIGRATION_FILE}, ${MIGRATION_RECORD} and ${INTEGRITY_MIGRATION_RECORD} on ${databaseName}.`);
     return {
       applied: true,
       database_name: databaseName,
+      base_migration: BASE_MIGRATION_FILE,
       migration: MIGRATION_RECORD,
       integrity_migration: INTEGRITY_MIGRATION_RECORD,
     };
@@ -221,6 +224,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  BASE_MIGRATION_FILE,
   MIGRATION_FILE,
   MIGRATION_LOCK,
   MIGRATION_RECORD,
