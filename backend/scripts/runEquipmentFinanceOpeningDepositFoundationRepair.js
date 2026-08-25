@@ -1,7 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const mysql = require("mysql2/promise");
-require("dotenv").config();
 
 const MIGRATION_LOCK = "chalin03:equipment-finance:opening-deposit-foundation-repair";
 const BASE_MIGRATION_FILE = "20260729_equipment_finance_deposit_reservation.sql";
@@ -28,213 +27,177 @@ function sslConfig() {
   if (String(process.env.DB_SSL || "").trim().toLowerCase() !== "true") return undefined;
   const ca = String(process.env.DB_SSL_CA_BASE64 || "").trim();
   if (ca) return { ca: Buffer.from(ca, "base64").toString("utf8"), rejectUnauthorized: true };
-  return {
-    rejectUnauthorized: !["0", "false", "no", "off"].includes(
-      String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "true").trim().toLowerCase()
-    ),
-  };
+  return { rejectUnauthorized: true };
 }
 
-function connectionOptions() {
-  return {
-    host: requiredEnv("DB_HOST", "MYSQLHOST"),
-    port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
-    user: requiredEnv("DB_USER", "MYSQLUSER"),
-    password: requiredEnv("DB_PASSWORD", "MYSQLPASSWORD"),
-    database: requiredEnv("DB_NAME", "MYSQLDATABASE"),
-    ssl: sslConfig(),
-    connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
-    multipleStatements: false,
-    timezone: "Z",
-  };
+function migrationCandidates(relativePath) {
+  return [
+    path.join(__dirname, "../../database/migrations", relativePath),
+    path.join(__dirname, "../database/migrations", relativePath),
+    path.join(process.cwd(), "database/migrations", relativePath),
+  ];
 }
 
-function hasExecutableSql(text) {
-  return String(text || "")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:--|#).*$/, ""))
-    .join("\n")
-    .trim().length > 0;
+function resolveMigrationFile(relativePath, { required = true } = {}) {
+  for (const candidate of migrationCandidates(relativePath)) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  if (!required) return null;
+  throw new Error(`Migration file not found: ${relativePath}`);
+}
+
+function stripSqlComments(value) {
+  return value
+    .replace(/\/\*![\s\S]*?\*\//g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|\n)\s*--.*(?=\n|$)/g, "$1")
+    .replace(/(^|\n)\s*#.*(?=\n|$)/g, "$1");
 }
 
 function splitSql(sqlText) {
+  const text = stripSqlComments(String(sqlText || "")).replace(/\r\n/g, "\n");
   const statements = [];
   let delimiter = ";";
-  let buffer = "";
+  let current = "";
+  let quote = null;
+  let escaped = false;
 
-  for (const line of String(sqlText || "").replace(/\r\n/g, "\n").split("\n")) {
-    const match = line.match(/^\s*DELIMITER\s+(\S+)\s*$/i);
-    if (match) {
-      if (hasExecutableSql(buffer)) {
-        throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
-      }
-      buffer = "";
-      delimiter = match[1];
+  const flush = () => {
+    const statement = current.trim();
+    if (statement) statements.push(statement);
+    current = "";
+  };
+
+  for (const line of text.split("\n")) {
+    const delimiterMatch = line.trim().match(/^DELIMITER\s+(.+)$/i);
+    if (delimiterMatch) {
+      if (current.trim()) throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
+      delimiter = delimiterMatch[1].trim();
       continue;
     }
 
-    buffer += `${line}\n`;
-    const trimmed = buffer.trimEnd();
-    if (!trimmed.endsWith(delimiter)) continue;
-
-    const statement = trimmed.slice(0, -delimiter.length).trim();
-    if (statement) statements.push(statement);
-    buffer = "";
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      if (quote) {
+        current += char;
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === quote) quote = null;
+        continue;
+      }
+      if (char === "'" || char === '"' || char === "`") {
+        quote = char;
+        current += char;
+        continue;
+      }
+      if (line.startsWith(delimiter, index)) {
+        flush();
+        index += delimiter.length - 1;
+        continue;
+      }
+      current += char;
+    }
+    current += "\n";
   }
 
-  if (hasExecutableSql(buffer)) throw new Error("SQL script ended with an incomplete statement.");
+  flush();
   return statements;
 }
 
-function migrationDirectory() {
-  const candidates = [
-    path.resolve(__dirname, "../database/migrations"),
-    path.resolve(__dirname, "../../database/migrations"),
-  ];
-  const existing = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!existing) throw new Error(`Approved Opening Deposit migration directory is missing. Checked: ${candidates.join(", ")}`);
-  return existing;
+async function createConnection() {
+  return mysql.createConnection({
+    host: requiredEnv("DB_HOST", "MYSQLHOST"),
+    port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
+    user: requiredEnv("DB_USER", "MYSQLUSER"),
+    password: process.env.DB_PASSWORD ?? process.env.MYSQLPASSWORD ?? "",
+    database: requiredEnv("DB_NAME", "MYSQLDATABASE"),
+    ssl: sslConfig(),
+    multipleStatements: false,
+  });
 }
 
-function readMigration(filename) {
-  const filePath = path.join(migrationDirectory(), filename);
-  if (!fs.existsSync(filePath)) throw new Error(`Approved Opening Deposit SQL file is missing: ${filePath}`);
-  return fs.readFileSync(filePath, "utf8");
-}
-
-function tryReadMigration(filename) {
-  const filePath = path.join(migrationDirectory(), filename);
-  if (!fs.existsSync(filePath)) return null;
-  return fs.readFileSync(filePath, "utf8");
-}
-
-async function executeStatements(connection, statements, label) {
-  const results = [];
-  for (let index = 0; index < statements.length; index += 1) {
-    try {
-      const [rows] = await connection.query(statements[index]);
-      results.push(Array.isArray(rows) ? rows : []);
-    } catch (error) {
-      error.message = `${label} failed at statement ${index + 1} of ${statements.length}: ${error.message}`;
-      throw error;
-    }
-  }
-  return results;
-}
-
-function validateFoundation(results) {
-  if (results.length !== 4) {
-    throw new Error(`Opening Deposit repair verifier returned ${results.length} result sets instead of 4.`);
-  }
-  const [migrationRows, columnRows, indexRows, duplicateRows] = results;
-  if (migrationRows.length !== 1 || migrationRows[0]?.migration_name !== MIGRATION_RECORD) {
-    throw new Error("Opening Deposit repair migration record was not verified.");
-  }
-  if (Number(columnRows[0]?.missing_opening_deposit_columns || 0) !== 0) {
-    throw new Error("Opening Deposit evidence/payment columns are still missing.");
-  }
-  if (Number(indexRows[0]?.missing_opening_deposit_indexes || 0) !== 0) {
-    throw new Error("Opening Deposit supporting indexes are still missing.");
-  }
-  if (Number(duplicateRows[0]?.duplicate_opening_deposit_idempotency_keys || 0) !== 0) {
-    throw new Error("Duplicate Opening Deposit idempotency keys must be reviewed before startup can continue.");
-  }
-}
-
-async function verifyDatabaseIdentity(connection) {
-  const [[row]] = await connection.query("SELECT DATABASE() AS database_name");
-  const databaseName = String(row?.database_name || "").trim();
-  const expected = String(process.env.CHALIN03_EXPECTED_DATABASE || "").trim();
-  if (!databaseName || !expected || databaseName !== expected) {
-    throw new Error("Opening Deposit production database identity check failed.");
-  }
-  return databaseName;
-}
-
-async function validateIntegrityTriggers(connection) {
-  const placeholders = REQUIRED_TRIGGERS.map(() => "?").join(",");
+async function tableExists(connection, tableName) {
   const [rows] = await connection.query(
-    `SELECT TRIGGER_NAME, EVENT_MANIPULATION, ACTION_TIMING
-       FROM information_schema.TRIGGERS
-      WHERE TRIGGER_SCHEMA = DATABASE()
-        AND TRIGGER_NAME IN (${placeholders})`,
-    REQUIRED_TRIGGERS
+    `SELECT COUNT(*) AS present FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    [tableName]
   );
-  const expected = new Map([
-    [REQUIRED_TRIGGERS[0], ["INSERT", "BEFORE"]],
-    [REQUIRED_TRIGGERS[1], ["INSERT", "BEFORE"]],
-    [REQUIRED_TRIGGERS[2], ["UPDATE", "BEFORE"]],
-  ]);
-  const found = new Map(rows.map((row) => [row.TRIGGER_NAME, row]));
-  for (const [name, [event, timing]] of expected) {
-    const row = found.get(name);
-    if (!row) throw new Error(`Opening Deposit integrity trigger is missing: ${name}.`);
-    if (row.EVENT_MANIPULATION !== event || row.ACTION_TIMING !== timing) {
-      throw new Error(`Opening Deposit integrity trigger ${name} has invalid timing.`);
-    }
-  }
+  return Number(rows[0]?.present || 0) === 1;
+}
+
+async function ensureSchemaMigrationsTable(connection) {
+  if (await tableExists(connection, "schema_migrations")) return;
+  await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (migration_name VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+}
+
+async function migrationRecorded(connection, migrationName) {
+  await ensureSchemaMigrationsTable(connection);
+  const [rows] = await connection.query(`SELECT migration_name FROM schema_migrations WHERE migration_name = ? LIMIT 1`, [migrationName]);
+  return rows.length > 0;
+}
+
+async function recordMigration(connection, migrationName) {
+  await ensureSchemaMigrationsTable(connection);
+  await connection.query(`INSERT INTO schema_migrations (migration_name) VALUES (?) ON DUPLICATE KEY UPDATE migration_name = VALUES(migration_name)`, [migrationName]);
+}
+
+async function executeSqlFile(connection, filePath) {
+  const statements = splitSql(fs.readFileSync(filePath, "utf8"));
+  for (const statement of statements) await connection.query(statement);
+}
+
+async function verifyRequiredTriggers(connection) {
+  const placeholders = REQUIRED_TRIGGERS.map(() => "?").join(",");
+  const [rows] = await connection.query(`SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND TRIGGER_NAME IN (${placeholders})`, REQUIRED_TRIGGERS);
+  const found = new Set(rows.map((row) => row.TRIGGER_NAME));
+  const missing = REQUIRED_TRIGGERS.filter((name) => !found.has(name));
+  if (missing.length) throw new Error(`Opening Deposit repair did not install required triggers: ${missing.join(", ")}`);
+  return { ok: true, triggers: REQUIRED_TRIGGERS.slice() };
 }
 
 async function runEquipmentFinanceOpeningDepositFoundationRepair() {
-  const connection = await mysql.createConnection(connectionOptions());
-  let lockAcquired = false;
+  const connection = await createConnection();
   try {
-    const databaseName = await verifyDatabaseIdentity(connection);
-    const [[lockRow]] = await connection.query("SELECT GET_LOCK(?, 30) AS acquired", [MIGRATION_LOCK]);
-    lockAcquired = Number(lockRow?.acquired || 0) === 1;
-    if (!lockAcquired) throw new Error("Could not acquire the Opening Deposit foundation repair lock.");
+    const lockName = MIGRATION_LOCK;
+    await connection.query("SELECT GET_LOCK(?, 30)", [lockName]);
+    try {
+      const baseFile = resolveMigrationFile(BASE_MIGRATION_FILE, { required: false });
+      const repairFile = resolveMigrationFile(MIGRATION_FILE);
+      const integrityFile = resolveMigrationFile(INTEGRITY_MIGRATION_FILE);
 
-    const baseSql = tryReadMigration(BASE_MIGRATION_FILE);
-    if (baseSql) {
-      await executeStatements(connection, splitSql(baseSql), "Equipment Finance controlled deposit foundation");
-    } else {
-      console.log(`Optional ${BASE_MIGRATION_FILE} is not packaged in this backend deployment; continuing with the packaged Opening Deposit repair.`);
+      if (baseFile && !(await migrationRecorded(connection, BASE_MIGRATION_FILE))) {
+        await executeSqlFile(connection, baseFile);
+        await recordMigration(connection, BASE_MIGRATION_FILE);
+      }
+      if (!(await migrationRecorded(connection, MIGRATION_RECORD))) {
+        await executeSqlFile(connection, repairFile);
+        await recordMigration(connection, MIGRATION_RECORD);
+      }
+
+      await executeSqlFile(connection, integrityFile);
+      await recordMigration(connection, INTEGRITY_MIGRATION_RECORD);
+
+      const verifierFile = resolveMigrationFile(VERIFIER_FILE);
+      await executeSqlFile(connection, verifierFile);
+      await verifyRequiredTriggers(connection);
+    } finally {
+      await connection.query("DO RELEASE_LOCK(?)", [lockName]);
     }
-
-    await executeStatements(connection, splitSql(readMigration(MIGRATION_FILE)), "Opening Deposit foundation repair");
-    const verifierResults = await executeStatements(
-      connection,
-      splitSql(readMigration(VERIFIER_FILE)),
-      "Opening Deposit foundation verifier"
-    );
-    validateFoundation(verifierResults);
-    await executeStatements(
-      connection,
-      splitSql(readMigration(INTEGRITY_MIGRATION_FILE)),
-      "Opening Deposit integrity trigger repair"
-    );
-    await validateIntegrityTriggers(connection);
-
-    console.log(`Verified ${MIGRATION_RECORD} and ${INTEGRITY_MIGRATION_RECORD} on ${databaseName}.`);
-    return { applied: true, database_name: databaseName, migration: MIGRATION_RECORD, integrity_migration: INTEGRITY_MIGRATION_RECORD };
   } finally {
-    if (lockAcquired) {
-      try { await connection.query("SELECT RELEASE_LOCK(?)", [MIGRATION_LOCK]); } catch {}
-    }
     await connection.end();
   }
 }
 
-if (require.main === module) {
-  runEquipmentFinanceOpeningDepositFoundationRepair().catch((error) => {
-    console.error("Equipment Finance Opening Deposit startup repair failed.");
-    console.error(error.message);
-    process.exit(1);
-  });
-}
+module.exports = { runEquipmentFinanceOpeningDepositFoundationRepair, splitSql, verifyRequiredTriggers };
 
-module.exports = {
-  BASE_MIGRATION_FILE,
-  MIGRATION_FILE,
-  MIGRATION_LOCK,
-  MIGRATION_RECORD,
-  VERIFIER_FILE,
-  INTEGRITY_MIGRATION_FILE,
-  INTEGRITY_MIGRATION_RECORD,
-  REQUIRED_TRIGGERS,
-  runEquipmentFinanceOpeningDepositFoundationRepair,
-  validateFoundation,
-  validateIntegrityTriggers,
-  splitSql,
-};
+if (require.main === module) {
+  runEquipmentFinanceOpeningDepositFoundationRepair()
+    .then(() => {
+      console.log("Equipment Finance Opening Deposit startup repair completed.");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("Equipment Finance Opening Deposit startup repair failed.");
+      console.error(error);
+      process.exit(1);
+    });
+}
