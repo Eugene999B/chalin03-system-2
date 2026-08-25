@@ -184,12 +184,15 @@ async function activeLockMap(connection, assetIds, columns) {
     : columns.has("lock_status")
       ? "sale_lock.lock_status IN ('installment_active','active','reserved','locked')"
       : "1 = 1";
+  const orderBy = columns.has("locked_at")
+    ? "sale_lock.locked_at, sale_lock.agreement_id"
+    : "sale_lock.agreement_id";
   const [rows] = await connection.query(
     `SELECT sale_lock.asset_id, sale_lock.agreement_id
        FROM equipment_asset_sale_locks sale_lock
       WHERE sale_lock.asset_id IN (${placeholders(assetIds)})
         AND ${activeWhere}
-      ORDER BY sale_lock.id`,
+      ORDER BY ${orderBy}`,
     assetIds
   );
   for (const row of rows) {
