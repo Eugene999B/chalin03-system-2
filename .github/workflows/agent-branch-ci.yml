@@ -7,30 +7,107 @@ on:
       - 'agent/**'
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: agent-branch-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  normalize-fixer:
+  backend:
+    name: Backend syntax, migrations and tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - working-directory: backend
+        run: npm ci
+      - working-directory: backend
+        run: npm run syntax-check
+      - working-directory: backend
+        run: npm run migration-safety
+      - working-directory: backend
+        run: npm test
+
+  frontend:
+    name: Frontend tests, lint and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm test
+      - working-directory: frontend
+        run: npm run lint
+      - working-directory: frontend
+        run: npm run build
+
+  dependencies:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - working-directory: backend
+        run: npm ci
+      - working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+  full-history-secret-scan:
+    name: Gitleaks complete Git history
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-      - name: Normalize and restore
+          fetch-depth: 0
+      - name: Scan complete history with reviewed fingerprints
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          path = Path('frontend/src/styles/equipmentFinancePhaseOne.css')
-          text = path.read_text()
-          path.write_text(re.sub(r'@media \(max-width:(\d+)px\)', r'@media (max-width: \1px)', text))
-          PY
-          git fetch origin production --depth=1
-          git checkout origin/production -- .github/workflows/agent-branch-ci.yml .github/workflows/equipment-finance-phase6-browser.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add frontend/src/styles/equipmentFinancePhaseOne.css .github/workflows/agent-branch-ci.yml .github/workflows/equipment-finance-phase6-browser.yml
-          git commit -m "fix: preserve Finance CSS contract formatting"
-          git push origin HEAD:${GITHUB_REF_NAME}
+          docker run --rm \
+            -v "$PWD:/repo" \
+            -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git . \
+            --redact \
+            --exit-code 1 \
+            --log-level error
+
+  codeql:
+    name: CodeQL JavaScript security-extended analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - id: analyze
+        continue-on-error: true
+        uses: github/codeql-action/analyze@v3
+        with:
+          upload: never
+          output: codeql-results
+      - name: Enforce reviewed SARIF policy
+        run: node backend/scripts/verifyVersionThreeCodeqlSarif.js codeql-results/javascript.sarif
