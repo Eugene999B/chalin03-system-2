@@ -5,7 +5,7 @@
     "buildCommand": "npm ci"
   },
   "deploy": {
-    "preDeployCommand": "node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/repairEquipmentFinanceDepositCommitmentTrigger.js",
+    "preDeployCommand": "node -e \"console.log('Chalin 03 pre-deploy: database repairs are controlled maintenance; skipping automatic Opening Deposit repair to prevent deployment-time MySQL lock hangs.')\"",
     "startCommand": "npm start"
   }
 }
