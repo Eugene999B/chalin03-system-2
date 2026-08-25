@@ -5,6 +5,9 @@
 -- Do not run database/schema.sql against production.
 -- The guard recalculates controlled Finance balances from preserved payments,
 -- schedule charges and append-only ledger entries whenever an agreement updates.
+-- IMPORTANT: An installment Finance agreement remains `approved` until the exact
+-- equipment reservation is committed. A completed opening deposit alone must
+-- never transition the agreement to `active`.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -94,8 +97,10 @@ BEGIN
 
         IF NEW.agreement_status IN ('cancelled','defaulted') THEN
             SET NEW.next_due_date = NULL;
-        ELSEIF NEW.equipment_commitment_status = 'not_reserved'
-               AND v_deposits + 0.01 < NEW.deposit_required THEN
+        ELSEIF NEW.equipment_commitment_status = 'not_reserved' THEN
+            -- Deposit completion is not equipment reservation. Keep the
+            -- controlled Finance agreement approved until the exact machine
+            -- reservation has been created and committed.
             SET NEW.agreement_status = 'approved';
             SET NEW.next_due_date = v_next_due;
         ELSEIF v_balance <= 0.01 THEN
@@ -123,7 +128,7 @@ INSERT INTO schema_migrations (
 )
 VALUES (
     'equipment_finance_phase4_balance_guard',
-    'Adds a ledger-aware balance guard so existing Finance payment paths preserve approved corrections, returns, reversals, waivers, penalties and damage charges.'
+    'Ledger-aware Finance balance guard; controlled installment agreements remain approved until exact equipment reservation is committed.'
 )
 ON DUPLICATE KEY UPDATE
     description = VALUES(description);
