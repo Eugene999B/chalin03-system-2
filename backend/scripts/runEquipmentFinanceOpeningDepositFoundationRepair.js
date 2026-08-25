@@ -11,6 +11,15 @@ const MIGRATION_FILE =
   "20260805_equipment_finance_opening_deposit_foundation_repair.sql";
 const VERIFIER_FILE =
   "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql";
+const INTEGRITY_MIGRATION_RECORD =
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity";
+const INTEGRITY_MIGRATION_FILE =
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity.sql";
+const REQUIRED_TRIGGERS = Object.freeze([
+  "trg_equipment_finance_payment_gate_before_insert",
+  "trg_equipment_finance_reservation_gate_before_insert",
+  "trg_equipment_finance_commitment_gate_before_update",
+]);
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
@@ -192,6 +201,37 @@ function validateRepair(results) {
   }
 }
 
+async function validateIntegrityTriggers(connection) {
+  const placeholders = REQUIRED_TRIGGERS.map(() => "?").join(",");
+  const [rows] = await connection.query(
+    `SELECT TRIGGER_NAME, EVENT_MANIPULATION, ACTION_TIMING
+       FROM information_schema.TRIGGERS
+      WHERE TRIGGER_SCHEMA = DATABASE()
+        AND TRIGGER_NAME IN (${placeholders})`,
+    REQUIRED_TRIGGERS
+  );
+
+  const found = new Map(rows.map((row) => [row.TRIGGER_NAME, row]));
+  const missing = REQUIRED_TRIGGERS.filter((name) => !found.has(name));
+  if (missing.length) {
+    throw new Error(
+      `Opening Deposit integrity triggers are still missing: ${missing.join(", ")}.`
+    );
+  }
+
+  const expectedEvents = new Map([
+    ["trg_equipment_finance_payment_gate_before_insert", ["INSERT", "BEFORE"]],
+    ["trg_equipment_finance_reservation_gate_before_insert", ["INSERT", "BEFORE"]],
+    ["trg_equipment_finance_commitment_gate_before_update", ["UPDATE", "BEFORE"]],
+  ]);
+  for (const [name, [event, timing]] of expectedEvents) {
+    const row = found.get(name);
+    if (row.EVENT_MANIPULATION !== event || row.ACTION_TIMING !== timing) {
+      throw new Error(`Opening Deposit integrity trigger ${name} has invalid timing.`);
+    }
+  }
+}
+
 async function runEquipmentFinanceOpeningDepositFoundationRepair() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
@@ -220,11 +260,25 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
     );
     validateRepair(verifierResults);
 
-    console.log(`Verified ${MIGRATION_RECORD} on ${databaseName}.`);
+    // The foundation migration supplies the evidence columns/indexes. The
+    // final deposit-reservation migration supplies the three database guards.
+    // Apply only this deposit-specific integrity migration here; do not run the
+    // broader Phase 4 correction/ledger startup chain from a payment request.
+    await executeStatements(
+      connection,
+      splitSqlScript(readMigrationFile(INTEGRITY_MIGRATION_FILE)),
+      "Equipment Finance Opening Deposit integrity trigger repair"
+    );
+    await validateIntegrityTriggers(connection);
+
+    console.log(
+      `Verified ${MIGRATION_RECORD} and ${INTEGRITY_MIGRATION_RECORD} on ${databaseName}.`
+    );
     return {
       applied: true,
       database_name: databaseName,
       migration: MIGRATION_RECORD,
+      integrity_migration: INTEGRITY_MIGRATION_RECORD,
     };
   } finally {
     if (lockAcquired) {
@@ -247,14 +301,18 @@ if (require.main === module) {
 }
 
 module.exports = {
+  INTEGRITY_MIGRATION_FILE,
+  INTEGRITY_MIGRATION_RECORD,
   MIGRATION_FILE,
   MIGRATION_LOCK,
   MIGRATION_RECORD,
+  REQUIRED_TRIGGERS,
   VERIFIER_FILE,
   executeStatements,
   hasExecutableSql,
   runEquipmentFinanceOpeningDepositFoundationRepair,
   splitSqlScript,
+  validateIntegrityTriggers,
   validateRepair,
   verifyDatabaseIdentity,
 };
