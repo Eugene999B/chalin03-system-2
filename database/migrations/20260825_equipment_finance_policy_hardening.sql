@@ -1,5 +1,7 @@
 -- CHALIN 03 PROFESSIONAL EQUIPMENT INSTALLMENT FINANCE
 -- POLICY HARDENING — ADDITIVE ONLY
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: verified Professional Backup and separate verified SQL/database backup before production execution.
 -- Captures commercial policy on each new agreement so later Finance Settings
 -- changes cannot silently rewrite an existing customer's terms.
 
