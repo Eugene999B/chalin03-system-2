@@ -226,9 +226,6 @@ async function schemaStatus(connection = pool) {
   }
 
   return {
-    // Runtime Deposit readiness is intentionally limited to the actual
-    // schema and database controls needed to record a deposit safely.
-    // Migration bookkeeping is informational and must never block payment.
     ready: missingColumns.length === 0 && missingTriggers.length === 0,
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
@@ -277,13 +274,28 @@ async function assertSchemaReady(connection = pool) {
   return status;
 }
 
+function readinessDiagnostic(readiness) {
+  return readiness
+    ? {
+        missing_columns: readiness.missing_columns || [],
+        missing_triggers: readiness.missing_triggers || [],
+        missing_migrations: readiness.missing_migrations || [],
+        backend_revision:
+          process.env.RAILWAY_GIT_COMMIT_SHA ||
+          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
+          process.env.RAILWAY_GIT_COMMIT ||
+          "unknown",
+      }
+    : undefined;
+}
+
 function sendError(res, error, fallbackMessage) {
   if (error instanceof DepositError) {
     return res.status(error.statusCode).json({
       status: "error",
       code: error.code,
       message: error.message,
-      readiness: error.readiness,
+      ...(error.readiness ? { readiness: readinessDiagnostic(error.readiness) } : {}),
     });
   }
   if (Number(error?.statusCode || 0) >= 400) {
@@ -292,7 +304,7 @@ function sendError(res, error, fallbackMessage) {
       code: error.code || "EQUIPMENT_FINANCE_DEPOSIT_ERROR",
       message: error.message || fallbackMessage,
       ...(error.details ? { details: error.details } : {}),
-      ...(error.readiness ? { readiness: error.readiness } : {}),
+      ...(error.readiness ? { readiness: readinessDiagnostic(error.readiness) } : {}),
     });
   }
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
@@ -300,6 +312,15 @@ function sendError(res, error, fallbackMessage) {
       status: "error",
       code: "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
       message: "The Opening Deposit payment controls are not installed on the production database.",
+      diagnostic: {
+        mysql_code: error.code,
+        mysql_message: cleanText(error.sqlMessage || error.message, 500),
+        backend_revision:
+          process.env.RAILWAY_GIT_COMMIT_SHA ||
+          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
+          process.env.RAILWAY_GIT_COMMIT ||
+          "unknown",
+      },
     });
   }
   if (error?.errno === 1644 || error?.sqlState === "45000") {
@@ -540,7 +561,7 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
       message: readiness.ready
         ? "Finance deposit and reservation controls are ready."
         : "The Opening Deposit payment controls are not installed on the production database.",
-      readiness,
+      readiness: readinessDiagnostic(readiness),
     });
   } catch (error) {
     return sendError(res, error, "Could not check Finance deposit readiness.");
