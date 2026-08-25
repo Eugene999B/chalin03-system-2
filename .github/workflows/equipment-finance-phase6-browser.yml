@@ -4,11 +4,11 @@ on:
   pull_request:
     branches: [main, production]
   push:
-    branches: [main, production, fix/customer-photo-and-installment-ui-20260825]
+    branches: [main, production]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   phase6-browser:
@@ -21,198 +21,25 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Apply customer portrait and Finance UI patch
-        working-directory: .
-        shell: bash
-        env:
-          PATCH_BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          phase1 = Path('backend/routes/equipmentFinancePhaseOneRoutes.js')
-          text = phase1.read_text()
-          helper = r'''
-function normalizeProfilePhoto(value) {
-  const photo = String(value ?? "").trim();
-  if (!photo) return null;
-  if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(photo) || photo.length > 180000) {
-    throw new PhaseOneError(400, "Choose a customer photo again. The image must be a valid compressed portrait.", "INVALID_CUSTOMER_PROFILE_PHOTO");
-  }
-  return photo;
-}
-'''
-          if 'function normalizeProfilePhoto(value)' not in text:
-              text = text.replace('function normalizeKyc(body = {}, customer = {}) {', helper + '\nfunction normalizeKyc(body = {}, customer = {}) {', 1)
-          text = text.replace('risk_notes: nullableText(body.risk_notes, 3000),\n    is_active:', 'risk_notes: nullableText(body.risk_notes, 3000),\n    profile_photo_data_url: normalizeProfilePhoto(body.profile_photo_data_url),\n    is_active:', 1)
-          old_insert = '''INSERT INTO hire_customers (
-       customer_code, customer_name, customer_type, phone, whatsapp_phone,
-       email, address, contact_person, payment_terms_days, credit_limit,
-       risk_notes, is_active, created_by, updated_by
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)'''
-          new_insert = '''INSERT INTO hire_customers (
-       customer_code, customer_name, customer_type, phone, whatsapp_phone,
-       email, address, contact_person, payment_terms_days, credit_limit,
-       risk_notes, profile_photo_data_url, is_active, created_by, updated_by
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)'''
-          if old_insert not in text: raise SystemExit('createCustomer INSERT block not found')
-          text = text.replace(old_insert, new_insert, 1)
-          text = text.replace('''      customer.risk_notes,
-      customer.is_active,
-      actorId,
-      actorId,''', '''      customer.risk_notes,
-      customer.profile_photo_data_url,
-      customer.is_active,
-      actorId,
-      actorId,''', 1)
-          text = text.replace('`SELECT customer.*,\n            (SELECT COUNT(*) FROM equipment_credit_applications application', '`SELECT customer.id, customer.customer_code, customer.customer_name, customer.customer_type,\n            customer.phone, customer.whatsapp_phone, customer.email, customer.address,\n            customer.contact_person, customer.payment_terms_days, customer.credit_limit, customer.risk_notes,\n            CASE WHEN customer.profile_photo_data_url IS NULL OR CHAR_LENGTH(customer.profile_photo_data_url) = 0 THEN 0 ELSE 1 END AS profile_photo_present,\n            customer.is_active, customer.created_by, customer.updated_by, customer.created_at, customer.updated_at,\n            (SELECT COUNT(*) FROM equipment_credit_applications application', 1)
-          text = text.replace('finance_agreement_count: Number(row.finance_agreement_count || 0),\n    outstanding_balance:', 'finance_agreement_count: Number(row.finance_agreement_count || 0),\n    profile_photo_present: Boolean(row.profile_photo_present),\n    outstanding_balance:', 1)
-          old_update = '''               email = ?, address = ?, contact_person = ?, risk_notes = ?,
-               is_active = ?, updated_by = ?'''
-          new_update = '''               email = ?, address = ?, contact_person = ?, risk_notes = ?,
-               profile_photo_data_url = ?, is_active = ?, updated_by = ?'''
-          if old_update not in text: raise SystemExit('customer update SET block not found')
-          text = text.replace(old_update, new_update, 1)
-          marker = '''            customer.contact_person,
-            customer.risk_notes,
-            customer.is_active,
-            userId(req),'''
-          replacement = '''            customer.contact_person,
-            customer.risk_notes,
-            customer.profile_photo_data_url,
-            customer.is_active,
-            userId(req),'''
-          if marker not in text: raise SystemExit('customer update parameter block not found')
-          text = text.replace(marker, replacement, 1)
-          photo_routes = r'''
-router.get(
-  "/phase-one/customers/:customerId/photo",
-  requirePermission("fleet.assets.view"),
-  async (req, res) => {
-    try {
-      const customerId = positiveId(req.params.customerId);
-      if (!customerId) return res.status(400).json({ status: "error", code: "INVALID_CUSTOMER_ID", message: "Choose a valid customer." });
-      const [rows] = await pool.query("SELECT profile_photo_data_url FROM hire_customers WHERE id = ? AND is_active = TRUE LIMIT 1", [customerId]);
-      if (!rows.length) return res.status(404).json({ status: "error", code: "FINANCE_CUSTOMER_NOT_FOUND", message: "Finance customer was not found." });
-      return res.json({ status: "success", exists: Boolean(rows[0].profile_photo_data_url), photo: rows[0].profile_photo_data_url || null });
-    } catch (error) {
-      if (error?.code === "ER_BAD_FIELD_ERROR") return res.status(503).json({ status: "error", code: "CUSTOMER_PROFILE_PHOTO_MIGRATION_REQUIRED", message: "Customer photo storage is awaiting its approved database migration." });
-      return sendError(res, error, "Could not load the customer photo.");
-    }
-  }
-);
-
-router.delete(
-  "/phase-one/customers/:customerId/photo",
-  requirePermission("fleet.assets.manage"),
-  async (req, res) => {
-    try {
-      const customerId = positiveId(req.params.customerId);
-      if (!customerId) return res.status(400).json({ status: "error", code: "INVALID_CUSTOMER_ID", message: "Choose a valid customer." });
-      await pool.query("UPDATE hire_customers SET profile_photo_data_url = NULL, updated_by = ? WHERE id = ?", [userId(req), customerId]);
-      return res.json({ status: "success", message: "Customer photo removed." });
-    } catch (error) {
-      if (error?.code === "ER_BAD_FIELD_ERROR") return res.status(503).json({ status: "error", code: "CUSTOMER_PROFILE_PHOTO_MIGRATION_REQUIRED", message: "Customer photo storage is awaiting its approved database migration." });
-      return sendError(res, error, "Could not remove the customer photo.");
-    }
-  }
-);
-'''
-          if '"/phase-one/customers/:customerId/photo"' not in text:
-              text = text.replace('router.get(\n  "/phase-one/customers",', photo_routes + '\nrouter.get(\n  "/phase-one/customers",', 1)
-          phase1.write_text(text)
-
-          professional = Path('backend/services/equipmentFinanceProfessionalService.js')
-          ptext = professional.read_text()
-          if 'customer.profile_photo_data_url AS customer_profile_photo_data_url' not in ptext:
-              ptext = ptext.replace('customer.address AS customer_address,\n       asset.asset_code,', 'customer.address AS customer_address,\n       customer.profile_photo_data_url AS customer_profile_photo_data_url,\n       asset.asset_code,', 1)
-          pdf_anchor = '''      doc.font("Helvetica-Bold").fontSize(12).text("Parties and machine");
-      let y = doc.y + 7;
-      pdfField(doc, "Buyer", agreement.kyc_customer_name || agreement.customer_name_snapshot, 45, y);
-      pdfField(doc, "Phone", agreement.kyc_customer_phone || agreement.customer_phone_snapshot, 305, y);'''
-          pdf_replacement = '''      doc.font("Helvetica-Bold").fontSize(12).text("Parties and machine");
-      let y = doc.y + 7;
-      const customerPortrait = dataImageBuffer(agreement.customer_profile_photo_data_url);
-      if (customerPortrait) {
-        doc.roundedRect(45, y, 58, 75, 5).lineWidth(1).strokeColor("#d7e1d9").stroke();
-        doc.image(customerPortrait, 49, y + 4, { fit: [50, 67], align: "center", valign: "center" });
-        pdfField(doc, "Buyer", agreement.kyc_customer_name || agreement.customer_name_snapshot, 115, y + 4, 180);
-        pdfField(doc, "Phone", agreement.kyc_customer_phone || agreement.customer_phone_snapshot, 305, y + 4, 180);
-        y += 18;
-      } else {
-        pdfField(doc, "Buyer", agreement.kyc_customer_name || agreement.customer_name_snapshot, 45, y);
-        pdfField(doc, "Phone", agreement.kyc_customer_phone || agreement.customer_phone_snapshot, 305, y);
-      }'''
-          if pdf_anchor not in ptext: raise SystemExit('Agreement PDF customer section not found')
-          professional.write_text(ptext.replace(pdf_anchor, pdf_replacement, 1))
-
-          customer_page = Path('frontend/src/pages/EquipmentFinanceCustomerCentrePage.jsx')
-          if 'CustomerPortraitPicker' not in customer_page.read_text():
-              raise SystemExit('Customer centre transform did not land')
-
-          wizard = Path('frontend/src/pages/EquipmentFinanceStartWizardPage.jsx')
-          wtext = wizard.read_text()
-          if 'CustomerPortraitPicker' not in wtext:
-              wtext = wtext.replace('import "../styles/equipmentFinancePhaseOne.css";', 'import CustomerPortrait, { CustomerPortraitPicker } from "../components/CustomerPortrait";\nimport "../styles/equipmentFinancePhaseOne.css";', 1)
-          wtext = wtext.replace('      contact_person: "",\n', '      contact_person: "",\n      profile_photo_data_url: "",\n', 1)
-          wtext = wtext.replace('<main className="finance-simple">', '<main className="finance-simple finance-start-wizard">', 1)
-          old_address = '<Field title="Address" hint="Optional for draft"><textarea value={data.customer.address} onChange={(event) => updateSection("customer", "address", event.target.value)} /></Field>'
-          new_address = '<div className="finance-start-wizard__customer-photo"><CustomerPortraitPicker value={data.customer.profile_photo_data_url} name={data.customer.customer_name || "Customer"} onChange={(value) => updateSection("customer", "profile_photo_data_url", value)} compact /></div><Field title="Address" hint="Optional for draft"><textarea value={data.customer.address} onChange={(event) => updateSection("customer", "address", event.target.value)} /></Field>'
-          if old_address in wtext: wtext = wtext.replace(old_address, new_address, 1)
-          selected_block = '''              </div>
-            </>
-          ) : (
-            <div className="finance-simple__grid">'''
-          selected_replacement = '''              </div>
-              {selectedCustomer ? <div className="finance-start-wizard__selected-customer"><CustomerPortrait customerId={selectedCustomer.id} name={selectedCustomer.customer_name} size="small" /><div><strong>{selectedCustomer.customer_name}</strong><span>{selectedCustomer.phone || "No phone"} · {selectedCustomer.customer_code}</span></div></div> : null}
-            </>
-          ) : (
-            <div className="finance-simple__grid">'''
-          if selected_block in wtext: wtext = wtext.replace(selected_block, selected_replacement, 1)
-          wizard.write_text(wtext)
-
-          doc = Path('frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx')
-          dtext = doc.read_text()
-          if 'CustomerPortrait' not in dtext:
-              dtext = dtext.replace('import { useAuth } from "../context/AuthContext";', 'import { useAuth } from "../context/AuthContext";\nimport CustomerPortrait from "../components/CustomerPortrait";', 1)
-          summary_anchor = '''          <section className="finance-docs__summary">
-            <div className="finance-docs__machine-preview">'''
-          summary_replacement = '''          <section className="finance-docs__summary finance-docs__summary--with-customer">
-            <div className="finance-docs__customer-portrait"><CustomerPortrait customerId={selectedAccount?.customer_id} name={snapshot.agreement?.kyc_customer_name || snapshot.agreement?.customer_name_snapshot || "Customer"} size="large" /></div>
-            <div className="finance-docs__machine-preview">'''
-          if summary_anchor in dtext: dtext = dtext.replace(summary_anchor, summary_replacement, 1)
-          doc.write_text(dtext)
-
-          css = Path('frontend/src/styles/equipmentFinancePhaseOne.css')
-          css_text = css.read_text()
-          if '.customer-portrait {' not in css_text:
-              css_text += '''\n\n.customer-portrait { flex:0 0 auto; width:92px; aspect-ratio:35/45; border-radius:14px; overflow:hidden; border:1px solid #d7e1d9; background:linear-gradient(145deg,#eef5ef,#f8fbf8); display:grid; place-items:center; box-shadow:0 8px 18px rgba(25,55,36,.08); color:#2b6741; font-weight:900; font-size:1.15rem; }\n.customer-portrait img { width:100%; height:100%; display:block; object-fit:cover; }\n.customer-portrait--small { width:58px; border-radius:11px; font-size:.85rem; }\n.customer-portrait--medium { width:78px; border-radius:12px; }\n.customer-portrait--large { width:112px; border-radius:16px; }\n.customer-photo-picker { display:flex; align-items:center; gap:.85rem; padding:.7rem; border:1px solid #dbe5dc; border-radius:16px; background:linear-gradient(135deg,#fbfdfb,#f3f8f4); }\n.customer-photo-picker__copy { display:flex; flex-direction:column; gap:.3rem; min-width:0; }\n.customer-photo-picker__copy strong { color:#193c27; }\n.customer-photo-picker__copy strong em { font-style:normal; margin-left:.35rem; color:#6c7b70; font-size:.75rem; font-weight:700; }\n.customer-photo-picker__copy>span { color:#68766c; font-size:.8rem; line-height:1.35; }\n.customer-photo-picker__actions { display:flex; gap:.45rem; flex-wrap:wrap; }\n.customer-photo-picker__button { min-height:36px; padding:.5rem .75rem; border:1px solid #c6d3c8; border-radius:10px; background:#fff; color:#1f4e31; font:inherit; font-weight:800; cursor:pointer; }\n.customer-photo-picker__button.is-primary { border-color:#28663e; background:#28663e; color:#fff; }\n.finance-customer-centre { max-width:1380px; padding-top:.65rem; }\n.finance-customer-centre .finance-simple__hero { padding:.9rem 1rem; border-radius:16px; align-items:center; }\n.customer-centre__grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin-top:.8rem; }\n.customer-centre__card { display:grid; grid-template-columns:1.25fr .75fr; gap:.7rem; padding:.8rem; border:1px solid #d9e3db; border-radius:16px; background:#fff; box-shadow:0 8px 22px rgba(30,51,37,.045); }\n.customer-centre__card-main { display:flex; gap:.7rem; align-items:center; min-width:0; }\n.customer-centre__card-main h3 { margin:.18rem 0; font-size:1rem; }\n.customer-centre__card-main p { margin:0; color:#5f6e63; }\n.customer-centre__balance { padding:.6rem; border-radius:12px; background:#f5f8f5; align-self:center; }\n.customer-centre__balance span,.customer-centre__balance strong,.customer-centre__balance small { display:block; }\n.customer-centre__balance span,.customer-centre__balance small { color:#718077; font-size:.72rem; }\n.customer-centre__balance strong { margin:.15rem 0; color:#173d27; }\n.customer-centre__actions { grid-column:1/-1; display:flex; gap:.45rem; flex-wrap:wrap; border-top:1px solid #edf2ee; padding-top:.6rem; }\n.customer-centre__backdrop { background:rgba(10,24,15,.58); }\n.customer-centre__profile-dialog,.customer-centre__edit-dialog { width:min(94vw,720px); max-height:min(88dvh,780px); overflow:auto; background:#fff; border:1px solid #dce6df; border-radius:20px; box-shadow:0 28px 90px rgba(0,0,0,.22); padding:1rem; }\n.customer-centre__profile-head,.customer-centre__edit-head { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:.85rem; padding-bottom:.75rem; border-bottom:1px solid #e3eae4; }\n.customer-centre__profile-head h2,.customer-centre__edit-head h2 { margin:0; font-size:1.35rem; }\n.customer-centre__profile-head span,.customer-centre__edit-head span { color:#68766c; font-size:.82rem; }\n.customer-centre__photo-row { margin:.8rem 0; }\n.customer-centre__form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }\n.customer-centre__profile-actions,.customer-centre__form-actions { display:flex; align-items:center; justify-content:space-between; gap:.7rem; margin-top:.8rem; padding-top:.7rem; border-top:1px solid #e6ece7; }\n.finance-start-wizard { max-width:1280px; padding-top:.45rem; }\n.finance-start-wizard .finance-simple__hero { padding:.8rem .95rem; border-radius:15px; align-items:center; }\n.finance-start-wizard .finance-simple__hero h1 { font-size:clamp(1.45rem,3vw,2rem); }\n.finance-start-wizard .finance-simple__notice { margin:.5rem 0; padding:.55rem .72rem; font-size:.82rem; }\n.finance-start-wizard .finance-simple__steps { position:sticky; top:.35rem; z-index:20; margin:.5rem 0; gap:.35rem; padding:.25rem; border:1px solid #dbe5dd; border-radius:14px; background:rgba(255,255,255,.94); box-shadow:0 10px 22px rgba(26,52,34,.08); backdrop-filter:blur(8px); }\n.finance-start-wizard .finance-simple__step { min-height:46px; padding:.45rem .55rem; border-radius:11px; font-size:.82rem; }\n.finance-start-wizard .finance-simple__panel { margin-top:.55rem; padding:.75rem; border-radius:16px; }\n.finance-start-wizard .finance-simple__grid { gap:.6rem; margin-top:.65rem; }\n.finance-start-wizard .finance-simple__section { margin-top:.6rem; padding:.72rem; border-radius:14px; box-shadow:none; }\n.finance-start-wizard .finance-simple input,.finance-start-wizard .finance-simple select,.finance-start-wizard .finance-simple textarea { min-height:40px; padding:.58rem .68rem; border-radius:10px; }\n.finance-start-wizard .finance-simple__sticky-actions { width:min(900px,100%); margin:.55rem auto 0; border-radius:14px; padding:.6rem; }\n.finance-start-wizard__customer-photo { grid-column:1/-1; }\n.finance-start-wizard__selected-customer { display:flex; align-items:center; gap:.6rem; margin-top:.65rem; padding:.55rem; border:1px solid #dbe5dd; border-radius:12px; background:#f8fbf8; }\n.finance-docs__summary--with-customer { grid-template-columns:120px minmax(0,1fr) 1.2fr; }\n.finance-docs__customer-portrait { display:grid; place-items:start center; }\n@media (max-width:900px) { .customer-centre__grid{grid-template-columns:1fr;} .customer-centre__form-grid{grid-template-columns:1fr;} .customer-centre__card{grid-template-columns:1fr;} .finance-docs__summary--with-customer{grid-template-columns:90px minmax(0,1fr);} }\n@media (max-width:680px) { .customer-photo-picker{align-items:flex-start;} .finance-start-wizard .finance-simple__hero{align-items:flex-start;} .finance-start-wizard .finance-simple__steps{overflow-x:auto;} .finance-start-wizard .finance-simple__step{min-width:118px;justify-content:flex-start;} }\n'''
-          css.write_text(css_text)
-          PY
-          node --check backend/routes/equipmentFinancePhaseOneRoutes.js
-          node --check backend/services/equipmentFinanceProfessionalService.js
-          git fetch origin production --depth=1
-          git checkout origin/production -- .github/workflows/equipment-finance-phase6-browser.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/routes/equipmentFinancePhaseOneRoutes.js backend/services/equipmentFinanceProfessionalService.js frontend/src/components/CustomerPortrait.jsx frontend/src/pages/EquipmentFinanceCustomerCentrePage.jsx frontend/src/pages/EquipmentFinanceStartWizardPage.jsx frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx frontend/src/styles/equipmentFinancePhaseOne.css database/migrations/20260825_equipment_finance_customer_profile_photo.sql .github/workflows/equipment-finance-phase6-browser.yml
-          git commit -m "feat: add customer portraits and polish installment finance UI"
-          git push origin HEAD:${PATCH_BRANCH}
-
       - name: Use Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
       - name: Install frontend dependencies
         run: npm ci
+
       - name: Install Playwright test runner
         run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
       - name: Run Phase 6 portfolio, reporting and performance journeys
         run: npx playwright test e2e/equipmentFinancePhaseSix.spec.js
+
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
