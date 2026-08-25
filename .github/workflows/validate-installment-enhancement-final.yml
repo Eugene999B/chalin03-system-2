@@ -1,0 +1,41 @@
+name: Validate Installment Enhancement Final
+
+'on':
+  push:
+    branches:
+      - fix/installment-finance-enhancement
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.2
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Backend checks
+        working-directory: backend
+        run: |
+          npm ci
+          node --check routes/equipmentFinanceCustomerPhotoCaptureRoutes.js
+          node --check routes/equipmentFinanceIndependentRoutes.js
+          node tests/equipmentFinanceInstallmentEnhancements.test.js
+      - name: Frontend build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Remove temporary validator
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/validate-installment-enhancement-final.yml
+          git commit -m 'chore: remove final installment validation workflow'
+          git push origin HEAD:fix/installment-finance-enhancement
