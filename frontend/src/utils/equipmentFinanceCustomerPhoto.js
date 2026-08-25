@@ -93,8 +93,12 @@ export async function compressFinanceCustomerPhoto(file) {
   const targetWidth = Math.round(PASSPORT_HEIGHT * PASSPORT_RATIO);
   const targetHeight = PASSPORT_HEIGHT;
   const sourceRatio = scaledWidth / scaledHeight;
-  const cropWidth = sourceRatio > PASSPORT_RATIO ? Math.round(scaledHeight * PASSPORT_RATIO) : scaledWidth;
-  const cropHeight = sourceRatio > PASSPORT_RATIO ? scaledHeight : Math.round(scaledWidth / PASSPORT_RATIO);
+  const cropWidth = sourceRatio > PASSPORT_RATIO
+    ? Math.round(scaledHeight * PASSPORT_RATIO)
+    : scaledWidth;
+  const cropHeight = sourceRatio > PASSPORT_RATIO
+    ? scaledHeight
+    : Math.round(scaledWidth / PASSPORT_RATIO);
   const cropX = Math.max(0, Math.round((scaledWidth - cropWidth) / 2));
   const cropY = Math.max(0, Math.round((scaledHeight - cropHeight) / 2));
   const canvas = document.createElement("canvas");
@@ -104,10 +108,20 @@ export async function compressFinanceCustomerPhoto(file) {
   if (!context) throw new Error("Picture compression is unavailable in this browser.");
 
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, width, height);
+  context.fillRect(0, 0, targetWidth, targetHeight);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(image, cropX / scale, cropY / scale, cropWidth / scale, cropHeight / scale, 0, 0, targetWidth, targetHeight);
+  context.drawImage(
+    image,
+    cropX / scale,
+    cropY / scale,
+    cropWidth / scale,
+    cropHeight / scale,
+    0,
+    0,
+    targetWidth,
+    targetHeight
+  );
 
   let quality = 0.86;
   let dataUrl = canvasDataUrl(canvas, quality);
