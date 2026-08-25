@@ -39,8 +39,8 @@ assert(
 );
 assert(
   page.includes("axiosClient.get(API)") &&
-    page.includes("axiosClient.post(API, payload)") &&
-    page.includes("axiosClient.put(`${API}/${editing.id}`, payload)") &&
+    /axiosClient\.post\(API,\s*\{/.test(page) &&
+    /axiosClient\.put\(`\$\{API\/\$\{editing\.id\}\}`,\s*\{/.test(page) &&
     page.includes("confirm_duplicate"),
   "Authorised Finance staff must be able to create and update duplicate-protected customers."
 );
