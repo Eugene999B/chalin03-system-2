@@ -388,7 +388,22 @@ function sendError(res, error, fallbackMessage) {
     });
   }
   console.error(fallbackMessage, error);
-  return res.status(500).json({ status: "error", message: fallbackMessage });
+  return res.status(500).json({
+    status: "error",
+    code: "EQUIPMENT_FINANCE_DEPOSIT_INTERNAL_ERROR",
+    message: fallbackMessage,
+    diagnostic: {
+      mysql_code: error?.code || null,
+      mysql_errno: error?.errno || null,
+      mysql_sql_state: error?.sqlState || null,
+      mysql_message: cleanText(error?.sqlMessage || error?.message || "", 800),
+      backend_revision:
+        process.env.RAILWAY_GIT_COMMIT_SHA ||
+        process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
+        process.env.RAILWAY_GIT_COMMIT ||
+        "unknown",
+    },
+  });
 }
 
 async function withTransaction(work) {
