@@ -1,0 +1,39 @@
+name: Chalin 03 Production Backend CI
+
+on:
+  push:
+    branches:
+      - production
+  pull_request:
+    branches:
+      - production
+
+jobs:
+  backend-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Backend syntax validation
+        run: npm run syntax-check
+
+      - name: Opening Deposit interface contract test
+        run: node --test tests/equipmentFinanceDepositReservationInterface.test.js
+
+      - name: Opening Deposit contract test
+        run: node --test tests/equipmentFinanceDepositReservationContract.test.js
