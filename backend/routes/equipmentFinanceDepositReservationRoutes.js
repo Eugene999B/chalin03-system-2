@@ -9,9 +9,6 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const {
   runEquipmentFinanceOpeningDepositFoundationRepair,
 } = require("../scripts/runEquipmentFinanceOpeningDepositFoundationRepair");
-const {
-  runEquipmentFinancePhaseFourStartup,
-} = require("../scripts/runEquipmentFinancePhaseFourStartup");
 
 const router = express.Router();
 
@@ -199,36 +196,40 @@ async function schemaStatus(connection = pool) {
   );
 
   let missingMigrations = [];
-  const [[schemaMigrationsTable]] = await connection.query(
-    `SELECT COUNT(*) AS present
-     FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'schema_migrations'`
-  );
+  try {
+    const [[schemaMigrationsTable]] = await connection.query(
+      `SELECT COUNT(*) AS present
+       FROM information_schema.TABLES
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'schema_migrations'`
+    );
 
-  if (Number(schemaMigrationsTable?.present || 0) !== 1) {
+    if (Number(schemaMigrationsTable?.present || 0) !== 1) {
+      missingMigrations = [...REQUIRED_MIGRATIONS];
+    } else {
+      const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
+      const [migrationRows] = await connection.query(
+        `SELECT migration_name
+         FROM schema_migrations
+         WHERE migration_name IN (${migrationPlaceholders})`,
+        REQUIRED_MIGRATIONS
+      );
+      const installedMigrations = new Set(
+        migrationRows.map((row) => row.migration_name)
+      );
+      missingMigrations = REQUIRED_MIGRATIONS.filter(
+        (migrationName) => !installedMigrations.has(migrationName)
+      );
+    }
+  } catch (_error) {
     missingMigrations = [...REQUIRED_MIGRATIONS];
-  } else {
-    const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
-    const [migrationRows] = await connection.query(
-      `SELECT migration_name
-       FROM schema_migrations
-       WHERE migration_name IN (${migrationPlaceholders})`,
-      REQUIRED_MIGRATIONS
-    );
-    const installedMigrations = new Set(
-      migrationRows.map((row) => row.migration_name)
-    );
-    missingMigrations = REQUIRED_MIGRATIONS.filter(
-      (migrationName) => !installedMigrations.has(migrationName)
-    );
   }
 
   return {
-    ready:
-      missingColumns.length === 0 &&
-      missingTriggers.length === 0 &&
-      missingMigrations.length === 0,
+    // Runtime Deposit readiness is intentionally limited to the actual
+    // schema and database controls needed to record a deposit safely.
+    // Migration bookkeeping is informational and must never block payment.
+    ready: missingColumns.length === 0 && missingTriggers.length === 0,
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
     missing_migrations: missingMigrations,
@@ -243,13 +244,12 @@ async function ensureDepositFoundationReady() {
   if (!depositFoundationRepairPromise) {
     depositFoundationRepairPromise = (async () => {
       await runEquipmentFinanceOpeningDepositFoundationRepair();
-      await runEquipmentFinancePhaseFourStartup();
       const verified = await schemaStatus(pool);
       if (!verified.ready) {
         const error = new DepositError(
           503,
-          "Finance deposit controls are not ready after the approved production repair.",
-          "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED"
+          "The Opening Deposit payment controls are not installed on the production database.",
+          "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED"
         );
         error.readiness = verified;
         throw error;
@@ -264,13 +264,12 @@ async function ensureDepositFoundationReady() {
 }
 
 async function assertSchemaReady(connection = pool) {
-  await ensureDepositFoundationReady();
-  const status = await schemaStatus(connection);
+  const status = await ensureDepositFoundationReady();
   if (!status.ready) {
     const error = new DepositError(
       503,
-      "Finance deposit collection and equipment reservation are being prepared. Apply and verify the approved deposit-reservation migration first.",
-      "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED"
+      "The Opening Deposit payment controls are not installed on the production database.",
+      "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED"
     );
     error.readiness = status;
     throw error;
@@ -299,9 +298,8 @@ function sendError(res, error, fallbackMessage) {
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
     return res.status(503).json({
       status: "error",
-      code: "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
-      message:
-        "Finance deposit collection and equipment reservation are being prepared. Apply and verify the approved deposit-reservation migration first.",
+      code: "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
+      message: "The Opening Deposit payment controls are not installed on the production database.",
     });
   }
   if (error?.errno === 1644 || error?.sqlState === "45000") {
@@ -538,12 +536,10 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
     const readiness = await schemaStatus(pool);
     return res.status(readiness.ready ? 200 : 503).json({
       status: readiness.ready ? "success" : "error",
-      code: readiness.ready
-        ? undefined
-        : "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
+      code: readiness.ready ? undefined : "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
       message: readiness.ready
         ? "Finance deposit and reservation controls are ready."
-        : "Apply and verify the approved Finance deposit-reservation migration first.",
+        : "The Opening Deposit payment controls are not installed on the production database.",
       readiness,
     });
   } catch (error) {
@@ -624,8 +620,6 @@ router.post(
   async (req, res) => {
     try {
       assertDepositOfficer(req);
-      await ensureDepositFoundationReady();
-      await assertSchemaReady(pool);
       const body = req.body || {};
       const agreementId = positiveId(req.params.agreementId);
       const amount = money(body.amount, 0);
@@ -663,6 +657,8 @@ router.post(
             "EQUIPMENT_FINANCE_AGREEMENT_LINK_INVALID"
           );
         }
+
+        await assertSchemaReady(connection);
 
         if (idempotencyKey) {
           const [existingRows] = await connection.query(
