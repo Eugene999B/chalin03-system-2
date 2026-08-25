@@ -6,18 +6,7 @@ const dateOptions = { timeZone: "Africa/Accra" };
 function SmsStatus({ value }) {
   const status = String(value || "Unknown");
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        minHeight: 28,
-        padding: "4px 9px",
-        borderRadius: 999,
-        background: "#eef3ef",
-        fontWeight: 700,
-        fontSize: 12,
-      }}
-    >
+    <span style={{ display: "inline-flex", alignItems: "center", minHeight: 28, padding: "4px 9px", borderRadius: 999, background: "#eef3ef", fontWeight: 700, fontSize: 12 }}>
       {status}
     </span>
   );
@@ -26,14 +15,7 @@ function SmsStatus({ value }) {
 function SmsCard({ log }) {
   const when = new Date(log.submitted_at || log.created_at).toLocaleString("en-GB", dateOptions);
   return (
-    <article
-      style={{
-        border: "1px solid #d9e2dc",
-        borderRadius: 14,
-        padding: 14,
-        background: "#fff",
-      }}
-    >
+    <article style={{ border: "1px solid #d9e2dc", borderRadius: 14, padding: 14, background: "#fff" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
         <div>
           <strong style={{ display: "block", overflowWrap: "anywhere" }}>{log.recipient_phone || "—"}</strong>
@@ -42,23 +24,11 @@ function SmsCard({ log }) {
         <SmsStatus value={log.status} />
       </div>
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-        <div>
-          <span style={{ display: "block", color: "#647169", fontSize: 12 }}>Type</span>
-          <strong>{log.sms_type || "Finance"}</strong>
-        </div>
-        <div>
-          <span style={{ display: "block", color: "#647169", fontSize: 12 }}>Message</span>
-          <div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{log.message || "—"}</div>
-        </div>
+        <div><span style={{ display: "block", color: "#647169", fontSize: 12 }}>Type</span><strong>{log.sms_type || "Finance"}</strong></div>
+        <div><span style={{ display: "block", color: "#647169", fontSize: 12 }}>Message</span><div style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{log.message || "—"}</div></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-          <div>
-            <span style={{ display: "block", color: "#647169", fontSize: 12 }}>Provider</span>
-            <span>{log.provider || "—"}</span>
-          </div>
-          <div>
-            <span style={{ display: "block", color: "#647169", fontSize: 12 }}>Sent by</span>
-            <span>{log.sent_by_name || log.sent_by_username || "System"}</span>
-          </div>
+          <div><span style={{ display: "block", color: "#647169", fontSize: 12 }}>Provider</span><span>{log.provider || "—"}</span></div>
+          <div><span style={{ display: "block", color: "#647169", fontSize: 12 }}>Sent by</span><span>{log.sent_by_name || log.sent_by_username || "System"}</span></div>
         </div>
       </div>
     </article>
@@ -94,12 +64,11 @@ export default function EquipmentFinanceSmsHistoryPage() {
           <p style={{ margin: "8px 0 0", color: "#647169" }}>Every Installment Finance SMS attempt and delivery result.</p>
         </div>
         <button type="button" onClick={load} disabled={loading} style={{ minHeight: 44, padding: "10px 14px" }}>
-          {loading ? "Refreshing…" : "Refresh history"}
+          {loading ? "Refreshing…" : "Refresh SMS history"}
         </button>
       </div>
       {error ? <div role="alert" style={{ marginBottom: 16, padding: 14, borderRadius: 12, background: "#fff1f0", color: "#9c2d25", overflowWrap: "anywhere" }}>{error}</div> : null}
 
-      <div style={{ display: "none" }} aria-hidden="true" />
       <div className="equipment-finance-sms-history-table" style={{ overflowX: "auto", border: "1px solid #d9e2dc", borderRadius: 14, background: "#fff" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead><tr>{["Date / Time", "Phone", "Type", "Message", "Status", "Provider", "Sent By"].map((heading) => <th key={heading} style={{ textAlign: "left", padding: 12, background: "#f5f8f6", borderBottom: "1px solid #d9e2dc", whiteSpace: "nowrap" }}>{heading}</th>)}</tr></thead>
