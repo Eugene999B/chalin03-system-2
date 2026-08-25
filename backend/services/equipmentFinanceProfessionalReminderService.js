@@ -4,6 +4,7 @@ const {
   assertProfessionalSchema,
   getProfessionalSettings,
 } = require("./equipmentFinanceProfessionalService");
+const { calculateLateFee } = require("./equipmentFinanceLateFeePolicyService");
 
 const SCHEDULER_INTERVAL_MS = Math.max(
   60 * 60 * 1000,
@@ -64,22 +65,34 @@ function money(value) {
   });
 }
 
+function lateFeeSentence(settings, row) {
+  const fee = calculateLateFee({
+    lateChargeType: settings.late_charge_type,
+    lateChargeValue: settings.late_charge_value,
+    lateChargeCap: settings.late_charge_cap,
+    overdueAmount: Number(row.line_balance || 0),
+  });
+  if (fee <= 0) return "No late payment fee is currently configured.";
+  return `A late payment fee of GHS ${money(fee)} will be added if this installment remains unpaid after its due date.`;
+}
+
 function classifyReminder(row, settings, today) {
   const dueDate = String(row.due_date || "").slice(0, 10);
   if (!dueDate) return null;
   const daysUntil = dayDifference(dueDate, today);
+  const feeSentence = lateFeeSentence(settings, row);
   if (daysUntil > 0 && parseDueSoonDays(settings.due_soon_days).includes(daysUntil)) {
     return {
       type: "due_soon",
       days: daysUntil,
-      due_sentence: `GHS ${money(row.line_balance)} is due on ${dueDate}.`,
+      due_sentence: `GHS ${money(row.line_balance)} is due on ${dueDate}. ${feeSentence}`,
     };
   }
   if (daysUntil === 0) {
     return {
       type: "due_today",
       days: 0,
-      due_sentence: `GHS ${money(row.line_balance)} is due today.`,
+      due_sentence: `GHS ${money(row.line_balance)} is due today. ${feeSentence}`,
     };
   }
   if (daysUntil < 0) {
@@ -89,7 +102,7 @@ function classifyReminder(row, settings, today) {
       return {
         type: "overdue",
         days: daysPast,
-        due_sentence: `GHS ${money(row.line_balance)} has been overdue for ${daysPast} day${daysPast === 1 ? "" : "s"}.`,
+        due_sentence: `GHS ${money(row.line_balance)} has been overdue for ${daysPast} day${daysPast === 1 ? "" : "s"}. ${feeSentence}`,
       };
     }
   }
@@ -106,6 +119,7 @@ async function reminderCandidates({ today = ghanaDate(), limit = 500 } = {}) {
               schedule.waived_charge_amount - schedule.amount_paid,
               0
             ) AS line_balance,
+            schedule.late_charge_amount,
             agreement.id AS agreement_id, agreement.agreement_number,
             agreement.outstanding_balance, agreement.hire_location_id,
             agreement.customer_name_snapshot, agreement.customer_phone_snapshot,
@@ -134,6 +148,15 @@ async function reminderCandidates({ today = ghanaDate(), limit = 500 } = {}) {
     const customerName = row.customer_name_snapshot || row.customer_name || "Customer";
     const phone = row.customer_phone_snapshot || row.customer_phone || "";
     const equipmentName = row.asset_name_snapshot || row.asset_name || "equipment";
+    const fee = calculateLateFee({
+      lateChargeType: settings.late_charge_type,
+      lateChargeValue: settings.late_charge_value,
+      lateChargeCap: settings.late_charge_cap,
+      overdueAmount: Number(row.line_balance || 0),
+    });
+    const feeSentence = fee > 0
+      ? `A late payment fee of GHS ${money(fee)} will be added if this installment remains unpaid after its due date.`
+      : "No late payment fee is currently configured.";
     const message = replaceTemplate(settings.reminder_template, {
       customer_name: customerName,
       agreement_number: row.agreement_number,
@@ -142,6 +165,8 @@ async function reminderCandidates({ today = ghanaDate(), limit = 500 } = {}) {
       due_sentence: classification.due_sentence,
       due_date: String(row.due_date).slice(0, 10),
       amount_due: money(row.line_balance),
+      late_fee_amount: money(fee),
+      late_fee_sentence: feeSentence,
       payment_phone: row.payment_phone || "",
     }).slice(0, 480);
     reminders.push({
@@ -151,6 +176,8 @@ async function reminderCandidates({ today = ghanaDate(), limit = 500 } = {}) {
       equipment_name: equipmentName,
       reminder_type: classification.type,
       days: classification.days,
+      late_fee_amount: fee,
+      late_fee_sentence: feeSentence,
       message,
       reminder_key: `finance:${row.agreement_id}:${row.schedule_id}:${classification.type}:${today}`,
     });
@@ -228,7 +255,7 @@ async function runProfessionalReminderSync({
     return { sent: 0, failed: 0, skipped: reminders.length, reason: "weekend_blocked" };
   }
 
-  const result = { sent: 0, failed: 0, skipped: 0, details: [] };
+  const result = { sent: 0, failed: 0, skipped: 0, boss_sent: 0, boss_failed: 0, details: [] };
   for (const reminder of reminders.slice(0, 100)) {
     if (!cleanText(reminder.customer_phone, 40)) {
       result.skipped += 1;
@@ -287,11 +314,28 @@ async function runProfessionalReminderSync({
     );
     if (["accepted", "delivered", "delivery_unknown"].includes(status)) result.sent += 1;
     else result.failed += 1;
+
+    if (settings.boss_payment_alert_enabled && cleanText(settings.boss_payment_alert_phone, 40)) {
+      const bossMessage = `CHALIN03 FINANCE: ${reminder.customer_name} / ${reminder.agreement_number}. ${reminder.reminder_type === "overdue" ? "OVERDUE" : "DUE ALERT"}. ${reminder.due_sentence} Balance GHS ${money(reminder.outstanding_balance)}.`;
+      const bossSms = await sendSmsAlertToPhone({
+        branchId: null,
+        phone: settings.boss_payment_alert_phone,
+        message: bossMessage.slice(0, 480),
+        logMessage: `Finance boss ${reminder.reminder_type} alert for ${reminder.agreement_number}.`,
+        smsType: `equipment_finance_boss_${reminder.reminder_type}`,
+        sentBy,
+        sourceReference: `${reminder.reminder_key}:boss`,
+      });
+      if (bossSms.ok) result.boss_sent += 1;
+      else result.boss_failed += 1;
+    }
+
     result.details.push({
       agreement_id: reminder.agreement_id,
       reminder_type: reminder.reminder_type,
       status,
       sms_log_id: sms.log_id || null,
+      late_fee_amount: reminder.late_fee_amount,
     });
   }
   return result;
