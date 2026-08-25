@@ -26,6 +26,19 @@ jobs:
             frontend/package-lock.json
       - name: Apply isolated Installment Finance patch
         run: python tools/apply_installment_finance_enhancement.py
+      - name: Normalize regression test paths for backend working directory
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('backend/tests/equipmentFinanceInstallmentEnhancements.test.js')
+          s = p.read_text()
+          s = s.replace('fs.readFileSync("backend/routes/equipmentFinanceIndependentRoutes.js", "utf8")', 'fs.readFileSync("routes/equipmentFinanceIndependentRoutes.js", "utf8")')
+          s = s.replace('fs.readFileSync("backend/routes/equipmentFinanceCustomerPhotoCaptureRoutes.js", "utf8")', 'fs.readFileSync("routes/equipmentFinanceCustomerPhotoCaptureRoutes.js", "utf8")')
+          s = s.replace('fs.readFileSync("frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx", "utf8")', 'fs.readFileSync("../frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx", "utf8")')
+          s = s.replace('fs.readFileSync("frontend/src/App.jsx", "utf8")', 'fs.readFileSync("../frontend/src/App.jsx", "utf8")')
+          s = s.replace('fs.readFileSync("frontend/src/layouts/InstallmentFinanceLayout.jsx", "utf8")', 'fs.readFileSync("../frontend/src/layouts/InstallmentFinanceLayout.jsx", "utf8")')
+          p.write_text(s)
+          PY
       - name: Validate backend
         working-directory: backend
         run: |
