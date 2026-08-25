@@ -39,6 +39,16 @@ function dateLabel(value) {
       });
 }
 
+function nextDueLabel(value) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const due = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  return due < today ? "—" : dateLabel(value);
+}
+
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
@@ -295,7 +305,7 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
                 </div>
                 <div className="finance-simplified__compact-fact">
                   <span>Next due</span>
-                  <strong>{dateLabel(account.next_due_date)}</strong>
+                  <strong>{nextDueLabel(account.next_due_date)}</strong>
                 </div>
                 <div className="finance-simplified__compact-record-actions">
                   <button
@@ -337,7 +347,7 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
                   <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
                   <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
                   <article><span>Official balance</span><strong data-testid="account-detail-official-balance">{money(selected.outstanding_balance)}</strong></article>
-                  <article><span>Next due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
+                  <article><span>Next due</span><strong>{nextDueLabel(selected.next_due_date)}</strong></article>
                 </div>
 
                 <form onSubmit={recordPayment}>
