@@ -4,7 +4,7 @@
 
 This runner applies and verifies the complete approved-credit Equipment Installment Finance database plan as one fail-closed operation.
 
-It exists so an authorised Railway operator does not need to copy and paste four large SQL migrations manually.
+It exists so an authorised Railway operator does not need to copy and paste the Finance SQL migrations manually.
 
 The runner is **not automatic**. Adding this file or deploying the application does not execute any database migration.
 
@@ -16,7 +16,7 @@ Run from the backend service working directory in the approved Railway productio
 npm run migrate:equipment-finance:production
 ```
 
-Do not replace this command with `npm run migrate:production`. The older command is locked to the separate 25 July 2026 migration release.
+Do not replace this command with `npm run migrate:production`. The older command is locked to a separate legacy migration release.
 
 ## Exact migration order
 
@@ -28,8 +28,14 @@ The runner applies each migration and immediately executes its matching read-onl
 4. `20260729_equipment_finance_agreement_activation_verify.sql`
 5. `20260729_equipment_finance_deposit_reservation.sql`
 6. `20260729_equipment_finance_deposit_reservation_verify.sql`
-7. `20260729_equipment_finance_final_lifecycle.sql`
-8. `20260729_equipment_finance_final_lifecycle_verify.sql`
+7. `20260805_equipment_finance_opening_deposit_foundation_repair.sql`
+8. `20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql`
+9. `20260803_equipment_finance_phase4_deposit_reservation_integrity.sql`
+10. `20260803_equipment_finance_phase4_deposit_reservation_integrity_verify.sql`
+11. `20260729_equipment_finance_final_lifecycle.sql`
+12. `20260729_equipment_finance_final_lifecycle_verify.sql`
+13. `20260825_equipment_finance_policy_hardening.sql`
+14. `20260825_equipment_finance_policy_hardening_verify.sql`
 
 The operation stops immediately when a migration fails, a verifier result is missing, a verifier value is not numeric, or any problem count is not exactly zero.
 
@@ -42,7 +48,7 @@ NODE_ENV=production
 CHALIN03_EQUIPMENT_FINANCE_MIGRATIONS_ENABLED=true
 CHALIN03_SIGNED_BACKUP_CONFIRMED=true
 CHALIN03_SQL_BACKUP_CONFIRMED=true
-CHALIN03_MIGRATION_RELEASE=20260729_EQUIPMENT_FINANCE_COMPLETE
+CHALIN03_MIGRATION_RELEASE=20260825_EQUIPMENT_FINANCE_POLICY_HARDENING
 CHALIN03_EXPECTED_DATABASE=<exact Railway production database name>
 ```
 
@@ -64,7 +70,7 @@ Before changing schema, the runner:
 - requires the exact expected database name;
 - connects through the existing Railway database variables;
 - confirms the selected database matches `CHALIN03_EXPECTED_DATABASE`; and
-- acquires the MySQL advisory lock `chalin03:production-migrations:20260729-equipment-finance`.
+- acquires the MySQL advisory lock `chalin03:production-migrations:20260825-equipment-finance-policy-hardening`.
 
 The runner executes only the reviewed files listed in its immutable migration plan. It does not scan the migrations folder. **Never run `database/schema.sql` against production.**
 
@@ -76,7 +82,7 @@ A successful run ends with:
 All approved Equipment Finance migrations and verifiers passed.
 ```
 
-Before accepting the release, retain the complete Railway migration log and confirm each migration printed both an `Applying ...` and `Verified ...` message.
+Before accepting the release, retain the complete Railway migration log and confirm each migration printed both an `Applying ...` and `Verified ...` message, including the 20260825 policy-hardening stage.
 
 After success:
 
