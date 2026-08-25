@@ -563,12 +563,14 @@ function machineReadiness(machine, media) {
   if (!["sale_only", "sale_or_hire"].includes(machine.operational_purpose)) {
     missing.push("sale purpose approval");
   }
-  if (machine.sale_status !== "available") missing.push("available sale status");
+  if (!["available", "installment_active"].includes(machine.sale_status)) missing.push("available sale status");
   if (Number(machine.active_hire_count || 0) > 0) missing.push("not active on Hire");
   return {
     ready: missing.length === 0,
     missing,
     photo_count: media.length,
+    workflow_status: machine.sale_status === "installment_active" ? "installment" : "available",
+    workflow_status_label: machine.sale_status === "installment_active" ? "Under Installment" : "Available",
   };
 }
 

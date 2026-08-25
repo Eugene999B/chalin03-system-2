@@ -157,7 +157,20 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
     if (Number(existing.active_hire_count || 0) > 0 && machine.operational_purpose === "sale_only") throw new ProfessionalFinanceError(409, "An active Hire machine cannot be changed to sale-only.");
     await assertUnique(connection, id, machine);
     const updates = { ...machine, updated_by: userId || null };
-    if (locationId !== undefined) { const location = await locationRecord(connection, locationId); updates.hire_location_id = locationId || null; updates.current_location = location?.name || null; }
+    if (Object.prototype.hasOwnProperty.call(input || {}, "equipment_origin_location_id")) {
+      const requestedLocationId = positiveId(input.equipment_origin_location_id);
+      if (requestedLocationId === null) {
+        updates.hire_location_id = null;
+        updates.current_location = null;
+      } else if (Number(existing.hire_location_id || 0) === requestedLocationId) {
+        updates.hire_location_id = existing.hire_location_id;
+        updates.current_location = existing.current_location;
+      } else {
+        const location = await locationRecord(connection, requestedLocationId);
+        updates.hire_location_id = requestedLocationId;
+        updates.current_location = location?.name || null;
+      }
+    }
     const entries = Object.entries(updates).filter(([, value]) => value !== undefined);
     if (entries.length) await connection.query(`UPDATE fleet_assets SET ${entries.map(([key]) => `\`${key}\` = ?`).join(", ")} WHERE id = ?`, [...entries.map(([, value]) => value), id]);
     const effectiveLocationId = locationId === undefined ? existing.hire_location_id : locationId;

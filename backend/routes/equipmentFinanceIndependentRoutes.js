@@ -204,6 +204,23 @@ router.use(equipmentFinanceScheduleRoutes);
 router.use("/agreement-activations", equipmentFinanceAgreementActivationRoutes);
 router.use("/credit-applications", equipmentCreditOptionalDecisionRoutes);
 router.use("/credit-applications", equipmentFinanceDraftRecoveryRoutes);
+router.get(
+  "/phase-one/bootstrap",
+  requirePermission("fleet.assets.view"),
+  async (req, res, next) => {
+    try {
+      const machines = await listProfessionalMachines({
+        search: req.query.search,
+        status: req.query.status,
+        limit: req.query.limit,
+      });
+      return res.json({ status: "success", count: machines.length, machines });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
 router.use(equipmentFinancePhaseOneRoutes);
 
 router.use(equipmentFinanceDocumentCompletionRoutes);
