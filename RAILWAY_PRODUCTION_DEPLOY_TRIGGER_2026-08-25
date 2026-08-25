@@ -1,0 +1,3 @@
+Production redeploy trigger for the Equipment Installment Payments & Collections date fix.
+
+No application behavior is defined here; this file exists only to create a production branch commit so Railway rebuilds the already-merged production revision.
