@@ -1,8 +1,9 @@
 name: Chalin03 Installment Enhancement
 
-on:
+'on':
   push:
-    branches: [fix/installment-finance-enhancement]
+    branches:
+      - fix/installment-finance-enhancement
 
 permissions:
   contents: write
@@ -11,126 +12,38 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
         with:
           node-version: 20.20.2
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
-
-      - name: Patch installment-only Finance features
-        shell: python
+      - name: Apply isolated Installment Finance patch
+        run: python tools/apply_installment_finance_enhancement.py
+      - name: Validate backend
+        working-directory: backend
         run: |
-          from pathlib import Path
-
-          # Customer passport photo: crop client output to a consistent 35:45 portrait.
-          p = Path('frontend/src/utils/equipmentFinanceCustomerPhoto.js')
-          s = p.read_text()
-          if 'const PASSPORT_RATIO = 35 / 45;' not in s:
-              s = s.replace('const MAX_DIMENSION = 1280;\n', 'const MAX_DIMENSION = 1400;\nconst PASSPORT_RATIO = 35 / 45;\nconst PASSPORT_HEIGHT = 900;\n', 1)
-              old = '''  const width = Math.max(1, Math.round(image.naturalWidth * scale));\n  const height = Math.max(1, Math.round(image.naturalHeight * scale));\n  const canvas = document.createElement("canvas");\n  canvas.width = width;\n  canvas.height = height;'''
-              new = '''  const scaledWidth = Math.max(1, Math.round(image.naturalWidth * scale));\n  const scaledHeight = Math.max(1, Math.round(image.naturalHeight * scale));\n  const targetWidth = Math.round(PASSPORT_HEIGHT * PASSPORT_RATIO);\n  const targetHeight = PASSPORT_HEIGHT;\n  const sourceRatio = scaledWidth / scaledHeight;\n  const cropWidth = sourceRatio > PASSPORT_RATIO ? Math.round(scaledHeight * PASSPORT_RATIO) : scaledWidth;\n  const cropHeight = sourceRatio > PASSPORT_RATIO ? scaledHeight : Math.round(scaledWidth / PASSPORT_RATIO);\n  const cropX = Math.max(0, Math.round((scaledWidth - cropWidth) / 2));\n  const cropY = Math.max(0, Math.round((scaledHeight - cropHeight) / 2));\n  const canvas = document.createElement("canvas");\n  canvas.width = targetWidth;\n  canvas.height = targetHeight;'''
-              if old not in s:
-                  raise SystemExit('passport photo sizing block not found')
-              s = s.replace(old, new, 1)
-              s = s.replace('  context.drawImage(image, 0, 0, width, height);', '  context.drawImage(image, cropX / scale, cropY / scale, cropWidth / scale, cropHeight / scale, 0, 0, targetWidth, targetHeight);', 1)
-              s = s.replace('    width,\n    height,\n', '    width: targetWidth,\n    height: targetHeight,\n', 1)
-              s = s.replace('    compressed: true,\n', '    compressed: true,\n    passport_crop: true,\n    passport_ratio: "35:45",\n', 1)
-          p.write_text(s)
-
-          # Server-side normalization guarantees a consistent stored document photo.
-          p = Path('backend/routes/equipmentFinanceCustomerPhotoCaptureRoutes.js')
-          s = p.read_text()
-          if 'const sharp = require("sharp");' not in s:
-              s = s.replace('const express = require("express");\n', 'const express = require("express");\nconst sharp = require("sharp");\n', 1)
-          marker = 'function successfulCreation(res, payload) {'
-          if 'async function normalizeCustomerPassportPhoto' not in s:
-              fn = '''async function normalizeCustomerPassportPhoto(photo) {\n  const source = Buffer.from(photo.content_base64, "base64");\n  const oriented = await sharp(source, { failOn: "error" }).rotate().toBuffer();\n  const metadata = await sharp(oriented).metadata();\n  const width = Number(metadata.width || 0);\n  const height = Number(metadata.height || 0);\n  if (!width || !height) {\n    const error = new Error("The customer picture is unreadable.");\n    error.statusCode = 400;\n    error.code = "FINANCE_CUSTOMER_PHOTO_UNREADABLE";\n    throw error;\n  }\n  const ratio = 35 / 45;\n  let cropWidth = width;\n  let cropHeight = Math.round(width / ratio);\n  if (cropHeight > height) { cropHeight = height; cropWidth = Math.round(height * ratio); }\n  const left = Math.max(0, Math.floor((width - cropWidth) / 2));\n  const top = Math.max(0, Math.floor((height - cropHeight) / 2));\n  const output = await sharp(oriented)\n    .extract({ left, top, width: cropWidth, height: cropHeight })\n    .resize(700, 900, { fit: "cover", position: "centre" })\n    .jpeg({ quality: 84, mozjpeg: true, chromaSubsampling: "4:2:0" })\n    .toBuffer();\n  if (output.length > MAX_CUSTOMER_PHOTO_BYTES) {\n    const error = new Error("The normalized customer passport picture is too large.");\n    error.statusCode = 413;\n    error.code = "FINANCE_CUSTOMER_PHOTO_TOO_LARGE";\n    throw error;\n  }\n  return { ...photo, mime_type: "image/jpeg", file_name: "customer-passport-photo.jpg", content_base64: output.toString("base64"), file_size_bytes: output.length, width: 700, height: 900, passport_normalized: true };\n}\n\n'''
-              s = s.replace(marker, fn + marker, 1)
-          s = s.replace('  (req, res, next) => {\n    let photo;', '  async (req, res, next) => {\n    let photo;', 1)
-          if 'photo = await normalizeCustomerPassportPhoto(photo);' not in s:
-              s = s.replace('    if (!photo) return next();\n\n    const body = { ...(req.body || {}) };', '    if (!photo) return next();\n    photo = await normalizeCustomerPassportPhoto(photo);\n\n    const body = { ...(req.body || {}) };', 1)
-          p.write_text(s)
-
-          # Excavators page: normalize the real phase-one bootstrap payload used by the page.
-          p = Path('backend/routes/equipmentFinanceIndependentRoutes.js')
-          s = p.read_text()
-          old = '''      const machines = await listProfessionalMachines({\n        search: req.query.search,\n        status: req.query.status,\n        limit: req.query.limit,\n      });\n      return res.json({ status: "success", count: machines.length, machines });'''
-          new = '''      const machines = await listProfessionalMachines({\n        search: req.query.search,\n        status: req.query.status,\n        limit: req.query.limit,\n      });\n      const normalizedMachines = machines.map((machine) => {\n        if (machine.sale_status !== "installment_active") return machine;\n        return {\n          ...machine,\n          workflow_status: "installment",\n          workflow_status_label: "Under Installment",\n          readiness: {\n            ...(machine.readiness || {}),\n            ready: true,\n            missing: (machine.readiness?.missing || []).filter((item) => item !== "available sale status"),\n          },\n          editability: {\n            ...(machine.editability || {}),\n            editable: false,\n            reason: "This excavator is protected under an active Finance installment workflow.",\n          },\n        };\n      });\n      return res.json({ status: "success", count: normalizedMachines.length, machines: normalizedMachines });'''
-          if old not in s:
-              raise SystemExit('phase-one bootstrap source pattern not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s)
-
-          # Finance-only SMS History: reuse the existing sms_log audit table, but scope to Finance prefixes only.
-          p = Path('backend/routes/equipmentFinanceIndependentRoutes.js')
-          s = p.read_text()
-          if '  "/sms-history",' not in s:
-              marker = 'router.get(\n  "/finance-customers",'
-              route = '''router.get(\n  "/sms-history",\n  requirePermission("fleet.assets.view"),\n  async (req, res, next) => {\n    try {\n      const limit = Math.min(Math.max(Number(req.query.limit || 100), 1), 200);\n      const page = Math.max(Number(req.query.page || 1), 1);\n      const offset = (page - 1) * limit;\n      const filter = `WHERE sl.source_reference LIKE 'finance:%'\n           OR sl.source_reference LIKE 'finance-payment-receipt:%'\n           OR sl.source_reference LIKE 'equipment-finance-%'`;
-      const [countRows] = await pool.query(`SELECT COUNT(*) AS total_count FROM sms_log sl ${filter}`);\n      const [logs] = await pool.query(`SELECT sl.id, sl.recipient_phone, sl.message, sl.sms_type, sl.status, sl.provider, sl.provider_message_id, sl.provider_status, sl.status_reason, sl.segment_count, sl.estimated_credits, sl.sent_at, sl.submitted_at, sl.delivery_confirmed_at, sl.last_status_at, sl.source_reference, sl.created_at, u.full_name AS sent_by_name, u.username AS sent_by_username FROM sms_log sl LEFT JOIN users u ON u.id = sl.sent_by ${filter} ORDER BY sl.id DESC LIMIT ? OFFSET ?`, [limit, offset]);\n      return res.json({ status: "success", page, limit, total_count: Number(countRows[0]?.total_count || 0), logs });\n    } catch (error) { return next(error); }\n  }\n);\n\n'''
-              if marker not in s:
-                  raise SystemExit('finance customer route marker not found')
-              s = s.replace(marker, route + marker, 1)
-          p.write_text(s)
-
-          # Installment Finance SMS History page.
-          Path('frontend/src/pages/EquipmentFinanceSmsHistoryPage.jsx').write_text('''import { useEffect, useState } from "react";\nimport axiosClient from "../api/axiosClient";\n\nexport default function EquipmentFinanceSmsHistoryPage() {\n  const [logs, setLogs] = useState([]);\n  const [error, setError] = useState("");\n  const [loading, setLoading] = useState(true);\n\n  async function load() {\n    setLoading(true);\n    setError("");\n    try {\n      const response = await axiosClient.get("/equipment-catalogue/sales/sms-history", { params: { limit: 200 } });\n      setLogs(Array.isArray(response.data?.logs) ? response.data.logs : []);\n    } catch (err) {\n      setError(err?.response?.data?.message || "Could not load Installment SMS history.");\n    } finally {\n      setLoading(false);\n    }\n  }\n\n  useEffect(() => { load(); }, []);\n\n  return (\n    <main style={{ padding: 24, maxWidth: 1440, margin: "0 auto" }}>\n      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 20, flexWrap: "wrap" }}>\n        <div>\n          <p style={{ margin: 0, color: "#66736b" }}>Equipment Installment Finance</p>\n          <h1 style={{ margin: "6px 0 0" }}>SMS History</h1>\n          <p style={{ margin: "8px 0 0", color: "#647169" }}>Every Installment Finance SMS attempt and delivery result.</p>\n        </div>\n        <button type="button" onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh history"}</button>\n      </div>\n      {error ? <div role="alert" style={{ marginBottom: 16, padding: 14, borderRadius: 12, background: "#fff1f0", color: "#9c2d25" }}>{error}</div> : null}\n      <div style={{ overflowX: "auto", border: "1px solid #d9e2dc", borderRadius: 14, background: "#fff" }}>\n        <table style={{ width: "100%", minWidth: 1000, borderCollapse: "collapse" }}>\n          <thead><tr>{["Date / Time", "Phone", "Type", "Message", "Status", "Provider", "Sent By"].map((heading) => <th key={heading} style={{ textAlign: "left", padding: 12, background: "#f5f8f6", borderBottom: "1px solid #d9e2dc", whiteSpace: "nowrap" }}>{heading}</th>)}</tr></thead>\n          <tbody>{logs.map((log) => <tr key={log.id}>\n            <td style={{ padding: 12, verticalAlign: "top", whiteSpace: "nowrap" }}>{new Date(log.submitted_at || log.created_at).toLocaleString("en-GB", { timeZone: "Africa/Accra" })}</td>\n            <td style={{ padding: 12, verticalAlign: "top" }}>{log.recipient_phone || "—"}</td>\n            <td style={{ padding: 12, verticalAlign: "top" }}>{log.sms_type || "Finance"}</td>\n            <td style={{ padding: 12, verticalAlign: "top", minWidth: 320, maxWidth: 520, whiteSpace: "pre-wrap" }}>{log.message}</td>\n            <td style={{ padding: 12, verticalAlign: "top", fontWeight: 700 }}>{log.status || "Unknown"}</td>\n            <td style={{ padding: 12, verticalAlign: "top" }}>{log.provider || "—"}</td>\n            <td style={{ padding: 12, verticalAlign: "top" }}>{log.sent_by_name || log.sent_by_username || "System"}</td>\n          </tr>)}</tbody>\n        </table>\n        {!loading && logs.length === 0 ? <div style={{ padding: 28, textAlign: "center", color: "#6b766f" }}>No Installment Finance SMS has been recorded yet.</div> : null}\n      </div>\n    </main>\n  );\n}\n''')
-
-          # Installment Finance-only route + navigation item.
-          p = Path('frontend/src/App.jsx')
-          s = p.read_text()
-          if 'EquipmentFinanceSmsHistoryPage' not in s:
-              marker = 'import SmsPage from "./pages/SmsPage";'
-              if marker not in s: raise SystemExit('App SMS import marker not found')
-              s = s.replace(marker, marker + '\nimport EquipmentFinanceSmsHistoryPage from "./pages/EquipmentFinanceSmsHistoryPage";', 1)
-              marker = '''            <Route\n              path="reports"\n              element={permissionOnlyPage(\n                "fleet.assets.view",\n                <EquipmentSalesReportsPage />\n              )}\n            />'''
-              route = marker + '''\n            <Route\n              path="sms-history"\n              element={permissionOnlyPage(\n                "fleet.assets.view",\n                <EquipmentFinanceSmsHistoryPage />\n              )}\n            />'''
-              if marker not in s: raise SystemExit('Installment report route marker not found')
-              s = s.replace(marker, route, 1)
-          p.write_text(s)
-
-          p = Path('frontend/src/layouts/InstallmentFinanceLayout.jsx')
-          s = p.read_text()
-          if 'title: "SMS History"' not in s:
-              marker = '''      {\n        title: "Portfolio, SMS & Reports",\n        description: "Statements, arrears, cash flow, accounting exports and thermal receipts",\n        path: "/equipment-installment-finance/reports",\n        icon: "📊",\n        permissions: ["fleet.assets.view"],\n      },'''
-              item = marker + '''\n      {\n        title: "SMS History",\n        description: "Installment Finance customer SMS attempts, provider status and delivery history",\n        path: "/equipment-installment-finance/sms-history",\n        icon: "✉️",\n        permissions: ["fleet.assets.view"],\n      },'''
-              if marker not in s: raise SystemExit('Finance navigation reports marker not found')
-              s = s.replace(marker, item, 1)
-          p.write_text(s)
-
-          p = Path('frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx')
-          s = p.read_text()
-          s = s.replace('No automatic cropping', 'Passport portrait crop 35:45')
-          s = s.replace('keeps the complete frame visible', 'normalizes the portrait for agreement documents')
-          s = s.replace('Full image preserved', 'Passport portrait normalized')
-          p.write_text(s)
-
-          Path('backend/tests/equipmentFinanceInstallmentEnhancements.test.js').write_text('''const assert = require("assert");\nconst fs = require("fs");\nconst independent = fs.readFileSync("backend/routes/equipmentFinanceIndependentRoutes.js", "utf8");\nconst photo = fs.readFileSync("backend/routes/equipmentFinanceCustomerPhotoCaptureRoutes.js", "utf8");\nconst photoUi = fs.readFileSync("frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx", "utf8");\nconst routeUi = fs.readFileSync("frontend/src/App.jsx", "utf8");\nconst navUi = fs.readFileSync("frontend/src/layouts/InstallmentFinanceLayout.jsx", "utf8");\nassert.match(independent, /Under Installment/);\nassert.match(independent, /sms-history/);\nassert.match(independent, /finance-payment-receipt:/);\nassert.match(photo, /sharp/);\nassert.match(photo, /resize\\(700, 900/);\nassert.match(photoUi, /Passport portrait crop 35:45/);\nassert.match(routeUi, /EquipmentFinanceSmsHistoryPage/);\nassert.match(navUi, /title: "SMS History"/);\nconsole.log("Installment Finance enhancement regression checks passed.");\n''')
-
-      - name: Install dependencies and run full focused validation
-        run: |
-          cd backend
           npm ci
           node --check routes/equipmentFinanceCustomerPhotoCaptureRoutes.js
           node --check routes/equipmentFinanceIndependentRoutes.js
-          node --check services/equipmentFinanceProfessionalService.js
-          node ../backend/tests/equipmentFinanceInstallmentEnhancements.test.js
-          cd ../frontend
+          node tests/equipmentFinanceInstallmentEnhancements.test.js
+      - name: Validate frontend production build
+        working-directory: frontend
+        run: |
           npm ci
           npm run build
-
-      - name: Commit feature patch and remove workflow
+      - name: Commit validated feature and remove temporary tooling
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/utils/equipmentFinanceCustomerPhoto.js frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx frontend/src/pages/EquipmentFinanceSmsHistoryPage.jsx frontend/src/App.jsx frontend/src/layouts/InstallmentFinanceLayout.jsx backend/routes/equipmentFinanceCustomerPhotoCaptureRoutes.js backend/routes/equipmentFinanceIndependentRoutes.js backend/tests/equipmentFinanceInstallmentEnhancements.test.js .github/workflows/chalin03-installment-enhancement.yml
+          git add frontend/src/utils/equipmentFinanceCustomerPhoto.js frontend/src/components/EquipmentFinanceCustomerPhotoPanel.jsx frontend/src/pages/EquipmentFinanceSmsHistoryPage.jsx frontend/src/App.jsx frontend/src/layouts/InstallmentFinanceLayout.jsx backend/routes/equipmentFinanceCustomerPhotoCaptureRoutes.js backend/routes/equipmentFinanceIndependentRoutes.js backend/tests/equipmentFinanceInstallmentEnhancements.test.js tools/apply_installment_finance_enhancement.py .github/workflows/chalin03-installment-enhancement.yml
           git commit -m 'feat: improve installment customer photo sms history and equipment status'
-          git rm .github/workflows/chalin03-installment-enhancement.yml
-          git commit -m 'chore: remove one-off installment enhancement workflow'
+          git rm .github/workflows/chalin03-installment-enhancement.yml tools/apply_installment_finance_enhancement.py
+          git commit -m 'chore: remove one-off installment enhancement tooling'
           git push origin HEAD:fix/installment-finance-enhancement
