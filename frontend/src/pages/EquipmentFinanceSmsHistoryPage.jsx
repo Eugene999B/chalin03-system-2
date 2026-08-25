@@ -28,7 +28,6 @@ function feePolicy(settings) {
 export default function EquipmentFinanceSmsHistoryPage() {
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [reminder, setReminder] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,14 +37,12 @@ export default function EquipmentFinanceSmsHistoryPage() {
     setLoading(true);
     setError("");
     try {
-      const [historyResponse, financeResponse, reminderResponse] = await Promise.all([
+      const [historyResponse, financeResponse] = await Promise.all([
         axiosClient.get("/equipment-catalogue/sales/sms-history", { params: { limit: 200 } }),
         axiosClient.get("/equipment-catalogue/sales/professional/settings"),
-        axiosClient.get("/equipment-catalogue/sales/installment-command/settings"),
       ]);
       setLogs(Array.isArray(historyResponse.data?.logs) ? historyResponse.data.logs : []);
       setSettings(financeResponse.data?.settings || null);
-      setReminder(reminderResponse.data?.settings || null);
     } catch (err) {
       setError(err?.response?.data?.message || "Could not load Installment Finance SMS history and settings.");
     } finally {
@@ -57,10 +54,6 @@ export default function EquipmentFinanceSmsHistoryPage() {
 
   function updateSetting(key, value) {
     setSettings((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateReminder(key, value) {
-    setReminder((current) => ({ ...current, [key]: value }));
   }
 
   async function saveSettings() {
