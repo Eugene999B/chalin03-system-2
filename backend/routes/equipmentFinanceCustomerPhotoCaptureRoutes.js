@@ -56,47 +56,56 @@ function parseCustomerPhoto(value) {
 }
 
 async function normalizeCustomerPassportPhoto(photo) {
-  const source = Buffer.from(photo.content_base64, "base64");
-  const oriented = await sharp(source, { failOn: "error" }).rotate().toBuffer();
-  const metadata = await sharp(oriented).metadata();
-  const width = Number(metadata.width || 0);
-  const height = Number(metadata.height || 0);
-  if (!width || !height) {
-    const error = new Error("The customer picture is unreadable.");
-    error.statusCode = 400;
-    error.code = "FINANCE_CUSTOMER_PHOTO_UNREADABLE";
-    throw error;
+  try {
+    const source = Buffer.from(photo.content_base64, "base64");
+    const oriented = await sharp(source, { failOn: "error" }).rotate().toBuffer();
+    const metadata = await sharp(oriented).metadata();
+    const width = Number(metadata.width || 0);
+    const height = Number(metadata.height || 0);
+    if (!width || !height) {
+      const error = new Error("The customer picture is unreadable.");
+      error.statusCode = 400;
+      error.code = "FINANCE_CUSTOMER_PHOTO_UNREADABLE";
+      throw error;
+    }
+    const ratio = 35 / 45;
+    let cropWidth = width;
+    let cropHeight = Math.round(width / ratio);
+    if (cropHeight > height) {
+      cropHeight = height;
+      cropWidth = Math.round(height * ratio);
+    }
+    const left = Math.max(0, Math.floor((width - cropWidth) / 2));
+    const top = Math.max(0, Math.floor((height - cropHeight) / 2));
+    const output = await sharp(oriented)
+      .extract({ left, top, width: cropWidth, height: cropHeight })
+      .resize(700, 900, { fit: "cover", position: "centre" })
+      .jpeg({ quality: 84, mozjpeg: true, chromaSubsampling: "4:2:0" })
+      .toBuffer();
+    if (output.length > MAX_CUSTOMER_PHOTO_BYTES) {
+      const error = new Error("The normalized customer passport picture is too large.");
+      error.statusCode = 413;
+      error.code = "FINANCE_CUSTOMER_PHOTO_TOO_LARGE";
+      throw error;
+    }
+    return {
+      ...photo,
+      mime_type: "image/jpeg",
+      file_name: "customer-passport-photo.jpg",
+      content_base64: output.toString("base64"),
+      file_size_bytes: output.length,
+      width: 700,
+      height: 900,
+      passport_normalized: true,
+    };
+  } catch (error) {
+    if (error?.statusCode && error?.code) throw error;
+    const normalizedError = new Error("The customer picture could not be normalized safely.");
+    normalizedError.statusCode = 400;
+    normalizedError.code = "FINANCE_CUSTOMER_PHOTO_NORMALIZATION_FAILED";
+    normalizedError.cause = error;
+    throw normalizedError;
   }
-  const ratio = 35 / 45;
-  let cropWidth = width;
-  let cropHeight = Math.round(width / ratio);
-  if (cropHeight > height) {
-    cropHeight = height;
-    cropWidth = Math.round(height * ratio);
-  }
-  const left = Math.max(0, Math.floor((width - cropWidth) / 2));
-  const top = Math.max(0, Math.floor((height - cropHeight) / 2));
-  const output = await sharp(oriented)
-    .extract({ left, top, width: cropWidth, height: cropHeight })
-    .resize(700, 900, { fit: "cover", position: "centre" })
-    .jpeg({ quality: 84, mozjpeg: true, chromaSubsampling: "4:2:0" })
-    .toBuffer();
-  if (output.length > MAX_CUSTOMER_PHOTO_BYTES) {
-    const error = new Error("The normalized customer passport picture is too large.");
-    error.statusCode = 413;
-    error.code = "FINANCE_CUSTOMER_PHOTO_TOO_LARGE";
-    throw error;
-  }
-  return {
-    ...photo,
-    mime_type: "image/jpeg",
-    file_name: "customer-passport-photo.jpg",
-    content_base64: output.toString("base64"),
-    file_size_bytes: output.length,
-    width: 700,
-    height: 900,
-    passport_normalized: true,
-  };
 }
 
 function successfulCreation(res, payload) {
@@ -114,16 +123,16 @@ router.post(
     let photo;
     try {
       photo = parseCustomerPhoto(req.body?.customer_photo);
+      if (photo) photo = await normalizeCustomerPassportPhoto(photo);
     } catch (error) {
       return res.status(Number(error.statusCode || 400)).json({
         status: "error",
         code: error.code || "FINANCE_CUSTOMER_PHOTO_INVALID",
-        message: error.message,
+        message: error.message || "The customer picture could not be processed safely.",
       });
     }
 
     if (!photo) return next();
-    photo = await normalizeCustomerPassportPhoto(photo);
 
     const body = { ...(req.body || {}) };
     delete body.customer_photo;
