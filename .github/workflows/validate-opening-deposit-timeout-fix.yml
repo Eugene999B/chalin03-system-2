@@ -1,0 +1,68 @@
+name: Validate Opening Deposit timeout fix
+on:
+  push:
+    branches:
+      - fix/opening-deposit-request-timeout
+permissions:
+  contents: write
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Patch request path and validate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/routes/equipmentFinanceDepositReservationRoutes.js')
+          s = p.read_text()
+          old = '''let depositFoundationRepairPromise = null;
+          async function ensureDepositFoundationReady() {
+            const current = await schemaStatus(pool);
+            if (current.ready) return current;
+
+            if (!depositFoundationRepairPromise) {
+              depositFoundationRepairPromise = (async () => {
+                await runEquipmentFinanceOpeningDepositFoundationRepair();
+                const verified = await schemaStatus(pool);
+                if (!verified.ready) {
+                  const error = new DepositError(
+                    503,
+                    "The Opening Deposit payment controls are not installed correctly on the production database.",
+                    "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED"
+                  );
+                  error.readiness = verified;
+                  throw error;
+                }
+                return verified;
+              })().finally(() => {
+                depositFoundationRepairPromise = null;
+              });
+            }
+
+            return depositFoundationRepairPromise;
+          }'''
+          new = '''async function ensureDepositFoundationReady() {
+            return schemaStatus(pool);
+          }'''
+          if old not in s:
+              raise SystemExit('Expected stable Deposit request-path repair block was not found; aborting safely.')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          node --check backend/routes/equipmentFinanceDepositReservationRoutes.js
+          cd backend
+          npm ci --omit=dev
+          node --test tests/equipmentFinanceDepositReservationRoutes.test.js tests/equipmentFinanceOpeningDepositFoundationRepair.test.js
+      - name: Remove validation workflow and commit fix
+        run: |
+          rm -f .github/workflows/validate-opening-deposit-timeout-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/routes/equipmentFinanceDepositReservationRoutes.js .github/workflows/validate-opening-deposit-timeout-fix.yml
+          git commit -m 'Fix Opening Deposit request-timeout path'
+          git push origin HEAD
