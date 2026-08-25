@@ -26,7 +26,7 @@ test("deposit is limited to authorised Finance managers and accountants", () => 
 });
 
 test("deposit interface calls only the protected deposit reservation API", () => {
-  assert.match(page, /const API = "\\/equipment-catalogue\\/sales\\/deposit-reservations"/);
+  assert.ok(page.includes('const API = "/equipment-catalogue/sales/deposit-reservations"'));
   assert.match(page, /axiosClient\.get\(`\$\{API\}\/readiness`\)/);
   assert.match(page, /axiosClient\.get\(`\$\{API\}\/candidates`\)/);
   assert.match(page, /axiosClient\.post\(`\$\{API\}\/\$\{selected\.agreement_id\}\/deposit`/);
