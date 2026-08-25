@@ -32,7 +32,6 @@ function flag(settings, key) {
 export default function EquipmentFinanceSmsHistoryPage() {
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState(null);
-  const [reminder, setReminder] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,14 +41,12 @@ export default function EquipmentFinanceSmsHistoryPage() {
     setLoading(true);
     setError("");
     try {
-      const [historyResponse, financeResponse, reminderResponse] = await Promise.all([
+      const [historyResponse, financeResponse] = await Promise.all([
         axiosClient.get("/equipment-catalogue/sales/sms-history", { params: { limit: 200 } }),
         axiosClient.get("/equipment-catalogue/sales/professional/settings"),
-        axiosClient.get("/equipment-catalogue/sales/installment-command/settings"),
       ]);
       setLogs(Array.isArray(historyResponse.data?.logs) ? historyResponse.data.logs : []);
       setSettings(financeResponse.data?.settings || null);
-      setReminder(reminderResponse.data?.settings || null);
     } catch (err) {
       setError(err?.response?.data?.message || "Could not load Installment Finance SMS history and settings.");
     } finally {
@@ -61,10 +58,6 @@ export default function EquipmentFinanceSmsHistoryPage() {
 
   function updateSetting(key, value) {
     setSettings((current) => ({ ...current, [key]: value }));
-  }
-
-  function updateReminder(key, value) {
-    setReminder((current) => ({ ...current, [key]: value }));
   }
 
   async function saveSettings() {
@@ -107,26 +100,6 @@ export default function EquipmentFinanceSmsHistoryPage() {
     }
   }
 
-  async function saveReminderPolicy() {
-    setSaving(true);
-    setError("");
-    setNotice("");
-    try {
-      await axiosClient.put("/equipment-catalogue/sales/installment-command/settings", {
-        settings: reminder,
-        reason: "Updated Installment Finance event-specific reminder policy from SMS History.",
-      });
-      setNotice("Event-specific reminder policy saved.");
-      await load();
-    } catch (err) {
-      setError(err?.response?.data?.message || "Could not save event-specific reminder policy.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const eventSettings = reminder || settings || {};
-
   return (
     <main style={{ padding: "clamp(18px, 3vw, 32px)", maxWidth: 1500, margin: "0 auto" }}>
       <style>{`
@@ -136,6 +109,7 @@ export default function EquipmentFinanceSmsHistoryPage() {
         .finance-sms-event strong{color:#173b68;font-size:.9rem}
         .finance-sms-event span{margin-top:4px;color:#647169;font-size:.8rem;line-height:1.4}
         .finance-sms-event b{float:right;font-size:.72rem;letter-spacing:.08em}
+        .finance-sms-event em{display:block;margin-top:5px;color:#7b6b30;font-size:.7rem;font-style:normal}
         @media(max-width:767px){
           .finance-sms-history-table,.finance-sms-history-table thead{display:none}
           .finance-sms-history-table,.finance-sms-history-table tbody,.finance-sms-history-table tr,.finance-sms-history-table td{display:block;width:100%;box-sizing:border-box}
@@ -168,13 +142,13 @@ export default function EquipmentFinanceSmsHistoryPage() {
 
         {settings ? (
           <div className="finance-sms-event-grid" aria-label="Finance SMS event matrix">
-            <div className="finance-sms-event"><b>{flag(eventSettings,"customer_due_soon_sms_enabled")}</b><strong>Customer — due soon</strong><span>Reminder before the scheduled due date.</span></div>
-            <div className="finance-sms-event"><b>{flag(eventSettings,"customer_due_today_sms_enabled")}</b><strong>Customer — due today</strong><span>Same-day amount and due-date notification.</span></div>
-            <div className="finance-sms-event"><b>{flag(eventSettings,"customer_overdue_sms_enabled")}</b><strong>Customer — overdue</strong><span>Arrears reminder using the agreement policy.</span></div>
-            <div className="finance-sms-event"><b>{flag(eventSettings,"boss_due_alert_enabled")}</b><strong>Boss — due</strong><span>Separate from payment-received alerts.</span></div>
-            <div className="finance-sms-event"><b>{flag(eventSettings,"boss_overdue_alert_enabled")}</b><strong>Boss — overdue</strong><span>Escalation when an installment remains unpaid.</span></div>
-            <div className="finance-sms-event"><b>{flag(eventSettings,"late_fee_applied_sms_enabled")}</b><strong>Late fee — applied</strong><span>Distinct from the pre-due warning.</span></div>
-            <div className="finance-sms-event"><b>{flag(eventSettings,"payment_reversal_sms_enabled")}</b><strong>Payment — reversed</strong><span>Financial reversal is treated as its own communication event.</span></div>
+            <div className="finance-sms-event"><b>{flag(settings,"customer_due_soon_sms_enabled")}</b><strong>Customer — due soon</strong><span>Reminder before the scheduled due date.</span><em>Configured in Finance policy</em></div>
+            <div className="finance-sms-event"><b>{flag(settings,"customer_due_today_sms_enabled")}</b><strong>Customer — due today</strong><span>Same-day amount and due-date notification.</span><em>Configured in Finance policy</em></div>
+            <div className="finance-sms-event"><b>{flag(settings,"customer_overdue_sms_enabled")}</b><strong>Customer — overdue</strong><span>Arrears reminder using the agreement policy.</span><em>Configured in Finance policy</em></div>
+            <div className="finance-sms-event"><b>{flag(settings,"boss_due_alert_enabled")}</b><strong>Boss — due</strong><span>Separate from payment-received alerts.</span><em>Configured in Finance policy</em></div>
+            <div className="finance-sms-event"><b>{flag(settings,"boss_overdue_alert_enabled")}</b><strong>Boss — overdue</strong><span>Escalation when an installment remains unpaid.</span><em>Configured in Finance policy</em></div>
+            <div className="finance-sms-event"><b>{flag(settings,"late_fee_applied_sms_enabled")}</b><strong>Late fee — applied</strong><span>Distinct from the pre-due warning.</span><em>Configured in Finance policy</em></div>
+            <div className="finance-sms-event"><b>{flag(settings,"payment_reversal_sms_enabled")}</b><strong>Payment — reversed</strong><span>Financial reversal is treated as its own communication event.</span><em>Configured in Finance policy</em></div>
           </div>
         ) : null}
       </section>
@@ -182,7 +156,7 @@ export default function EquipmentFinanceSmsHistoryPage() {
       {settings ? (
         <section style={{ ...CARD, padding: 20, marginBottom: 20 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <div><p style={{ margin: 0, color: "#66736b", fontWeight: 700 }}>MASTER FINANCE POLICY</p><h2 style={{ margin: "4px 0" }}>Finance SMS &amp; Late-Fee Settings</h2></div>
+            <div><p style={{ margin: 0, color: "#66736b", fontWeight: 700 }}>MASTER FINANCE POLICY</p><h2 style={{ margin: "4px 0" }}>Finance SMS, Reminders &amp; Late-Fee Settings</h2></div>
             <button className="is-primary" type="button" onClick={saveSettings} disabled={saving}>{saving ? "Saving…" : "Save Finance policy"}</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14, marginTop: 16 }}>
@@ -208,20 +182,6 @@ export default function EquipmentFinanceSmsHistoryPage() {
           </div>
           <div style={{ marginTop: 16, padding: 14, borderRadius: 12, background: "#fff9dc", border: "1px solid #ead37a", color: "#5a4300" }}>
             <strong>Customer-facing fee notice:</strong> {feePolicy(settings)} New agreements snapshot this policy at creation. Existing agreements retain their policy snapshot and are not silently rewritten.
-          </div>
-        </section>
-      ) : null}
-
-      {reminder ? (
-        <section style={{ ...CARD, padding: 20, marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <div><p style={{ margin: 0, color: "#66736b", fontWeight: 700 }}>EVENT POLICY</p><h2 style={{ margin: "4px 0" }}>Customer &amp; Boss Reminder Events</h2></div>
-            <button className="is-primary" type="button" onClick={saveReminderPolicy} disabled={saving}>{saving ? "Saving…" : "Save event policy"}</button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14, marginTop: 16 }}>
-            {["customer_due_soon_sms_enabled","customer_due_today_sms_enabled","customer_overdue_sms_enabled","boss_due_alert_enabled","boss_overdue_alert_enabled","late_fee_applied_sms_enabled","payment_reversal_sms_enabled"].map((key) => (
-              <label key={key}><input type="checkbox" checked={Boolean(reminder[key])} onChange={(e) => updateReminder(key, e.target.checked)} /> {key.replaceAll("_", " ")}</label>
-            ))}
           </div>
         </section>
       ) : null}
