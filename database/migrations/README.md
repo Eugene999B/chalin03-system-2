@@ -140,8 +140,14 @@ The complete production order is:
 4. `20260729_equipment_finance_agreement_activation_verify.sql`
 5. `20260729_equipment_finance_deposit_reservation.sql`
 6. `20260729_equipment_finance_deposit_reservation_verify.sql`
-7. `20260729_equipment_finance_final_lifecycle.sql`
-8. `20260729_equipment_finance_final_lifecycle_verify.sql`
+7. `20260805_equipment_finance_opening_deposit_foundation_repair.sql`
+8. `20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql`
+9. `20260803_equipment_finance_phase4_deposit_reservation_integrity.sql`
+10. `20260803_equipment_finance_phase4_deposit_reservation_integrity_verify.sql`
+11. `20260729_equipment_finance_final_lifecycle.sql`
+12. `20260729_equipment_finance_final_lifecycle_verify.sql`
+13. `20260825_equipment_finance_policy_hardening.sql`
+14. `20260825_equipment_finance_policy_hardening_verify.sql`
 
 The credit-foundation verifier must explicitly report:
 
@@ -157,9 +163,11 @@ problem counts before it can continue to the next stage.
 These additive migrations create the controlled Finance progression from credit
 application and KYC through agreement activation, deposit and machine
 reservation, installment collections, delivery handover and final ownership
-transfer. They preserve existing Equipment Hire contracts, jobs, dispatches,
-invoices, payments, returns, workers and historical legacy Equipment Sales
-agreements.
+transfer. The final 20260825 policy-hardening migration additionally snapshots
+agreement-level commercial policy, strengthens reconciliation state and separates
+customer and boss event notification controls. It preserves existing Equipment
+Hire contracts, jobs, dispatches, invoices, payments, returns, workers and
+historical legacy Equipment Sales agreements.
 
 The approved one-command runner is:
 
