@@ -27,12 +27,33 @@ jobs:
           if not match:
               raise SystemExit('Expected stable Deposit request-path repair block was not found; aborting safely.')
           replacement = 'async function ensureDepositFoundationReady() {\n  return schemaStatus(pool);\n}'
-          p.write_text(s[:match.start()] + replacement + s[match.end():])
+          patched = s[:match.start()] + replacement + s[match.end():]
+          helper_start = patched.find('async function ensureDepositFoundationReady')
+          helper_end = patched.find('async function assertSchemaReady', helper_start)
+          helper = patched[helper_start:helper_end]
+          if 'runEquipmentFinanceOpeningDepositFoundationRepair' in helper or 'GET_LOCK' in helper:
+              raise SystemExit('Opening Deposit request path still invokes repair/locking; aborting safely.')
+          p.write_text(patched)
           PY
           node --check backend/routes/equipmentFinanceDepositReservationRoutes.js
           cd backend
           npm ci --omit=dev
-          node --test tests/equipmentFinanceDepositReservationContract.test.js tests/equipmentFinanceOpeningDepositFoundationRepair.test.js
+          node --test tests/equipmentFinanceDepositReservationContract.test.js
+          node - <<'NODE'
+          const fs = require('fs');
+          const route = fs.readFileSync('routes/equipmentFinanceDepositReservationRoutes.js', 'utf8');
+          const helper = route.slice(
+            route.indexOf('async function ensureDepositFoundationReady'),
+            route.indexOf('async function assertSchemaReady')
+          );
+          if (!/async function ensureDepositFoundationReady\(\)\s*\{\s*return schemaStatus\(pool\);\s*\}/s.test(helper)) {
+            throw new Error('Opening Deposit readiness helper is not read-only.');
+          }
+          if (helper.includes('runEquipmentFinanceOpeningDepositFoundationRepair') || helper.includes('GET_LOCK')) {
+            throw new Error('Opening Deposit request path can still run a repair lock.');
+          }
+          console.log('Opening Deposit request-timeout regression guard passed.');
+          NODE
       - name: Remove validation workflow and commit fix
         run: |
           rm -f .github/workflows/validate-opening-deposit-timeout-fix.yml
