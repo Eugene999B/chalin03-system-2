@@ -166,7 +166,7 @@ export default function EquipmentFinanceDepositReservationPageV2() {
 
         <section className="finance-simple__section">
           <div className="finance-simple__toolbar">
-            <div><p className="finance-simple__eyebrow">Approved agreements</p><h2>{visible.length} agreement(s)</h2></div>
+            <div><p className="finance-simple__eyebrow">Approved agreements</p><h2>{visible.length} agreement(s)</h2><p>Search, select, then record the opening deposit against the approved agreement.</p></div>
             <div className="finance-simple__actions">
               <input aria-label="Search agreements" placeholder="Customer, agreement or excavator" value={search} onChange={(e) => setSearch(e.target.value)} />
               <select aria-label="Deposit filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
