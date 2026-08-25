@@ -1,8 +1,41 @@
 -- CHALIN 03 OPENING DEPOSIT TRIGGER CORRECTION
 -- Keeps approved-credit agreements approved until the exact machine reservation exists.
--- Replaces only the two BEFORE UPDATE agreement triggers involved in the proven conflict.
+-- Removes any legacy BEFORE UPDATE agreement trigger carrying the obsolete
+-- "cannot become active before equipment reservation" rule, regardless of trigger name.
 
 DELIMITER $$
+
+DROP PROCEDURE IF EXISTS chalin03_remove_legacy_finance_activation_guards $$
+CREATE PROCEDURE chalin03_remove_legacy_finance_activation_guards()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE trigger_name VARCHAR(255);
+    DECLARE cur CURSOR FOR
+        SELECT TRIGGER_NAME
+          FROM information_schema.TRIGGERS
+         WHERE TRIGGER_SCHEMA = DATABASE()
+           AND EVENT_OBJECT_TABLE = 'equipment_sale_agreements'
+           AND EVENT_MANIPULATION = 'UPDATE'
+           AND ACTION_TIMING = 'BEFORE'
+           AND ACTION_STATEMENT LIKE '%A controlled Finance agreement cannot become active before equipment reservation.%';
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+    OPEN cur;
+    trigger_loop: LOOP
+        FETCH cur INTO trigger_name;
+        IF done = 1 THEN LEAVE trigger_loop; END IF;
+        SET @drop_trigger_sql = CONCAT(
+            'DROP TRIGGER IF EXISTS `', REPLACE(trigger_name, '`', '``'), '`'
+        );
+        PREPARE drop_trigger_stmt FROM @drop_trigger_sql;
+        EXECUTE drop_trigger_stmt;
+        DEALLOCATE PREPARE drop_trigger_stmt;
+    END LOOP;
+    CLOSE cur;
+END $$
+
+CALL chalin03_remove_legacy_finance_activation_guards() $$
+DROP PROCEDURE IF EXISTS chalin03_remove_legacy_finance_activation_guards $$
 
 DROP TRIGGER IF EXISTS trg_equipment_finance_phase4_balance_guard_before_update $$
 CREATE TRIGGER trg_equipment_finance_phase4_balance_guard_before_update
