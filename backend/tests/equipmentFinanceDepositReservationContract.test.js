@@ -130,7 +130,7 @@ test("database triggers block generic payment bypasses and premature reservation
 });
 
 test("forward integrity migration is startup-safe and its verifier is read-only", () => {
-  assert.equal(startup.splitSqlScript(integrityMigration).length, 7);
+  assert.equal(startup.splitSqlScript(integrityMigration).length, 9);
   assert.equal(startup.splitSqlScript(integrityVerification).length, 4);
   assert.match(integrityMigration, /FORWARD-ONLY TRIGGER REPLACEMENT/);
   assert.match(integrityMigration, /BACKUP REQUIRED/);
@@ -181,7 +181,7 @@ test("runtime readiness is read-only and fails closed", () => {
   assert.match(route, /information_schema\.TRIGGERS/);
   assert.match(route, /missing_migrations/);
   assert.match(route, /scope: "company_wide"/);
-  assert.match(route, /EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED/);
+  assert.match(route, /EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED/);
   assert.match(route, /router\.get\("\/readiness"/);
   assert.match(route, /router\.get\("\/candidates"/);
   assert.match(route, /router\.post\(\n\s+"\/:agreementId\/deposit"/);
