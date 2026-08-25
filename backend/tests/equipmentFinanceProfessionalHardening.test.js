@@ -4,6 +4,7 @@ const {
   calculateProspectiveLateFee,
   nextDueFromSchedule,
 } = require("../services/equipmentFinanceAuthoritativePolicyService");
+const { calculateFee } = require("../services/equipmentFinanceLateFeeApplicationService");
 const { buildFinanceSchedule } = require("../services/equipmentFinanceScheduleService");
 const { requestContext } = require("../middleware/requestContext");
 
@@ -31,10 +32,7 @@ function testLegacyAgreementDoesNotAdvertiseAnUnverifiedFee() {
     late_charge_value_snapshot: 250,
     late_charge_cap_snapshot: 500,
   };
-  assert.strictEqual(
-    calculateProspectiveLateFee({ agreement, overdueBalance: 1000, alreadyApplied: 0 }),
-    0
-  );
+  assert.strictEqual(calculateProspectiveLateFee({ agreement, overdueBalance: 1000, alreadyApplied: 0 }), 0);
 }
 
 function testNoSecondLateFeeWarningAfterAppliedCharge() {
@@ -44,14 +42,14 @@ function testNoSecondLateFeeWarningAfterAppliedCharge() {
     late_charge_value_snapshot: 250,
     late_charge_cap_snapshot: 500,
   };
-  assert.strictEqual(
-    calculateProspectiveLateFee({ agreement, overdueBalance: 1000, alreadyApplied: 250 }),
-    0
-  );
-  assert.strictEqual(
-    calculateProspectiveLateFee({ agreement, overdueBalance: 1000, alreadyApplied: 0 }),
-    250
-  );
+  assert.strictEqual(calculateProspectiveLateFee({ agreement, overdueBalance: 1000, alreadyApplied: 250 }), 0);
+  assert.strictEqual(calculateProspectiveLateFee({ agreement, overdueBalance: 1000, alreadyApplied: 0 }), 250);
+}
+
+function testLateFeeApplicationCalculator() {
+  assert.strictEqual(calculateFee({ type: "fixed", value: 250, cap: 500, legacyReviewRequired: false }, 1000), 250);
+  assert.strictEqual(calculateFee({ type: "percentage", value: 10, cap: 75, legacyReviewRequired: false }, 1000), 75);
+  assert.strictEqual(calculateFee({ type: "fixed", value: 250, cap: 500, legacyReviewRequired: true }, 1000), 0);
 }
 
 function testNextDueUsesOnlyUnpaidCurrentOrFutureRows() {
@@ -84,14 +82,8 @@ function testLegacyApiIsExplicitlyRetired() {
   const req = { path: "/api/installments/agreements", method: "GET", headers: {} };
   const res = {
     setHeader() {},
-    status(code) {
-      status = code;
-      return this;
-    },
-    json(value) {
-      payload = value;
-      return this;
-    },
+    status(code) { status = code; return this; },
+    json(value) { payload = value; return this; },
   };
   requestContext(req, res, () => assert.fail("Legacy installment route must not reach next middleware."));
   assert.strictEqual(status, 410);
@@ -101,6 +93,7 @@ function testLegacyApiIsExplicitlyRetired() {
 testAgreementPolicySnapshot();
 testLegacyAgreementDoesNotAdvertiseAnUnverifiedFee();
 testNoSecondLateFeeWarningAfterAppliedCharge();
+testLateFeeApplicationCalculator();
 testNextDueUsesOnlyUnpaidCurrentOrFutureRows();
 testScheduleExplainsDateAdjustments();
 testLegacyApiIsExplicitlyRetired();
