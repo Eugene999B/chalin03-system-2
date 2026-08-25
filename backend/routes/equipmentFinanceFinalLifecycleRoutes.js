@@ -291,7 +291,12 @@ function accountListSql() {
       agreement.financed_amount, agreement.amount_paid,
       agreement.outstanding_balance, agreement.overdue_amount,
       agreement.payment_frequency, agreement.installment_count,
-      agreement.next_due_date, agreement.final_due_date,
+      (SELECT MIN(schedule.due_date)
+       FROM equipment_installment_schedule schedule
+      WHERE schedule.agreement_id = agreement.id
+        AND schedule.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
+        AND schedule.due_date >= CURRENT_DATE) AS next_due_date,
+      agreement.final_due_date,
       agreement.delivery_policy, agreement.delivery_threshold_percent,
       agreement.equipment_commitment_status, agreement.delivery_status,
       agreement.ownership_status, agreement.agreement_document_number,
