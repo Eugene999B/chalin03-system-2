@@ -120,19 +120,72 @@ router.put(
   }
 );
 
+const EVENT_NOTIFICATION_DEFAULTS = Object.freeze({
+  boss_due_alert_enabled: false,
+  boss_overdue_alert_enabled: true,
+  customer_due_soon_sms_enabled: true,
+  customer_due_today_sms_enabled: true,
+  customer_overdue_sms_enabled: true,
+  late_fee_applied_sms_enabled: true,
+  payment_reversal_sms_enabled: true,
+});
+
+async function loadEventNotificationSettings() {
+  const placeholders = EVENT_NOTIFICATION_KEYS.map(() => "?").join(", ");
+  const [columnRows] = await pool.query(
+    `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'equipment_finance_settings'
+        AND COLUMN_NAME IN (${placeholders})`,
+    EVENT_NOTIFICATION_KEYS
+  );
+  const available = new Set(columnRows.map((row) => String(row.COLUMN_NAME)));
+  const missing = EVENT_NOTIFICATION_KEYS.filter((key) => !available.has(key));
+  const availableKeys = EVENT_NOTIFICATION_KEYS.filter((key) => available.has(key));
+  const selectList = availableKeys.length
+    ? availableKeys.map((key) => `\`${key}\``).join(", ")
+    : "id";
+  const [rows] = await pool.query(
+    `SELECT ${selectList}
+       FROM equipment_finance_settings
+      WHERE id = 1
+      LIMIT 1`
+  );
+  if (!rows.length) return { settings: null, missing };
+  const settings = Object.fromEntries(
+    EVENT_NOTIFICATION_KEYS.map((key) => [
+      key,
+      available.has(key) ? Boolean(rows[0][key]) : EVENT_NOTIFICATION_DEFAULTS[key],
+    ])
+  );
+  return { settings, missing };
+}
+
 router.get(
   "/professional/notification-settings",
   requirePermission("fleet.assets.view"),
   async (_req, res) => {
     try {
-      const [rows] = await pool.query(
-        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
-           FROM equipment_finance_settings
-          WHERE id = 1
-          LIMIT 1`
-      );
-      if (!rows.length) return res.status(503).json({ status: "error", message: "Finance notification settings are not initialized." });
-      return res.json({ status: "success", scope: "company_wide_finance", settings: rows[0], keys: EVENT_NOTIFICATION_KEYS });
+      const result = await loadEventNotificationSettings();
+      if (!result.settings) {
+        return res.status(503).json({
+          status: "error",
+          code: "FINANCE_NOTIFICATION_SETTINGS_NOT_INITIALIZED",
+          message: "Finance notification settings are not initialized.",
+        });
+      }
+      return res.json({
+        status: "success",
+        scope: "company_wide_finance",
+        settings: result.settings,
+        keys: EVENT_NOTIFICATION_KEYS,
+        schema: {
+          migration_pending: result.missing.length > 0,
+          missing_notification_columns: result.missing,
+          defaults_used_for_missing_columns: result.missing,
+        },
+      });
     } catch (error) {
       return sendError(res, error, "Could not load Finance notification event settings.");
     }
@@ -187,7 +240,7 @@ router.put(
       );
       return res.json({ status: "success", changed: true, settings: afterRows[0], message: "Finance notification event policy saved with history." });
     } catch (error) {
-      return sendError(res, error, "Could not save Finance notification event settings.");
+      return sendError(res, error, "Could not load Finance notification event settings.");
     }
   }
 );
