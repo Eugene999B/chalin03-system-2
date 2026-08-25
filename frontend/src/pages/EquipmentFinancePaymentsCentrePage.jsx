@@ -25,8 +25,12 @@ export default function EquipmentFinancePaymentsCentrePage() {
 
   useEffect(() => {
     let active = true;
-    async function load() {
-      setLoading(true);
+    let refreshing = false;
+
+    async function load({ showSpinner = true } = {}) {
+      if (refreshing) return;
+      refreshing = true;
+      if (showSpinner) setLoading(true);
       setProblem("");
       try {
         const response = await axiosClient.get(`${API}/accounts`);
@@ -34,12 +38,24 @@ export default function EquipmentFinancePaymentsCentrePage() {
       } catch (error) {
         if (active) setProblem(errorMessage(error, "Could not load payment-ready accounts."));
       } finally {
-        if (active) setLoading(false);
+        refreshing = false;
+        if (active && showSpinner) setLoading(false);
       }
     }
+
     load();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load({ showSpinner: false });
+    }, 15000);
+    const refreshOnFocus = () => { if (document.visibilityState === "visible") void load({ showSpinner: false }); };
+    document.addEventListener("visibilitychange", refreshOnFocus);
+    window.addEventListener("focus", refreshOnFocus);
+
     return () => {
       active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+      window.removeEventListener("focus", refreshOnFocus);
     };
   }, []);
 

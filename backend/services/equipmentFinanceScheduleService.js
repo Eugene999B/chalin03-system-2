@@ -190,7 +190,8 @@ function dueDateFor({
     frequency === "monthly"
       ? addMonths(firstDate, index)
       : addDays(firstDate, index * intervalDays);
-  return applyNonWorkingRule(unadjusted, nonWorkingDayRule, nonWorkingDates);
+  const adjusted = applyNonWorkingRule(unadjusted, nonWorkingDayRule, nonWorkingDates);
+  return { unadjusted, adjusted };
 }
 
 function normalizeScheduleInput(input = {}) {
@@ -279,6 +280,7 @@ function buildFinanceSchedule(input = {}) {
   let assignedCents = 0;
   let previousDueDate = null;
   let collisionAdjustments = 0;
+  const dateAdjustments = [];
   const schedule = [];
 
   for (let index = 0; index < normalized.installment_count; index += 1) {
@@ -287,7 +289,7 @@ function buildFinanceSchedule(input = {}) {
         ? totalCents - assignedCents
         : baseCents;
     assignedCents += cents;
-    let dueDate = dueDateFor({
+    const dueDateResult = dueDateFor({
       firstDate,
       frequency: normalized.payment_frequency,
       intervalDays: normalized.custom_interval_days,
@@ -295,10 +297,27 @@ function buildFinanceSchedule(input = {}) {
       nonWorkingDayRule: normalized.non_working_day_rule,
       nonWorkingDates,
     });
+    let dueDate = dueDateResult.adjusted;
+
+    if (isoDate(dueDateResult.unadjusted) !== isoDate(dueDateResult.adjusted)) {
+      dateAdjustments.push({
+        sequence_number: index + 1,
+        reason: "non_working_day_rule",
+        original_due_date: isoDate(dueDateResult.unadjusted),
+        adjusted_due_date: isoDate(dueDateResult.adjusted),
+      });
+    }
 
     if (previousDueDate && dueDate.getTime() <= previousDueDate.getTime()) {
+      const originalCollisionDate = isoDate(dueDate);
       dueDate = nextAvailableDateAfter(previousDueDate, nonWorkingDates);
       collisionAdjustments += 1;
+      dateAdjustments.push({
+        sequence_number: index + 1,
+        reason: "duplicate_date_collision",
+        original_due_date: originalCollisionDate,
+        adjusted_due_date: isoDate(dueDate),
+      });
     }
 
     previousDueDate = dueDate;
@@ -320,6 +339,7 @@ function buildFinanceSchedule(input = {}) {
       strictly_increasing_dates: true,
       duplicate_due_dates_allowed: false,
       collision_adjustments: collisionAdjustments,
+      date_adjustments: dateAdjustments,
       monthly_anchor_day_preserved: true,
       rounding: "final_schedule_line_only",
       non_working_day_rule: normalized.non_working_day_rule,

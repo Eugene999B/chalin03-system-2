@@ -80,17 +80,66 @@ function enhancePhotoField(field) {
   input.insertAdjacentElement("afterend", picker);
 }
 
+function injectInstallmentHardeningStyles() {
+  const existing = document.getElementById("installment-finance-hardening-styles");
+  if (existing) return existing;
+  const style = document.createElement("style");
+  style.id = "installment-finance-hardening-styles";
+  style.textContent = `
+    @media (min-width: 1200px) {
+      body.finance-installment-page--start .finance-simple__hero {
+        min-height: 150px !important;
+        padding-top: 1.35rem !important;
+        padding-bottom: 1.45rem !important;
+      }
+      body.finance-installment-page--start .finance-simple__hero h1 {
+        font-size: clamp(2rem, 3.4vw, 3.65rem) !important;
+      }
+      body.finance-installment-page--start .finance-simple__hero span {
+        max-width: 860px !important;
+      }
+    }
+    @media (max-width: 767px) {
+      body.installment-finance-mobile .finance-simple__dialog button,
+      body.installment-finance-mobile .finance-simple__dialog a {
+        min-height: 48px;
+      }
+      body.installment-finance-mobile .finance-simple__dialog {
+        padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+      }
+      body.installment-finance-mobile .finance-simple__table-wrap {
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  return style;
+}
+
+function enhanceMobileDialogKeyboard() {
+  const close = (event) => {
+    if (event.key !== "Escape") return;
+    const dialog = document.querySelector('.finance-simple__dialog[role="dialog"], .finance-accounts__dialog[role="dialog"]');
+    if (!dialog) return;
+    const closeButton = [...dialog.querySelectorAll("button")].find((button) => /^close$/i.test(button.textContent.trim()));
+    if (closeButton) closeButton.click();
+  };
+  window.addEventListener("keydown", close);
+  return () => window.removeEventListener("keydown", close);
+}
+
 export default function InstallmentMobileEnhancements() {
   useEffect(() => {
     const root = document.body;
     root.classList.add("installment-finance-mobile");
+    const style = injectInstallmentHardeningStyles();
+    const removeKeyboardHandler = enhanceMobileDialogKeyboard();
 
     let frame = 0;
     const scan = () => {
       frame = 0;
-      document
-        .querySelectorAll(".finance-simple__field")
-        .forEach(enhancePhotoField);
+      document.querySelectorAll(".finance-simple__field").forEach(enhancePhotoField);
     };
     const schedule = () => {
       if (!frame) frame = window.requestAnimationFrame(scan);
@@ -103,7 +152,9 @@ export default function InstallmentMobileEnhancements() {
     return () => {
       observer.disconnect();
       if (frame) window.cancelAnimationFrame(frame);
+      removeKeyboardHandler();
       root.classList.remove("installment-finance-mobile");
+      style?.remove();
       document
         .querySelectorAll(".finance-simple__field[data-installment-photo-picker='true']")
         .forEach((field) => {
