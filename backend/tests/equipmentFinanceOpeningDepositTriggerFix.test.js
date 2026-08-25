@@ -8,6 +8,7 @@ const file = path.join(
   "../database/migrations/20260825_equipment_finance_opening_deposit_trigger_fix.sql"
 );
 const sql = fs.readFileSync(file, "utf8");
+const { splitSql } = require("../scripts/runEquipmentFinanceOpeningDepositFoundationRepair");
 
 test("Opening Deposit trigger fix replaces all three protected Finance gates", () => {
   for (const triggerName of [
@@ -17,6 +18,15 @@ test("Opening Deposit trigger fix replaces all three protected Finance gates", (
   ]) {
     assert.match(sql, new RegExp(`DROP TRIGGER IF EXISTS ${triggerName}`));
     assert.match(sql, new RegExp(`CREATE TRIGGER ${triggerName}`));
+  }
+});
+
+test("Opening Deposit trigger SQL is split into exactly three executable statements", () => {
+  const statements = splitSql(sql);
+  assert.equal(statements.length, 3);
+  for (const statement of statements) {
+    assert.match(statement, /^DROP TRIGGER IF EXISTS /);
+    assert.match(statement, /CREATE TRIGGER /);
   }
 });
 
