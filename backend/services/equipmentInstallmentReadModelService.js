@@ -277,11 +277,13 @@ async function loadRows(connection = pool, locationId = null) {
        (SELECT MIN(eis.due_date)
         FROM equipment_installment_schedule eis
         WHERE eis.agreement_id = esa.id
-          AND ${openSchedule}) AS next_schedule_due_date,
+          AND ${openSchedule}
+          AND eis.due_date >= CURDATE()) AS next_schedule_due_date,
        (SELECT ${remaining}
         FROM equipment_installment_schedule eis
         WHERE eis.agreement_id = esa.id
           AND ${openSchedule}
+          AND eis.due_date >= CURDATE()
         ORDER BY eis.due_date, eis.sequence_number
         LIMIT 1) AS next_payment_amount,
        (SELECT MIN(eis.due_date)
