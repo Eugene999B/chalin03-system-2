@@ -1,5 +1,4 @@
 const mysql = require("mysql2/promise");
-require("dotenv").config();
 
 function requiredEnv(primary, fallback) {
   const value = process.env[primary] || process.env[fallback];
@@ -9,7 +8,16 @@ function requiredEnv(primary, fallback) {
 
 function sslConfig() {
   if (String(process.env.DB_SSL || "").trim().toLowerCase() !== "true") return undefined;
-  return { rejectUnauthorized: !["0", "false", "no", "off"].includes(String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "true").trim().toLowerCase()) };
+  const normalized = String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "true").trim().toLowerCase();
+  const rejectUnauthorized = !["0", "false", "no", "off"].includes(normalized);
+  const encodedCa = String(process.env.DB_SSL_CA_BASE64 || "").trim();
+  if (encodedCa && rejectUnauthorized) {
+    return {
+      ca: Buffer.from(encodedCa, "base64").toString("utf8"),
+      rejectUnauthorized: true,
+    };
+  }
+  return { rejectUnauthorized };
 }
 
 const options = {
