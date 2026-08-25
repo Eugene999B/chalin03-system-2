@@ -23,11 +23,32 @@ function requiredEnv(primary, fallback) {
   return value;
 }
 
+function booleanValue(value, fallback = false) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return ["1", "true", "yes", "on"].includes(normalized);
+}
+
+// Keep deployment repair TLS behavior identical to backend/config/db.js.
 function sslConfig() {
-  if (String(process.env.DB_SSL || "").trim().toLowerCase() !== "true") return undefined;
-  const ca = String(process.env.DB_SSL_CA_BASE64 || "").trim();
-  if (ca) return { ca: Buffer.from(ca, "base64").toString("utf8"), rejectUnauthorized: true };
-  return { rejectUnauthorized: true };
+  const dbSsl = String(process.env.DB_SSL || "").trim().toLowerCase();
+  if (dbSsl === "false") return false;
+  if (dbSsl !== "true") return undefined;
+
+  const encodedCa = String(process.env.DB_SSL_CA_BASE64 || "").trim();
+  const rejectUnauthorized = booleanValue(
+    process.env.DB_SSL_REJECT_UNAUTHORIZED,
+    true
+  );
+
+  if (encodedCa) {
+    return {
+      ca: Buffer.from(encodedCa, "base64").toString("utf8"),
+      rejectUnauthorized,
+    };
+  }
+
+  return { rejectUnauthorized };
 }
 
 function migrationCandidates(relativePath) {
@@ -68,39 +89,51 @@ function splitSql(sqlText) {
     current = "";
   };
 
-  for (const line of text.split("\n")) {
+  const lines = text.split("\n");
+  for (const line of lines) {
     const delimiterMatch = line.trim().match(/^DELIMITER\s+(.+)$/i);
     if (delimiterMatch) {
-      if (current.trim()) throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
+      if (current.trim()) {
+        throw new Error("SQL DELIMITER appeared before the previous statement was complete.");
+      }
       delimiter = delimiterMatch[1].trim();
       continue;
     }
 
     for (let index = 0; index < line.length; index += 1) {
       const char = line[index];
+
       if (quote) {
         current += char;
-        if (escaped) escaped = false;
-        else if (char === "\\") escaped = true;
-        else if (char === quote) quote = null;
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === quote) {
+          quote = null;
+        }
         continue;
       }
+
       if (char === "'" || char === '"' || char === "`") {
         quote = char;
         current += char;
         continue;
       }
+
       if (line.startsWith(delimiter, index)) {
         flush();
         index += delimiter.length - 1;
         continue;
       }
+
       current += char;
     }
+
     current += "\n";
   }
 
-  flush();
+  if (current.trim()) flush();
   return statements;
 }
 
@@ -118,7 +151,10 @@ async function createConnection() {
 
 async function tableExists(connection, tableName) {
   const [rows] = await connection.query(
-    `SELECT COUNT(*) AS present FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+    `SELECT COUNT(*) AS present
+       FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?`,
     [tableName]
   );
   return Number(rows[0]?.present || 0) === 1;
@@ -126,31 +162,54 @@ async function tableExists(connection, tableName) {
 
 async function ensureSchemaMigrationsTable(connection) {
   if (await tableExists(connection, "schema_migrations")) return;
-  await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (migration_name VARCHAR(255) PRIMARY KEY, applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      migration_name VARCHAR(255) PRIMARY KEY,
+      applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 }
 
 async function migrationRecorded(connection, migrationName) {
   await ensureSchemaMigrationsTable(connection);
-  const [rows] = await connection.query(`SELECT migration_name FROM schema_migrations WHERE migration_name = ? LIMIT 1`, [migrationName]);
+  const [rows] = await connection.query(
+    `SELECT migration_name FROM schema_migrations WHERE migration_name = ? LIMIT 1`,
+    [migrationName]
+  );
   return rows.length > 0;
 }
 
 async function recordMigration(connection, migrationName) {
   await ensureSchemaMigrationsTable(connection);
-  await connection.query(`INSERT INTO schema_migrations (migration_name) VALUES (?) ON DUPLICATE KEY UPDATE migration_name = VALUES(migration_name)`, [migrationName]);
+  await connection.query(
+    `INSERT INTO schema_migrations (migration_name) VALUES (?)
+     ON DUPLICATE KEY UPDATE migration_name = VALUES(migration_name)`,
+    [migrationName]
+  );
 }
 
 async function executeSqlFile(connection, filePath) {
-  const statements = splitSql(fs.readFileSync(filePath, "utf8"));
-  for (const statement of statements) await connection.query(statement);
+  const sql = fs.readFileSync(filePath, "utf8");
+  const statements = splitSql(sql);
+  for (const statement of statements) {
+    await connection.query(statement);
+  }
 }
 
 async function verifyRequiredTriggers(connection) {
   const placeholders = REQUIRED_TRIGGERS.map(() => "?").join(",");
-  const [rows] = await connection.query(`SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND TRIGGER_NAME IN (${placeholders})`, REQUIRED_TRIGGERS);
+  const [rows] = await connection.query(
+    `SELECT TRIGGER_NAME
+       FROM information_schema.TRIGGERS
+      WHERE TRIGGER_SCHEMA = DATABASE()
+        AND TRIGGER_NAME IN (${placeholders})`,
+    REQUIRED_TRIGGERS
+  );
   const found = new Set(rows.map((row) => row.TRIGGER_NAME));
   const missing = REQUIRED_TRIGGERS.filter((name) => !found.has(name));
-  if (missing.length) throw new Error(`Opening Deposit repair did not install required triggers: ${missing.join(", ")}`);
+  if (missing.length) {
+    throw new Error(`Opening Deposit repair did not install required triggers: ${missing.join(", ")}`);
+  }
   return { ok: true, triggers: REQUIRED_TRIGGERS.slice() };
 }
 
@@ -159,6 +218,7 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
   try {
     const lockName = MIGRATION_LOCK;
     await connection.query("SELECT GET_LOCK(?, 30)", [lockName]);
+
     try {
       const baseFile = resolveMigrationFile(BASE_MIGRATION_FILE, { required: false });
       const repairFile = resolveMigrationFile(MIGRATION_FILE);
@@ -168,6 +228,7 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
         await executeSqlFile(connection, baseFile);
         await recordMigration(connection, BASE_MIGRATION_FILE);
       }
+
       if (!(await migrationRecorded(connection, MIGRATION_RECORD))) {
         await executeSqlFile(connection, repairFile);
         await recordMigration(connection, MIGRATION_RECORD);
@@ -187,7 +248,11 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
   }
 }
 
-module.exports = { runEquipmentFinanceOpeningDepositFoundationRepair, splitSql, verifyRequiredTriggers };
+module.exports = {
+  runEquipmentFinanceOpeningDepositFoundationRepair,
+  splitSql,
+  verifyRequiredTriggers,
+};
 
 if (require.main === module) {
   runEquipmentFinanceOpeningDepositFoundationRepair()
