@@ -32,6 +32,34 @@ function dateLabel(value) {
       });
 }
 
+function nextDueLabel(value) {
+  if (!value) return "Not scheduled";
+  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  if (Number.isNaN(parsed.getTime()) || parsed < todayUtc) return "Not scheduled";
+  return dateLabel(value);
+}
+
+function nextDueFromSchedule(schedule, fallback) {
+  const today = new Date();
+  const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  const candidates = (Array.isArray(schedule) ? schedule : [])
+    .filter((row) => {
+      const balance = Math.max(
+        Number(row.scheduled_amount || 0) +
+          Number(row.late_charge_amount || 0) -
+          Number(row.waived_charge_amount || 0) -
+          Number(row.amount_paid || 0),
+        0
+      );
+      const date = row?.due_date ? new Date(`${String(row.due_date).slice(0, 10)}T00:00:00Z`) : null;
+      return balance > 0.01 && date && !Number.isNaN(date.getTime()) && date >= todayUtc;
+    })
+    .sort((left, right) => String(left.due_date).localeCompare(String(right.due_date)));
+  return candidates[0]?.due_date || (fallback && nextDueLabel(fallback) !== "Not scheduled" ? fallback : null);
+}
+
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
@@ -94,53 +122,15 @@ function lifecycleSteps(account, detail) {
   const fullyPaid = Number(account.outstanding_balance || 0) <= 0.01;
 
   const steps = [
-    {
-      key: "application",
-      title: "Approved Application",
-      note: account.application_number || "Approved credit file",
-      complete: true,
-    },
-    {
-      key: "agreement",
-      title: "Agreement",
-      note: account.agreement_number,
-      complete: true,
-    },
-    {
-      key: "reservation",
-      title: "Deposit & Reservation",
-      note: reserved ? "Machine reserved" : "Awaiting required deposit",
-      complete: reserved,
-    },
-    {
-      key: "collections",
-      title: "Collections",
-      note: fullyPaid
-        ? "Fully settled"
-        : paymentCount
-          ? `${paymentCount} payment record${paymentCount === 1 ? "" : "s"}`
-          : "No installment collection yet",
-      complete: fullyPaid,
-      current: reserved && !fullyPaid,
-    },
-    {
-      key: "delivery",
-      title: "Delivery",
-      note: delivered ? dateLabel(account.delivery_datetime) : "Not handed over",
-      complete: delivered,
-      current: fullyPaid && !delivered,
-    },
-    {
-      key: "ownership",
-      title: "Ownership",
-      note: transferred ? dateLabel(account.transfer_date) : "Not transferred",
-      complete: transferred,
-      current: fullyPaid && delivered && !transferred,
-    },
+    { key: "application", title: "Approved Application", note: account.application_number || "Approved credit file", complete: true },
+    { key: "agreement", title: "Agreement", note: account.agreement_number, complete: true },
+    { key: "reservation", title: "Deposit & Reservation", note: reserved ? "Machine reserved" : "Awaiting required deposit", complete: reserved },
+    { key: "collections", title: "Collections", note: fullyPaid ? "Fully settled" : paymentCount ? `${paymentCount} payment record${paymentCount === 1 ? "" : "s"}` : "No installment collection yet", complete: fullyPaid, current: reserved && !fullyPaid },
+    { key: "delivery", title: "Delivery", note: delivered ? dateLabel(account.delivery_datetime) : "Not handed over", complete: delivered, current: fullyPaid && !delivered },
+    { key: "ownership", title: "Ownership", note: transferred ? dateLabel(account.transfer_date) : "Not transferred", complete: transferred, current: fullyPaid && delivered && !transferred },
   ];
 
-  const currentAssigned = steps.some((step) => step.current);
-  if (!currentAssigned) {
+  if (!steps.some((step) => step.current)) {
     const firstIncomplete = steps.find((step) => !step.complete);
     if (firstIncomplete) firstIncomplete.current = true;
   }
@@ -159,10 +149,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [problem, setProblem] = useState("");
 
-  const closeDetail = useCallback(() => {
-    setSelected(null);
-    setDetail(null);
-  }, []);
+  const closeDetail = useCallback(() => { setSelected(null); setDetail(null); }, []);
 
   const loadDetail = useCallback(async (account) => {
     if (!account?.agreement_id) return;
@@ -187,9 +174,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
       const next = response.data?.accounts || [];
       setAccounts(next);
       if (requestedAgreement) {
-        const requested = next.find(
-          (account) => String(account.agreement_id) === String(requestedAgreement)
-        );
+        const requested = next.find((account) => String(account.agreement_id) === String(requestedAgreement));
         if (requested) await loadDetail(requested);
       } else {
         closeDetail();
@@ -201,24 +186,17 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
     }
   }, [closeDetail, loadDetail, requestedAgreement]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  const metrics = useMemo(() => {
-    return accounts.reduce(
-      (result, account) => {
-        const tone = accountTone(account);
-        if (tone !== "completed") result.active += 1;
-        if (tone === "overdue" || tone === "defaulted") result.overdue += 1;
-        result.paid += Number(account.amount_paid || 0);
-        result.outstanding += Number(account.outstanding_balance || 0);
-        result.overdueAmount += Number(account.overdue_amount || 0);
-        return result;
-      },
-      { active: 0, overdue: 0, paid: 0, outstanding: 0, overdueAmount: 0 }
-    );
-  }, [accounts]);
+  const metrics = useMemo(() => accounts.reduce((result, account) => {
+    const tone = accountTone(account);
+    if (tone !== "completed") result.active += 1;
+    if (tone === "overdue" || tone === "defaulted") result.overdue += 1;
+    result.paid += Number(account.amount_paid || 0);
+    result.outstanding += Number(account.outstanding_balance || 0);
+    result.overdueAmount += Number(account.overdue_amount || 0);
+    return result;
+  }, { active: 0, overdue: 0, paid: 0, outstanding: 0, overdueAmount: 0 }), [accounts]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -228,20 +206,12 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
       if (status === "overdue" && !["overdue", "defaulted"].includes(tone)) return false;
       if (status === "completed" && tone !== "completed") return false;
       if (!term) return true;
-      return [
-        account.agreement_number,
-        account.application_number,
-        account.customer_name,
-        account.customer_phone,
-        account.asset_code,
-        account.asset_name,
-        account.serial_number,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(term));
+      return [account.agreement_number, account.application_number, account.customer_name, account.customer_phone, account.asset_code, account.asset_name, account.serial_number]
+        .filter(Boolean).some((value) => String(value).toLowerCase().includes(term));
     });
   }, [accounts, search, status]);
 
+  const selectedNextDue = useMemo(() => nextDueFromSchedule(detail?.schedule, selected?.next_due_date), [detail, selected]);
   const health = selected ? accountHealth(selected, detail) : null;
   const lifecycle = selected ? lifecycleSteps(selected, detail) : [];
 
@@ -251,10 +221,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
         <div>
           <p>Search first, open one account</p>
           <h1>Active Installments</h1>
-          <span>
-            Search the installment register, select the correct account, then view its complete
-            schedule and payment history in a focused dialog.
-          </span>
+          <span>Search the installment register, select the correct account, then view its complete schedule and payment history in a focused dialog.</span>
         </div>
         <div className="finance-accounts__hero-actions">
           <Link className="is-primary" to="/equipment-installment-finance/applications?stage=collections">Record a Payment</Link>
@@ -276,18 +243,9 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
         <div className="finance-accounts__toolbar">
           <div><p>Choose installment account</p><h2>{visible.length} result(s)</h2></div>
           <div>
-            <input
-              aria-label="Search active installment accounts"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Agreement, customer, phone or excavator"
-              autoComplete="off"
-            />
+            <input aria-label="Search active installment accounts" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Agreement, customer, phone or excavator" autoComplete="off" />
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="active">Active accounts</option>
-              <option value="overdue">Overdue / defaulted</option>
-              <option value="completed">Completed</option>
-              <option value="all">All accounts</option>
+              <option value="active">Active accounts</option><option value="overdue">Overdue / defaulted</option><option value="completed">Completed</option><option value="all">All accounts</option>
             </select>
             <button type="button" onClick={load} disabled={loading}>Refresh</button>
           </div>
@@ -301,24 +259,12 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
             const tone = accountTone(account);
             return (
               <article key={account.agreement_id} className={`finance-simplified__compact-record ${["overdue", "defaulted"].includes(tone) ? "is-warning" : ""}`}>
-                <div>
-                  <small>{account.agreement_number}</small>
-                  <h3>{account.customer_name}</h3>
-                  <p>{account.asset_code} — {account.asset_name}</p>
-                </div>
-                <div className="finance-simplified__compact-fact">
-                  <span>Official balance</span>
-                  <strong>{money(account.outstanding_balance)}</strong>
-                </div>
-                <div className="finance-simplified__compact-fact">
-                  <span>{Number(account.overdue_amount || 0) > 0 ? "Overdue" : "Next due"}</span>
-                  <strong>{Number(account.overdue_amount || 0) > 0 ? money(account.overdue_amount) : dateLabel(account.next_due_date)}</strong>
-                </div>
+                <div><small>{account.agreement_number}</small><h3>{account.customer_name}</h3><p>{account.asset_code} — {account.asset_name}</p></div>
+                <div className="finance-simplified__compact-fact"><span>Official balance</span><strong>{money(account.outstanding_balance)}</strong></div>
+                <div className="finance-simplified__compact-fact"><span>{Number(account.overdue_amount || 0) > 0 ? "Overdue" : "Next due"}</span><strong>{Number(account.overdue_amount || 0) > 0 ? money(account.overdue_amount) : nextDueLabel(account.next_due_date)}</strong></div>
                 <div className="finance-simplified__compact-record-actions">
                   <button type="button" onClick={() => loadDetail(account)}>Open Account</button>
-                  {Number(account.outstanding_balance || 0) > 0.01 ? (
-                    <Link className="is-primary" to={`/equipment-installment-finance/applications?stage=collections&agreement=${account.agreement_id}`}>Record Payment</Link>
-                  ) : null}
+                  {Number(account.outstanding_balance || 0) > 0.01 ? <Link className="is-primary" to={`/equipment-installment-finance/applications?stage=collections&agreement=${account.agreement_id}`}>Record Payment</Link> : null}
                 </div>
               </article>
             );
@@ -329,106 +275,15 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
       {selected ? (
         <div className="finance-accounts__backdrop" role="presentation" onMouseDown={closeDetail}>
           <section className="finance-accounts__dialog" role="dialog" aria-modal="true" aria-label="Installment account file" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-accounts__dialog-head">
-              <div>
-                <p>Selected account</p>
-                <h2>{selected.agreement_number}</h2>
-                <span>{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span>
-              </div>
-              <button type="button" onClick={closeDetail}>Close</button>
-            </div>
-
+            <div className="finance-accounts__dialog-head"><div><p>Selected account</p><h2>{selected.agreement_number}</h2><span>{selected.customer_name} · {selected.asset_code} {selected.asset_name}</span></div><button type="button" onClick={closeDetail}>Close</button></div>
             {detailLoading ? <div className="finance-accounts__empty">Loading account file…</div> : null}
             {!detailLoading ? (
               <>
-                {detail?.reconciliation?.consistent === false ? (
-                  <div className="finance-accounts__notice is-error">
-                    Payment and completion actions remain blocked until receipts, allocations,
-                    schedule and ledger evidence reconcile.
-                  </div>
-                ) : null}
-
-                {health ? (
-                  <section className="finance-integrity-health" data-testid="finance-account-health">
-                    <div className={`finance-integrity-health__banner is-${health.tone}`}>
-                      <div className="finance-integrity-health__identity">
-                        <div className="finance-integrity-health__mark">{health.mark}</div>
-                        <div>
-                          <small>Account health</small>
-                          <strong>{health.title}</strong>
-                          <span>{health.note}</span>
-                        </div>
-                      </div>
-                      <div className="finance-integrity-health__chips">
-                        <span>{detail?.reconciliation?.consistent === false ? "Reconciliation blocked" : "Reconciled"}</span>
-                        <span>{selected.equipment_commitment_status === "reserved" ? "Machine reserved" : "Reservation pending"}</span>
-                        <span>{Number(selected.overdue_amount || 0) > 0.01 ? `${money(selected.overdue_amount)} overdue` : "No overdue balance"}</span>
-                      </div>
-                    </div>
-
-                    <div className="finance-integrity-health__timeline" aria-label="Installment lifecycle timeline">
-                      {lifecycle.map((step, index) => (
-                        <article
-                          key={step.key}
-                          className={`finance-integrity-health__step ${step.complete ? "is-complete" : ""} ${step.current ? "is-current" : ""}`}
-                        >
-                          <div className="finance-integrity-health__dot">
-                            {step.complete ? "✓" : index + 1}
-                          </div>
-                          <strong>{step.title}</strong>
-                          <span>{step.note}</span>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                ) : null}
-
-                <div className="finance-accounts__summary">
-                  <article><span>Official balance</span><strong>{money(selected.outstanding_balance)}</strong></article>
-                  <article><span>Overdue</span><strong>{money(selected.overdue_amount)}</strong></article>
-                  <article><span>Next due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
-                  <article><span>Delivery</span><strong>{label(selected.delivery_status)}</strong></article>
-                  <article><span>Ownership</span><strong>{label(selected.ownership_status)}</strong></article>
-                </div>
-
-                <details>
-                  <summary>Show installment schedule and payment history</summary>
-                  <div className="finance-accounts__two-column">
-                    <section>
-                      <h3>Installment schedule</h3>
-                      <div className="finance-accounts__rows">
-                        {(detail?.schedule || []).map((row) => (
-                          <article key={row.id || row.sequence_number}>
-                            <span>Payment {row.sequence_number}</span>
-                            <strong>{dateLabel(row.due_date)}</strong>
-                            <b>{money(row.scheduled_amount)}</b>
-                            <small>{label(row.schedule_status)}</small>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                    <section>
-                      <h3>Payment history</h3>
-                      <div className="finance-accounts__rows">
-                        {(detail?.payments || []).map((payment) => (
-                          <article key={payment.id}>
-                            <span>{payment.receipt_number || payment.payment_number}</span>
-                            <strong>{dateLabel(payment.payment_date)}</strong>
-                            <b>{money(payment.amount)}</b>
-                            <small>{label(payment.payment_method)}</small>
-                          </article>
-                        ))}
-                        {!(detail?.payments || []).length ? <div className="finance-accounts__empty">No payment recorded.</div> : null}
-                      </div>
-                    </section>
-                  </div>
-                </details>
-
-                <div className="finance-accounts__dialog-actions">
-                  <Link className="is-primary" to={`/equipment-installment-finance/applications?stage=collections&agreement=${selected.agreement_id}`}>Record Payment</Link>
-                  <Link to={`/equipment-installment-finance/applications?stage=customer-portfolios&customer=${selected.customer_id}`}>Customer Profile</Link>
-                  <Link to={`/equipment-installment-finance/applications?stage=case-operations&case_type=agreement&case_id=${selected.agreement_id}`}>Case History</Link>
-                </div>
+                {detail?.reconciliation?.consistent === false ? <div className="finance-accounts__notice is-error">Payment and completion actions remain blocked until receipts, allocations, schedule and ledger evidence reconcile.</div> : null}
+                {health ? <section className="finance-integrity-health" data-testid="finance-account-health"><div className={`finance-integrity-health__banner is-${health.tone}`}><div className="finance-integrity-health__identity"><div className="finance-integrity-health__mark">{health.mark}</div><div><small>Account health</small><strong>{health.title}</strong><span>{health.note}</span></div></div><div className="finance-integrity-health__chips"><span>{detail?.reconciliation?.consistent === false ? "Reconciliation blocked" : "Reconciled"}</span><span>{selected.equipment_commitment_status === "reserved" ? "Machine reserved" : "Reservation pending"}</span><span>{Number(selected.overdue_amount || 0) > 0.01 ? `${money(selected.overdue_amount)} overdue` : "No overdue balance"}</span></div></div><div className="finance-integrity-health__timeline" aria-label="Installment lifecycle timeline">{lifecycle.map((step, index) => <article key={step.key} className={`finance-integrity-health__step ${step.complete ? "is-complete" : ""} ${step.current ? "is-current" : ""}`}><div className="finance-integrity-health__dot">{step.complete ? "✓" : index + 1}</div><strong>{step.title}</strong><span>{step.note}</span></article>)}</div></section> : null}
+                <div className="finance-accounts__summary"><article><span>Official balance</span><strong>{money(selected.outstanding_balance)}</strong></article><article><span>Overdue</span><strong>{money(selected.overdue_amount)}</strong></article><article><span>Next due</span><strong>{nextDueLabel(selectedNextDue)}</strong></article><article><span>Delivery</span><strong>{label(selected.delivery_status)}</strong></article><article><span>Ownership</span><strong>{label(selected.ownership_status)}</strong></article></div>
+                <details><summary>Show installment schedule and payment history</summary><div className="finance-accounts__two-column"><section><h3>Installment schedule</h3><div className="finance-accounts__rows">{(detail?.schedule || []).map((row) => <article key={row.id || row.sequence_number}><span>Payment {row.sequence_number}</span><strong>{dateLabel(row.due_date)}</strong><b>{money(row.scheduled_amount)}</b><small>{label(row.schedule_status)}</small></article>)}</div></section><section><h3>Payment history</h3><div className="finance-accounts__rows">{(detail?.payments || []).map((payment) => <article key={payment.id}><span>{payment.receipt_number || payment.payment_number}</span><strong>{dateLabel(payment.payment_date)}</strong><b>{money(payment.amount)}</b><small>{label(payment.payment_method)}</small></article>)}{!(detail?.payments || []).length ? <div className="finance-accounts__empty">No payment recorded.</div> : null}</div></section></div></details>
+                <div className="finance-accounts__dialog-actions"><Link className="is-primary" to={`/equipment-installment-finance/applications?stage=collections&agreement=${selected.agreement_id}`}>Record Payment</Link><Link to={`/equipment-installment-finance/applications?stage=customer-portfolios&customer=${selected.customer_id}`}>Customer Profile</Link><Link to={`/equipment-installment-finance/applications?stage=case-operations&case_type=agreement&case_id=${selected.agreement_id}`}>Case History</Link></div>
               </>
             ) : null}
           </section>
