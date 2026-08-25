@@ -9,7 +9,7 @@ const MIGRATION_RECORD = "20260805_equipment_finance_opening_deposit_foundation_
 const MIGRATION_FILE = "20260805_equipment_finance_opening_deposit_foundation_repair.sql";
 const VERIFIER_FILE = "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql";
 const INTEGRITY_MIGRATION_RECORD = "20260803_equipment_finance_phase4_deposit_reservation_integrity";
-const INTEGRITY_MIGRATION_FILE = "20260803_equipment_finance_phase4_deposit_reservation_integrity.sql";
+const INTEGRITY_MIGRATION_FILE = "20260825_equipment_finance_opening_deposit_trigger_fix.sql";
 const REQUIRED_TRIGGERS = Object.freeze([
   "trg_equipment_finance_payment_gate_before_insert",
   "trg_equipment_finance_reservation_gate_before_insert",
