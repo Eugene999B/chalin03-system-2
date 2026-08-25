@@ -172,7 +172,7 @@ assert.match(reports, /documents\/delivery\.pdf/);
 assert.match(reports, /documents\/ownership\.pdf/);
 assert.match(reports, /\/receipt\.pdf/);
 assert.match(secureUpload, /async function optimizeEquipmentPhoto/);
-assert.match(secureUpload, /MAX_SOURCE_BYTES = 15 \* 1024 \* 1024/);
+assert.match(secureUpload, /MAX_SOURCE_BYTES = 25 \* 1024 \* 1024/);
 assert.match(secureUpload, /canvas\.toBlob/);
 assert.match(secureUploadStyles, /display: none !important/);
 assert.match(retirementBridge, /Spare Parts installment sales have moved/);

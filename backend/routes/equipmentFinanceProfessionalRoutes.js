@@ -25,6 +25,15 @@ const {
 
 const router = express.Router();
 const RUN_CONFIRMATION = "RUN INSTALLMENT REMINDERS";
+const EVENT_NOTIFICATION_KEYS = Object.freeze([
+  "boss_due_alert_enabled",
+  "boss_overdue_alert_enabled",
+  "customer_due_soon_sms_enabled",
+  "customer_due_today_sms_enabled",
+  "customer_overdue_sms_enabled",
+  "late_fee_applied_sms_enabled",
+  "payment_reversal_sms_enabled",
+]);
 
 function userId(req) {
   const id = Number(req.user?.id || 0);
@@ -40,6 +49,12 @@ function sendError(res, error, fallback) {
   };
   if (error.readiness) payload.readiness = error.readiness;
   return res.status(statusCode).json(payload);
+}
+
+function parseBoolean(value) {
+  if ([true, 1, "1", "true", "yes", "on", "enabled"].includes(value)) return true;
+  if ([false, 0, "0", "false", "no", "off", "disabled"].includes(value)) return false;
+  return undefined;
 }
 
 router.get(
@@ -106,6 +121,78 @@ router.put(
 );
 
 router.get(
+  "/professional/notification-settings",
+  requirePermission("fleet.assets.view"),
+  async (_req, res) => {
+    try {
+      const [rows] = await pool.query(
+        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
+           FROM equipment_finance_settings
+          WHERE id = 1
+          LIMIT 1`
+      );
+      if (!rows.length) return res.status(503).json({ status: "error", message: "Finance notification settings are not initialized." });
+      return res.json({ status: "success", scope: "company_wide_finance", settings: rows[0], keys: EVENT_NOTIFICATION_KEYS });
+    } catch (error) {
+      return sendError(res, error, "Could not load Finance notification event settings.");
+    }
+  }
+);
+
+router.put(
+  "/professional/notification-settings",
+  requirePermission("fleet.assets.manage"),
+  async (req, res) => {
+    try {
+      const input = req.body?.settings || req.body || {};
+      const values = EVENT_NOTIFICATION_KEYS.map((key) => {
+        const parsed = parseBoolean(input[key]);
+        if (parsed === undefined) throw new ProfessionalFinanceError(400, `Invalid boolean value for ${key}.`, "FINANCE_NOTIFICATION_SETTING_INVALID");
+        return parsed ? 1 : 0;
+      });
+      const [beforeRows] = await pool.query(
+        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
+           FROM equipment_finance_settings
+          WHERE id = 1
+          FOR UPDATE`
+      );
+      if (!beforeRows.length) throw new ProfessionalFinanceError(503, "Finance notification settings are not initialized.");
+      const before = beforeRows[0];
+      const changed = EVENT_NOTIFICATION_KEYS.some((key, index) => Number(before[key]) !== values[index]);
+      if (!changed) return res.json({ status: "success", changed: false, message: "The notification event policy is already saved." });
+
+      const placeholders = EVENT_NOTIFICATION_KEYS.map(() => "?").join(", ");
+      const assignments = EVENT_NOTIFICATION_KEYS.map((key) => `\`${key}\` = ?`).join(", ");
+      await pool.query(
+        `UPDATE equipment_finance_settings SET ${assignments}, updated_at = NOW() WHERE id = 1`,
+        values
+      );
+      const [afterRows] = await pool.query(
+        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
+           FROM equipment_finance_settings
+          WHERE id = 1
+          LIMIT 1`
+      );
+      await pool.query(
+        `INSERT INTO equipment_finance_settings_history (
+           settings_id, old_snapshot_json, new_snapshot_json, change_reason, changed_by
+         ) VALUES (?, ?, ?, ?, ?)`,
+        [
+          1,
+          JSON.stringify(before),
+          JSON.stringify(afterRows[0] || {}),
+          req.body?.reason || "Updated Installment Finance event-specific notification policy",
+          userId(req),
+        ]
+      );
+      return res.json({ status: "success", changed: true, settings: afterRows[0], message: "Finance notification event policy saved with history." });
+    } catch (error) {
+      return sendError(res, error, "Could not save Finance notification event settings.");
+    }
+  }
+);
+
+router.get(
   "/professional/machines",
   requirePermission("fleet.assets.view"),
   async (req, res) => {
@@ -124,20 +211,9 @@ router.get(
           crop: false,
           required_primary_photo: true,
           recommended_evidence: [
-            "main",
-            "front",
-            "rear",
-            "left_side",
-            "right_side",
-            "cabin",
-            "engine",
-            "serial_plate",
-            "chassis_plate",
-            "attachment",
-            "inspection",
-            "damage",
-            "registration",
-            "ownership",
+            "main","front","rear","left_side","right_side","cabin","engine",
+            "serial_plate","chassis_plate","attachment","inspection","damage",
+            "registration","ownership",
           ],
         },
       });
@@ -174,11 +250,7 @@ router.post(
         notes: req.body?.notes,
         userId: userId(req),
       });
-      return res.status(201).json({
-        status: "success",
-        message: "Finance document signature saved as controlled agreement evidence.",
-        signature,
-      });
+      return res.status(201).json({ status: "success", message: "Finance document signature saved as controlled agreement evidence.", signature });
     } catch (error) {
       return sendError(res, error, "Could not save the Finance document signature.");
     }
@@ -190,10 +262,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
-      const documents = await listIssuedDocuments({
-        agreementId: req.query.agreement_id,
-        limit: req.query.limit,
-      });
+      const documents = await listIssuedDocuments({ agreementId: req.query.agreement_id, limit: req.query.limit });
       return res.json({ status: "success", count: documents.length, documents });
     } catch (error) {
       return sendError(res, error, "Could not load issued Finance documents.");
@@ -212,17 +281,13 @@ router.post(
         format: req.body?.format || "pdf",
         userId: userId(req),
       });
-      return res.status(201).json({
-        status: "success",
-        message: "Finance document issued from an immutable data snapshot.",
-        document: {
-          id: document.id,
-          document_number: document.document_number,
-          document_type: document.document_type,
-          document_format: document.document_format,
-          snapshot_checksum: document.snapshot_checksum,
-        },
-      });
+      return res.status(201).json({ status: "success", message: "Finance document issued from an immutable data snapshot.", document: {
+        id: document.id,
+        document_number: document.document_number,
+        document_type: document.document_type,
+        document_format: document.document_format,
+        snapshot_checksum: document.snapshot_checksum,
+      }});
     } catch (error) {
       return sendError(res, error, "Could not issue the Finance document.");
     }
@@ -235,44 +300,28 @@ router.get(
   async (req, res) => {
     try {
       const document = await getIssuedDocument(req.params.documentId);
-      const requested = String(req.query.format || document.document_format || "pdf")
-        .trim()
-        .toLowerCase();
+      const requested = String(req.query.format || document.document_format || "pdf").trim().toLowerCase();
       if (requested === "json") {
-        return res.json({
-          status: "success",
-          document: {
-            id: document.id,
-            document_number: document.document_number,
-            document_type: document.document_type,
-            template_version: document.template_version,
-            snapshot_checksum: document.snapshot_checksum,
-            issued_at: document.issued_at,
-            issued_by_name: document.issued_by_name,
-          },
-          snapshot: document.snapshot,
-        });
+        return res.json({ status: "success", document: {
+          id: document.id,
+          document_number: document.document_number,
+          document_type: document.document_type,
+          template_version: document.template_version,
+          snapshot_checksum: document.snapshot_checksum,
+          issued_at: document.issued_at,
+          issued_by_name: document.issued_by_name,
+        }, snapshot: document.snapshot });
       }
       if (requested === "word" || requested === "doc") {
         const buffer = renderAgreementWord(document.snapshot, document.document_number);
         res.setHeader("Content-Type", "application/msword; charset=utf-8");
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="${document.document_number}.doc"`
-        );
+        res.setHeader("Content-Disposition", `attachment; filename="${document.document_number}.doc"`);
         return res.send(buffer);
       }
-      if (requested !== "pdf" && requested !== "print") {
-        throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON.");
-      }
+      if (requested !== "pdf" && requested !== "print") throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON.");
       const buffer = await renderAgreementPdf(document.snapshot, document.document_number);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `${requested === "print" ? "inline" : "attachment"}; filename="${
-          document.document_number
-        }.pdf"`
-      );
+      res.setHeader("Content-Disposition", `${requested === "print" ? "inline" : "attachment"}; filename="${document.document_number}.pdf"`);
       return res.send(buffer);
     } catch (error) {
       return sendError(res, error, "Could not download the issued Finance document.");
@@ -297,10 +346,7 @@ router.get(
           reminder_time: String(settings.reminder_time || "09:00").slice(0, 5),
           timezone: "Africa/Accra",
           due_soon_enabled: true,
-          due_soon_days: String(settings.due_soon_days || "7,3,1")
-            .split(",")
-            .map((value) => Number(value.trim()))
-            .filter((value) => Number.isInteger(value) && value > 0),
+          due_soon_days: String(settings.due_soon_days || "7,3,1").split(",").map((value) => Number(value.trim())).filter((value) => Number.isInteger(value) && value > 0),
           due_today_enabled: true,
           overdue_enabled: true,
           overdue_start_days: 1,
@@ -317,9 +363,7 @@ router.get(
         sms: {
           automatic_available: true,
           automatic_sms_enabled: settings.automatic_reminders_enabled,
-          reason: settings.automatic_reminders_enabled
-            ? "Automatic Finance reminders are enabled under the saved company-wide policy."
-            : "Automatic reminders are currently disabled in Finance Settings.",
+          reason: settings.automatic_reminders_enabled ? "Automatic Finance reminders are enabled under the saved company-wide policy." : "Automatic reminders are currently disabled in Finance Settings.",
         },
         policy: {
           scope: "company_wide_finance",
@@ -345,9 +389,7 @@ router.put(
         body: {
           automatic_reminders_enabled: input.automatic_sms_enabled,
           reminder_time: input.reminder_time,
-          due_soon_days: Array.isArray(input.due_soon_days)
-            ? input.due_soon_days.join(",")
-            : input.due_soon_days,
+          due_soon_days: Array.isArray(input.due_soon_days) ? input.due_soon_days.join(",") : input.due_soon_days,
           overdue_repeat_days: input.overdue_repeat_days,
           max_sms_7_days: input.max_sms_7_days,
           max_sms_30_days: input.max_sms_30_days,
@@ -359,11 +401,7 @@ router.put(
         userId: userId(req),
         req,
       });
-      return res.json({
-        status: "success",
-        message: "Company-wide installment reminder settings saved.",
-        changed: result.changed,
-      });
+      return res.json({ status: "success", message: "Company-wide installment reminder settings saved.", changed: result.changed });
     } catch (error) {
       return sendError(res, error, "Could not save installment reminder settings.");
     }
@@ -388,26 +426,12 @@ router.post(
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
-      const confirmation = String(req.body?.confirmation || "")
-        .trim()
-        .toUpperCase();
+      const confirmation = String(req.body?.confirmation || "").trim().toUpperCase();
       if (confirmation !== RUN_CONFIRMATION) {
-        return res.status(400).json({
-          status: "error",
-          code: "INSTALLMENT_REMINDER_CONFIRMATION_REQUIRED",
-          message: `Type "${RUN_CONFIRMATION}" to send eligible reminders now.`,
-        });
+        return res.status(400).json({ status: "error", code: "INSTALLMENT_REMINDER_CONFIRMATION_REQUIRED", message: `Type "${RUN_CONFIRMATION}" to send eligible reminders now.` });
       }
-      const result = await runProfessionalReminderSync({
-        source: "run_now",
-        sentBy: userId(req),
-        bypassTime: true,
-      });
-      return res.json({
-        status: result.failed ? "warning" : "success",
-        message: `Reminder run completed: ${result.sent} sent, ${result.failed} failed and ${result.skipped} skipped.`,
-        result,
-      });
+      const result = await runProfessionalReminderSync({ source: "run_now", sentBy: userId(req), bypassTime: true });
+      return res.json({ status: result.failed ? "warning" : "success", message: `Reminder run completed: ${result.sent} sent, ${result.failed} failed and ${result.skipped} skipped.`, result });
     } catch (error) {
       return sendError(res, error, "Could not run installment reminders.");
     }
@@ -433,23 +457,12 @@ router.post(
   async (req, res) => {
     try {
       const paymentId = Number(req.params.paymentId);
-      const [rows] = await pool.query(
-        "SELECT agreement_id FROM equipment_sale_payments WHERE id = ? LIMIT 1",
-        [paymentId]
-      );
-      if (!rows.length) {
-        throw new ProfessionalFinanceError(404, "Finance payment was not found.");
-      }
-      const alert = await sendBossPaymentAlert({
-        paymentId,
-        agreementId: rows[0].agreement_id,
-        userId: userId(req),
-      });
+      const [rows] = await pool.query("SELECT agreement_id FROM equipment_sale_payments WHERE id = ? LIMIT 1", [paymentId]);
+      if (!rows.length) throw new ProfessionalFinanceError(404, "Finance payment was not found.");
+      const alert = await sendBossPaymentAlert({ paymentId, agreementId: rows[0].agreement_id, userId: userId(req) });
       return res.status(alert.ok ? 200 : 202).json({
         status: alert.ok ? "success" : "warning",
-        message: alert.ok
-          ? "Boss payment alert submitted."
-          : alert.reason || "Boss payment alert could not be confirmed.",
+        message: alert.ok ? "Boss payment alert submitted." : alert.reason || "Boss payment alert could not be confirmed.",
         alert,
       });
     } catch (error) {

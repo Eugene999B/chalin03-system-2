@@ -49,6 +49,17 @@ function dateValue(value) {
   return [year, String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
 }
 
+function ghanaToday(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function moneyValue(value, minimum = 0) {
   const normalized = String(value ?? "").replaceAll(",", "").trim();
   if (!normalized || !/^(?:\d+|\d*\.\d{1,2})$/.test(normalized)) {
@@ -179,7 +190,8 @@ function dueDateFor({
     frequency === "monthly"
       ? addMonths(firstDate, index)
       : addDays(firstDate, index * intervalDays);
-  return applyNonWorkingRule(unadjusted, nonWorkingDayRule, nonWorkingDates);
+  const adjusted = applyNonWorkingRule(unadjusted, nonWorkingDayRule, nonWorkingDates);
+  return { unadjusted, adjusted };
 }
 
 function normalizeScheduleInput(input = {}) {
@@ -201,7 +213,7 @@ function normalizeScheduleInput(input = {}) {
   );
   const minimumFirstDueDate = input.minimum_first_due_date
     ? dateValue(input.minimum_first_due_date)
-    : null;
+    : ghanaToday();
   const nonWorkingDayRule = normalizeNonWorkingRule(
     input.non_working_day_rule ?? input.proposed_non_working_day_rule
   );
@@ -268,6 +280,7 @@ function buildFinanceSchedule(input = {}) {
   let assignedCents = 0;
   let previousDueDate = null;
   let collisionAdjustments = 0;
+  const dateAdjustments = [];
   const schedule = [];
 
   for (let index = 0; index < normalized.installment_count; index += 1) {
@@ -276,7 +289,7 @@ function buildFinanceSchedule(input = {}) {
         ? totalCents - assignedCents
         : baseCents;
     assignedCents += cents;
-    let dueDate = dueDateFor({
+    const dueDateResult = dueDateFor({
       firstDate,
       frequency: normalized.payment_frequency,
       intervalDays: normalized.custom_interval_days,
@@ -284,10 +297,27 @@ function buildFinanceSchedule(input = {}) {
       nonWorkingDayRule: normalized.non_working_day_rule,
       nonWorkingDates,
     });
+    let dueDate = dueDateResult.adjusted;
+
+    if (isoDate(dueDateResult.unadjusted) !== isoDate(dueDateResult.adjusted)) {
+      dateAdjustments.push({
+        sequence_number: index + 1,
+        reason: "non_working_day_rule",
+        original_due_date: isoDate(dueDateResult.unadjusted),
+        adjusted_due_date: isoDate(dueDateResult.adjusted),
+      });
+    }
 
     if (previousDueDate && dueDate.getTime() <= previousDueDate.getTime()) {
+      const originalCollisionDate = isoDate(dueDate);
       dueDate = nextAvailableDateAfter(previousDueDate, nonWorkingDates);
       collisionAdjustments += 1;
+      dateAdjustments.push({
+        sequence_number: index + 1,
+        reason: "duplicate_date_collision",
+        original_due_date: originalCollisionDate,
+        adjusted_due_date: isoDate(dueDate),
+      });
     }
 
     previousDueDate = dueDate;
@@ -309,6 +339,7 @@ function buildFinanceSchedule(input = {}) {
       strictly_increasing_dates: true,
       duplicate_due_dates_allowed: false,
       collision_adjustments: collisionAdjustments,
+      date_adjustments: dateAdjustments,
       monthly_anchor_day_preserved: true,
       rounding: "final_schedule_line_only",
       non_working_day_rule: normalized.non_working_day_rule,
