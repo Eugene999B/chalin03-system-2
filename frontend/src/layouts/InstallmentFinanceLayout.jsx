@@ -194,6 +194,13 @@ const navigationSections = [
         permissions: ["fleet.assets.view"],
       },
       {
+        title: "SMS History",
+        description: "Installment Finance customer SMS attempts, provider status and delivery history",
+        path: "/equipment-installment-finance/sms-history",
+        icon: "✉️",
+        permissions: ["fleet.assets.view"],
+      },
+      {
         title: "Staff & Workforce",
         description: "Finance staff logins, roles, profiles, documents and permissions",
         path: "/equipment-installment-finance/workforce",

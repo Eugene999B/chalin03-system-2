@@ -7,7 +7,9 @@ const START_INSTALLMENT_PATH =
   "/equipment-catalogue/sales/phase-one/start-installment";
 const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
 const TARGET_BYTES = 480 * 1024;
-const MAX_DIMENSION = 1280;
+const MAX_DIMENSION = 1400;
+const PASSPORT_RATIO = 35 / 45;
+const PASSPORT_HEIGHT = 900;
 
 function cleanPath(value) {
   return String(value || "")
@@ -86,11 +88,18 @@ export async function compressFinanceCustomerPhoto(file) {
     1,
     MAX_DIMENSION / Math.max(Number(image.naturalWidth || 1), Number(image.naturalHeight || 1))
   );
-  const width = Math.max(1, Math.round(image.naturalWidth * scale));
-  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const scaledWidth = Math.max(1, Math.round(image.naturalWidth * scale));
+  const scaledHeight = Math.max(1, Math.round(image.naturalHeight * scale));
+  const targetWidth = Math.round(PASSPORT_HEIGHT * PASSPORT_RATIO);
+  const targetHeight = PASSPORT_HEIGHT;
+  const sourceRatio = scaledWidth / scaledHeight;
+  const cropWidth = sourceRatio > PASSPORT_RATIO ? Math.round(scaledHeight * PASSPORT_RATIO) : scaledWidth;
+  const cropHeight = sourceRatio > PASSPORT_RATIO ? scaledHeight : Math.round(scaledWidth / PASSPORT_RATIO);
+  const cropX = Math.max(0, Math.round((scaledWidth - cropWidth) / 2));
+  const cropY = Math.max(0, Math.round((scaledHeight - cropHeight) / 2));
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
   const context = canvas.getContext("2d", { alpha: false });
   if (!context) throw new Error("Picture compression is unavailable in this browser.");
 
@@ -98,7 +107,7 @@ export async function compressFinanceCustomerPhoto(file) {
   context.fillRect(0, 0, width, height);
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = "high";
-  context.drawImage(image, 0, 0, width, height);
+  context.drawImage(image, cropX / scale, cropY / scale, cropWidth / scale, cropHeight / scale, 0, 0, targetWidth, targetHeight);
 
   let quality = 0.86;
   let dataUrl = canvasDataUrl(canvas, quality);
@@ -114,9 +123,11 @@ export async function compressFinanceCustomerPhoto(file) {
     file_size_bytes: dataUrlBytes(dataUrl),
     original_file_name: String(file.name || "customer-photo").slice(0, 180),
     original_file_size_bytes: Number(file.size || 0),
-    width,
-    height,
+    width: targetWidth,
+    height: targetHeight,
     compressed: true,
+    passport_crop: true,
+    passport_ratio: "35:45",
     compression_quality: quality,
     captured_at: new Date().toISOString(),
   };

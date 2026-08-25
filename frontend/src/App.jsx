@@ -40,6 +40,7 @@ import AuditAccountingPage from "./pages/AuditAccountingPage";
 import AuditSignoffHistoryPage from "./pages/AuditSignoffHistoryPage";
 import AuditUnlockRequestsPage from "./pages/AuditUnlockRequestsPage";
 import SmsPage from "./pages/SmsPage";
+import EquipmentFinanceSmsHistoryPage from "./pages/EquipmentFinanceSmsHistoryPage";
 import AdvancedAccountingIntelligencePage from "./pages/AdvancedAccountingIntelligencePage";
 import StockTransfersPage from "./pages/StockTransfersPage";
 import MiningPortalPage from "./pages/MiningPortalPage";
@@ -717,6 +718,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "fleet.assets.view",
                 <EquipmentSalesReportsPage />
+              )}
+            />
+            <Route
+              path="sms-history"
+              element={permissionOnlyPage(
+                "fleet.assets.view",
+                <EquipmentFinanceSmsHistoryPage />
               )}
             />
             <Route
