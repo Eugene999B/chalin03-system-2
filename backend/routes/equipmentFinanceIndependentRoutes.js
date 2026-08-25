@@ -11,6 +11,7 @@ const {
 } = require("../services/equipmentFinanceCustomerPortfolioService");
 const {
   assertProfessionalSchema,
+  listProfessionalMachines,
 } = require("../services/equipmentFinanceProfessionalService");
 const equipmentFinancePhaseTwoImageRoutes = require("./equipmentFinancePhaseTwoImageRoutes");
 const equipmentFinanceAdministratorOverrideRoutes = require("./equipmentFinanceAdministratorOverrideRoutes");
@@ -133,14 +134,66 @@ router.use(equipmentFinancePhaseThreeCreationGuardRoutes);
 router.use(equipmentFinanceMachineVisibilityRoutes);
 router.use(equipmentFinanceCriticalEntryRoutes);
 
-// Capture the optional compressed customer passport picture before the existing
-// creation handler, then encrypt it only after the application transaction commits.
 router.use(equipmentFinanceCustomerPhotoCaptureRoutes);
 router.use(equipmentFinanceImageSafeStartRoutes);
 
 router.use("/credit-applications", equipmentFinanceApplicationReadRoutes);
 router.use(equipmentFinanceRuntimeHotfixRoutes);
 router.use(equipmentFinanceDraftRuntimeRoutes);
+
+// The Excavators register needs to describe a machine that is already in the
+// protected installment workflow as "Under Installment", not as missing the
+// availability field. This is intentionally read-only; payment/reservation
+// writes remain on their existing routes.
+router.get(
+  "/professional/machine-register",
+  requirePermission("fleet.assets.view"),
+  async (req, res, next) => {
+    try {
+      const machines = await listProfessionalMachines({
+        search: req.query.search,
+        status: req.query.status,
+        limit: req.query.limit,
+      });
+      const normalizedMachines = machines.map((machine) => {
+        const underInstallment = machine.sale_status === "installment_active";
+        if (!underInstallment) return machine;
+        return {
+          ...machine,
+          workflow_status: "installment",
+          workflow_status_label: "Under Installment",
+          readiness: {
+            ...machine.readiness,
+            ready: true,
+            missing: (machine.readiness?.missing || []).filter(
+              (item) => item !== "available sale status"
+            ),
+          },
+          editability: {
+            ...(machine.editability || {}),
+            editable: false,
+            reason: "This excavator is protected under an active Finance installment workflow.",
+          },
+        };
+      });
+      return res.json({
+        status: "success",
+        count: normalizedMachines.length,
+        machines: normalizedMachines,
+        image_policy: {
+          crop: false,
+          object_fit: "contain",
+          protected_photo_limit_bytes: 48128,
+          stored_formats: ["image/jpeg", "image/png"],
+          legacy_webp_download_compatibility: true,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
+
 router.use("/professional/machine-register", equipmentFinanceMachineRegisterRoutes);
 router.use("/deposit-reservations", equipmentFinanceDepositReservationRoutes);
 router.use("/finance-corrections", equipmentFinanceCorrectionRoutes);
