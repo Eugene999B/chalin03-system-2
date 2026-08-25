@@ -263,31 +263,8 @@ async function schemaStatus(connection = pool) {
   };
 }
 
-let depositFoundationRepairPromise = null;
 async function ensureDepositFoundationReady() {
-  const current = await schemaStatus(pool);
-  if (current.ready) return current;
-
-  if (!depositFoundationRepairPromise) {
-    depositFoundationRepairPromise = (async () => {
-      await runEquipmentFinanceOpeningDepositFoundationRepair();
-      const verified = await schemaStatus(pool);
-      if (!verified.ready) {
-        const error = new DepositError(
-          503,
-          "The Opening Deposit payment controls are not installed correctly on the production database.",
-          "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED"
-        );
-        error.readiness = verified;
-        throw error;
-      }
-      return verified;
-    })().finally(() => {
-      depositFoundationRepairPromise = null;
-    });
-  }
-
-  return depositFoundationRepairPromise;
+  return schemaStatus(pool);
 }
 
 async function assertSchemaReady(connection = pool) {
