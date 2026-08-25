@@ -122,15 +122,48 @@ async function assertDatabaseIdentity(connection) {
   return actual;
 }
 
+async function ensureAgreementActivationPrerequisites(connection) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'equipment_sale_agreements'
+        AND COLUMN_NAME IN ('credit_application_id','activation_source','equipment_commitment_status')`
+  );
+  const present = new Set(rows.map((row) => row.COLUMN_NAME));
+
+  const definitions = new Map([
+    ["credit_application_id", "BIGINT NULL AFTER agreement_number"],
+    [
+      "activation_source",
+      "ENUM('legacy','approved_credit_application') NOT NULL DEFAULT 'legacy' AFTER credit_application_id",
+    ],
+    [
+      "equipment_commitment_status",
+      "ENUM('not_reserved','reserved','locked','released') NOT NULL DEFAULT 'not_reserved' AFTER activation_source",
+    ],
+  ]);
+
+  for (const [column, definition] of definitions) {
+    if (present.has(column)) continue;
+    await connection.query(
+      `ALTER TABLE equipment_sale_agreements ADD COLUMN ${column} ${definition}`
+    );
+  }
+}
+
 async function verify(connection) {
   const [columns] = await connection.query(`
     SELECT TABLE_NAME, COLUMN_NAME
       FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
-       AND ((TABLE_NAME = 'equipment_sale_agreements' AND COLUMN_NAME IN ('deposit_completed_at','deposit_completed_by','reservation_activated_at','reservation_activated_by'))
-         OR (TABLE_NAME = 'equipment_sale_payments' AND COLUMN_NAME IN ('idempotency_key','credit_application_id','payment_stage','reservation_effect')))
+       AND ((TABLE_NAME = 'equipment_sale_agreements' AND COLUMN_NAME IN ('credit_application_id','activation_source','equipment_commitment_status','deposit_completed_at','deposit_completed_by','reservation_activated_at','reservation_activated_by'))
+         OR (TABLE_NAME = 'equipment_sale_payments' AND COLUMN_NAME IN ('credit_application_id','payment_stage','reservation_effect','idempotency_key')))
   `);
   const requiredColumns = [
+    ["equipment_sale_agreements", "credit_application_id"],
+    ["equipment_sale_agreements", "activation_source"],
+    ["equipment_sale_agreements", "equipment_commitment_status"],
     ["equipment_sale_agreements", "deposit_completed_at"],
     ["equipment_sale_agreements", "deposit_completed_by"],
     ["equipment_sale_agreements", "reservation_activated_at"],
@@ -142,7 +175,9 @@ async function verify(connection) {
   ];
   const columnSet = new Set(columns.map((row) => `${row.TABLE_NAME}.${row.COLUMN_NAME}`));
   const missingColumns = requiredColumns.filter(([table, column]) => !columnSet.has(`${table}.${column}`));
-  if (missingColumns.length) throw new Error(`Opening Deposit columns still missing: ${missingColumns.map(([t,c]) => `${t}.${c}`).join(", ")}`);
+  if (missingColumns.length) {
+    throw new Error(`Opening Deposit columns still missing: ${missingColumns.map(([t,c]) => `${t}.${c}`).join(", ")}`);
+  }
 
   const [indexes] = await connection.query(`
     SELECT TABLE_NAME, INDEX_NAME
@@ -186,6 +221,7 @@ async function main() {
     lockAcquired = Number(lockRow?.acquired || 0) === 1;
     if (!lockAcquired) throw new Error("Could not acquire Opening Deposit deployment lock.");
 
+    await ensureAgreementActivationPrerequisites(connection);
     await executeStatements(connection, splitSql(readMigration(FOUNDATION_FILE)), "Opening Deposit foundation");
     await executeStatements(connection, splitSql(readMigration(INTEGRITY_FILE)), "Opening Deposit integrity");
     await verify(connection);
@@ -206,4 +242,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { commentFree, splitSql, main };
+module.exports = { commentFree, splitSql, main, ensureAgreementActivationPrerequisites };
