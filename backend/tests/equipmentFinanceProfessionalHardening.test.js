@@ -1,5 +1,11 @@
 const assert = require("assert");
-const { agreementLateFeePolicy, calculateProspectiveLateFee, nextDueFromSchedule } = require("../services/equipmentFinanceAuthoritativePolicyService");
+const {
+  agreementLateFeePolicy,
+  calculateProspectiveLateFee,
+  nextDueFromSchedule,
+} = require("../services/equipmentFinanceAuthoritativePolicyService");
+const { buildFinanceSchedule } = require("../services/equipmentFinanceScheduleService");
+const { requestContext } = require("../middleware/requestContext");
 
 function testAgreementPolicySnapshot() {
   const agreement = {
@@ -57,8 +63,45 @@ function testNextDueUsesOnlyUnpaidCurrentOrFutureRows() {
   assert.strictEqual(next.dueDate, "2026-09-19");
 }
 
+function testScheduleExplainsDateAdjustments() {
+  const schedule = buildFinanceSchedule({
+    selling_price: 120000,
+    deposit: 20000,
+    payment_frequency: "monthly",
+    installment_count: 3,
+    first_due_date: "2026-08-30",
+    non_working_day_rule: "next_weekday",
+  });
+  assert.ok(Array.isArray(schedule.calculation_policy.date_adjustments));
+  assert.ok(schedule.calculation_policy.date_adjustments.length >= 1);
+  assert.strictEqual(schedule.calculation_policy.date_adjustments[0].original_due_date, "2026-08-30");
+  assert.notStrictEqual(schedule.calculation_policy.date_adjustments[0].adjusted_due_date, "2026-08-30");
+}
+
+function testLegacyApiIsExplicitlyRetired() {
+  let status = null;
+  let payload = null;
+  const req = { path: "/api/installments/agreements", method: "GET", headers: {} };
+  const res = {
+    setHeader() {},
+    status(code) {
+      status = code;
+      return this;
+    },
+    json(value) {
+      payload = value;
+      return this;
+    },
+  };
+  requestContext(req, res, () => assert.fail("Legacy installment route must not reach next middleware."));
+  assert.strictEqual(status, 410);
+  assert.strictEqual(payload.code, "LEGACY_INSTALLMENT_API_RETIRED");
+}
+
 testAgreementPolicySnapshot();
 testLegacyAgreementDoesNotAdvertiseAnUnverifiedFee();
 testNoSecondLateFeeWarningAfterAppliedCharge();
 testNextDueUsesOnlyUnpaidCurrentOrFutureRows();
+testScheduleExplainsDateAdjustments();
+testLegacyApiIsExplicitlyRetired();
 console.log("Equipment Finance professional hardening tests passed.");
