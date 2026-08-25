@@ -302,7 +302,8 @@ BEGIN
             END IF;
         END IF;
 
-        IF NEW.agreement_status IN ('active','due_soon','payment_due','overdue')
+        IF OLD.agreement_status NOT IN ('active','due_soon','payment_due','overdue')
+           AND NEW.agreement_status IN ('active','due_soon','payment_due','overdue')
            AND NEW.equipment_commitment_status <> 'reserved' THEN
             SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT = 'A controlled Finance agreement cannot become active before equipment reservation.';
@@ -318,4 +319,3 @@ VALUES (
     'Make opening deposits company-wide, require explicit application approval and idempotency, and reserve only the exact available non-Hire machine after the full deposit.'
 )
 ON DUPLICATE KEY UPDATE description = VALUES(description);
-
