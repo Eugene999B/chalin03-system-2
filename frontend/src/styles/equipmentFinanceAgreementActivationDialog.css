@@ -1,0 +1,175 @@
+/* Prepare Agreement / Activate Agreement: compact decision dialog. */
+.finance-simple__dialog-backdrop:has(.finance-simple__dialog[aria-label="Activate Finance agreement"]) {
+  padding: 16px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] {
+  width: min(920px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100dvh - 32px);
+  border-radius: 18px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] > .finance-simple__section-header {
+  padding: 14px 18px 12px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] > .finance-simple__section-header h2 {
+  font-size: 1.15rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] > .finance-simple__section-header .finance-simple__muted {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 12px 18px 8px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__summary article {
+  min-height: 52px;
+  padding: 7px 8px;
+  border-radius: 10px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__summary span {
+  font-size: 0.66rem;
+  line-height: 1.2;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__summary strong {
+  margin-top: 2px;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__notice {
+  margin: 8px 18px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] > form {
+  overflow: visible;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] > form > .finance-simple__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.62fr);
+  gap: 8px;
+  margin: 8px 18px 0;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__field {
+  gap: 4px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__field > span {
+  font-size: 0.74rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__field small {
+  font-size: 0.68rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] input,
+.finance-simple__dialog[aria-label="Activate Finance agreement"] textarea {
+  min-height: 38px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 9px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] textarea {
+  min-height: 56px;
+  max-height: 72px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__check {
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__check input {
+  min-width: 18px;
+  min-height: 18px;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__check span {
+  line-height: 1.25;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__check strong {
+  font-size: 0.8rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__check small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__sticky-actions {
+  position: static;
+  margin: 12px 18px 0;
+  padding: 10px 0 12px;
+  border: 0;
+  border-top: 1px solid #dbe4dd;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__sticky-actions > span {
+  color: #68746b;
+  font-size: 0.72rem;
+}
+
+.finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__sticky-actions button {
+  min-height: 38px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 900px) {
+  .finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .finance-simple__dialog-backdrop:has(.finance-simple__dialog[aria-label="Activate Finance agreement"]) {
+    padding: 8px;
+  }
+
+  .finance-simple__dialog[aria-label="Activate Finance agreement"] {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .finance-simple__dialog[aria-label="Activate Finance agreement"] > form {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .finance-simple__dialog[aria-label="Activate Finance agreement"] > form > .finance-simple__grid {
+    grid-template-columns: minmax(0, 1fr);
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .finance-simple__dialog[aria-label="Activate Finance agreement"] .finance-simple__sticky-actions {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+}
