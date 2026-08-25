@@ -49,6 +49,17 @@ function dateValue(value) {
   return [year, String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
 }
 
+function ghanaToday(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function moneyValue(value, minimum = 0) {
   const normalized = String(value ?? "").replaceAll(",", "").trim();
   if (!normalized || !/^(?:\d+|\d*\.\d{1,2})$/.test(normalized)) {
@@ -201,7 +212,7 @@ function normalizeScheduleInput(input = {}) {
   );
   const minimumFirstDueDate = input.minimum_first_due_date
     ? dateValue(input.minimum_first_due_date)
-    : null;
+    : ghanaToday();
   const nonWorkingDayRule = normalizeNonWorkingRule(
     input.non_working_day_rule ?? input.proposed_non_working_day_rule
   );
