@@ -1,6 +1,7 @@
 const { pool } = require("../config/db");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 const { assertProfessionalSchema, getProfessionalSettings } = require("./equipmentFinanceProfessionalService");
+const { applyEligibleLateFees } = require("./equipmentFinanceLateFeeApplicationService");
 const {
   agreementLateFeePolicy,
   calculateProspectiveLateFee,
@@ -95,6 +96,10 @@ function classifyReminder(row, agreement, settings, today) {
 
 async function reminderCandidates({ today = ghanaToday(), limit = 500 } = {}) {
   await assertProfessionalSchema();
+  // Apply eligible contractual late fees once before building the reminder
+  // read-model. The application service is idempotent and reconciles the
+  // agreement after each successful fee write.
+  await applyEligibleLateFees({ today, sendNotifications: true });
   const settings = await getProfessionalSettings();
   const [rows] = await pool.query(
     `SELECT schedule.id AS schedule_id, schedule.sequence_number, schedule.due_date,
@@ -308,4 +313,4 @@ function startProfessionalReminderScheduler() {
   return { started: true, interval_ms: SCHEDULER_INTERVAL_MS };
 }
 
-module.exports = { reminderCandidates: reminderCandidates, classifyReminder, ghanaDate, listProfessionalReminderHistory, previewProfessionalReminders, runProfessionalReminderSync, startProfessionalReminderScheduler };
+module.exports = { reminderCandidates, classifyReminder, ghanaDate, listProfessionalReminderHistory, previewProfessionalReminders, runProfessionalReminderSync, startProfessionalReminderScheduler };
