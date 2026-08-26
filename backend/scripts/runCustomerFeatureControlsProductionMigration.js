@@ -14,23 +14,44 @@ function requiredEnv(primary, fallback) {
   return String(value).trim();
 }
 
-function connectionOptions() {
-  const sslEnabled = String(process.env.DB_SSL || "").trim().toLowerCase();
-  let ssl;
-  if (sslEnabled === "true") {
-    const ca = String(process.env.DB_SSL_CA_BASE64 || "").trim();
-    ssl = ca
-      ? { ca: Buffer.from(ca, "base64").toString("utf8"), rejectUnauthorized: true }
-      : { rejectUnauthorized: true };
+function booleanValue(value, fallback = false) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return ["1", "true", "yes", "on"].includes(normalized);
+}
+
+function sslConfig() {
+  const dbSsl = String(process.env.DB_SSL || "").trim().toLowerCase();
+  if (dbSsl === "false") return false;
+  if (dbSsl !== "true") return undefined;
+
+  const encodedCa = String(process.env.DB_SSL_CA_BASE64 || "").trim();
+  if (encodedCa) {
+    return {
+      ca: Buffer.from(encodedCa, "base64").toString("utf8"),
+      rejectUnauthorized: true,
+    };
   }
 
+  // Keep the migration runner consistent with the main Chalin 03 DB connector.
+  // Railway may use a self-signed/internal CA chain; honor the explicit runtime
+  // policy rather than hard-coding certificate rejection here.
+  return {
+    rejectUnauthorized: booleanValue(
+      process.env.DB_SSL_REJECT_UNAUTHORIZED,
+      true
+    ),
+  };
+}
+
+function connectionOptions() {
   return {
     host: requiredEnv("DB_HOST", "MYSQLHOST"),
     port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
     user: requiredEnv("DB_USER", "MYSQLUSER"),
     password: requiredEnv("DB_PASSWORD", "MYSQLPASSWORD"),
     database: requiredEnv("DB_NAME", "MYSQLDATABASE"),
-    ssl,
+    ssl: sslConfig(),
     connectTimeout: Number(process.env.DB_CONNECT_TIMEOUT_MS || 15000),
     timezone: "Z",
   };
