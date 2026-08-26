@@ -563,6 +563,20 @@ function validateSaleCreateRequest({ body }) {
     errors,
   });
 
+  const isNewCustomer = customerId === null;
+  if (
+    isNewCustomer &&
+    customerName &&
+    customerName.split(/\s+/).filter(Boolean).length < 2
+  ) {
+    addError(
+      errors,
+      "body.customer_name",
+      "New customer names must contain at least two separate names, for example Appiah Eugene.",
+      "CUSTOMER_NAME_REQUIRES_TWO_NAMES"
+    );
+  }
+
   const paymentType = String(body.payment_type || "")
     .trim()
     .toLowerCase();
@@ -699,6 +713,15 @@ function validateSaleCreateRequest({ body }) {
       "body.customer_name",
       "Customer name or phone is required for credit, mixed or installment sales.",
       "CUSTOMER_REQUIRED"
+    );
+  }
+
+  if (paymentType === "credit" && !customerPhone) {
+    addError(
+      errors,
+      "body.customer_phone",
+      "Credit sales require the customer's phone number.",
+      "CREDIT_CUSTOMER_PHONE_REQUIRED"
     );
   }
 
