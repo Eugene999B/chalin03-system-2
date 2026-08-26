@@ -20,13 +20,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: backend/package-lock.json
-      - name: Fetch production base for migration safety
-        run: git fetch --no-tags --depth=1 origin production:refs/remotes/origin/production
       - working-directory: backend
         run: npm ci
       - working-directory: backend
