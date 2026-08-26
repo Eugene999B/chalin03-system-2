@@ -6,6 +6,6 @@
   },
   "deploy": {
     "startCommand": "npm start",
-    "preDeployCommand": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js && node scripts/finalizeEquipmentFinanceCommitmentTrigger.js && node scripts/verifyEquipmentFinanceProductionContract.js && :"
+    "preDeployCommand": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js && node scripts/finalizeEquipmentFinanceCommitmentTrigger.js && node scripts/verifyEquipmentFinanceProductionContractV2.js && :"
   }
 }
