@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import { CustomerPortraitPicker } from "../components/CustomerPortrait";
 import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/equipmentFinanceStartWizardPolish.css";
 
 const API = "/equipment-catalogue/sales/phase-one";
 const DRAFT_KEY = "chalin03.finance.start-installment.v2";
@@ -33,6 +35,7 @@ function blankState() {
       email: "",
       address: "",
       contact_person: "",
+      profile_photo_data_url: "",
     },
     asset_id: "",
     offer: {
@@ -528,7 +531,7 @@ export default function EquipmentFinanceStartWizardPage() {
   ].filter(Boolean);
 
   return (
-    <main className="finance-simple">
+    <main className="finance-simple finance-start-wizard">
       <header className="finance-simple__hero">
         <div>
           <p>Company-wide guided workflow</p>
@@ -627,6 +630,9 @@ export default function EquipmentFinanceStartWizardPage() {
             </>
           ) : (
             <div className="finance-simple__grid">
+              <div className="finance-start-wizard__customer-photo">
+                <CustomerPortraitPicker value={data.customer.profile_photo_data_url} name={data.customer.customer_name || "Customer"} onChange={(value) => updateSection("customer", "profile_photo_data_url", value)} compact />
+              </div>
               <Field title="Customer name"><input value={data.customer.customer_name} onChange={(event) => updateSection("customer", "customer_name", event.target.value)} /></Field>
               <Field title="Customer type"><select value={data.customer.customer_type} onChange={(event) => updateSection("customer", "customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Company</option><option value="contractor">Contractor</option><option value="government">Government</option></select></Field>
               <Field title="Phone number"><input inputMode="tel" value={data.customer.phone} onChange={(event) => updateSection("customer", "phone", event.target.value)} /></Field>
