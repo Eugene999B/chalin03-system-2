@@ -1,0 +1,105 @@
+name: Opening Deposit Stability Gate
+
+on:
+  push:
+    branches:
+      - fix/opening-deposit-root-stability-20260826
+
+permissions:
+  contents: write
+
+jobs:
+  stabilize-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply surgical production fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          route = Path('backend/routes/equipmentFinanceDepositReservationRoutes.js')
+          text = route.read_text()
+          old = re.search(r"function triggerDefinitionIsValid\(triggerName, actionStatement\) \{.*?\n\}\n\nasync function schemaStatus", text, re.S)
+          if not old:
+              raise SystemExit('validator block not found')
+          new = '''function triggerDefinitionIsValid(triggerName, actionStatement) {
+  const sql = String(actionStatement || "");
+  if (triggerName === "trg_equipment_finance_commitment_gate_before_update") {
+    return (
+      /OLD\\.equipment_commitment_status\\s*<>\\s*['\"]reserved['\"]/i.test(sql) &&
+      /NEW\\.equipment_commitment_status\\s*=\\s*['\"]reserved['\"]/i.test(sql) &&
+      /NEW\\.deposit_received\\s*<\\s*NEW\\.deposit_required/i.test(sql) &&
+      /active_lock_count/i.test(sql) &&
+      /application_status/i.test(sql)
+    );
+  }
+  if (triggerName === "trg_equipment_finance_payment_gate_before_insert") {
+    return (
+      /NEW\\.payment_stage\\s*=\\s*['\"]opening_deposit['\"]/i.test(sql) &&
+      /NEW\\.payment_category\\s*=\\s*['\"]deposit['\"]/i.test(sql) &&
+      /idempotency_key/i.test(sql)
+    );
+  }
+  if (triggerName === "trg_equipment_finance_reservation_gate_before_insert") {
+    return (
+      /NEW\\.lock_status\\s*<>\\s*['\"]installment_active['\"]/i.test(sql) &&
+      (/v_deposit_received\\s*<\\s*v_deposit_required/i.test(sql) ||
+       /v_deposit_received\\s*\\+\\s*0\\.01\\s*<\\s*v_deposit_required/i.test(sql))
+    );
+  }
+  return true;
+}
+
+async function schemaStatus'''
+          route.write_text(text[:old.start()] + new + text[old.end():])
+
+          railway = Path('railway.json')
+          railway.write_text('''{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "npm ci"
+  },
+  "deploy": {
+    "preDeployCommand": "if [ -f backend/package.json ]; then cd backend; fi && export CHALIN03_EXPECTED_DATABASE=\\\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\\\" && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/verifyEquipmentFinanceDepositReadiness.js",
+    "startCommand": "if [ -f backend/package.json ]; then cd backend; fi && export CHALIN03_EXPECTED_DATABASE=\\\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\\\" && node scripts/runDebtCustomerIdentityReconciliationStartup.js && node scripts/bootstrapInstallmentResetOwnership.js && node -r ./services/exportWorkbookSafetyBootstrap.js -r ./scripts/installmentDeepDeleteRouteBootstrap.js -r ./scripts/equipmentFinanceDepositBoundaryBootstrap.js server.js"
+  }
+}
+''')
+          print('surgical fixes prepared')
+          PY
+
+      - name: Backend install, syntax and tests
+        working-directory: backend
+        run: npm ci && npm run syntax-check && npm test
+
+      - name: Frontend install, tests and build
+        working-directory: frontend
+        run: npm ci && npm test && npm run build
+
+      - name: Verify critical contract text
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          route = Path('backend/routes/equipmentFinanceDepositReservationRoutes.js').read_text()
+          rail = Path('railway.json').read_text()
+          assert 'NEW\\.lock_status\\s*<>\\s*[\"\']installment_active' in route
+          assert 'preDeployCommand' in rail
+          assert 'runEquipmentFinanceProductionPredeployRepair.js' in rail
+          print('Critical contract checks passed')
+          PY
+
+      - name: Commit tested fixes and remove gate
+        run: |
+          rm -f .github/workflows/opening-deposit-stability-gate.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/routes/equipmentFinanceDepositReservationRoutes.js railway.json
+          git commit -m "fix(finance): stabilize Opening Deposit production contract"
+          git push origin HEAD:fix/opening-deposit-root-stability-20260826
