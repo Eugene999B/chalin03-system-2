@@ -2,7 +2,7 @@ const bcrypt = require("bcryptjs");
 const { pool } = require("../config/db");
 const { RESET_CONFIRMATION, buildDryRun } = require("./installmentFinanceLiveResetService");
 const { clearEverythingInInstallment } = require("./installmentCompletePurgeServiceV3");
-const { finalize } = require("../scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger");
+const { canonicalize } = require("../scripts/canonicalizeEquipmentFinanceOpeningDepositReservationTrigger");
 
 async function verifyPassword(db, userId, password) {
   const [[user]] = await db.query("SELECT id,password_hash,is_active FROM users WHERE id=? LIMIT 1", [userId]);
@@ -36,10 +36,10 @@ async function executeReset({ userId, password, confirmation, dryRunFingerprint,
     const result = await clearEverythingInInstallment(db);
     await db.commit();
     try {
-      await finalize();
+      await canonicalize();
     } catch (repairError) {
-      repairError.statusCode = 503;
-      repairError.code = "RESET_OPENING_DEPOSIT_FOUNDATION_REPAIR_FAILED";
+      repairError.statusCode = repairError.statusCode || 503;
+      repairError.code = repairError.code || "RESET_OPENING_DEPOSIT_FOUNDATION_REPAIR_FAILED";
       repairError.message = `Installment reset completed, but the Opening Deposit foundation repair failed: ${repairError.message}`;
       throw repairError;
     }
