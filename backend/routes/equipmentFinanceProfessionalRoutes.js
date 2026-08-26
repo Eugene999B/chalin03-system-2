@@ -246,6 +246,78 @@ router.put(
 );
 
 router.get(
+  "/professional/notification-settings",
+  requirePermission("fleet.assets.view"),
+  async (_req, res) => {
+    try {
+      const [rows] = await pool.query(
+        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
+           FROM equipment_finance_settings
+          WHERE id = 1
+          LIMIT 1`
+      );
+      if (!rows.length) return res.status(503).json({ status: "error", message: "Finance notification settings are not initialized." });
+      return res.json({ status: "success", scope: "company_wide_finance", settings: rows[0], keys: EVENT_NOTIFICATION_KEYS });
+    } catch (error) {
+      return sendError(res, error, "Could not load Finance notification event settings.");
+    }
+  }
+);
+
+router.put(
+  "/professional/notification-settings",
+  requirePermission("fleet.assets.manage"),
+  async (req, res) => {
+    try {
+      const input = req.body?.settings || req.body || {};
+      const values = EVENT_NOTIFICATION_KEYS.map((key) => {
+        const parsed = parseBoolean(input[key]);
+        if (parsed === undefined) throw new ProfessionalFinanceError(400, `Invalid boolean value for ${key}.`, "FINANCE_NOTIFICATION_SETTING_INVALID");
+        return parsed ? 1 : 0;
+      });
+      const [beforeRows] = await pool.query(
+        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
+           FROM equipment_finance_settings
+          WHERE id = 1
+          FOR UPDATE`
+      );
+      if (!beforeRows.length) throw new ProfessionalFinanceError(503, "Finance notification settings are not initialized.");
+      const before = beforeRows[0];
+      const changed = EVENT_NOTIFICATION_KEYS.some((key, index) => Number(before[key]) !== values[index]);
+      if (!changed) return res.json({ status: "success", changed: false, message: "The notification event policy is already saved." });
+
+      const placeholders = EVENT_NOTIFICATION_KEYS.map(() => "?").join(", ");
+      const assignments = EVENT_NOTIFICATION_KEYS.map((key) => `\`${key}\` = ?`).join(", ");
+      await pool.query(
+        `UPDATE equipment_finance_settings SET ${assignments}, updated_at = NOW() WHERE id = 1`,
+        values
+      );
+      const [afterRows] = await pool.query(
+        `SELECT ${EVENT_NOTIFICATION_KEYS.join(", ")}
+           FROM equipment_finance_settings
+          WHERE id = 1
+          LIMIT 1`
+      );
+      await pool.query(
+        `INSERT INTO equipment_finance_settings_history (
+           settings_id, old_snapshot_json, new_snapshot_json, change_reason, changed_by
+         ) VALUES (?, ?, ?, ?, ?)`,
+        [
+          1,
+          JSON.stringify(before),
+          JSON.stringify(afterRows[0] || {}),
+          req.body?.reason || "Updated Installment Finance event-specific notification policy",
+          userId(req),
+        ]
+      );
+      return res.json({ status: "success", changed: true, settings: afterRows[0], message: "Finance notification event policy saved with history." });
+    } catch (error) {
+      return sendError(res, error, "Could not save Finance notification event settings.");
+    }
+  }
+);
+
+router.get(
   "/professional/machines",
   requirePermission("fleet.assets.view"),
   async (req, res) => {
