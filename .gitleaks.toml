@@ -1,6 +1,9 @@
 title = "Chalin 03 reviewed Gitleaks configuration"
 description = "Reviewed false-positive history exceptions are limited to the generic-api-key rule and exact historical commits only."
 
+[extend]
+useDefault = true
+
 [[rules]]
 id = "generic-api-key"
 
