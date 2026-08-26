@@ -7,6 +7,9 @@ import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccou
 import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
+import PlatformNoticeCleanup from "./components/PlatformNoticeCleanup.jsx";
+import AdminIntelligenceSettings from "./components/AdminIntelligenceSettings.jsx";
+import SecurityCentreBulkDelete from "./components/SecurityCentreBulkDelete.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
 import "./index.css";
@@ -19,10 +22,9 @@ import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v44-input-hotfix";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v44-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v45-management-intelligence";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v45-${APP_BUILD_ID}`;
 
-// Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
 
@@ -35,43 +37,31 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <AdvancedAccountingExpenseFundingEvidence />
     <EmergencyCommandOverlay />
     <CommandArrivalBanner />
+    <PlatformNoticeCleanup />
+    <AdminIntelligenceSettings />
+    <SecurityCentreBulkDelete />
   </React.StrictMode>
 );
 
 window.__chalin03MarkBootHealthy?.(APP_SHELL_RELEASE);
 
 async function removeDevelopmentServiceWorkerCaches() {
-  if (!("serviceWorker" in navigator)) {
-    return;
-  }
+  if (!("serviceWorker" in navigator)) return;
 
   try {
     const registrations = await navigator.serviceWorker.getRegistrations();
-
-    await Promise.all(
-      registrations.map((registration) => registration.unregister())
-    );
+    await Promise.all(registrations.map((registration) => registration.unregister()));
 
     if ("caches" in window) {
       const cacheNames = await caches.keys();
-
       await Promise.all(
         cacheNames
           .filter((cacheName) => String(cacheName).startsWith("chalin03-"))
           .map((cacheName) => caches.delete(cacheName))
       );
     }
-
-    if (registrations.length > 0) {
-      console.log(
-        "✅ Development service workers and old local caches were removed"
-      );
-    }
   } catch (error) {
-    console.warn(
-      "⚠️ Could not fully clear development service-worker caches:",
-      error
-    );
+    console.warn("Could not fully clear development service-worker caches:", error);
   }
 }
 
@@ -80,7 +70,6 @@ function requestAssetRecovery(reason) {
     window.__chalin03RecoverFromAssetMismatch(reason);
     return;
   }
-
   window.location.reload();
 }
 
@@ -97,10 +86,7 @@ if ("serviceWorker" in navigator) {
       let reloadingForUpdate = false;
 
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (!hadActiveController || reloadingForUpdate) {
-          return;
-        }
-
+        if (!hadActiveController || reloadingForUpdate) return;
         reloadingForUpdate = true;
         window.location.reload();
       });
@@ -111,22 +97,13 @@ if ("serviceWorker" in navigator) {
           updateViaCache: "none",
         })
         .then((registration) => {
-          registration.waiting?.postMessage({
-            type: "CHALIN03_SKIP_WAITING",
-          });
-
-          registration.update().catch(() => {
-            // The active worker remains available if an update check is offline.
-          });
-
-          console.log(
-            `✅ Chalin 03 service worker registered (${APP_SHELL_RELEASE})`
-          );
+          registration.waiting?.postMessage({ type: "CHALIN03_SKIP_WAITING" });
+          registration.update().catch(() => {});
+          console.log(`✅ Chalin 03 service worker registered (${APP_SHELL_RELEASE})`);
         })
         .catch((error) => {
           console.error("❌ Service worker registration failed:", error);
         });
-
       return;
     }
 
