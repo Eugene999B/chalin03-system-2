@@ -7,8 +7,15 @@ const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
+  assertFinanceMutationSafe,
+  refreshFinanceAgreementFromEvidence,
+} = require("../services/equipmentFinanceReconciliationService");
+const {
   runEquipmentFinanceOpeningDepositFoundationRepair,
 } = require("../scripts/runEquipmentFinanceOpeningDepositFoundationRepair");
+const {
+  runEquipmentFinancePhaseFourStartup,
+} = require("../scripts/runEquipmentFinancePhaseFourStartup");
 
 const router = express.Router();
 
@@ -157,27 +164,6 @@ async function documentNumber(sequenceCode, prefix, userId) {
   }
 }
 
-function triggerDefinitionIsValid(triggerName, actionStatement) {
-  const sql = String(actionStatement || "");
-  if (triggerName === "trg_equipment_finance_commitment_gate_before_update") {
-    return (
-      /OLD\.agreement_status\s+NOT\s+IN\s*\(/i.test(sql) &&
-      /NEW\.agreement_status\s+IN\s*\(/i.test(sql) &&
-      /NEW\.equipment_commitment_status\s*<>\s*['\"]reserved['\"]/i.test(sql)
-    );
-  }
-  if (triggerName === "trg_equipment_finance_payment_gate_before_insert") {
-    return /NEW\.payment_stage\s*=\s*['\"]opening_deposit['\"]/i.test(sql);
-  }
-  if (triggerName === "trg_equipment_finance_reservation_gate_before_insert") {
-    return (
-      /NEW\.lock_status\s*=\s*['\"]installment_active['\"]/i.test(sql) &&
-      /v_deposit_received\s*(?:\+\s*0\.01\s*)?<\s*v_deposit_required/i.test(sql)
-    );
-  }
-  return true;
-}
-
 async function schemaStatus(connection = pool) {
   const tableNames = Object.keys(REQUIRED_COLUMNS);
   const placeholders = tableNames.map(() => "?").join(",");
@@ -205,119 +191,83 @@ async function schemaStatus(connection = pool) {
 
   const triggerPlaceholders = REQUIRED_TRIGGERS.map(() => "?").join(",");
   const [triggerRows] = await connection.query(
-    `SELECT TRIGGER_NAME, ACTION_STATEMENT
+    `SELECT TRIGGER_NAME
      FROM information_schema.TRIGGERS
      WHERE TRIGGER_SCHEMA = DATABASE()
        AND TRIGGER_NAME IN (${triggerPlaceholders})`,
     REQUIRED_TRIGGERS
   );
-  const triggerMap = new Map(triggerRows.map((row) => [row.TRIGGER_NAME, row.ACTION_STATEMENT]));
-  const missingTriggers = [];
-  const invalidTriggers = [];
-  for (const triggerName of REQUIRED_TRIGGERS) {
-    if (!triggerMap.has(triggerName)) {
-      missingTriggers.push(triggerName);
-    } else if (!triggerDefinitionIsValid(triggerName, triggerMap.get(triggerName))) {
-      invalidTriggers.push(triggerName);
-    }
-  }
+  const installedTriggers = new Set(triggerRows.map((row) => row.TRIGGER_NAME));
+  const missingTriggers = REQUIRED_TRIGGERS.filter(
+    (triggerName) => !installedTriggers.has(triggerName)
+  );
 
-  let missingMigrations = [];
-  try {
-    const [[schemaMigrationsTable]] = await connection.query(
-      `SELECT COUNT(*) AS present
-       FROM information_schema.TABLES
-       WHERE TABLE_SCHEMA = DATABASE()
-         AND TABLE_NAME = 'schema_migrations'`
-    );
-
-    if (Number(schemaMigrationsTable?.present || 0) !== 1) {
-      missingMigrations = [...REQUIRED_MIGRATIONS];
-    } else {
-      const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
-      const [migrationRows] = await connection.query(
-        `SELECT migration_name
-         FROM schema_migrations
-         WHERE migration_name IN (${migrationPlaceholders})`,
-        REQUIRED_MIGRATIONS
-      );
-      const installedMigrations = new Set(
-        migrationRows.map((row) => row.migration_name)
-      );
-      missingMigrations = REQUIRED_MIGRATIONS.filter(
-        (migrationName) => !installedMigrations.has(migrationName)
-      );
-    }
-  } catch (_error) {
-    missingMigrations = [...REQUIRED_MIGRATIONS];
-  }
+  const migrationPlaceholders = REQUIRED_MIGRATIONS.map(() => "?").join(",");
+  const [migrationRows] = await connection.query(
+    `SELECT migration_name
+     FROM schema_migrations
+     WHERE migration_name IN (${migrationPlaceholders})`,
+    REQUIRED_MIGRATIONS
+  );
+  const installedMigrations = new Set(
+    migrationRows.map((row) => row.migration_name)
+  );
+  const missingMigrations = REQUIRED_MIGRATIONS.filter(
+    (migrationName) => !installedMigrations.has(migrationName)
+  );
 
   return {
     ready:
       missingColumns.length === 0 &&
       missingTriggers.length === 0 &&
-      invalidTriggers.length === 0,
+      missingMigrations.length === 0,
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
-    invalid_triggers: invalidTriggers,
     missing_migrations: missingMigrations,
   };
 }
 
+let depositFoundationRepairPromise = null;
 async function ensureDepositFoundationReady() {
-  return schemaStatus(pool);
+  const current = await schemaStatus(pool);
+  if (current.ready) return current;
+
+  if (!depositFoundationRepairPromise) {
+    depositFoundationRepairPromise = (async () => {
+      await runEquipmentFinanceOpeningDepositFoundationRepair();
+      await runEquipmentFinancePhaseFourStartup();
+      const verified = await schemaStatus(pool);
+      if (!verified.ready) {
+        const error = new DepositError(
+          503,
+          "Finance deposit controls are not ready after the approved production repair.",
+          "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED"
+        );
+        error.readiness = verified;
+        throw error;
+      }
+      return verified;
+    })().finally(() => {
+      depositFoundationRepairPromise = null;
+    });
+  }
+
+  return depositFoundationRepairPromise;
 }
 
 async function assertSchemaReady(connection = pool) {
-  let status = await ensureDepositFoundationReady();
-  if (!status.ready || status.invalid_triggers?.length) {
-    try {
-      await runEquipmentFinanceOpeningDepositFoundationRepair();
-    } catch (repairError) {
-      const error = new DepositError(
-        503,
-        "The Opening Deposit payment controls require a production database repair before a payment can be recorded.",
-        "EQUIPMENT_FINANCE_DEPOSIT_REPAIR_FAILED"
-      );
-      error.readiness = status;
-      error.diagnostic = {
-        repair_error: cleanText(repairError.message, 500),
-        backend_revision:
-          process.env.RAILWAY_GIT_COMMIT_SHA ||
-          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
-          process.env.RAILWAY_GIT_COMMIT ||
-          "unknown",
-      };
-      throw error;
-    }
-    status = await ensureDepositFoundationReady();
-  }
-  if (!status.ready || status.invalid_triggers?.length) {
+  await ensureDepositFoundationReady();
+  const status = await schemaStatus(connection);
+  if (!status.ready) {
     const error = new DepositError(
       503,
-      "The Opening Deposit payment controls are not installed correctly on the production database.",
-      "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED"
+      "Finance deposit collection and equipment reservation are being prepared. Apply and verify the approved deposit-reservation migration first.",
+      "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED"
     );
     error.readiness = status;
     throw error;
   }
   return status;
-}
-
-function readinessDiagnostic(readiness) {
-  return readiness
-    ? {
-        missing_columns: readiness.missing_columns || [],
-        missing_triggers: readiness.missing_triggers || [],
-        invalid_triggers: readiness.invalid_triggers || [],
-        missing_migrations: readiness.missing_migrations || [],
-        backend_revision:
-          process.env.RAILWAY_GIT_COMMIT_SHA ||
-          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
-          process.env.RAILWAY_GIT_COMMIT ||
-          "unknown",
-      }
-    : undefined;
 }
 
 function sendError(res, error, fallbackMessage) {
@@ -326,8 +276,7 @@ function sendError(res, error, fallbackMessage) {
       status: "error",
       code: error.code,
       message: error.message,
-      ...(error.readiness ? { readiness: readinessDiagnostic(error.readiness) } : {}),
-      ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+      readiness: error.readiness,
     });
   }
   if (Number(error?.statusCode || 0) >= 400) {
@@ -336,40 +285,15 @@ function sendError(res, error, fallbackMessage) {
       code: error.code || "EQUIPMENT_FINANCE_DEPOSIT_ERROR",
       message: error.message || fallbackMessage,
       ...(error.details ? { details: error.details } : {}),
-      ...(error.readiness ? { readiness: readinessDiagnostic(error.readiness) } : {}),
-      ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
+      ...(error.readiness ? { readiness: error.readiness } : {}),
     });
   }
-  if (["ER_NO_SUCH_TABLE"].includes(error?.code)) {
+  if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
     return res.status(503).json({
       status: "error",
-      code: "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
-      message: "The Opening Deposit payment controls are not installed on the production database.",
-      diagnostic: {
-        mysql_code: error.code,
-        mysql_message: cleanText(error.sqlMessage || error.message, 500),
-        backend_revision:
-          process.env.RAILWAY_GIT_COMMIT_SHA ||
-          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
-          process.env.RAILWAY_GIT_COMMIT ||
-          "unknown",
-      },
-    });
-  }
-  if (["ER_BAD_FIELD_ERROR"].includes(error?.code)) {
-    return res.status(500).json({
-      status: "error",
-      code: "EQUIPMENT_FINANCE_DEPOSIT_QUERY_INVALID",
-      message: "The Opening Deposit query referenced a field that does not exist in the live database.",
-      diagnostic: {
-        mysql_code: error.code,
-        mysql_message: cleanText(error.sqlMessage || error.message, 500),
-        backend_revision:
-          process.env.RAILWAY_GIT_COMMIT_SHA ||
-          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
-          process.env.RAILWAY_GIT_COMMIT ||
-          "unknown",
-      },
+      code: "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
+      message:
+        "Finance deposit collection and equipment reservation are being prepared. Apply and verify the approved deposit-reservation migration first.",
     });
   }
   if (error?.errno === 1644 || error?.sqlState === "45000") {
@@ -377,7 +301,6 @@ function sendError(res, error, fallbackMessage) {
       status: "error",
       code: "EQUIPMENT_FINANCE_DEPOSIT_GATE_REJECTED",
       message: cleanText(error.sqlMessage || error.message, 500),
-      ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
     });
   }
   if (error?.code === "ER_DUP_ENTRY") {
@@ -427,11 +350,17 @@ async function loadAgreement(connection, agreementId) {
        asset.sale_status,
        asset.is_active AS asset_is_active,
        location.name AS equipment_origin_name,
+       (SELECT sale_lock.id
+          FROM equipment_asset_sale_locks sale_lock
+         WHERE sale_lock.asset_id = agreement.asset_id
+           AND sale_lock.released_at IS NULL
+         ORDER BY sale_lock.id
+         LIMIT 1) AS active_lock_id,
        (SELECT sale_lock.agreement_id
           FROM equipment_asset_sale_locks sale_lock
          WHERE sale_lock.asset_id = agreement.asset_id
            AND sale_lock.released_at IS NULL
-         ORDER BY sale_lock.locked_at
+         ORDER BY sale_lock.id
          LIMIT 1) AS active_lock_agreement_id,
        (SELECT COUNT(*)
         FROM hire_contract_assets hire_asset
@@ -464,98 +393,81 @@ function assertControlledAgreement(agreement) {
   ) {
     throw new DepositError(
       409,
-      "This agreement is not a controlled approved-credit Finance agreement.",
-      "EQUIPMENT_FINANCE_CONTROLLED_AGREEMENT_REQUIRED"
+      "This is a legacy agreement. Continue managing it through the existing legacy account workflow.",
+      "EQUIPMENT_FINANCE_LEGACY_AGREEMENT"
     );
   }
   if (agreement.application_status !== "approved") {
     throw new DepositError(
       409,
-      "The linked Finance application is not explicitly approved.",
-      "EQUIPMENT_FINANCE_APPLICATION_NOT_APPROVED"
+      "The linked credit application is no longer explicitly approved.",
+      "EQUIPMENT_FINANCE_APPLICATION_APPROVAL_REQUIRED"
     );
   }
   if (!["approved", "active"].includes(agreement.agreement_status)) {
     throw new DepositError(
       409,
-      "The agreement is not in an approved or active Finance state.",
-      "EQUIPMENT_FINANCE_AGREEMENT_STATE_INVALID"
+      "Opening deposits cannot be collected for this agreement status."
     );
   }
-  if (!["not_reserved", "reserved"].includes(agreement.equipment_commitment_status)) {
-    throw new DepositError(
-      409,
-      "The equipment commitment state cannot accept an opening deposit.",
-      "EQUIPMENT_FINANCE_COMMITMENT_STATE_INVALID"
-    );
-  }
-  return true;
 }
 
 function assertAssetCanBeReserved(agreement) {
+  if (!Boolean(Number(agreement.asset_is_active))) {
+    throw new DepositError(409, "The equipment is not active in the fleet register.");
+  }
+  if (!["sale_only", "sale_or_hire"].includes(agreement.operational_purpose)) {
+    throw new DepositError(409, "The equipment is not authorised for sale.");
+  }
   if (Number(agreement.active_hire_count || 0) > 0) {
     throw new DepositError(
       409,
-      "The exact excavator is currently active on Hire and cannot be reserved for Finance.",
-      "EQUIPMENT_FINANCE_ASSET_HIRE_CONFLICT"
+      "The equipment is active on a Hire contract and cannot be reserved for Finance."
     );
   }
-  if (!Number(agreement.asset_is_active || 0)) {
-    throw new DepositError(409, "The exact excavator is inactive and cannot be reserved.");
+  if (
+    agreement.sale_status !== "available" &&
+    agreement.sale_status !== "installment_active"
+  ) {
+    throw new DepositError(409, "The equipment is not currently available for reservation.");
   }
-  if (!["sale_only", "sale_or_hire"].includes(String(agreement.operational_purpose || ""))) {
-    throw new DepositError(
-      409,
-      "The exact excavator is not configured for equipment sale.",
-      "EQUIPMENT_FINANCE_ASSET_PURPOSE_INVALID"
-    );
-  }
-  if (String(agreement.sale_status || "") !== "available") {
-    throw new DepositError(
-      409,
-      "The exact excavator is not currently available for this Finance reservation.",
-      "EQUIPMENT_FINANCE_ASSET_UNAVAILABLE"
-    );
-  }
-  const reserved = Number(agreement.active_lock_agreement_id || 0) > 0;
-  if (reserved && Number(agreement.active_lock_agreement_id) !== Number(agreement.id)) {
-    throw new DepositError(
-      409,
-      "The exact excavator is already reserved for another agreement.",
-      "EQUIPMENT_FINANCE_ASSET_ALREADY_RESERVED"
-    );
+  if (
+    agreement.active_lock_agreement_id &&
+    Number(agreement.active_lock_agreement_id) !== Number(agreement.id)
+  ) {
+    throw new DepositError(409, "The equipment already has another active sale lock.");
   }
 }
 
 function candidateShape(agreement) {
-  const depositRequired = Number(agreement.deposit_required || 0);
-  const depositReceived = Number(agreement.deposit_received || 0);
-  const remainingCents = Math.max(toCents(depositRequired) - toCents(depositReceived), 0);
+  const requiredCents = toCents(agreement.deposit_required);
+  const receivedCents = toCents(agreement.deposit_received);
+  const remainingCents = Math.max(requiredCents - receivedCents, 0);
   const reserved = agreement.equipment_commitment_status === "reserved";
   const blockers = [];
-
-  if (!["approved", "active"].includes(agreement.agreement_status)) {
-    blockers.push("agreement_not_approved_or_active");
-  }
-  if (agreement.activation_source !== "approved_credit_application") {
-    blockers.push("controlled_credit_activation_required");
-  }
   if (agreement.application_status !== "approved") {
-    blockers.push("credit_application_not_approved");
+    blockers.push("application_not_approved");
   }
-  if (Number(agreement.active_hire_count || 0) > 0) blockers.push("equipment_active_on_hire");
-  if (!Number(agreement.asset_is_active || 0)) blockers.push("equipment_inactive");
-  if (!["sale_only", "sale_or_hire"].includes(String(agreement.operational_purpose || ""))) {
-    blockers.push("equipment_not_for_sale");
+  if (!Boolean(Number(agreement.asset_is_active))) blockers.push("asset_inactive");
+  if (!["sale_only", "sale_or_hire"].includes(agreement.operational_purpose)) {
+    blockers.push("asset_not_sale_authorised");
   }
-  if (String(agreement.sale_status || "") !== "available" && !reserved) {
-    blockers.push("equipment_unavailable");
+  if (Number(agreement.active_hire_count || 0) > 0) {
+    blockers.push("asset_active_on_hire");
   }
-  if (reserved) blockers.push("equipment_already_reserved");
-
+  if (
+    agreement.active_lock_agreement_id &&
+    Number(agreement.active_lock_agreement_id) !== Number(agreement.id)
+  ) {
+    blockers.push("asset_locked_to_another_agreement");
+  }
   return {
     agreement_id: agreement.id,
     agreement_number: agreement.agreement_number,
+    agreement_status: agreement.agreement_status,
+    equipment_commitment_status: agreement.equipment_commitment_status,
+    application_id: agreement.credit_application_id,
+    application_number: agreement.application_number,
     customer_id: agreement.customer_id,
     customer_name: agreement.customer_name,
     customer_phone: agreement.customer_phone,
@@ -563,10 +475,11 @@ function candidateShape(agreement) {
     asset_code: agreement.asset_code,
     asset_name: agreement.asset_name,
     main_image_url: agreement.main_image_url,
-    sale_total: Number(agreement.total_amount || 0),
+    asset_sale_status: agreement.sale_status,
+    active_hire_count: Number(agreement.active_hire_count || 0),
     total_amount: Number(agreement.total_amount || 0),
-    deposit_required: Number(agreement.deposit_required || 0),
-    deposit_received: Number(agreement.deposit_received || 0),
+    deposit_required: fromCents(requiredCents),
+    deposit_received: fromCents(receivedCents),
     deposit_remaining: fromCents(remainingCents),
     financed_amount: Number(agreement.financed_amount || 0),
     outstanding_balance: Number(agreement.outstanding_balance || 0),
@@ -592,35 +505,17 @@ function candidateShape(agreement) {
   };
 }
 
-async function loadControlledDepositEvidence(connection, agreementId) {
-  const [rows] = await connection.query(
-    `SELECT
-       COALESCE(SUM(CASE WHEN payment.is_voided = FALSE THEN payment.amount ELSE 0 END), 0) AS total_paid,
-       COALESCE(SUM(CASE WHEN payment.is_voided = FALSE
-                              AND payment.payment_category = 'deposit'
-                              AND payment.payment_stage = 'opening_deposit'
-                         THEN payment.amount ELSE 0 END), 0) AS controlled_deposit_received
-       FROM equipment_sale_payments payment
-      WHERE payment.agreement_id = ?`,
-    [agreementId]
-  );
-  return {
-    total_paid: Number(Number(rows[0]?.total_paid || 0).toFixed(2)),
-    controlled_deposit_received: Number(
-      Number(rows[0]?.controlled_deposit_received || 0).toFixed(2)
-    ),
-  };
-}
-
 router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     const readiness = await schemaStatus(pool);
     return res.status(readiness.ready ? 200 : 503).json({
       status: readiness.ready ? "success" : "error",
-      code: readiness.ready ? undefined : "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
+      code: readiness.ready
+        ? undefined
+        : "EQUIPMENT_FINANCE_DEPOSIT_FOUNDATION_REQUIRED",
       message: readiness.ready
         ? "Finance deposit and reservation controls are ready."
-        : "The Opening Deposit payment controls are not installed on the production database.",
+        : "Apply and verify the approved Finance deposit-reservation migration first.",
       readiness,
     });
   } catch (error) {
@@ -630,16 +525,7 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
 
 router.get("/candidates", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
-    const readiness = await schemaStatus(pool);
-    if (!readiness.ready) {
-      return res.status(503).json({
-        status: "error",
-        code: "EQUIPMENT_FINANCE_DEPOSIT_SCHEMA_REQUIRED",
-        message: "Opening Deposit candidates are temporarily unavailable because the payment controls are not ready.",
-        readiness,
-      });
-    }
-
+    await ensureDepositFoundationReady();
     const [rows] = await pool.query(
       `SELECT
          agreement.*,
@@ -656,11 +542,17 @@ router.get("/candidates", requirePermission("fleet.assets.view"), async (_req, r
          asset.sale_status,
          asset.is_active AS asset_is_active,
          location.name AS equipment_origin_name,
+         (SELECT sale_lock.id
+            FROM equipment_asset_sale_locks sale_lock
+           WHERE sale_lock.asset_id = agreement.asset_id
+             AND sale_lock.released_at IS NULL
+           ORDER BY sale_lock.id
+           LIMIT 1) AS active_lock_id,
          (SELECT sale_lock.agreement_id
             FROM equipment_asset_sale_locks sale_lock
            WHERE sale_lock.asset_id = agreement.asset_id
              AND sale_lock.released_at IS NULL
-           ORDER BY sale_lock.locked_at
+           ORDER BY sale_lock.id
            LIMIT 1) AS active_lock_agreement_id,
          (SELECT COUNT(*)
           FROM hire_contract_assets hire_asset
@@ -702,15 +594,15 @@ router.post(
   "/:agreementId/deposit",
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
-    let agreementId = null;
     try {
       assertDepositOfficer(req);
-      const body = req.body || {};
-      agreementId = positiveId(req.params.agreementId);
-      const amount = money(body.amount, 0);
-      const method = enumValue(body.payment_method, PAYMENT_METHODS, undefined);
-      const confirmReservation = boolValue(body.confirm_reservation, false);
-      const idempotencyKey = cleanText(body.idempotency_key, 191);
+      await ensureDepositFoundationReady();
+      await assertSchemaReady(pool);
+      const agreementId = positiveId(req.params.agreementId);
+      const amount = money(req.body.amount, 0);
+      const method = enumValue(req.body.payment_method, PAYMENT_METHODS, undefined);
+      const confirmReservation = boolValue(req.body.confirm_reservation, false);
+      const idempotencyKey = cleanText(req.body.idempotency_key, 191);
 
       if (!agreementId || amount === undefined || confirmReservation === undefined) {
         throw new DepositError(
@@ -724,9 +616,6 @@ router.post(
       if (amount > 0 && !idempotencyKey) {
         throw new DepositError(400, "A deposit idempotency key is required.");
       }
-
-      // Repair/reset-proof the Opening Deposit foundation before opening the payment transaction.
-      await assertSchemaReady(pool);
 
       const result = await withTransaction(async (connection) => {
         const [agreementLocks] = await connection.query(
@@ -745,8 +634,6 @@ router.post(
             "EQUIPMENT_FINANCE_AGREEMENT_LINK_INVALID"
           );
         }
-
-        await assertSchemaReady(connection);
 
         if (idempotencyKey) {
           const [existingRows] = await connection.query(
@@ -786,22 +673,11 @@ router.post(
         }
 
         assertControlledAgreement(agreement);
-
-        const depositEvidence = await loadControlledDepositEvidence(connection, agreement.id);
-        const storedDeposit = toCents(agreement.deposit_received);
-        const evidencedDeposit = toCents(depositEvidence.controlled_deposit_received);
-        if (Math.abs(storedDeposit - evidencedDeposit) > 1) {
-          throw new DepositError(
-            409,
-            "The agreement's opening-deposit balance does not match its controlled deposit receipts. No payment was saved.",
-            "EQUIPMENT_FINANCE_DEPOSIT_EVIDENCE_RECONCILIATION_REQUIRED"
-          );
-        }
-        agreement = {
-          ...agreement,
-          amount_paid: depositEvidence.total_paid,
-          deposit_received: depositEvidence.controlled_deposit_received,
-        };
+        const currentReconciliation = await assertFinanceMutationSafe(agreement.id, {
+          connection,
+          lock: false,
+        });
+        agreement = { ...agreement, ...currentReconciliation.calculated };
 
         const [assetRows] = await connection.query(
           `SELECT id, is_active, operational_purpose, sale_status
@@ -825,11 +701,11 @@ router.post(
           [agreement.asset_id]
         );
         const [activeLockRows] = await connection.query(
-          `SELECT agreement_id, lock_status
+          `SELECT id, agreement_id, lock_status
              FROM equipment_asset_sale_locks
             WHERE asset_id = ?
               AND released_at IS NULL
-            ORDER BY locked_at
+            ORDER BY id
             FOR UPDATE`,
           [agreement.asset_id]
         );
@@ -843,7 +719,7 @@ router.post(
           operational_purpose: assetRows[0].operational_purpose,
           sale_status: assetRows[0].sale_status,
           active_hire_count: activeHireRows.length,
-          active_lock_id: null,
+          active_lock_id: activeLockRows[0]?.id || null,
           active_lock_agreement_id: conflictingLock?.agreement_id || null,
         };
         assertAssetCanBeReserved(agreement);
@@ -915,8 +791,8 @@ router.post(
               depositComplete ? "reserved" : "none",
               fromCents(amountCents),
               method,
-              nullableText(body.reference_number, 150),
-              nullableText(body.notes, 500),
+              nullableText(req.body.reference_number, 150),
+              nullableText(req.body.notes, 500),
               positiveId(req.user?.id),
               positiveId(req.user?.id),
             ]
@@ -991,52 +867,73 @@ router.post(
           if (Number(assetUpdate.affectedRows || 0) !== 1) {
             throw new DepositError(
               409,
-              "The exact excavator could not be moved into the protected Finance reservation state.",
-              "EQUIPMENT_FINANCE_RESERVATION_ASSET_UPDATE_FAILED"
+              "The machine changed status before reservation. The deposit and reservation were rolled back."
             );
           }
 
           await connection.query(
             `UPDATE equipment_sale_agreements
-                SET equipment_commitment_status = 'reserved',
-                    reservation_activated_at = COALESCE(reservation_activated_at, NOW()),
-                    reservation_activated_by = COALESCE(reservation_activated_by, ?),
-                    agreement_status = 'active'
+                SET agreement_status = 'active',
+                    equipment_commitment_status = 'reserved',
+                    reservation_activated_at =
+                      COALESCE(reservation_activated_at, NOW()),
+                    reservation_activated_by =
+                      COALESCE(reservation_activated_by, ?)
               WHERE id = ?`,
             [positiveId(req.user?.id), agreement.id]
           );
         }
 
-        const [updatedAgreementRows] = await connection.query(
-          `SELECT * FROM equipment_sale_agreements WHERE id = ? LIMIT 1`,
-          [agreement.id]
+        const reconciliation = await refreshFinanceAgreementFromEvidence(
+          connection,
+          agreement.id
         );
-        const updatedAgreement = updatedAgreementRows[0] || agreement;
-        await writeAuditEvent(connection, {
-          action: depositComplete ? "equipment_finance_deposit_and_reservation" : "equipment_finance_opening_deposit",
+        const refreshed = reconciliation.agreement;
+        await writeAuditEvent({
+          connection,
+          req,
+          action: depositComplete
+            ? "EQUIPMENT_FINANCE_DEPOSIT_COMPLETED_AND_RESERVED"
+            : "EQUIPMENT_FINANCE_PARTIAL_DEPOSIT_RECORDED",
+          actionType: depositComplete
+            ? "equipment.finance.deposit.complete_reserve"
+            : "equipment.finance.deposit.partial",
           entityType: "equipment_sale_agreement",
           entityId: agreement.id,
-          actorUserId: positiveId(req.user?.id),
+          workspaceCode: "equipment_installment_finance",
+          hireLocationId: null,
+          severity: "notice",
+          outcome: "success",
+          details: depositComplete
+            ? `Completed the required opening deposit and reserved ${agreement.asset_code} under ${agreement.agreement_number}.`
+            : `Recorded a partial opening deposit under ${agreement.agreement_number}; equipment remains unreserved.`,
           metadata: {
-            amount: fromCents(amountCents),
-            payment_method: method,
+            credit_application_id: agreement.credit_application_id,
             payment_id: payment?.id || null,
-            receipt_number: payment?.receipt_number || null,
+            amount: fromCents(amountCents),
+            deposit_required: fromCents(requiredCents),
+            deposit_received: depositAfter,
+            deposit_remaining: fromCents(
+              Math.max(requiredCents - depositAfterCents, 0)
+            ),
+            equipment_origin_location_id: agreement.hire_location_id || null,
             reservation_created: reservationCreated,
-            asset_id: agreement.asset_id,
-            asset_code: agreement.asset_code,
+            hire_contract_created: false,
+            delivery_created: false,
+            ownership_transferred: false,
+            sms_sent: false,
           },
         });
 
         return {
-          agreement: candidateShape(updatedAgreement),
+          agreement: candidateShape(refreshed),
           payment,
           already_recorded: false,
           reservation_created: reservationCreated,
         };
       });
 
-      return res.status(200).json({
+      return res.status(result.already_recorded ? 200 : 201).json({
         status: "success",
         message: result.agreement.reserved
           ? "Required deposit confirmed and machine reserved for this Finance agreement. No Hire work, delivery, ownership transfer or SMS was created."
@@ -1052,55 +949,6 @@ router.post(
         },
       });
     } catch (error) {
-      if (agreementId && (error?.errno === 1644 || error?.sqlState === "45000")) {
-        try {
-          const [rows] = await pool.query(
-            `SELECT
-               agreement.id,
-               agreement.agreement_status,
-               agreement.equipment_commitment_status,
-               agreement.activation_source,
-               agreement.credit_application_id,
-               agreement.deposit_required,
-               agreement.deposit_received,
-               agreement.reservation_activated_at,
-               agreement.reservation_activated_by,
-               asset.id AS asset_id,
-               asset.asset_code,
-               asset.sale_status,
-               asset.is_active,
-               (SELECT COUNT(*)
-                  FROM equipment_asset_sale_locks lock_row
-                 WHERE lock_row.agreement_id = agreement.id
-                   AND lock_row.asset_id = agreement.asset_id
-                   AND (lock_row.hire_location_id <=> agreement.hire_location_id)
-                   AND lock_row.lock_status = 'installment_active'
-                   AND lock_row.released_at IS NULL) AS matching_active_reservations,
-               (SELECT COUNT(*)
-                  FROM equipment_asset_sale_locks lock_row
-                 WHERE lock_row.asset_id = agreement.asset_id
-                   AND lock_row.released_at IS NULL) AS active_reservations_on_asset
-             FROM equipment_sale_agreements agreement
-             INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
-             WHERE agreement.id = ?
-             LIMIT 1`,
-            [agreementId]
-          );
-          error.diagnostic = {
-            ...(error.diagnostic || {}),
-            mysql_code: error.code,
-            mysql_message: cleanText(error.sqlMessage || error.message, 500),
-            live_state: rows[0] || null,
-            backend_revision:
-              process.env.RAILWAY_GIT_COMMIT_SHA ||
-              process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
-              process.env.RAILWAY_GIT_COMMIT ||
-              "unknown",
-          };
-        } catch (_diagnosticError) {
-          // Preserve original Finance gate error.
-        }
-      }
       return sendError(res, error, "Could not record the Finance opening deposit.");
     }
   }
