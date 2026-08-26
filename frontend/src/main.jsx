@@ -19,9 +19,9 @@ import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v50-users-settings-intelligence";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v50-${APP_BUILD_ID}`;
-const CACHE_RECOVERY_KEY = "__chalin03_frontend_recovery_v50__";
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v51-users-settings-intelligence";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v51-${APP_BUILD_ID}`;
+const CACHE_RECOVERY_KEY = "__chalin03_frontend_recovery_v51__";
 
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
