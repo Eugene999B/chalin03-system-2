@@ -1,4 +1,5 @@
 import CustomerFeatureControlsPanel from "../components/CustomerFeatureControlsPanel";
+import AdminIntelligenceSettings from "../components/AdminIntelligenceSettings";
 import UsersSettingsPage from "./UsersSettingsPage";
 
 export default function UsersSettingsControlRoomPage() {
@@ -6,6 +7,7 @@ export default function UsersSettingsControlRoomPage() {
     <>
       <CustomerFeatureControlsPanel />
       <UsersSettingsPage />
+      <AdminIntelligenceSettings />
     </>
   );
 }
