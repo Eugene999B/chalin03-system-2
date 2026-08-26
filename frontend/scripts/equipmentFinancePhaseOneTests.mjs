@@ -92,7 +92,7 @@ assert.match(excavators, /One source of truth/);
 assert.match(excavators, /Edit details/);
 assert.match(excavators, /Editing locked/);
 assert.match(excavators, /finance-simple__machine-image/);
-assert.match(excavators, /finance-simple__photo-viewer/);
+assert.match(excavators, /viewerPhoto/);
 assert.doesNotMatch(excavators, /useWorkspaceContext/);
 
 assert.match(applications, /Applications and approvals/i);
