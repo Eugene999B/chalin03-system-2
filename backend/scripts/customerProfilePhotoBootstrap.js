@@ -2,6 +2,7 @@ const Module = require("module");
 const express = require("express");
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { sensitiveAdminLimiter } = require("../middleware/securityMiddleware");
 
 const PHOTO_LIMIT = 180000;
 const PHOTO_PATTERN = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
@@ -90,6 +91,7 @@ function patchCustomerRouter(router) {
   };
 
   const routes = express.Router();
+  routes.use(sensitiveAdminLimiter);
   routes.use(profileMiddleware);
   routes.use(listEnricher);
   routes.get("/phase-one/customers/:customerId/photo", requirePermission("fleet.assets.view"), async (req, res) => {
