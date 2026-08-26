@@ -2,7 +2,17 @@ const { recoverInstallmentLegacyTrialOwnership } = require("../services/installm
 
 let recoveryPromise = null;
 
+function isReadinessProbe(req) {
+  if (String(req.method || "").toUpperCase() !== "GET") return false;
+  const candidates = [req.path, req.originalUrl, req.url, `${req.baseUrl || ""}${req.path || ""}`].map((value) => String(value || ""));
+  return candidates.some((value) => /\/sales\/deposit-reservations\/readiness(?:\?|$)/i.test(value));
+}
+
 async function recover(req, res, next) {
+  // Readiness is a read-only Finance foundation probe. It must not depend on
+  // the unrelated Installment deep-delete legacy-ownership recovery layer.
+  if (isReadinessProbe(req)) return next();
+
   if (!recoveryPromise) {
     recoveryPromise = (async () => {
       const { pool } = require("../config/db");
