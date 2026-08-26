@@ -15,10 +15,11 @@ import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 import "./styles/installmentExcavatorModalFinal.css";
+import "./styles/.c03-login-palette-overrides.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v39-bespoke-login";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v39-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v40-login-palette";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v40-${APP_BUILD_ID}`;
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
