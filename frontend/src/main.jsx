@@ -19,8 +19,9 @@ import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v48-users-settings-intelligence";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v48-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v49-users-settings-intelligence-recovery";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v49-${APP_BUILD_ID}`;
+const CACHE_RECOVERY_KEY = "__chalin03_frontend_recovery_v49__";
 
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
@@ -38,6 +39,36 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 window.__chalin03MarkBootHealthy?.(APP_SHELL_RELEASE);
+
+async function clearProductionFrontendCacheOnce() {
+  if (!import.meta.env.PROD || typeof window === "undefined") return;
+
+  try {
+    if (window.localStorage.getItem(CACHE_RECOVERY_KEY) === "done") return;
+
+    window.localStorage.setItem(CACHE_RECOVERY_KEY, "done");
+
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(
+        registrations.map((registration) => registration.unregister())
+      );
+    }
+
+    if ("caches" in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames
+          .filter((cacheName) => String(cacheName).startsWith("chalin03-"))
+          .map((cacheName) => caches.delete(cacheName))
+      );
+    }
+
+    window.location.reload();
+  } catch (error) {
+    console.warn("⚠️ Chalin 03 frontend cache recovery could not complete:", error);
+  }
+}
 
 async function removeDevelopmentServiceWorkerCaches() {
   if (!("serviceWorker" in navigator)) {
@@ -126,6 +157,7 @@ if ("serviceWorker" in navigator) {
           console.error("❌ Service worker registration failed:", error);
         });
 
+      void clearProductionFrontendCacheOnce();
       return;
     }
 
