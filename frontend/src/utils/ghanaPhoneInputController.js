@@ -1,8 +1,9 @@
 const PHONE_HINT = /(?:phone|mobile|whatsapp|telephone|tel|contact\s*(?:number|phone))/i;
+const SEARCH_HINT = /(?:search|query|filter)/i;
 
 function isPhoneInput(input) {
   if (!(input instanceof HTMLInputElement)) return false;
-  if (input.type === "tel") return true;
+  if (input.disabled || input.readOnly) return false;
 
   const signature = [
     input.name,
@@ -14,10 +15,12 @@ function isPhoneInput(input) {
     .filter(Boolean)
     .join(" ");
 
+  if (SEARCH_HINT.test(signature)) return false;
+  if (input.type === "tel") return true;
   if (PHONE_HINT.test(signature)) return true;
 
   const parentText = input.parentElement?.textContent || "";
-  return PHONE_HINT.test(parentText.slice(0, 120));
+  return PHONE_HINT.test(parentText.slice(0, 120)) && !SEARCH_HINT.test(parentText.slice(0, 120));
 }
 
 function canonicalizeLocalDigits(value) {
