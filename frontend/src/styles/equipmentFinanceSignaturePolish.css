@@ -21,6 +21,12 @@
   word-break: normal;
 }
 
+@media (min-width: 981px) {
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simplified__customer-summary h3 {
+    min-width: 16rem;
+  }
+}
+
 .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simplified__customer-summary p,
 .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simplified__customer-summary small,
 .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simplified__customer-balance span,
