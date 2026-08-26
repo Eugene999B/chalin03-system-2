@@ -6,8 +6,8 @@ export default function UsersSettingsControlRoomPage() {
   return (
     <>
       <CustomerFeatureControlsPanel />
-      <UsersSettingsPage />
       <AdminIntelligenceSettings />
+      <UsersSettingsPage />
     </>
   );
 }
