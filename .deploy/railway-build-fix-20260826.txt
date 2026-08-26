@@ -1,0 +1,1 @@
+Production Railway build configuration fix marker. The Railway service root is backend; build/start commands must run from that directory without `cd backend`.
