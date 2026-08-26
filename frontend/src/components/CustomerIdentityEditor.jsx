@@ -26,7 +26,7 @@ function validateForm(form) {
     return "Enter at least two separate customer names, for example Firstname Lastname.";
   }
 
-  if (!/^[\p{L}][\p{L}'’.\-]*(?:\s+[\p{L}][\p{L}'’.\-]*)+$/u.test(name)) {
+  if (!/^[\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*)+$/u.test(name)) {
     return "Customer name must contain at least two clear names separated by spaces.";
   }
 
