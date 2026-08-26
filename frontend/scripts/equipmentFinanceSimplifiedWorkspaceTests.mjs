@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 const currentFile = fileURLToPath(import.meta.url);
 const root = path.resolve(path.dirname(currentFile), "..");
@@ -20,9 +19,9 @@ const styles = read("src", "styles", "equipmentFinanceSimplifiedWorkspace.css");
 const signatureShell = read("src", "styles", "equipmentFinanceSignatureShell.css");
 
 assert.match(customerCentre, /selectedCustomer/);
-assert.match(customerCentre, /View Details/);
+assert.match(customerCentre, /View profile/);
 assert.match(customerCentre, /Search Finance customer register/);
-assert.match(customerCentre, /finance-simplified__customer-row/);
+assert.match(customerCentre, /customer-centre__grid/);
 assert.doesNotMatch(customerCentre, /finance-simple__facts[\s\S]*visibleCustomers\.map/);
 
 assert.match(customerPortfolio, /No customer selected/);
