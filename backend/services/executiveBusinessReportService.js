@@ -49,6 +49,24 @@ function isMonthEndSendWindow(date = new Date(), env = process.env) {
   return tomorrow.getMonth() !== date.getMonth() && date.getHours() >= closeHour(env);
 }
 
+async function hasConfirmedClosing(dateText) {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS closing_count,
+            COALESCE(SUM(counted_confirmed = 1), 0) AS confirmed_count
+     FROM daily_closings
+     WHERE closing_date = ?`,
+    [dateText]
+  );
+  const row = rows[0] || {};
+  const closingCount = numeric(row.closing_count);
+  const confirmedCount = numeric(row.confirmed_count);
+  return {
+    closing_count: closingCount,
+    confirmed_count: confirmedCount,
+    confirmed: closingCount > 0 && confirmedCount >= closingCount,
+  };
+}
+
 async function ensureRules() {
   await pool.query(
     `INSERT INTO notification_rules
@@ -93,7 +111,7 @@ async function buildMetrics(start, end) {
               COALESCE(SUM(counted_confirmed = 1 AND verification_status <> 'verified'),0) AS awaiting_verification,
               COALESCE(SUM(ABS(difference_total)),0) AS absolute_variance,
               COALESCE(SUM(difference_total < -0.009),0) AS shortage_count,
-              COALESCE(SUM(difference_total < -0.009),0) AS variance_count,
+              COALESCE(SUM(ABS(difference_total) >= 0.01),0) AS variance_count,
               COALESCE(SUM(stale_after_close = 1),0) AS changed_after_close_count
        FROM daily_closings
        WHERE closing_date BETWEEN ? AND ?`,
@@ -127,7 +145,6 @@ async function buildMetrics(start, end) {
   const st = stock[0] || {};
   const i = incidents[0] || {};
   const h = hire[0] || {};
-
   const salesTotal = numeric(s.sales_total);
   const expensesTotal = numeric(e.expenses_total);
 
@@ -177,21 +194,18 @@ function roleMessage(type, role, period, metrics) {
   const advice = adviceFor(metrics, type);
 
   if (role === "auditor") {
-    return `Chalin 03 ${reportName} — ${label}. Audit focus: ${metrics.closingCount} daily closing record(s), ${metrics.awaitingVerification} awaiting verification, ${metrics.changedAfterCloseCount} changed after close, ${metrics.varianceCount} variance record(s), shortage exposure ${money(metrics.absoluteVariance)}. Customer debt ${money(metrics.outstandingDebt)}. Serious/high Mining incidents: ${metrics.seriousIncidents}. Please review exceptions, supporting evidence and sign-offs. Management intelligence: ${advice.slice(0, 3).join(" ")}`;
+    return `Chalin 03 ${reportName} — ${label}. Audit focus: ${metrics.closingCount} daily closing record(s), ${metrics.awaitingVerification} awaiting verification, ${metrics.changedAfterCloseCount} changed after close, ${metrics.varianceCount} variance record(s), variance exposure ${money(metrics.absoluteVariance)}. Customer debt ${money(metrics.outstandingDebt)}. Serious/high Mining incidents: ${metrics.seriousIncidents}. Please review exceptions, supporting evidence and sign-offs. Management intelligence: ${advice.slice(0, 3).join(" ")}`;
   }
 
   if (role === "manager") {
-    return `Chalin 03 ${reportName} — ${label}. Operations: sales ${money(metrics.salesTotal)} from ${metrics.saleCount} sale(s), expenses ${money(metrics.expensesTotal)}, estimated operating result ${money(metrics.estimatedOperatingResult)}, customer debt ${money(metrics.outstandingDebt)}, low stock ${metrics.lowStockCount}, Mining serious/high incidents ${metrics.seriousIncidents}, hire invoiced ${money(metrics.hireInvoiced)} and unpaid hire balance ${money(metrics.hireBalance)}. Priority actions: ${advice.slice(0, 4).join(" ")}`;
+    return `Chalin 03 ${reportName} — ${label}. Operations: sales ${money(metrics.salesTotal)} from ${metrics.saleCount} sale(s), expenses ${money(metrics.expensesTotal)}, estimated operating result ${money(metrics.estimatedOperatingResult)}, customer debt ${money(metrics.outstandingDebt)}, low stock ${metrics.lowStockCount}, Mining serious/high incidents ${metrics.seriousIncidents}, Equipment Hire invoiced ${money(metrics.hireInvoiced)} and unpaid hire balance ${money(metrics.hireBalance)}. Priority actions: ${advice.slice(0, 4).join(" ")}`;
   }
 
-  return `Chalin 03 ${reportName} — ${label}. Business result: sales ${money(metrics.salesTotal)} from ${metrics.saleCount} sale(s); payments received ${money(metrics.paymentsReceived)}; expenses ${money(metrics.expensesTotal)}; estimated operating result ${money(metrics.estimatedOperatingResult)}; outstanding customer debt ${money(metrics.outstandingDebt)}. Daily Closing: ${metrics.verifiedClosings}/${metrics.closingCount} verified, ${metrics.awaitingVerification} awaiting verification, ${metrics.varianceCount} variance record(s), ${metrics.changedAfterCloseCount} changed after close. Stock: ${metrics.lowStockCount} low item(s). Mining: ${metrics.incidentCount} incident(s), ${metrics.seriousIncidents} serious/high. Equipment Hire: ${metrics.hireInvoiced} invoiced? ${money(metrics.hireInvoiced)}, paid ${money(metrics.hirePaid)}, balance ${money(metrics.hireBalance)}. Management advice: ${advice.join(" ")}`;
+  return `Chalin 03 ${reportName} — ${label}. Business result: sales ${money(metrics.salesTotal)} from ${metrics.saleCount} sale(s); payments received ${money(metrics.paymentsReceived)}; expenses ${money(metrics.expensesTotal)}; estimated operating result ${money(metrics.estimatedOperatingResult)}; outstanding customer debt ${money(metrics.outstandingDebt)}. Daily Closing: ${metrics.verifiedClosings}/${metrics.closingCount} verified, ${metrics.awaitingVerification} awaiting verification, ${metrics.varianceCount} variance record(s), ${metrics.changedAfterCloseCount} changed after close. Stock: ${metrics.lowStockCount} low item(s). Mining: ${metrics.incidentCount} incident(s), ${metrics.seriousIncidents} serious/high. Equipment Hire: invoiced ${money(metrics.hireInvoiced)}, paid ${money(metrics.hirePaid)}, balance ${money(metrics.hireBalance)}. Management advice: ${advice.join(" ")}`;
 }
 
 async function sendRoleSms(notificationId, notificationKey, type, role, message) {
-  const [users] = await pool.query(
-    `SELECT id, phone FROM users WHERE is_active = TRUE AND role = ? AND phone IS NOT NULL AND phone <> ''`,
-    [role]
-  );
+  const [users] = await pool.query(`SELECT id, phone FROM users WHERE is_active = TRUE AND role = ? AND phone IS NOT NULL AND phone <> ''`, [role]);
   for (const user of users) {
     const result = await sendSmsAlertToPhone({ branchId: 1, phone: user.phone, message, smsType: `${type}_business_intelligence`, sourceReference: notificationKey, sentBy: user.id });
     await pool.query(
@@ -206,10 +220,19 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
   const rules = await ensureRules();
   const rule = type === "weekly" ? rules.weekly : rules.monthly;
   if (!rule || !Number(rule.is_enabled)) return { skipped: true, reason: "report_rule_disabled" };
-  if (!force && type === "weekly" && !isWeeklySendWindow(date)) return { skipped: true, reason: "not_weekly_send_window" };
-  if (!force && type === "monthly" && !isMonthEndSendWindow(date)) return { skipped: true, reason: "not_month_end_send_window" };
 
   const period = periodFor(type, date);
+  if (!force && type === "weekly") {
+    if (!isWeeklySendWindow(date)) return { skipped: true, reason: "not_weekly_send_window" };
+    const closing = await hasConfirmedClosing(period.end);
+    if (!closing.confirmed) return { skipped: true, reason: "saturday_closing_not_confirmed", closing };
+  }
+  if (!force && type === "monthly") {
+    if (!isMonthEndSendWindow(date)) return { skipped: true, reason: "not_month_end_send_window" };
+    const closing = await hasConfirmedClosing(period.end);
+    if (!closing.confirmed) return { skipped: true, reason: "month_end_closing_not_confirmed", closing };
+  }
+
   const metrics = await buildMetrics(period.start, period.end);
   const notificationKey = `${type === "weekly" ? WEEKLY_RULE : MONTHLY_RULE}.${period.key}`;
   const [existing] = await pool.query(`SELECT id FROM notifications WHERE notification_key = ? LIMIT 1`, [notificationKey]);
