@@ -5,6 +5,7 @@
     "buildCommand": "npm ci"
   },
   "deploy": {
+    "preDeployCommand": ["npm run migrate:equipment-finance:opening-deposit-foundation:production"],
     "startCommand": "npm start"
   }
 }
