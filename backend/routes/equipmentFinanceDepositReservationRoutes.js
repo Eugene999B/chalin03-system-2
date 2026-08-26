@@ -255,7 +255,8 @@ async function schemaStatus(connection = pool) {
   return {
     ready:
       missingColumns.length === 0 &&
-      missingTriggers.length === 0,
+      missingTriggers.length === 0 &&
+      invalidTriggers.length === 0,
     missing_columns: missingColumns,
     missing_triggers: missingTriggers,
     invalid_triggers: invalidTriggers,
@@ -268,8 +269,30 @@ async function ensureDepositFoundationReady() {
 }
 
 async function assertSchemaReady(connection = pool) {
-  const status = await ensureDepositFoundationReady();
-  if (!status.ready) {
+  let status = await ensureDepositFoundationReady();
+  if (!status.ready || status.invalid_triggers?.length) {
+    try {
+      await runEquipmentFinanceOpeningDepositFoundationRepair();
+    } catch (repairError) {
+      const error = new DepositError(
+        503,
+        "The Opening Deposit payment controls require a production database repair before a payment can be recorded.",
+        "EQUIPMENT_FINANCE_DEPOSIT_REPAIR_FAILED"
+      );
+      error.readiness = status;
+      error.diagnostic = {
+        repair_error: cleanText(repairError.message, 500),
+        backend_revision:
+          process.env.RAILWAY_GIT_COMMIT_SHA ||
+          process.env.RAILWAY_GIT_COMMIT_SHA_SHORT ||
+          process.env.RAILWAY_GIT_COMMIT ||
+          "unknown",
+      };
+      throw error;
+    }
+    status = await ensureDepositFoundationReady();
+  }
+  if (!status.ready || status.invalid_triggers?.length) {
     const error = new DepositError(
       503,
       "The Opening Deposit payment controls are not installed correctly on the production database.",
@@ -701,6 +724,9 @@ router.post(
       if (amount > 0 && !idempotencyKey) {
         throw new DepositError(400, "A deposit idempotency key is required.");
       }
+
+      // Repair/reset-proof the Opening Deposit foundation before opening the payment transaction.
+      await assertSchemaReady(pool);
 
       const result = await withTransaction(async (connection) => {
         const [agreementLocks] = await connection.query(
