@@ -9,6 +9,7 @@ const {
   sendOwnerSmsAlert,
 } = require("../services/smsAlertService");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { ensureReportRules } = require("../services/executiveBusinessReportService");
 const {
   WORKSPACES,
   SEVERITIES,
@@ -149,6 +150,10 @@ router.get(
   "/rules",
   requirePermission("notifications.manage"),
   asyncHandler(async (req, res) => {
+    if (isAdmin(req) || workspaceCode(req) === "spare_parts") {
+      await ensureReportRules();
+    }
+
     const params = [];
     let where = "";
     if (!isAdmin(req)) {
