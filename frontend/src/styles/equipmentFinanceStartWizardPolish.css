@@ -1,0 +1,34 @@
+.finance-start-wizard { width:min(100%,1280px); padding-top:.45rem; }
+.finance-start-wizard .finance-simple__hero { padding:.8rem .95rem; border-radius:15px; align-items:center; }
+.finance-start-wizard .finance-simple__hero h1 { font-size:clamp(1.45rem,3vw,2rem); }
+.finance-start-wizard .finance-simple__hero span { margin-top:.3rem; font-size:.86rem; }
+.finance-start-wizard > .finance-simple__notice { margin:.5rem 0; padding:.55rem .72rem; font-size:.82rem; }
+.finance-start-wizard .finance-simple__steps { position:sticky; top:.35rem; z-index:20; margin:.5rem 0; gap:.35rem; padding:.25rem; border:1px solid #dbe5dd; border-radius:14px; background:rgba(255,255,255,.94); box-shadow:0 10px 22px rgba(26,52,34,.08); backdrop-filter:blur(8px); }
+.finance-start-wizard .finance-simple__step { min-height:46px; padding:.45rem .55rem; border-radius:11px; font-size:.82rem; }
+.finance-start-wizard .finance-simple__panel { margin-top:.55rem; padding:.75rem; border-radius:16px; }
+.finance-start-wizard .finance-simple__grid { gap:.6rem; margin-top:.65rem; }
+.finance-start-wizard .finance-simple__section { margin-top:.6rem; padding:.72rem; border-radius:14px; box-shadow:none; }
+.finance-start-wizard input,.finance-start-wizard select,.finance-start-wizard textarea { min-height:40px; padding:.58rem .68rem; border-radius:10px; }
+.finance-start-wizard textarea { min-height:80px; }
+.finance-start-wizard .finance-simple__sticky-actions { width:min(900px,100%); margin:.55rem auto 0; border-radius:14px; padding:.6rem; }
+.finance-start-wizard .finance-simple__step b { width:26px; height:26px; flex-basis:26px; }
+.finance-start-wizard .finance-simple__customer-grid { gap:.65rem; }
+.finance-start-wizard .finance-simple__customer-grid button { display:flex; flex-direction:column; align-items:flex-start; gap:.18rem; width:100%; min-height:100px; padding:.85rem; border:1px solid #d7e1d9; border-radius:14px; background:#fff; color:#183d27; text-align:left; box-shadow:0 6px 16px rgba(30,51,37,.04); }
+.finance-start-wizard .finance-simple__customer-grid button.is-selected { border-color:#2c7545; box-shadow:0 0 0 3px rgba(44,117,69,.12); }
+.finance-start-wizard .finance-simple__customer-grid button strong { font-size:.98rem; }
+.finance-start-wizard .finance-simple__customer-grid button span,.finance-start-wizard .finance-simple__customer-grid button small { color:#66736a; }
+.finance-start-wizard .finance-simple__cards { gap:.75rem; margin-top:.7rem; }
+.finance-start-wizard .finance-simple__card { border-radius:14px; }
+.finance-start-wizard .finance-simple__machine-image { aspect-ratio:16/9; max-height:210px; }
+.finance-start-wizard .finance-simple__card-body { padding:.8rem; }
+.finance-start-wizard .finance-simple__facts { gap:.45rem; margin:.6rem 0; }
+.finance-start-wizard .finance-simple__facts div { padding:.5rem; }
+.finance-start-wizard .finance-simple__summary { gap:.55rem; margin-top:.7rem; }
+.finance-start-wizard .finance-simple__summary article { padding:.65rem; }
+.finance-start-wizard .finance-simple__schedule-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; margin-top:.65rem; }
+.finance-start-wizard .finance-simple__schedule-list article { display:grid; gap:.12rem; padding:.55rem .65rem; border:1px solid #e0e8e1; border-radius:10px; background:#f9fbf9; }
+.finance-start-wizard .finance-simple__schedule-list span { color:#748078; font-size:.72rem; }
+.finance-start-wizard .finance-simple__schedule-list strong { color:#203e2a; font-size:.82rem; }
+.finance-start-wizard .finance-simple__schedule-list b { color:#173d27; font-size:.82rem; }
+@media (max-width:900px) { .finance-start-wizard .finance-simple__steps{position:static;} .finance-start-wizard .finance-simple__schedule-list{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:720px) { .finance-start-wizard .finance-simple__hero-actions>*{width:100%;} .finance-start-wizard .finance-simple__steps{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;} .finance-start-wizard .finance-simple__step{flex:0 0 min(72vw,235px);scroll-snap-align:start;} .finance-start-wizard .finance-simple__panel{padding:.65rem;} .finance-start-wizard .finance-simple__schedule-list{grid-template-columns:1fr;} }

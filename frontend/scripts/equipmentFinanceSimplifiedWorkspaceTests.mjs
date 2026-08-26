@@ -12,7 +12,7 @@ const customerPortfolio = read("src", "pages", "EquipmentFinanceCustomerPortfoli
 const paymentsCentre = read("src", "pages", "EquipmentFinancePaymentsCentrePage.jsx");
 const collections = read("src", "pages", "EquipmentFinanceCollectionsMinimalPage.jsx");
 const documentCentre = read("src", "pages", "EquipmentFinanceDocumentCentrePage.jsx");
-const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPage.jsx");
+const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPageV2.jsx");
 const activation = read("src", "pages", "EquipmentFinanceAgreementActivationPage.jsx");
 const accounts = read("src", "pages", "EquipmentFinanceActiveInstallmentsPage.jsx");
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
@@ -20,9 +20,9 @@ const styles = read("src", "styles", "equipmentFinanceSimplifiedWorkspace.css");
 const signatureShell = read("src", "styles", "equipmentFinanceSignatureShell.css");
 
 assert.match(customerCentre, /selectedCustomer/);
-assert.match(customerCentre, /View Details/);
+assert.match(customerCentre, /View profile/);
 assert.match(customerCentre, /Search Finance customer register/);
-assert.match(customerCentre, /finance-simplified__customer-row/);
+assert.match(customerCentre, /customer-centre__grid/);
 assert.doesNotMatch(customerCentre, /finance-simple__facts[\s\S]*visibleCustomers\.map/);
 
 assert.match(customerPortfolio, /No customer selected/);
@@ -47,11 +47,13 @@ assert.doesNotMatch(documentCentre, /nextAccounts\[0\]/);
 assert.doesNotMatch(documentCentre, /payments\?\.at\(-1\)/);
 assert.doesNotMatch(documentCentre, />C03<\/div>/);
 
-assert.match(deposit, /queueFilter/);
-assert.match(deposit, /Search opening deposit agreements/);
+assert.match(deposit, /filter/);
+assert.match(deposit, /Search agreements/);
+assert.match(deposit, /Deposit filter/);
 assert.match(deposit, /finance-simplified__compact-register/);
-assert.match(deposit, /Selected agreement/);
-assert.match(deposit, /Record Deposit/);
+assert.match(deposit, /Opening Deposit/);
+assert.match(deposit, /Approved agreements/);
+assert.match(deposit, /\/deposit`/);
 assert.doesNotMatch(deposit, /â|ðŸ/);
 
 assert.match(activation, /Search agreement activation candidates/);

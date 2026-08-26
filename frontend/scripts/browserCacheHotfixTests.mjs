@@ -23,7 +23,7 @@ assert.match(
   serviceWorker,
   /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
 );
-assert.match(serviceWorker, /browser-cache-integrity-v35/);
+assert.match(serviceWorker, /browser-cache-integrity-v37/);
 assert.match(serviceWorker, /const BUILD_ASSET_PREFIX = "\/assets\/"/);
 assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
 assert.match(serviceWorker, /networkBuildAsset\(request\)/);
@@ -68,7 +68,7 @@ assert.match(recovery, /url\.pathname\.startsWith\("\/assets\/"\)/);
 assert.match(recovery, /Updating Chalin 03/);
 
 assert.match(mainEntry, /VITE_CHALIN03_BUILD_ID/);
-assert.match(mainEntry, /browser-cache-integrity-v35/);
+assert.match(mainEntry, /browser-cache-integrity-v38/);
 assert.match(mainEntry, /updateViaCache: "none"/);
 assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
 assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
@@ -77,7 +77,7 @@ assert.match(mainEntry, /encodeURIComponent\(APP_SHELL_RELEASE\)/);
 assert.match(viteConfig, /RAILWAY_GIT_COMMIT_SHA/);
 assert.match(viteConfig, /CF_PAGES_COMMIT_SHA/);
 assert.match(viteConfig, /GITHUB_SHA/);
-assert.match(viteConfig, /Date\.now\(\)\.toString\(36\)/);
+assert.match(viteConfig, /Date\.now\(\).toString\(36\)/);
 assert.match(
   viteConfig,
   /"import\.meta\.env\.VITE_CHALIN03_BUILD_ID"/
