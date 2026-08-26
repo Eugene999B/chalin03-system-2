@@ -68,11 +68,15 @@ router.put(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const controls = await updateCustomerFeatureControls(getBranchId(req), {
-        customer_identity_editing_enabled:
-          req.body?.customer_identity_editing_enabled,
-        customer_merge_enabled: req.body?.customer_merge_enabled,
-      });
+      const controls = await updateCustomerFeatureControls(
+        getBranchId(req),
+        {
+          customer_identity_editing_enabled:
+            req.body?.customer_identity_editing_enabled,
+          customer_merge_enabled: req.body?.customer_merge_enabled,
+        },
+        req.user?.id || null
+      );
 
       await writeAuditEvent({
         req,
