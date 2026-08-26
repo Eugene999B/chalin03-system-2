@@ -1,0 +1,48 @@
+.gate4.biometric-login .gate4__access::before {
+  content: "SECURE STAFF LOGIN";
+  margin: 0 0 10px;
+  color: #768293;
+  font-size: 8px;
+  letter-spacing: .14em;
+  line-height: 1.2;
+}
+
+.gate4.biometric-login .gate4__access-heading h2 {
+  margin: 0;
+  font-size: 0;
+  line-height: 1.08;
+  letter-spacing: -.035em;
+}
+
+.gate4.biometric-login .gate4__access-heading h2::after {
+  content: "Sign in to continue";
+  color: #10223a;
+  font-size: clamp(29px, 3.4vw, 38px);
+  font-weight: 850;
+}
+
+.gate4.biometric-login .gate4__access-heading p {
+  margin: 7px 0 0;
+  font-size: 0;
+  line-height: 1.5;
+}
+
+.gate4.biometric-login .gate4__access-heading p::after {
+  content: "Select your business area and store, then enter your login details.";
+  color: #687587;
+  font-size: 12px;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs {
+  margin-top: 16px;
+}
+
+.gate4.biometric-login .gate4__context-strip {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .gate4.biometric-login .gate4__access-heading h2::after {
+    font-size: 29px;
+  }
+}
