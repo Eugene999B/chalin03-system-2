@@ -114,6 +114,7 @@ BEGIN
         END IF;
 
         IF NEW.agreement_status IN ('active','due_soon','payment_due','overdue')
+           AND OLD.agreement_status NOT IN ('active','due_soon','payment_due','overdue')
            AND NEW.equipment_commitment_status <> 'reserved' THEN
             SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT = 'A controlled Finance agreement cannot become active before equipment reservation.';
@@ -152,6 +153,7 @@ async function main() {
     );
     const action = String(trigger?.ACTION_STATEMENT || "").toLowerCase();
     const valid =
+      action.includes("old.agreement_status") &&
       action.includes("old.equipment_commitment_status") &&
       action.includes("new.equipment_commitment_status") &&
       action.includes("new.agreement_status in (") &&
