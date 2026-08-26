@@ -9,7 +9,6 @@ import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttentio
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
-import { installGhanaPhoneInputController } from "./utils/ghanaPhoneInputController.js";
 import "./index.css";
 import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
@@ -20,13 +19,12 @@ import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v43-ghana-phone-finance-layout";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v43-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v44-input-hotfix";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v44-${APP_BUILD_ID}`;
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
-installGhanaPhoneInputController();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
