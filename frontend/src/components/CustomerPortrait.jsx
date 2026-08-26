@@ -6,9 +6,15 @@ const PHOTO_API = "/equipment-catalogue/sales/phase-one/customers";
 const MAX_BYTES = 120 * 1024;
 const TARGET_WIDTH = 413;
 const TARGET_HEIGHT = 531;
+const SAFE_PHOTO_PATTERN = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
 
 function initials(name) {
   return String(name || "Customer").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "C";
+}
+
+function safePhotoSource(value) {
+  const source = String(value || "").trim();
+  return SAFE_PHOTO_PATTERN.test(source) && source.length <= 180000 ? source : "";
 }
 
 function readAsImage(file) {
@@ -57,13 +63,14 @@ export async function normalizeCustomerPortrait(file) {
 }
 
 export function CustomerPortrait({ customerId, src = "", name = "Customer", size = "medium", className = "" }) {
-  const [remoteSource, setRemoteSource] = useState(src || "");
+  const [remoteSource, setRemoteSource] = useState(safePhotoSource(src));
   useEffect(() => {
-    setRemoteSource(src || "");
-    if (!customerId || src) return undefined;
+    const localSource = safePhotoSource(src);
+    setRemoteSource(localSource);
+    if (!customerId || localSource) return undefined;
     let active = true;
     axiosClient.get(`${PHOTO_API}/${customerId}/photo`).then((response) => {
-      if (active) setRemoteSource(response.data?.photo || "");
+      if (active) setRemoteSource(safePhotoSource(response.data?.photo));
     }).catch(() => { if (active) setRemoteSource(""); });
     return () => { active = false; };
   }, [customerId, src]);
