@@ -20,8 +20,8 @@ import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v42-ghana-phone-finance-layout";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v42-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v43-ghana-phone-finance-layout";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v43-${APP_BUILD_ID}`;
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
