@@ -16,7 +16,7 @@ const customers = read("src", "pages", "EquipmentFinanceCustomerCentrePage.jsx")
 const excavators = read("src", "pages", "EquipmentFinanceExcavatorsPage.jsx");
 const applications = read("src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const activation = read("src", "pages", "EquipmentFinanceAgreementActivationPage.jsx");
-const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPage.jsx");
+const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPageV2.jsx");
 const collections = read("src", "pages", "EquipmentFinanceCollectionsMinimalPage.jsx");
 const reports = read("src", "pages", "EquipmentSalesReportsPage.jsx");
 const guide = read("src", "pages", "EquipmentFinanceGuidePage.jsx");
@@ -100,11 +100,13 @@ assert.match(applications, /Installment Offer/);
 assert.match(applications, /No Hire-location selection/);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
-for (const page of [activation, deposit]) {
-  assert.match(page, /Search, select, then/i);
-  assert.match(page, /finance-simplified__compact-register/);
-  assert.doesNotMatch(page, /selectedContextId|useWorkspaceContext/);
-}
+assert.match(activation, /Search, select, then/i);
+assert.match(activation, /finance-simplified__compact-register/);
+assert.doesNotMatch(activation, /selectedContextId|useWorkspaceContext/);
+assert.match(deposit, /Customer, agreement or excavator/i);
+assert.match(deposit, /Record Deposit|Complete Deposit/i);
+assert.match(deposit, /finance-simplified__compact-register/);
+assert.doesNotMatch(deposit, /selectedContextId|useWorkspaceContext/);
 assert.match(reports, /Equipment Finance Phase 6/);
 assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
