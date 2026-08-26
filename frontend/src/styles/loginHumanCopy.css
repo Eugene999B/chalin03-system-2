@@ -41,8 +41,90 @@
   margin-top: 10px;
 }
 
+/* Final login action: dark navy with simple, human wording. */
+.gate4.biometric-login .gate4__submit {
+  background: #0a1d31 !important;
+  color: #ffffff !important;
+  border: 1px solid #0a1d31 !important;
+  box-shadow: 0 12px 24px rgba(10, 29, 49, .18) !important;
+}
+
+.gate4.biometric-login .gate4__submit:hover:not(:disabled) {
+  background: #102b46 !important;
+  color: #ffffff !important;
+  box-shadow: 0 15px 28px rgba(10, 29, 49, .22) !important;
+}
+
+.gate4.biometric-login .gate4__submit strong,
+.gate4.biometric-login .gate4__submit small {
+  font-size: 0 !important;
+}
+
+.gate4.biometric-login .gate4__submit strong::after {
+  content: "Sign in" !important;
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+
+.gate4.biometric-login .gate4__submit small::after {
+  content: "Secure access to your Chalin 03 account" !important;
+  color: rgba(255,255,255,.68) !important;
+  font-size: 9px !important;
+}
+
+/* Keep the desktop/Windows presentation inside the available viewport. */
+html, body, #root {
+  min-height: 100%;
+}
+
+.gate4.biometric-login {
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+}
+
+.gate4.biometric-login .gate4__shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.gate4.biometric-login .gate4__layout {
+  height: calc(100vh - 68px);
+  height: calc(100dvh - 68px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.gate4.biometric-login .gate4__story {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.gate4.biometric-login .gate4__access {
+  min-height: 0;
+  overflow: auto;
+}
+
 @media (max-width: 760px) {
-  .gate4.biometric-login .gate4__access-heading h2::after {
-    font-size: 29px;
+  .gate4.biometric-login {
+    overflow: auto;
+  }
+
+  .gate4.biometric-login .gate4__shell {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .gate4.biometric-login .gate4__layout {
+    height: auto;
+    min-height: calc(100dvh - 60px);
+    overflow: visible;
+  }
+
+  .gate4.biometric-login .gate4__access {
+    overflow: visible;
   }
 }
