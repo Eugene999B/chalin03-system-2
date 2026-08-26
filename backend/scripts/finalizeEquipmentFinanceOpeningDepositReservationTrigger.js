@@ -119,9 +119,7 @@ async function finalize() {
                       SET MESSAGE_TEXT = 'Reservation asset or origin does not match the Finance agreement.';
               END IF;
 
-              IF NEW.lock_status = 'installment_active' THEN
-                  DO 0;
-              ELSE
+              IF NOT (NEW.lock_status = 'installment_active') THEN
                   SIGNAL SQLSTATE '45000'
                       SET MESSAGE_TEXT = 'Approved-credit Finance reservations must use installment_active status.';
               END IF;
@@ -175,7 +173,7 @@ async function finalize() {
     if (!/NEW\.lock_status\s*=\s*'installment_active'/i.test(action)) {
       throw new Error("The Opening Deposit reservation trigger is missing the canonical installment_active guard.");
     }
-    if (!/ELSE\s+SIGNAL SQLSTATE '45000'/i.test(action)) {
+    if (!/SIGNAL SQLSTATE '45000'/i.test(action)) {
       throw new Error("The Opening Deposit reservation trigger is missing the invalid-status rejection branch.");
     }
     if (!/v_deposit_received\s*\+\s*0\.01\s*<\s*v_deposit_required/i.test(action)) {
