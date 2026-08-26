@@ -129,27 +129,19 @@ function patchProfessionalService(service) {
       if (!agreementId || !snapshot?.agreement) return snapshot;
       try {
         const [rows] = await pool.query("SELECT profile_photo_data_url FROM hire_customers WHERE id = ? LIMIT 1", [snapshot.agreement.customer_id]);
-        snapshot.agreement.customer_profile_photo_data_url = rows[0]?.profile_photo_data_url || null;
+        const photo = rows[0]?.profile_photo_data_url || null;
+        snapshot.agreement.customer_profile_photo_data_url = photo;
+        if (photo && Array.isArray(snapshot.media) && !snapshot.media.some((item) => item.evidence_type === "customer_profile_photo")) {
+          snapshot.media.unshift({
+            evidence_type: "customer_profile_photo",
+            file_url: photo,
+            is_primary: false,
+          });
+        }
       } catch (error) {
         if (error?.code !== "ER_BAD_FIELD_ERROR") console.error("Agreement customer portrait load warning:", error);
       }
       return snapshot;
-    };
-  }
-  if (typeof service.renderAgreementWord === "function") {
-    const originalWord = service.renderAgreementWord;
-    service.renderAgreementWord = (snapshot, ...args) => {
-      const buffer = originalWord(snapshot, ...args);
-      if (!Buffer.isBuffer(buffer) || !snapshot?.agreement?.customer_profile_photo_data_url) return buffer;
-      try {
-        const html = buffer.toString("utf8");
-        const photo = snapshot.agreement.customer_profile_photo_data_url;
-        const inserted = html.replace(/<h3>Parties<\/h3>/, `<h3>Parties</h3><div style="margin:8px 0 12px;"><img src="${photo}" alt="Customer portrait" style="width:80px;height:103px;object-fit:cover;border:1px solid #d7e1d9;border-radius:6px;" /></div>`);
-        return Buffer.from(inserted, "utf8");
-      } catch (error) {
-        console.error("Agreement Word customer portrait warning:", error);
-        return buffer;
-      }
     };
   }
 }
