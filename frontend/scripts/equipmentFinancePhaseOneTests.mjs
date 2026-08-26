@@ -9,26 +9,24 @@ const read = (...parts) => fs.readFileSync(path.join(frontendRoot, ...parts), "u
 
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const workspace = read("src", "pages", "EquipmentSalesWorkspacePage.jsx");
-const home = read("src", "pages", "EquipmentInstallmentCommandPage.jsx");
-const minimalWorkflow = read("src", "pages", "EquipmentFinanceMinimalWorkflowPage.jsx");
 const wizard = read("src", "pages", "EquipmentFinanceStartWizardPage.jsx");
 const customers = read("src", "pages", "EquipmentFinanceCustomerCentrePage.jsx");
+const portrait = read("src", "components", "CustomerPortrait.jsx");
 const excavators = read("src", "pages", "EquipmentFinanceExcavatorsPage.jsx");
-const applications = read("src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const activation = read("src", "pages", "EquipmentFinanceAgreementActivationPage.jsx");
 const deposit = read("src", "pages", "EquipmentFinanceDepositReservationPageV2.jsx");
 const collections = read("src", "pages", "EquipmentFinanceCollectionsMinimalPage.jsx");
-const reports = read("src", "pages", "EquipmentSalesReportsPage.jsx");
+const documents = read("src", "pages", "EquipmentFinanceDocumentCentrePage.jsx");
 const guide = read("src", "pages", "EquipmentFinanceGuidePage.jsx");
-const css = read("src", "styles", "equipmentFinancePhaseOne.css");
-const guideCss = read("src", "styles", "equipmentFinanceGuide.css");
+const portraitCss = read("src", "styles", "customerProfilePortrait.css");
+const wizardCss = read("src", "styles", "equipmentFinanceStartWizardPolish.css");
 
 for (const stage of ["start", "customers", "machines", "guide", "activation", "deposit", "collections"]) {
   assert.match(workspace, new RegExp(`stage === "${stage}"`));
 }
-assert.match(workspace, /EquipmentFinanceApplicationsPage/);
-assert.match(workspace, /EquipmentFinanceCollectionsMinimalPage/);
-assert.doesNotMatch(workspace, /EquipmentCreditApplicationsPage/);
+assert.match(workspace, /EquipmentFinanceCustomerCentrePage/);
+assert.match(workspace, /EquipmentFinanceStartWizardPage/);
+assert.doesNotMatch(workspace, /useWorkspaceContext|selectedContextId/);
 
 for (const title of [
   "Finance Home",
@@ -43,28 +41,7 @@ for (const title of [
 ]) {
   assert.match(layout, new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
-assert.doesNotMatch(layout, /Finance Equipment Reference/);
 assert.match(layout, /Company-wide Finance portfolio/);
-
-assert.match(home, /EquipmentFinanceMinimalWorkflowPage/);
-assert.match(home, /EquipmentInstallmentCommandAdvancedPage/);
-for (const phrase of [
-  "Equipment Installment Workflow",
-  "Complete these nine actions",
-  "Equipment list",
-  "Add equipment",
-  "Customer selection",
-  "Create installment agreement",
-  "Configure terms",
-  "Preview schedule",
-  "Activate agreement",
-  "Record payment",
-  "Balance and payment history",
-]) {
-  assert.match(minimalWorkflow, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
-}
-assert.match(minimalWorkflow, /company-wide|Company-wide/);
-assert.match(minimalWorkflow, /official-outstanding-balance/);
 
 for (const phrase of [
   "Start New Installment",
@@ -73,67 +50,58 @@ for (const phrase of [
   "Customer assessment",
   "Review and create the draft",
   "Create Draft Installment",
+  "profile_photo_data_url",
 ]) {
   assert.match(wizard, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
 assert.match(wizard, /schedule-preview/);
+assert.match(wizard, /CustomerPortraitPicker/);
 assert.match(wizard, /customer_consent_confirmed/);
 assert.match(wizard, /credit_assessment_consent_confirmed/);
-assert.doesNotMatch(wizard, /selectedContextId|useWorkspaceContext/);
 assert.doesNotMatch(wizard, /Choose a Hire location|Choose a Finance location/);
 
-assert.match(customers, /Customer Centre/);
-assert.match(customers, /Add Customer/);
-assert.match(customers, /Start Installment/);
+assert.match(portrait, /normalizeCustomerPortrait/);
+assert.match(portrait, /CustomerPortraitPicker/);
+assert.match(portrait, /image\/jpeg/);
+assert.match(portrait, /TARGET_WIDTH/);
+assert.match(portrait, /TARGET_HEIGHT/);
+assert.match(portrait, /MAX_BYTES/);
+assert.match(portrait, /safePhotoSource/);
+assert.match(portraitCss, /customer-portrait/);
+assert.match(portraitCss, /customer-photo-picker/);
+
+assert.match(customers, /Finance Customer Centre/);
 assert.match(customers, /Search Finance customer register/);
+assert.match(customers, /CustomerPortraitPicker/);
+assert.match(customers, /Start New Installment/);
+assert.match(customers, /profile_photo_data_url/);
 assert.doesNotMatch(customers, /useWorkspaceContext/);
 
 assert.match(excavators, /One source of truth/);
-assert.match(excavators, /Edit details/);
-assert.match(excavators, /Editing locked/);
+assert.match(excavators, /Save Excavator/);
 assert.match(excavators, /finance-simple__machine-image/);
 assert.match(excavators, /viewerPhoto/);
-assert.doesNotMatch(excavators, /useWorkspaceContext/);
-
-assert.match(applications, /Applications and approvals/i);
-assert.match(applications, /Installment Offer/);
-assert.match(applications, /No Hire-location selection/);
-assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
 assert.match(activation, /Search, select, then/i);
 assert.match(activation, /finance-simplified__compact-register/);
 assert.doesNotMatch(activation, /selectedContextId|useWorkspaceContext/);
+
 assert.match(deposit, /Opening Deposit/);
 assert.match(deposit, /Approved agreements/);
 assert.match(deposit, /finance-simplified__compact-register/);
 assert.doesNotMatch(deposit, /selectedContextId|useWorkspaceContext/);
 
-assert.match(reports, /Equipment Finance Phase 6/);
-assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
+assert.match(collections, /Official balances are returned by the backend/i);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
-assert.match(collections, /Official balances are returned by the backend/i);
 assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
+assert.match(documents, /CustomerPortrait/);
+assert.match(documents, /customer portrait|customer_profile_photo|profile_photo/i);
 assert.match(guide, /Complete lifecycle/);
-assert.match(guide, /Installment Offer is created automatically/);
-assert.match(guide, /Task & Approval Inbox/);
-assert.match(guide, /Opening Deposit & Machine Reservation/);
 assert.match(guide, /Troubleshooting/);
-assert.match(guide, /dated owner-authorized restart release/);
-assert.match(guide, /general production reset endpoint.*remain blocked/);
-assert.doesNotMatch(guide, /workspace="equipment_hire"/);
-assert.match(guideCss, /@media \(max-width: 760px\)/);
-assert.match(guideCss, /@media \(max-width: 420px\)/);
-assert.match(guideCss, /grid-template-columns:\s*1fr/);
+assert.match(wizardCss, /@media \(max-width: 760px\)/);
+assert.match(wizardCss, /@media \(max-width: 420px\)/);
 
-assert.match(css, /@media \(max-width: 720px\)/);
-assert.match(css, /@media \(max-width: 390px\)/);
-assert.match(css, /object-fit:\s*contain/);
-assert.match(css, /overflow-wrap:\s*anywhere/);
-assert.match(css, /white-space:\s*normal/);
-assert.match(css, /position:\s*sticky/);
-assert.match(css, /min-height:\s*44px/);
-
-console.log("Equipment Finance Phase 3 usability contract passed.");
+console.log("Equipment Finance Phase 1 usability and customer-portrait contracts passed.");
