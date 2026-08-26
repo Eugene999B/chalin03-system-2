@@ -17,11 +17,12 @@ import "./styles/adminMobileHotfix.css";
 import "./styles/installmentExcavatorModalFinal.css";
 import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
+import "./styles/equipmentFinanceAgreementActivationDialog.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v51-users-settings-intelligence";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v51-${APP_BUILD_ID}`;
-const CACHE_RECOVERY_KEY = "__chalin03_frontend_recovery_v51__";
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v52-agreement-dialog";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v52-${APP_BUILD_ID}`;
+const CACHE_RECOVERY_KEY = "__chalin03_frontend_recovery_v52__";
 
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
