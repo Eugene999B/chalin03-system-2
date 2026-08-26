@@ -5,28 +5,7 @@ const DEFAULT_CONTROLS = Object.freeze({
   customer_merge_enabled: true,
 });
 
-let schemaPromise = null;
-
-async function ensureCustomerFeatureControlsSchema() {
-  if (!schemaPromise) {
-    schemaPromise = pool
-      .query(`
-        CREATE TABLE IF NOT EXISTS customer_feature_controls (
-          branch_id INT NOT NULL PRIMARY KEY,
-          customer_identity_editing_enabled TINYINT(1) NOT NULL DEFAULT 1,
-          customer_merge_enabled TINYINT(1) NOT NULL DEFAULT 1,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `)
-      .catch((error) => {
-        schemaPromise = null;
-        throw error;
-      });
-  }
-
-  await schemaPromise;
-}
+const CONTROL_ACTION = "CUSTOMER_FEATURE_CONTROLS_UPDATED";
 
 function normalizeBranchId(branchId) {
   const value = Number(branchId);
@@ -40,61 +19,61 @@ function normalizeFlag(value, fallback = true) {
   return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
 }
 
+function parseControlMetadata(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
+
 async function getCustomerFeatureControls(branchId) {
   const normalizedBranchId = normalizeBranchId(branchId);
-  await ensureCustomerFeatureControlsSchema();
-
-  await pool.query(
-    `INSERT IGNORE INTO customer_feature_controls (
-      branch_id,
-      customer_identity_editing_enabled,
-      customer_merge_enabled
-    ) VALUES (?, ?, ?)`,
-    [
-      normalizedBranchId,
-      DEFAULT_CONTROLS.customer_identity_editing_enabled ? 1 : 0,
-      DEFAULT_CONTROLS.customer_merge_enabled ? 1 : 0,
-    ]
-  );
 
   const [rows] = await pool.query(
     `SELECT
+       id,
        branch_id,
-       customer_identity_editing_enabled,
-       customer_merge_enabled,
-       created_at,
-       updated_at
-     FROM customer_feature_controls
+       metadata_json,
+       created_at
+     FROM activity_log
      WHERE branch_id = ?
+       AND action = ?
+     ORDER BY id DESC
      LIMIT 1`,
-    [normalizedBranchId]
+    [normalizedBranchId, CONTROL_ACTION]
   );
 
-  const row = rows[0] || {};
+  const row = rows[0] || null;
+  const metadata = parseControlMetadata(row?.metadata_json);
+  const controls = metadata?.controls || {};
 
   return {
     branch_id: normalizedBranchId,
     customer_identity_editing_enabled: normalizeFlag(
-      row.customer_identity_editing_enabled,
+      controls.customer_identity_editing_enabled,
       DEFAULT_CONTROLS.customer_identity_editing_enabled
     ),
     customer_merge_enabled: normalizeFlag(
-      row.customer_merge_enabled,
+      controls.customer_merge_enabled,
       DEFAULT_CONTROLS.customer_merge_enabled
     ),
-    created_at: row.created_at || null,
-    updated_at: row.updated_at || null,
+    created_at: row?.created_at || null,
+    updated_at: row?.created_at || null,
   };
 }
 
 async function updateCustomerFeatureControls(
   branchId,
-  { customer_identity_editing_enabled, customer_merge_enabled } = {}
+  { customer_identity_editing_enabled, customer_merge_enabled } = {},
+  userId = null
 ) {
   const normalizedBranchId = normalizeBranchId(branchId);
-  await ensureCustomerFeatureControlsSchema();
-
   const current = await getCustomerFeatureControls(normalizedBranchId);
+
   const next = {
     customer_identity_editing_enabled: normalizeFlag(
       customer_identity_editing_enabled,
@@ -107,18 +86,28 @@ async function updateCustomerFeatureControls(
   };
 
   await pool.query(
-    `INSERT INTO customer_feature_controls (
+    `INSERT INTO activity_log (
        branch_id,
-       customer_identity_editing_enabled,
-       customer_merge_enabled
-     ) VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       customer_identity_editing_enabled = VALUES(customer_identity_editing_enabled),
-       customer_merge_enabled = VALUES(customer_merge_enabled)`,
+       user_id,
+       action,
+       details,
+       workspace_code,
+       entity_type,
+       action_type,
+       metadata_json
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       normalizedBranchId,
-      next.customer_identity_editing_enabled ? 1 : 0,
-      next.customer_merge_enabled ? 1 : 0,
+      userId || null,
+      CONTROL_ACTION,
+      "Updated customer identity editing and customer merge feature controls",
+      "spare_parts",
+      "customer_feature_controls",
+      "update",
+      JSON.stringify({
+        controls: next,
+        changed_at: new Date().toISOString(),
+      }),
     ]
   );
 
@@ -139,7 +128,6 @@ function getFeatureDisabledMessage(featureName) {
 
 module.exports = {
   DEFAULT_CONTROLS,
-  ensureCustomerFeatureControlsSchema,
   getCustomerFeatureControls,
   updateCustomerFeatureControls,
   getFeatureDisabledMessage,
