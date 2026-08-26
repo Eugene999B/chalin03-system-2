@@ -25,4 +25,31 @@
 .gate4.biometric-login .gate4__story-copy h1 span{color:#e2b83f}
 .gate4.biometric-login .gate4__access{border-left-color:#e2b83f}
 .gate4.biometric-login .gate4__workspace-tabs button.is-selected{border-color:#c79d2e;background:linear-gradient(135deg,#fffdf4,#f3ead2);box-shadow:inset 4px 0 0 #e2b83f,0 10px 22px rgba(48,42,16,.09)}
-@media(max-width:760px){.gate4.biometric-login .gate4__workspace-tabs button:nth-child(1)>span,.gate4.biometric-login .gate4__workspace-tabs button:nth-child(2)>span,.gate4.biometric-login .gate4__workspace-tabs button:nth-child(3)>span{box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}}
+
+/* Human, professional login copy */
+.gate4.biometric-login .gate4__access-heading{margin-bottom:14px}
+.gate4.biometric-login .gate4__access-heading h2{font-size:0;line-height:1.12;margin:0 0 6px}
+.gate4.biometric-login .gate4__access-heading h2::after{content:"Sign in to Chalin 03";font-size:clamp(28px,3.2vw,36px);font-weight:750;letter-spacing:-.025em;color:#0a1d31}
+.gate4.biometric-login .gate4__access-heading p{font-size:0;margin:0;line-height:1.5;color:#657180}
+.gate4.biometric-login .gate4__access-heading p::after{content:"Select your business area and store, then enter your login details.";font-size:12px}
+.gate4.biometric-login .gate4__workspace-tabs{margin-top:16px}
+
+/* Simple, unmistakably dark sign-in button. */
+.gate4.biometric-login .gate4__submit{background:#0a1d31!important;color:#fff!important;border:1px solid #0a1d31!important;box-shadow:0 12px 24px rgba(10,29,49,.18)!important}
+.gate4.biometric-login .gate4__submit:hover:not(:disabled){background:#102b46!important;box-shadow:0 15px 28px rgba(10,29,49,.22)!important}
+.gate4.biometric-login .gate4__submit strong::after{content:"Sign in";color:#fff;font-size:13px;font-weight:800}
+.gate4.biometric-login .gate4__submit small::after{content:"Secure access to your Chalin 03 account";color:rgba(255,255,255,.68);font-size:9px}
+
+/* Preserve the proven single-screen desktop/Windows layout. */
+html,body,#root{min-height:100%;}
+.gate4.biometric-login{min-height:100vh;min-height:100dvh;overflow:hidden}
+.gate4.biometric-login .gate4__shell{min-height:100vh;min-height:100dvh;height:100vh;height:100dvh}
+.gate4.biometric-login .gate4__layout{height:calc(100vh - 68px);height:calc(100dvh - 68px);min-height:0;overflow:hidden}
+.gate4.biometric-login .gate4__access{min-height:0;overflow:auto}
+.gate4.biometric-login .gate4__story{min-height:0;overflow:hidden}
+@media(max-width:760px){
+  .gate4.biometric-login{overflow:auto}
+  .gate4.biometric-login .gate4__shell{height:auto;min-height:100dvh}
+  .gate4.biometric-login .gate4__layout{height:auto;min-height:calc(100dvh - 60px);overflow:visible}
+  .gate4.biometric-login .gate4__access{overflow:visible}
+}
