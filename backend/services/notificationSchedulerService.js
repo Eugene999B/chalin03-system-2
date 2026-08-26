@@ -1,5 +1,6 @@
 const { runNotificationSync } = require("./notificationService");
 const { runExecutiveNotificationSync } = require("./executiveNotificationService");
+const { runScheduledBusinessReports } = require("./executiveBusinessReportService");
 
 const DEFAULT_INTERVAL_MINUTES = 15;
 const MIN_INTERVAL_MINUTES = 5;
@@ -24,26 +25,15 @@ function boundedNumber(value, fallback, minimum, maximum) {
 function notificationSchedulerConfig(env = process.env) {
   const production = String(env.NODE_ENV || "").trim().toLowerCase() === "production";
   const enabled = booleanSetting(env.NOTIFICATION_SYNC_ENABLED, production);
-  const intelligenceEnabled = booleanSetting(
-    env.EXECUTIVE_NOTIFICATION_INTELLIGENCE_ENABLED,
-    production
-  );
-  const intervalMinutes = boundedNumber(
-    env.NOTIFICATION_SYNC_INTERVAL_MINUTES,
-    DEFAULT_INTERVAL_MINUTES,
-    MIN_INTERVAL_MINUTES,
-    MAX_INTERVAL_MINUTES
-  );
-  const initialDelayMs = boundedNumber(
-    env.NOTIFICATION_SYNC_INITIAL_DELAY_MS,
-    DEFAULT_INITIAL_DELAY_MS,
-    1_000,
-    5 * 60_000
-  );
+  const intelligenceEnabled = booleanSetting(env.EXECUTIVE_NOTIFICATION_INTELLIGENCE_ENABLED, production);
+  const businessReportsEnabled = booleanSetting(env.EXECUTIVE_BUSINESS_REPORTS_ENABLED, production);
+  const intervalMinutes = boundedNumber(env.NOTIFICATION_SYNC_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES, MIN_INTERVAL_MINUTES, MAX_INTERVAL_MINUTES);
+  const initialDelayMs = boundedNumber(env.NOTIFICATION_SYNC_INITIAL_DELAY_MS, DEFAULT_INITIAL_DELAY_MS, 1_000, 5 * 60_000);
 
   return {
     enabled,
     intelligenceEnabled,
+    businessReportsEnabled,
     intervalMinutes,
     intervalMs: Math.round(intervalMinutes * 60_000),
     initialDelayMs: Math.round(initialDelayMs),
@@ -53,7 +43,9 @@ function notificationSchedulerConfig(env = process.env) {
 async function runScheduledNotificationSync({
   sync = runNotificationSync,
   intelligenceSync = runExecutiveNotificationSync,
+  businessReportSync = runScheduledBusinessReports,
   intelligenceEnabled = true,
+  businessReportsEnabled = true,
   logger = console,
 } = {}) {
   if (syncRunning) return { skipped: true, reason: "local_sync_already_running" };
@@ -61,21 +53,14 @@ async function runScheduledNotificationSync({
   syncRunning = true;
   try {
     const result = await sync({ workspaceCode: "group", userId: null });
-    const intelligence = intelligenceEnabled
-      ? await intelligenceSync({ logger })
-      : null;
+    const intelligence = intelligenceEnabled ? await intelligenceSync({ logger }) : null;
+    const businessReports = businessReportsEnabled ? await businessReportSync({ logger }) : null;
 
-    logger.log(
-      `Notification sync completed: generated ${Number(
-        result?.generated_count || 0
-      )}, resolved ${Number(result?.resolved_count || 0)}.`
-    );
-    return { skipped: false, result, intelligence };
+    logger.log(`Notification sync completed: generated ${Number(result?.generated_count || 0)}, resolved ${Number(result?.resolved_count || 0)}.`);
+    return { skipped: false, result, intelligence, businessReports };
   } catch (error) {
     if (Number(error?.statusCode || 0) === 409) {
-      logger.warn(
-        "Notification sync skipped because another server instance holds the database lock."
-      );
+      logger.warn("Notification sync skipped because another server instance holds the database lock.");
       return { skipped: true, reason: "database_sync_already_running" };
     }
     logger.error("Automatic notification sync failed:", error.message);
@@ -89,6 +74,7 @@ function startNotificationSyncScheduler({
   env = process.env,
   sync = runNotificationSync,
   intelligenceSync = runExecutiveNotificationSync,
+  businessReportSync = runScheduledBusinessReports,
   logger = console,
   setTimeoutFn = setTimeout,
   setIntervalFn = setInterval,
@@ -102,13 +88,14 @@ function startNotificationSyncScheduler({
     return { started: false, alreadyStarted: true, ...config };
   }
 
-  const execute = () =>
-    runScheduledNotificationSync({
-      sync,
-      intelligenceSync,
-      intelligenceEnabled: config.intelligenceEnabled,
-      logger,
-    });
+  const execute = () => runScheduledNotificationSync({
+    sync,
+    intelligenceSync,
+    businessReportSync,
+    intelligenceEnabled: config.intelligenceEnabled,
+    businessReportsEnabled: config.businessReportsEnabled,
+    logger,
+  });
 
   initialTimer = setTimeoutFn(() => {
     initialTimer = null;
@@ -121,9 +108,7 @@ function startNotificationSyncScheduler({
   }, config.intervalMs);
   intervalTimer?.unref?.();
 
-  logger.log(
-    `Automatic notification sync scheduled every ${config.intervalMinutes} minute(s).`
-  );
+  logger.log(`Automatic notification checks scheduled every ${config.intervalMinutes} minute(s). Weekly and monthly business reports are gated to closing windows.`);
   return { started: true, ...config };
 }
 
