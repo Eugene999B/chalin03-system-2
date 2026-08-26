@@ -100,11 +100,14 @@ assert.match(applications, /Installment Offer/);
 assert.match(applications, /No Hire-location selection/);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
-for (const page of [activation, deposit]) {
-  assert.match(page, /Search, select, then/i);
-  assert.match(page, /finance-simplified__compact-register/);
-  assert.doesNotMatch(page, /selectedContextId|useWorkspaceContext/);
-}
+assert.match(activation, /Search, select, then/i);
+assert.match(activation, /finance-simplified__compact-register/);
+assert.doesNotMatch(activation, /selectedContextId|useWorkspaceContext/);
+assert.match(deposit, /Opening Deposit/);
+assert.match(deposit, /Approved agreements/);
+assert.match(deposit, /finance-simplified__compact-register/);
+assert.doesNotMatch(deposit, /selectedContextId|useWorkspaceContext/);
+
 assert.match(reports, /Equipment Finance Phase 6/);
 assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
