@@ -84,6 +84,7 @@ BEGIN
         END IF;
 
         IF NEW.agreement_status IN ('active','due_soon','payment_due','overdue')
+           AND OLD.agreement_status NOT IN ('active','due_soon','payment_due','overdue')
            AND NEW.equipment_commitment_status <> 'reserved' THEN
             SIGNAL SQLSTATE '45000'
                 SET MESSAGE_TEXT = 'A controlled Finance agreement cannot become active before equipment reservation.';
