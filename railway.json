@@ -5,7 +5,7 @@
     "buildCommand": "npm ci"
   },
   "deploy": {
-    "preDeployCommand": "node -e \"console.log('Chalin 03 pre-deploy: database repairs are controlled maintenance; skipping automatic Opening Deposit repair to prevent deployment-time MySQL lock hangs.')\" && node backend/scripts/runCustomerFeatureControlsProductionMigration.js",
+    "preDeployCommand": "node -e \"console.log('Chalin 03 pre-deploy: database repairs are controlled maintenance; skipping automatic Opening Deposit repair to prevent deployment-time MySQL lock hangs.')\" && NODE_ENV=production node backend/scripts/runCustomerFeatureControlsProductionMigration.js",
     "startCommand": "npm start"
   }
 }
