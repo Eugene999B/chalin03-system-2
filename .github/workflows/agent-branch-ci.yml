@@ -25,12 +25,14 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: backend/package-lock.json
+      - name: Fetch production base for migration safety
+        run: git fetch --no-tags --depth=1 origin production:refs/remotes/origin/production
       - working-directory: backend
         run: npm ci
       - working-directory: backend
         run: npm run syntax-check
       - working-directory: backend
-        run: npm run migration-safety
+        run: npm run migration-safety -- --base origin/production
       - working-directory: backend
         run: npm test
 
