@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import CustomerPortrait from "../components/CustomerPortrait";
 import "../styles/equipmentFinanceDocumentCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 import "../styles/equipmentFinanceDocumentDiscovery.css";
+import "../styles/customerProfilePortrait.css";
 
 const API = "/equipment-catalogue/sales";
 const ACCOUNTS_API = `${API}/finance-lifecycle/accounts`;
@@ -472,6 +474,7 @@ export default function EquipmentFinanceDocumentCentrePage() {
       {!loading && !previewLoading && snapshot ? (
         <>
           <section className="finance-docs__summary">
+            <div className="finance-docs__customer-portrait"><CustomerPortrait customerId={snapshot.agreement?.customer_id} name={snapshot.agreement?.kyc_customer_name || snapshot.agreement?.customer_name_snapshot || "Customer"} size="large" /></div>
             <div className="finance-docs__machine-preview">
               {primaryPhoto ? <img src={primaryPhoto} alt={snapshot.agreement?.asset_name || "Excavator"} /> : <span>No machine photo available</span>}
             </div>
