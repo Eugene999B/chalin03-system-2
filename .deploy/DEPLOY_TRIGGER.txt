@@ -1,8 +1,8 @@
 CHALIN 03 DEPLOYMENT TRIGGER
 
-Mode: NORMAL PRODUCTION
-Branch: production
-Trigger sequence: 1
-Triggered at: 2026-07-26
+Mode: TEST CANDIDATE ONLY
+Branch: fix/opening-deposit-root-final-20260826
+Trigger sequence: 2
+Triggered for Opening Deposit root-stability test only.
 
-This file exists only to create a harmless Git commit after changing Railway and Cloudflare back to the production branch. Editing the trigger sequence causes both platforms to deploy the selected branch without changing application or database behaviour.
+This file exists only to create a harmless Git commit for the non-production CI gate. It must never be merged as production behavior.
