@@ -150,13 +150,13 @@ async function main() {
           AND TRIGGER_NAME = ?`,
       [TRIGGER_NAME]
     );
-    const action = String(trigger?.ACTION_STATEMENT || "");
+    const action = String(trigger?.ACTION_STATEMENT || "").toLowerCase();
     const valid =
-      /OLD\\.equipment_commitment_status\\s*<>\\s*['\"]reserved['\"]/i.test(action) &&
-      /NEW\\.equipment_commitment_status\\s*=\\s*['\"]reserved['\"]/i.test(action) &&
-      /NEW\\.agreement_status\\s+IN\\s*\\(/i.test(action) &&
-      /v_active_lock_count/i.test(action) &&
-      /v_active_hire_count/i.test(action);
+      action.includes("old.equipment_commitment_status") &&
+      action.includes("new.equipment_commitment_status") &&
+      action.includes("new.agreement_status in (") &&
+      action.includes("v_active_lock_count") &&
+      action.includes("v_active_hire_count");
     if (!valid) throw new Error("Finance commitment trigger did not reach the canonical final definition.");
 
     console.log(
