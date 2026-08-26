@@ -43,11 +43,23 @@ function canonicalizeLocalDigits(value) {
   return digits ? `+233${digits}` : "";
 }
 
+function emitInput(input) {
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 function bindPhoneInput(input) {
   if (input.dataset.c03PhoneBound === "true") return;
   input.dataset.c03PhoneBound = "true";
   input.setAttribute("inputmode", "tel");
   input.setAttribute("autocomplete", "tel");
+
+  if (input.value.trim()) {
+    const normalized = canonicalizeLocalDigits(input.value);
+    if (normalized !== input.value) {
+      input.value = normalized;
+      emitInput(input);
+    }
+  }
 
   const normalize = (event) => {
     const raw = event.target.value;
@@ -69,7 +81,7 @@ function bindPhoneInput(input) {
   input.addEventListener("focus", () => {
     if (!input.value.trim()) {
       input.value = "+233";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      emitInput(input);
       requestAnimationFrame(() => {
         try {
           input.setSelectionRange(input.value.length, input.value.length);
