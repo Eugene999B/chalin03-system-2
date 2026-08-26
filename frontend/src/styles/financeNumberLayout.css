@@ -1,0 +1,47 @@
+/* Consistent finance-number alignment: presentation only. */
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+table td,
+table th {
+  vertical-align: middle;
+}
+
+table td:nth-child(n+2),
+table th:nth-child(n+2) {
+  font-variant-numeric: tabular-nums;
+}
+
+.cim-table td:nth-child(5),
+.cim-table th:nth-child(5) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cim-table td:nth-child(4),
+.cim-table th:nth-child(4) {
+  white-space: nowrap;
+}
+
+.cim-table strong,
+.cim-metric strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keep dense sale totals aligned and readable at every width. */
+.returning-customer-results,
+.returning-customer-selected,
+.cim-suggestion-grid {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .cim-table td:nth-child(4),
+  .cim-table td:nth-child(5),
+  .cim-table th:nth-child(4),
+  .cim-table th:nth-child(5) {
+    white-space: normal;
+  }
+}
