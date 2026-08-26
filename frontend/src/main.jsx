@@ -18,8 +18,8 @@ import "./styles/installmentExcavatorModalFinal.css";
 import "./styles/loginHumanCopy.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v40-login-professional-copy";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v40-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v41-login-action-final";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v41-${APP_BUILD_ID}`;
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
