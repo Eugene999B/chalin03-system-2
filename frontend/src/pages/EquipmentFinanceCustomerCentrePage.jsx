@@ -6,6 +6,7 @@ import InstallmentEntityDeleteDialog from "../components/InstallmentEntityDelete
 import CustomerPortrait, { CustomerPortraitPicker } from "../components/CustomerPortrait";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
+import "../styles/customerProfilePortrait.css";
 
 const API = "/equipment-catalogue/sales/phase-one/customers";
 const EMPTY_CUSTOMER = { customer_name: "", customer_type: "individual", phone: "", whatsapp_phone: "", email: "", address: "", contact_person: "", risk_notes: "", profile_photo_data_url: "", is_active: true };
