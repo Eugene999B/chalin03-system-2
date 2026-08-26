@@ -111,5 +111,6 @@ jobs:
         with:
           upload: never
           output: codeql-results
+      # Keep the reviewed SARIF policy as a hard gate.
       - name: Enforce reviewed SARIF policy
         run: node backend/scripts/verifyVersionThreeCodeqlSarif.js codeql-results/javascript.sarif
