@@ -55,7 +55,11 @@ function bindPhoneInput(input) {
     }
 
     if (event.target.value === "+233") {
-      event.target.setSelectionRange(event.target.value.length, event.target.value.length);
+      try {
+        event.target.setSelectionRange(event.target.value.length, event.target.value.length);
+      } catch {
+        // Ignore unsupported selection APIs.
+      }
     }
   };
 
@@ -84,6 +88,10 @@ function bindPhoneInput(input) {
 }
 
 function scan(root = document) {
+  if (root instanceof HTMLInputElement && isPhoneInput(root)) {
+    bindPhoneInput(root);
+  }
+
   root.querySelectorAll?.("input").forEach((input) => {
     if (isPhoneInput(input)) bindPhoneInput(input);
   });
