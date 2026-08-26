@@ -15,8 +15,8 @@ async function ensureCustomerFeatureControlsSchema() {
           branch_id INT NOT NULL PRIMARY KEY,
           customer_identity_editing_enabled TINYINT(1) NOT NULL DEFAULT 1,
           customer_merge_enabled TINYINT(1) NOT NULL DEFAULT 1,
-          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          created_at DATETIME NOT NULL,
+          updated_at DATETIME NOT NULL
         )
       `)
       .catch((error) => {
@@ -44,16 +44,21 @@ async function getCustomerFeatureControls(branchId) {
   const normalizedBranchId = normalizeBranchId(branchId);
   await ensureCustomerFeatureControlsSchema();
 
+  const now = new Date();
   await pool.query(
     `INSERT IGNORE INTO customer_feature_controls (
       branch_id,
       customer_identity_editing_enabled,
-      customer_merge_enabled
-    ) VALUES (?, ?, ?)`,
+      customer_merge_enabled,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?)`,
     [
       normalizedBranchId,
       DEFAULT_CONTROLS.customer_identity_editing_enabled ? 1 : 0,
       DEFAULT_CONTROLS.customer_merge_enabled ? 1 : 0,
+      now,
+      now,
     ]
   );
 
@@ -106,19 +111,25 @@ async function updateCustomerFeatureControls(
     ),
   };
 
+  const now = new Date();
   await pool.query(
     `INSERT INTO customer_feature_controls (
        branch_id,
        customer_identity_editing_enabled,
-       customer_merge_enabled
-     ) VALUES (?, ?, ?)
+       customer_merge_enabled,
+       created_at,
+       updated_at
+     ) VALUES (?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        customer_identity_editing_enabled = VALUES(customer_identity_editing_enabled),
-       customer_merge_enabled = VALUES(customer_merge_enabled)`,
+       customer_merge_enabled = VALUES(customer_merge_enabled),
+       updated_at = VALUES(updated_at)`,
     [
       normalizedBranchId,
       next.customer_identity_editing_enabled ? 1 : 0,
       next.customer_merge_enabled ? 1 : 0,
+      now,
+      now,
     ]
   );
 
