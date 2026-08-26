@@ -39,10 +39,15 @@ assert(
 );
 assert(
   page.includes("axiosClient.get(API)") &&
-    page.includes("axiosClient.post(API, payload)") &&
-    page.includes("axiosClient.put(`${API}/${editing.id}`, payload)") &&
-    page.includes("confirm_duplicate"),
+    page.includes("axiosClient.post(API, { ...form, confirm_duplicate: confirmDuplicate })") &&
+    page.includes("axiosClient.put(`${API}/${editing.id}`, { ...form, confirm_duplicate: confirmDuplicate })"),
   "Authorised Finance staff must be able to create and update duplicate-protected customers."
+);
+assert(
+  page.includes("profile_photo_data_url") &&
+    page.includes("CustomerPortrait") &&
+    page.includes("CustomerPortraitPicker"),
+  "The reusable customer profile must support an optional portrait in view and edit flows."
 );
 assert(
   !page.includes("useWorkspaceContext") &&
