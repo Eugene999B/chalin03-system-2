@@ -42,7 +42,6 @@ jobs:
 
           test = Path('backend/tests/equipmentFinanceOpeningDepositResetSafe.test.js')
           test.write_text('''import test from \"node:test\";\nimport assert from \"node:assert/strict\";\nimport fs from \"node:fs\";\nimport path from \"node:path\";\n\nconst route = fs.readFileSync(path.resolve(process.cwd(), \"routes/equipmentFinanceDepositReservationRoutes.js\"), \"utf8\");\n\ntest(\"Opening Deposit payment path is reset-safe\", () => {\n  assert.match(route, /invalidTriggers\\.length === 0/);\n  assert.match(route, /runEquipmentFinanceOpeningDepositFoundationRepair\\(\\)/);\n  assert.match(route, /Repair\\/reset-proof the Opening Deposit foundation/);\n  assert.match(route, /await assertSchemaReady\\(pool\\)/);\n});\n''')
-          test.write_text(test.read_text().replace('Repair\\/reset-proof','Repair\\/reset-proof'))
           PY
           node --check backend/routes/equipmentFinanceDepositReservationRoutes.js
           node --test backend/tests/equipmentFinanceOpeningDepositResetSafe.test.js
