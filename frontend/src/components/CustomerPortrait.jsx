@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import "../styles/customerProfilePortrait.css";
 
 const PHOTO_API = "/equipment-catalogue/sales/phase-one/customers";
 const MAX_BYTES = 120 * 1024;
