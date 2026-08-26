@@ -41,18 +41,18 @@
   margin-top: 10px;
 }
 
-/* Final login action: dark navy with simple, human wording. */
+/* Final login action: preserve the gold brand button; use dark text for contrast. */
 .gate4.biometric-login .gate4__submit {
-  background: #0a1d31 !important;
-  color: #ffffff !important;
-  border: 1px solid #0a1d31 !important;
-  box-shadow: 0 12px 24px rgba(10, 29, 49, .18) !important;
+  background: #f3c64d !important;
+  color: #0a1d31 !important;
+  border: 1px solid #c99a22 !important;
+  box-shadow: 0 12px 24px rgba(156, 116, 23, .18) !important;
 }
 
 .gate4.biometric-login .gate4__submit:hover:not(:disabled) {
-  background: #102b46 !important;
-  color: #ffffff !important;
-  box-shadow: 0 15px 28px rgba(10, 29, 49, .22) !important;
+  background: #e2b83f !important;
+  color: #07182c !important;
+  box-shadow: 0 15px 28px rgba(156, 116, 23, .22) !important;
 }
 
 .gate4.biometric-login .gate4__submit strong,
@@ -62,14 +62,14 @@
 
 .gate4.biometric-login .gate4__submit strong::after {
   content: "Sign in" !important;
-  color: #ffffff !important;
+  color: #0a1d31 !important;
   font-size: 13px !important;
   font-weight: 800 !important;
 }
 
 .gate4.biometric-login .gate4__submit small::after {
   content: "Secure access to your Chalin 03 account" !important;
-  color: rgba(255,255,255,.68) !important;
+  color: rgba(10,29,49,.68) !important;
   font-size: 9px !important;
 }
 
