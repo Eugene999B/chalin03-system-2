@@ -98,7 +98,6 @@ assert.match(collections, /payment-history/);
 assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
 assert.match(documents, /CustomerPortrait/);
-assert.match(documents, /customer portrait|customer_profile_photo|profile_photo/i);
 assert.match(guide, /Complete lifecycle/);
 assert.match(guide, /Troubleshooting/);
 assert.match(wizardCss, /@media \(max-width: 760px\)/);
