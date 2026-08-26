@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - 'agent/**'
+  pull_request:
+    branches:
+      - production
 
 permissions:
   contents: read
