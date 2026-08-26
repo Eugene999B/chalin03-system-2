@@ -59,7 +59,7 @@ function splitSqlScript(sqlText) {
   return statements;
 }
 
-async function main() {
+async function finalize() {
   const connection = await mysql.createConnection(connectionOptions());
   let lockAcquired = false;
   try {
@@ -92,6 +92,7 @@ async function main() {
     }
 
     console.log(JSON.stringify({ verified: true, database_name: databaseName, trigger: trigger.TRIGGER_NAME }, null, 2));
+    return { verified: true, database_name: databaseName, trigger: trigger.TRIGGER_NAME };
   } finally {
     if (lockAcquired) {
       try { await connection.query("SELECT RELEASE_LOCK(?)", [LOCK_NAME]); } catch {}
@@ -100,8 +101,12 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error("Opening Deposit reservation trigger finalization failed.");
-  console.error(error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  finalize().catch((error) => {
+    console.error("Opening Deposit reservation trigger finalization failed.");
+    console.error(error.message);
+    process.exit(1);
+  });
+}
+
+module.exports = { finalize };
