@@ -19,10 +19,9 @@ import "./styles/loginHumanCopy.css";
 import "./styles/financeNumberLayout.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v44-input-hotfix";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v44-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v46-auth-provider-hotfix";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v46-${APP_BUILD_ID}`;
 
-// Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
 
