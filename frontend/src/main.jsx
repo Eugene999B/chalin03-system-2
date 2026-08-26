@@ -17,8 +17,8 @@ import "./styles/adminMobileHotfix.css";
 import "./styles/installmentExcavatorModalFinal.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v37-excavator-optional-fields";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v37-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v38-customer-identity-guardrails";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v38-${APP_BUILD_ID}`;
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
@@ -55,9 +55,7 @@ async function removeDevelopmentServiceWorkerCaches() {
 
       await Promise.all(
         cacheNames
-          .filter((cacheName) =>
-            String(cacheName).startsWith("chalin03-")
-          )
+          .filter((cacheName) => String(cacheName).startsWith("chalin03-"))
           .map((cacheName) => caches.delete(cacheName))
       );
     }
@@ -106,13 +104,10 @@ if ("serviceWorker" in navigator) {
       });
 
       navigator.serviceWorker
-        .register(
-          `/sw.js?release=${encodeURIComponent(APP_SHELL_RELEASE)}`,
-          {
-            scope: "/",
-            updateViaCache: "none",
-          }
-        )
+        .register(`/sw.js?release=${encodeURIComponent(APP_SHELL_RELEASE)}`, {
+          scope: "/",
+          updateViaCache: "none",
+        })
         .then((registration) => {
           registration.waiting?.postMessage({
             type: "CHALIN03_SKIP_WAITING",
