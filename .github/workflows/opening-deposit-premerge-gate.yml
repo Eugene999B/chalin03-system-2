@@ -1,0 +1,53 @@
+name: Opening Deposit Premerge Gate
+
+on:
+  push:
+    branches:
+      - fix/opening-deposit-root-final-20260826
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Backend install and tests
+        working-directory: backend
+        run: |
+          npm ci
+          npm run syntax-check
+          npm test
+
+      - name: Frontend install, tests and build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Critical production contract checks
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const route = fs.readFileSync('backend/routes/equipmentFinanceDepositReservationRoutes.js', 'utf8');
+          const railway = JSON.parse(fs.readFileSync('railway.json', 'utf8'));
+          const reset = fs.readFileSync('backend/services/installmentFinanceResetProductionService.js', 'utf8');
+          const canonicalizer = fs.readFileSync('backend/scripts/canonicalizeEquipmentFinanceOpeningDepositReservationTrigger.js', 'utf8');
+          if (!canonicalizer.includes('trg_equipment_finance_reservation_gate_before_insert')) throw new Error('Canonicalizer missing reservation trigger');
+          if (!canonicalizer.includes("NEW.lock_status = 'installment_active'")) throw new Error('Canonicalizer missing canonical positive status guard');
+          if (!canonicalizer.includes("v_deposit_received + 0.01 < v_deposit_required")) throw new Error('Canonicalizer missing approved deposit tolerance');
+          if (!railway.deploy.preDeployCommand.includes('canonicalizeEquipmentFinanceOpeningDepositReservationTrigger.js')) throw new Error('Railway predeploy does not canonicalize reservation trigger');
+          if (railway.deploy.startCommand.includes('runEquipmentFinanceOpeningDepositFoundationRepair.js')) throw new Error('Legacy migration-dependent startup repair remains');
+          if (!reset.includes('canonicalizeEquipmentFinanceOpeningDepositReservationTrigger')) throw new Error('Reset does not canonicalize Opening Deposit');
+          if (!route.includes('function triggerDefinitionIsValid')) throw new Error('Route readiness function missing');
+          console.log('Opening Deposit production contract checks passed.');
+          NODE
