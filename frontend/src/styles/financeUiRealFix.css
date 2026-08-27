@@ -35,7 +35,34 @@
   }
 }
 
-/* Keep Start New Installment compact: the optional photo panel must not push the form far below. */
+/* Start New Installment: the route-specific signature layer must not reintroduce the blank top area. */
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple.finance-start-wizard,
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple {
+  padding-top: .35rem !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero {
+  min-height: auto !important;
+  padding: .8rem .95rem !important;
+  border-radius: 15px !important;
+  align-items: center !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero h1 {
+  font-size: clamp(1.45rem, 3vw, 2rem) !important;
+  line-height: 1.03 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero span {
+  margin-top: .3rem !important;
+  font-size: .86rem !important;
+  line-height: 1.45 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__steps {
+  margin: .35rem 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__panel {
+  margin-top: .35rem !important;
+}
+
+/* The optional start-screen customer photo is compact so the actual customer form remains immediately visible. */
 .finance-customer-photo {
   grid-template-columns: minmax(0, 1fr) 180px !important;
   gap: .75rem !important;
