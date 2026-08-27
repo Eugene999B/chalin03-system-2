@@ -51,12 +51,32 @@ function requestKey(agreementId) {
   return `finance-collection:${agreementId}:${uuid}`;
 }
 
-function isCollectable(account) {
+function paymentBreakdown(account) {
+  const totalPaid = Number(account?.amount_paid || 0);
+  const depositRequired = Number(account?.deposit_required || 0);
+  const depositReceived = Number(account?.deposit_received || 0);
+  const financedAmount = Number(account?.financed_amount || 0);
+  const installmentPaid = Math.max(totalPaid - depositReceived, 0);
+  const installmentOutstanding = Math.max(financedAmount - installmentPaid, 0);
+  const openingDepositOutstanding = Math.max(depositRequired - depositReceived, 0);
+  return {
+    installmentPaid: Number(installmentPaid.toFixed(2)),
+    installmentOutstanding: Number(installmentOutstanding.toFixed(2)),
+    openingDepositOutstanding: Number(openingDepositOutstanding.toFixed(2)),
+  };
+}
+
+function isInstallmentCollectable(account) {
+  const breakdown = paymentBreakdown(account);
   return (
     account.reserved &&
     !account.ownership_id &&
-    Number(account.outstanding_balance || 0) > 0.01
+    breakdown.installmentOutstanding > 0.01
   );
+}
+
+function hasOpeningDepositOutstanding(account) {
+  return paymentBreakdown(account).openingDepositOutstanding > 0.01;
 }
 
 export default function EquipmentFinanceCollectionsMinimalPage({ embedded = false }) {
@@ -168,7 +188,9 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
   const visibleAccounts = useMemo(() => {
     const term = search.trim().toLowerCase();
     return accounts.filter((account) => {
-      if (!isCollectable(account)) return false;
+      const breakdown = paymentBreakdown(account);
+      const relevant = breakdown.installmentOutstanding > 0.01 || breakdown.openingDepositOutstanding > 0.01;
+      if (!account.reserved || account.ownership_id || !relevant) return false;
       if (!term) return true;
       return [
         account.agreement_number,
@@ -187,13 +209,18 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
   async function recordPayment(event) {
     event.preventDefault();
     if (!selected) return;
+    const breakdown = paymentBreakdown(selected);
+    if (breakdown.installmentOutstanding <= 0.01) {
+      setProblem("There is no outstanding installment balance on this account. Use Opening Deposits for any remaining opening deposit balance.");
+      return;
+    }
     const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setProblem("Enter a valid payment amount.");
       return;
     }
-    if (amount > Number(selected.outstanding_balance || 0) + 0.01) {
-      setProblem("The payment cannot exceed the official outstanding balance.");
+    if (amount > breakdown.installmentOutstanding + 0.01) {
+      setProblem("The payment cannot exceed the outstanding installment balance.");
       return;
     }
 
@@ -249,7 +276,7 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
       {!embedded ? (
         <div className="finance-simple__notice is-info">
-          Official balances are returned by the backend from committed receipts and schedule allocations.
+          Installment balances follow the existing payment schedule. Opening deposits are shown separately and are never treated as installments.
         </div>
       ) : null}
 
@@ -265,7 +292,7 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
           <div className="finance-simple__toolbar">
             <div>
               <p className="finance-simple__eyebrow">Choose account</p>
-              <h2>{visibleAccounts.length} payment-ready account(s)</h2>
+              <h2>{visibleAccounts.filter(isInstallmentCollectable).length} installment payment-ready account(s)</h2>
             </div>
             <input
               aria-label="Search payment-ready Finance accounts"
@@ -278,37 +305,47 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
 
           {loading ? <div className="finance-simple__empty">Loading official accounts…</div> : null}
           {!loading && !visibleAccounts.length ? (
-            <div className="finance-simple__empty">No reserved installment account currently has an outstanding balance.</div>
+            <div className="finance-simple__empty">No account currently has an outstanding installment balance. Check Opening Deposits for any remaining opening deposit.</div>
           ) : null}
 
           <div className="finance-simplified__compact-register">
-            {visibleAccounts.map((account) => (
-              <article className="finance-simplified__compact-record" key={account.agreement_id}>
-                <div>
-                  <small>{account.agreement_number}</small>
-                  <h3>{account.customer_name}</h3>
-                  <p>{account.asset_code} — {account.asset_name}</p>
-                </div>
-                <div className="finance-simplified__compact-fact">
-                  <span>Official balance</span>
-                  <strong data-testid="collection-official-balance">{money(account.outstanding_balance)}</strong>
-                </div>
-                <div className="finance-simplified__compact-fact">
-                  <span>Next due</span>
-                  <strong>{dateLabel(account.next_due_date)}</strong>
-                </div>
-                <div className="finance-simplified__compact-record-actions">
-                  <button
-                    className="is-primary"
-                    type="button"
-                    disabled={!canCollect}
-                    onClick={() => loadDetail(account)}
-                  >
-                    Select Account
-                  </button>
-                </div>
-              </article>
-            ))}
+            {visibleAccounts.map((account) => {
+              const breakdown = paymentBreakdown(account);
+              const installmentReady = breakdown.installmentOutstanding > 0.01;
+              return (
+                <article className="finance-simplified__compact-record" key={account.agreement_id}>
+                  <div>
+                    <small>{account.agreement_number}</small>
+                    <h3>{account.customer_name}</h3>
+                    <p>{account.asset_code} — {account.asset_name}</p>
+                  </div>
+                  <div className="finance-simplified__compact-fact">
+                    <span>Installment balance</span>
+                    <strong data-testid="collection-official-balance">{money(breakdown.installmentOutstanding)}</strong>
+                  </div>
+                  <div className="finance-simplified__compact-fact">
+                    <span>Next installment due</span>
+                    <strong>{dateLabel(account.next_installment_due_date || account.next_due_date)}</strong>
+                  </div>
+                  {breakdown.openingDepositOutstanding > 0.01 ? (
+                    <div className="finance-simplified__compact-fact">
+                      <span>Opening deposit outstanding</span>
+                      <strong>{money(breakdown.openingDepositOutstanding)}</strong>
+                    </div>
+                  ) : null}
+                  <div className="finance-simplified__compact-record-actions">
+                    <button
+                      className="is-primary"
+                      type="button"
+                      disabled={!canCollect || !installmentReady}
+                      onClick={() => loadDetail(account)}
+                    >
+                      {installmentReady ? "Select Account" : "Opening Deposit Required"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -326,91 +363,107 @@ export default function EquipmentFinanceCollectionsMinimalPage({ embedded = fals
             </div>
 
             {detailLoading ? <div className="finance-simple__empty">Loading account details…</div> : null}
-            {!detailLoading ? (
-              <>
-                {detail?.reconciliation?.consistent === false ? (
-                  <div className="finance-simple__alert is-warning" data-testid="finance-reconciliation-warning">
-                    This account is temporarily locked because its receipts, allocations, schedule and ledger do not reconcile.
-                  </div>
-                ) : null}
-                <div className="finance-simple__summary">
-                  <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
-                  <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
-                  <article><span>Official balance</span><strong data-testid="account-detail-official-balance">{money(selected.outstanding_balance)}</strong></article>
-                  <article><span>Next due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
-                </div>
-
-                <form onSubmit={recordPayment}>
-                  <div className="finance-simple__grid">
-                    <label className="finance-simple__field">
-                      <span>Amount received</span>
-                      <input type="number" min="0.01" max={selected.outstanding_balance} step="0.01" required value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} />
-                    </label>
-                    <label className="finance-simple__field">
-                      <span>Payment method</span>
-                      <select value={form.payment_method} onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}>
-                        <option value="cash">Cash</option>
-                        <option value="momo">Mobile money</option>
-                        <option value="bank">Bank transfer</option>
-                        <option value="cheque">Cheque</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
-                    <label className="finance-simple__field">
-                      <span>Reference number</span>
-                      <input value={form.reference_number} onChange={(event) => setForm((current) => ({ ...current, reference_number: event.target.value }))} />
-                    </label>
-                    <label className="finance-simple__field">
-                      <span>Payment note</span>
-                      <input value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
-                    </label>
-                  </div>
-                  <div className="finance-simple__sticky-actions">
-                    <span>Maximum: {money(selected.outstanding_balance)}</span>
-                    <div>
-                      <button type="button" onClick={closeDetail}>Cancel</button>
-                      <button className="is-primary" type="submit" disabled={!canCollect || saving || detail?.reconciliation?.consistent === false}>
-                        {saving ? "Recording payment…" : "Record Payment"}
-                      </button>
+            {!detailLoading ? (() => {
+              const breakdown = paymentBreakdown(selected);
+              const installmentReady = breakdown.installmentOutstanding > 0.01;
+              return (
+                <>
+                  {detail?.reconciliation?.consistent === false ? (
+                    <div className="finance-simple__alert is-warning" data-testid="finance-reconciliation-warning">
+                      Reconciliation evidence is available for review. Normal installment posting remains separate from opening-deposit handling.
                     </div>
+                  ) : null}
+                  <div className="finance-simple__summary">
+                    <article><span>Purchase price</span><strong>{money(selected.total_amount)}</strong></article>
+                    <article><span>Total paid</span><strong>{money(selected.amount_paid)}</strong></article>
+                    <article><span>Installment balance</span><strong data-testid="account-detail-official-balance">{money(breakdown.installmentOutstanding)}</strong></article>
+                    <article><span>Next installment due</span><strong>{dateLabel(selected.next_installment_due_date || selected.next_due_date)}</strong></article>
+                    {breakdown.openingDepositOutstanding > 0.01 ? (
+                      <article><span>Opening deposit outstanding</span><strong>{money(breakdown.openingDepositOutstanding)}</strong></article>
+                    ) : null}
                   </div>
-                </form>
 
-                <details>
-                  <summary>Show payment schedule and receipt history</summary>
-                  <div className="finance-simple__grid">
-                    <section className="finance-simple__section">
-                      <h3>Payment schedule</h3>
-                      <div className="finance-simple__schedule-list">
-                        {(detail?.schedule || []).map((row) => (
-                          <article key={row.id || row.sequence_number}>
-                            <span>Payment {row.sequence_number}</span>
-                            <strong>{dateLabel(row.due_date)}</strong>
-                            <b>{money(row.scheduled_amount)}</b>
-                            <small>{label(row.schedule_status)}</small>
-                          </article>
-                        ))}
+                  {installmentReady ? (
+                    <form onSubmit={recordPayment}>
+                      <div className="finance-simple__grid">
+                        <label className="finance-simple__field">
+                          <span>Amount received</span>
+                          <input type="number" min="0.01" max={breakdown.installmentOutstanding} step="0.01" required value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} />
+                        </label>
+                        <label className="finance-simple__field">
+                          <span>Payment method</span>
+                          <select value={form.payment_method} onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}>
+                            <option value="cash">Cash</option>
+                            <option value="momo">Mobile money</option>
+                            <option value="bank">Bank transfer</option>
+                            <option value="cheque">Cheque</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </label>
+                        <label className="finance-simple__field">
+                          <span>Reference number</span>
+                          <input value={form.reference_number} onChange={(event) => setForm((current) => ({ ...current, reference_number: event.target.value }))} />
+                        </label>
+                        <label className="finance-simple__field">
+                          <span>Payment note</span>
+                          <input value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
+                        </label>
                       </div>
-                    </section>
-                    <section className="finance-simple__section" data-testid="payment-history">
-                      <h3>Payment history</h3>
-                      {!(detail?.payments || []).length ? <div className="finance-simple__empty">No payment has been recorded.</div> : (
+                      <div className="finance-simple__sticky-actions">
+                        <span>Maximum: {money(breakdown.installmentOutstanding)}</span>
+                        <div>
+                          <button type="button" onClick={closeDetail}>Cancel</button>
+                          <button className="is-primary" type="submit" disabled={!canCollect || saving}>
+                            {saving ? "Recording payment…" : "Record Payment"}
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="finance-simple__notice is-info">
+                      The installment schedule is fully paid. {hasOpeningDepositOutstanding(selected) ? "The remaining balance is an opening deposit and should be handled in Opening Deposits." : "There is no remaining installment payment to collect."}
+                      <div style={{ marginTop: "0.75rem" }}>
+                        <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=deposit">Open Opening Deposits</Link>
+                      </div>
+                    </div>
+                  )}
+
+                  <details>
+                    <summary>Show payment schedule and receipt history</summary>
+                    <div className="finance-simple__grid">
+                      <section className="finance-simple__section">
+                        <h3>Payment schedule</h3>
                         <div className="finance-simple__schedule-list">
-                          {(detail?.payments || []).map((payment) => (
-                            <article key={payment.id} data-testid="payment-history-row">
-                              <span>{payment.receipt_number || payment.payment_number}</span>
-                              <strong>{dateLabel(payment.payment_date)}</strong>
-                              <b>{money(payment.amount)}</b>
-                              <small>{label(payment.payment_method)}</small>
+                          {(detail?.schedule || []).map((row) => (
+                            <article key={row.id || row.sequence_number}>
+                              <span>Payment {row.sequence_number}</span>
+                              <strong>{dateLabel(row.due_date)}</strong>
+                              <b>{money(row.scheduled_amount)}</b>
+                              <small>{label(row.schedule_status)}</small>
                             </article>
                           ))}
                         </div>
-                      )}
-                    </section>
-                  </div>
-                </details>
-              </>
-            ) : null}
+                      </section>
+                      <section className="finance-simple__section" data-testid="payment-history">
+                        <h3>Payment history</h3>
+                        {!(detail?.payments || []).length ? <div className="finance-simple__empty">No payment has been recorded.</div> : (
+                          <div className="finance-simple__schedule-list">
+                            {(detail?.payments || []).map((payment) => (
+                              <article key={payment.id} data-testid="payment-history-row">
+                                <span>{payment.receipt_number || payment.payment_number}</span>
+                                <strong>{dateLabel(payment.payment_date)}</strong>
+                                <b>{money(payment.amount)}</b>
+                                <small>{label(payment.payment_method)}</small>
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    </div>
+                  </details>
+                </>
+              );
+            })() : null}
           </section>
         </div>
       ) : null}
