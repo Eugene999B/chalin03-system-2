@@ -46,10 +46,6 @@ function options() {
   };
 }
 
-function quote(value) {
-  return `\`${String(value).replace(/`/g, "``")}\``;
-}
-
 async function main() {
   const connection = await mysql.createConnection(options());
   let locked = false;
@@ -69,10 +65,8 @@ async function main() {
     locked = Number(lockRow?.acquired || 0) === 1;
     if (!locked) throw new Error("Could not acquire the Finance runtime-contract repair lock.");
 
-    // The original 20260729 migration only ADDED these ENUM columns when missing.
-    // Existing production installations could therefore retain stale ENUM definitions.
     const [paymentStageRows] = await connection.query(
-      `SELECT COLUMN_TYPE, IS_NULLABLE
+      `SELECT COLUMN_TYPE
          FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'equipment_sale_payments'
@@ -109,17 +103,37 @@ async function main() {
       );
     }
 
-    // Finance is company-wide. Location remains optional contextual origin data.
-    for (const tableName of ["equipment_sale_agreements", "equipment_sale_payments", "equipment_asset_sale_locks"]) {
-      const column = "hire_location_id";
-      const [[row]] = await connection.query(
-        `SELECT IS_NULLABLE FROM information_schema.COLUMNS
-          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1`,
-        [tableName, column]
-      );
-      if (row && String(row.IS_NULLABLE).toUpperCase() !== "YES") {
-        await connection.query(`ALTER TABLE ${quote(tableName)} MODIFY COLUMN ${quote(column)} INT NULL`);
-      }
+    const [agreementLocationRows] = await connection.query(
+      `SELECT IS_NULLABLE FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'equipment_sale_agreements'
+          AND COLUMN_NAME = 'hire_location_id'
+        LIMIT 1`
+    );
+    if (agreementLocationRows[0] && String(agreementLocationRows[0].IS_NULLABLE).toUpperCase() !== "YES") {
+      await connection.query("ALTER TABLE equipment_sale_agreements MODIFY COLUMN hire_location_id INT NULL");
+    }
+
+    const [paymentLocationRows] = await connection.query(
+      `SELECT IS_NULLABLE FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'equipment_sale_payments'
+          AND COLUMN_NAME = 'hire_location_id'
+        LIMIT 1`
+    );
+    if (paymentLocationRows[0] && String(paymentLocationRows[0].IS_NULLABLE).toUpperCase() !== "YES") {
+      await connection.query("ALTER TABLE equipment_sale_payments MODIFY COLUMN hire_location_id INT NULL");
+    }
+
+    const [lockLocationRows] = await connection.query(
+      `SELECT IS_NULLABLE FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'equipment_asset_sale_locks'
+          AND COLUMN_NAME = 'hire_location_id'
+        LIMIT 1`
+    );
+    if (lockLocationRows[0] && String(lockLocationRows[0].IS_NULLABLE).toUpperCase() !== "YES") {
+      await connection.query("ALTER TABLE equipment_asset_sale_locks MODIFY COLUMN hire_location_id INT NULL");
     }
 
     // Repair only dates that are impossible for the agreement lifecycle (earlier than
@@ -194,8 +208,6 @@ async function main() {
          AND schedule.due_date < DATE(agreement.created_at)`
     );
 
-    // Prevent recurrence: newly created/updated controlled Finance schedules may not carry
-    // a due date before the agreement itself. Existing legitimate overdue rows are unaffected.
     await connection.query("DROP TRIGGER IF EXISTS trg_equipment_finance_schedule_date_gate_before_insert");
     await connection.query(
       `CREATE TRIGGER trg_equipment_finance_schedule_date_gate_before_insert
