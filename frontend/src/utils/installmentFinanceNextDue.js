@@ -81,3 +81,4 @@ export function installInstallmentFinanceNextDue() {
 }
 
 export { nextDueFromSchedule };
+installInstallmentFinanceNextDue();
