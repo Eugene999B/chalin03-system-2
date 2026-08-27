@@ -73,10 +73,18 @@ async function main() {
         DECLARE done INT DEFAULT 0;
         DECLARE v_schedule_id BIGINT;
         DECLARE cur CURSOR FOR
-          SELECT s.id FROM equipment_installment_schedule s
+          SELECT s.id
+          FROM equipment_installment_schedule s
+          LEFT JOIN (
+            SELECT a.schedule_id, SUM(a.allocated_amount) AS allocated_amount
+            FROM equipment_sale_payment_allocations a
+            INNER JOIN equipment_sale_payments p ON p.id = a.payment_id
+            WHERE p.is_voided = FALSE
+            GROUP BY a.schedule_id
+          ) x ON x.schedule_id = s.id
           WHERE s.agreement_id = p_agreement_id
             AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
-            AND s.amount_paid <= 0.009
+            AND COALESCE(x.allocated_amount, 0) <= 0.009
           ORDER BY s.due_date, s.sequence_number, s.id;
         DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
 
@@ -103,15 +111,22 @@ async function main() {
         ) x ON x.schedule_id = s.id
         WHERE s.agreement_id = p_agreement_id
           AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
-          AND COALESCE(x.allocated_amount, 0) > 0;
+          AND COALESCE(x.allocated_amount, 0) > 0.009;
 
         SET v_distributable = GREATEST(v_financed - v_allocated - v_fixed_unallocated, 0.00);
 
         SELECT COUNT(*) INTO v_unpaid_count
         FROM equipment_installment_schedule s
+        LEFT JOIN (
+          SELECT a.schedule_id, SUM(a.allocated_amount) AS allocated_amount
+          FROM equipment_sale_payment_allocations a
+          INNER JOIN equipment_sale_payments p ON p.id = a.payment_id
+          WHERE p.is_voided = FALSE
+          GROUP BY a.schedule_id
+        ) x ON x.schedule_id = s.id
         WHERE s.agreement_id = p_agreement_id
           AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
-          AND s.amount_paid <= 0.009;
+          AND COALESCE(x.allocated_amount, 0) <= 0.009;
 
         IF v_unpaid_count > 0 AND v_distributable > 0 THEN
           OPEN cur;
@@ -134,15 +149,17 @@ async function main() {
 
         UPDATE equipment_sale_agreements agreement
         SET agreement.next_due_date = (
-              SELECT MIN(s.due_date) FROM equipment_installment_schedule s
+              SELECT MIN(s.due_date)
+              FROM equipment_installment_schedule s
+              LEFT JOIN (
+                SELECT a.schedule_id, SUM(a.allocated_amount) AS allocated_amount
+                FROM equipment_sale_payment_allocations a
+                INNER JOIN equipment_sale_payments p ON p.id = a.payment_id
+                WHERE p.is_voided = FALSE GROUP BY a.schedule_id
+              ) x ON x.schedule_id = s.id
               WHERE s.agreement_id = p_agreement_id
                 AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
-                AND GREATEST(s.scheduled_amount - COALESCE((
-                  SELECT SUM(a.allocated_amount)
-                  FROM equipment_sale_payment_allocations a
-                  INNER JOIN equipment_sale_payments p ON p.id = a.payment_id
-                  WHERE a.schedule_id = s.id AND p.is_voided = FALSE
-                ), 0), 0) > 0.009
+                AND GREATEST(s.scheduled_amount - COALESCE(x.allocated_amount, 0), 0) > 0.009
             ),
             agreement.final_due_date = (
               SELECT MAX(s.due_date) FROM equipment_installment_schedule s
@@ -200,21 +217,45 @@ async function main() {
     `);
 
     await connection.query(`
+      UPDATE equipment_installment_schedule s
+      LEFT JOIN (
+        SELECT a.schedule_id, COALESCE(SUM(a.allocated_amount), 0) AS allocated_amount
+        FROM equipment_sale_payment_allocations a
+        INNER JOIN equipment_sale_payments p ON p.id = a.payment_id
+        WHERE p.is_voided = FALSE
+        GROUP BY a.schedule_id
+      ) x ON x.schedule_id = s.id
+      SET s.amount_paid = LEAST(s.scheduled_amount, COALESCE(x.allocated_amount, 0)),
+          s.schedule_status = CASE
+            WHEN s.schedule_status IN ('cancelled','waived','rescheduled') THEN s.schedule_status
+            WHEN COALESCE(x.allocated_amount, 0) + 0.01 >= s.scheduled_amount THEN 'paid'
+            WHEN COALESCE(x.allocated_amount, 0) > 0.009 THEN 'partial'
+            WHEN s.due_date < CURDATE() THEN 'overdue'
+            WHEN s.due_date = CURDATE() THEN 'due'
+            ELSE 'upcoming'
+          END,
+          s.updated_at = NOW()
+      WHERE s.agreement_id IS NOT NULL
+    `);
+
+    await connection.query(`
       UPDATE equipment_sale_agreements a
       SET a.first_due_date = (
             SELECT MIN(s.due_date) FROM equipment_installment_schedule s
             WHERE s.agreement_id = a.id AND s.schedule_status <> 'rescheduled'
           ),
           a.next_due_date = (
-            SELECT MIN(s.due_date) FROM equipment_installment_schedule s
+            SELECT MIN(s.due_date)
+            FROM equipment_installment_schedule s
+            LEFT JOIN (
+              SELECT al.schedule_id, SUM(al.allocated_amount) AS allocated_amount
+              FROM equipment_sale_payment_allocations al
+              INNER JOIN equipment_sale_payments p ON p.id = al.payment_id
+              WHERE p.is_voided = FALSE GROUP BY al.schedule_id
+            ) x ON x.schedule_id = s.id
             WHERE s.agreement_id = a.id
               AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
-              AND GREATEST(s.scheduled_amount - COALESCE((
-                SELECT SUM(al.allocated_amount)
-                FROM equipment_sale_payment_allocations al
-                INNER JOIN equipment_sale_payments p ON p.id = al.payment_id
-                WHERE al.schedule_id = s.id AND p.is_voided = FALSE
-              ), 0), 0) > 0.009
+              AND GREATEST(s.scheduled_amount - COALESCE(x.allocated_amount, 0), 0) > 0.009
           ),
           a.final_due_date = (
             SELECT MAX(s.due_date) FROM equipment_installment_schedule s
