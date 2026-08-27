@@ -1,0 +1,18 @@
+title = "Chalin 03 reviewed Gitleaks configuration"
+description = "Reviewed false-positive history exceptions are limited to the generic-api-key rule and exact historical commits only."
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Reviewed AI/test fixtures from August 6-12 2026; these historical commits contain deterministic non-secret fixtures that trigger generic-api-key."
+  condition = "OR"
+  commits = [
+    "728c71d3059c7b980e62ae1d7b8b529219edb037",
+    "515db3b30630214b13b93fcd86bbb281d0a9a2bd",
+    "83a33dfb472c043d602f19eb11f6ca9a84c8cbac",
+    "2cd8aa7f78e5cf033b438e5e0898f2928d4ee166",
+  ]

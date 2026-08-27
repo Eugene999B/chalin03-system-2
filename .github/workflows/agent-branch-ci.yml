@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - 'agent/**'
+  pull_request:
+    branches:
+      - production
 
 permissions:
   contents: read
@@ -20,6 +23,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -30,7 +35,7 @@ jobs:
       - working-directory: backend
         run: npm run syntax-check
       - working-directory: backend
-        run: npm run migration-safety
+        run: npm run migration-safety -- --base origin/production
       - working-directory: backend
         run: npm test
 
@@ -109,5 +114,6 @@ jobs:
         with:
           upload: never
           output: codeql-results
+      # Keep the reviewed SARIF policy as a hard gate.
       - name: Enforce reviewed SARIF policy
         run: node backend/scripts/verifyVersionThreeCodeqlSarif.js codeql-results/javascript.sarif

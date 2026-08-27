@@ -119,7 +119,7 @@ async function finalize() {
                       SET MESSAGE_TEXT = 'Reservation asset or origin does not match the Finance agreement.';
               END IF;
 
-              IF NEW.lock_status <> 'installment_active' THEN
+              IF NOT (NEW.lock_status = 'installment_active') THEN
                   SIGNAL SQLSTATE '45000'
                       SET MESSAGE_TEXT = 'Approved-credit Finance reservations must use installment_active status.';
               END IF;
@@ -170,8 +170,14 @@ async function finalize() {
       [TRIGGER_NAME]
     );
     const action = String(trigger?.ACTION_STATEMENT || "");
+    if (!/NEW\.lock_status\s*=\s*'installment_active'/i.test(action)) {
+      throw new Error("The Opening Deposit reservation trigger is missing the canonical installment_active guard.");
+    }
+    if (!/SIGNAL SQLSTATE '45000'/i.test(action)) {
+      throw new Error("The Opening Deposit reservation trigger is missing the invalid-status rejection branch.");
+    }
     if (!/v_deposit_received\s*\+\s*0\.01\s*<\s*v_deposit_required/i.test(action)) {
-      throw new Error("The Opening Deposit reservation trigger did not reach the approved final definition.");
+      throw new Error("The Opening Deposit reservation trigger did not reach the canonical deposit threshold definition.");
     }
 
     console.log(JSON.stringify({ verified: true, database_name: databaseName, trigger: trigger.TRIGGER_NAME }, null, 2));
