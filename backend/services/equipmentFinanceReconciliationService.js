@@ -32,8 +32,8 @@ async function getDirectScheduleNextDue(connection, agreementId) {
     `SELECT s.due_date
        FROM equipment_installment_schedule s
       WHERE s.agreement_id = ?
-        AND s.schedule_status NOT IN ('cancelled','waived','rescheduled','paid')
-        AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
+        AND s.schedule_status IN ('upcoming','due','partial','overdue')
+        AND COALESCE(s.due_date, '') <> ''
       ORDER BY s.due_date, s.sequence_number
       LIMIT 1`,
     [Number(agreementId)]
