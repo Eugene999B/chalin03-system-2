@@ -22,22 +22,61 @@ function firstValidDate(candidates, createdDate) {
     (createdDate ? plusDays(createdDate, FALLBACK_DAYS) : null);
 }
 
-function operationalize(result) {
+async function scheduleTruth(connection, agreementId, createdDate) {
+  const [rows] = await connection.query(
+    `SELECT
+       MIN(CASE
+         WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
+          AND DATE(s.due_date) >= DATE(?)
+          AND GREATEST(
+            s.scheduled_amount + COALESCE(s.late_charge_amount, 0) - COALESCE(s.waived_charge_amount, 0)
+            - COALESCE(ae.allocated_amount, 0),
+            0
+          ) > 0.009
+         THEN s.due_date
+       END) AS allocation_backed_next_due_date,
+       MIN(CASE
+         WHEN s.schedule_status NOT IN ('rescheduled')
+          AND DATE(s.due_date) >= DATE(?)
+         THEN s.due_date
+       END) AS allocation_backed_first_due_date,
+       MAX(CASE
+         WHEN s.schedule_status <> 'rescheduled'
+          AND DATE(s.due_date) >= DATE(?)
+         THEN s.due_date
+       END) AS allocation_backed_final_due_date
+     FROM equipment_installment_schedule s
+     LEFT JOIN (
+       SELECT allocation.schedule_id,
+              SUM(CASE WHEN payment.is_voided = FALSE THEN allocation.allocated_amount ELSE 0 END) AS allocated_amount
+         FROM equipment_sale_payment_allocations allocation
+         INNER JOIN equipment_sale_payments payment ON payment.id = allocation.payment_id
+        GROUP BY allocation.schedule_id
+     ) ae ON ae.schedule_id = s.id
+    WHERE s.agreement_id = ?`,
+    [createdDate || "1000-01-01", createdDate || "1000-01-01", createdDate || "1000-01-01", agreementId]
+  );
+  return rows[0] || {};
+}
+
+function operationalize(result, truth = {}) {
   const agreement = result?.agreement || {};
   const createdDate = toDateText(agreement.created_at);
   const firstDue = firstValidDate([
+    truth.allocation_backed_first_due_date,
     result?.calculated?.first_schedule_due_date,
     result?.evidence?.first_schedule_due_date,
     agreement.first_due_date,
   ], createdDate);
   const nextDue = firstValidDate([
+    truth.allocation_backed_next_due_date,
     result?.calculated?.next_due_date,
     result?.evidence?.next_due_date,
-    result?.evidence?.first_schedule_due_date,
     agreement.next_due_date,
     firstDue,
   ], createdDate);
   const finalDue = firstValidDate([
+    truth.allocation_backed_final_due_date,
     result?.calculated?.final_schedule_due_date,
     result?.evidence?.final_schedule_due_date,
     agreement.final_due_date,
@@ -46,8 +85,6 @@ function operationalize(result) {
 
   return {
     ...result,
-    // Reconciliation remains visible through mismatches, but historical data defects do not
-    // lock normal collections or other routine Finance mutations.
     consistent: true,
     collection_operational: true,
     calculated: {
@@ -60,16 +97,60 @@ function operationalize(result) {
 }
 
 async function reconcileFinanceAgreement(agreementId, options = {}) {
-  return operationalize(await base.reconcileFinanceAgreement(agreementId, options));
+  const result = await base.reconcileFinanceAgreement(agreementId, options);
+  const connection = options.connection || undefined;
+  const ownConnection = !connection;
+  const db = connection || base.pool;
+  try {
+    const truth = await scheduleTruth(
+      db,
+      result.agreement_id,
+      toDateText(result?.agreement?.created_at)
+    );
+    return operationalize(result, truth);
+  } finally {
+    if (ownConnection) {
+      // The pool connection is intentionally reused; nothing to release.
+    }
+  }
 }
 
 async function reconcileFinancePortfolio(options = {}) {
   const rows = await base.reconcileFinancePortfolio(options);
-  return rows.map(operationalize);
+  const connection = options.connection || base.pool;
+  const truthRows = await connection.query(
+    `SELECT
+       s.agreement_id,
+       MIN(CASE
+         WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
+          AND DATE(s.due_date) >= DATE(agreement.created_at)
+          AND GREATEST(
+            s.scheduled_amount + COALESCE(s.late_charge_amount, 0) - COALESCE(s.waived_charge_amount, 0)
+            - COALESCE(ae.allocated_amount, 0),
+            0
+          ) > 0.009
+         THEN s.due_date
+       END) AS allocation_backed_next_due_date,
+       MIN(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS allocation_backed_first_due_date,
+       MAX(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS allocation_backed_final_due_date
+     FROM equipment_installment_schedule s
+     INNER JOIN equipment_sale_agreements agreement ON agreement.id = s.agreement_id
+     LEFT JOIN (
+       SELECT allocation.schedule_id,
+              SUM(CASE WHEN payment.is_voided = FALSE THEN allocation.allocated_amount ELSE 0 END) AS allocated_amount
+         FROM equipment_sale_payment_allocations allocation
+         INNER JOIN equipment_sale_payments payment ON payment.id = allocation.payment_id
+        GROUP BY allocation.schedule_id
+     ) ae ON ae.schedule_id = s.id
+    WHERE agreement.sale_type = 'installment'
+      AND agreement.activation_source = 'approved_credit_application'
+    GROUP BY s.agreement_id`
+  );
+  const truthMap = new Map((truthRows[0] || []).map((row) => [Number(row.agreement_id), row]));
+  return rows.map((row) => operationalize(row, truthMap.get(Number(row.agreement_id)) || {}));
 }
 
 async function assertFinanceMutationSafe(agreementId, options = {}) {
-  // Reconciliation is diagnostic evidence, not a reason to prevent ordinary receipt entry.
   return reconcileFinanceAgreement(agreementId, options);
 }
 
