@@ -1,0 +1,81 @@
+/* Real Finance UI fixes: keep dialogs in the same viewport regime as the sidebar. */
+.finance-simple__dialog-backdrop,
+.finance-accounts__backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 1000000 !important;
+  width: auto !important;
+  height: 100dvh !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
+  transform: none !important;
+}
+@media (min-width: 961px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop {
+    left: 300px !important;
+  }
+}
+@media (max-width: 960px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop {
+    left: 0 !important;
+  }
+}
+@media (max-width: 720px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop {
+    left: 0 !important;
+    padding: 0 !important;
+    place-items: end stretch !important;
+  }
+}
+
+/* Keep Start New Installment compact: the optional photo panel must not push the form far below. */
+.finance-customer-photo {
+  grid-template-columns: minmax(0, 1fr) 180px !important;
+  gap: .75rem !important;
+  margin: .35rem auto .5rem !important;
+  padding: .75rem !important;
+  border-radius: .9rem !important;
+}
+.finance-customer-photo__copy > span {
+  margin-top: .25rem !important;
+  line-height: 1.35 !important;
+  font-size: .82rem !important;
+}
+.finance-customer-photo__rules {
+  margin-top: .5rem !important;
+}
+.finance-customer-photo__preview {
+  min-height: 130px !important;
+  height: 130px !important;
+}
+.finance-customer-photo__preview img {
+  max-height: 130px !important;
+}
+.finance-customer-photo__actions {
+  gap: .4rem !important;
+}
+.finance-customer-photo button {
+  min-height: 38px !important;
+  padding: .55rem .7rem !important;
+  font-size: .78rem !important;
+}
+.finance-draft-bar {
+  margin-bottom: .35rem !important;
+  padding: .55rem .7rem !important;
+}
+@media (max-width: 720px) {
+  .finance-customer-photo {
+    grid-template-columns: 1fr !important;
+  }
+  .finance-customer-photo__preview {
+    min-height: 110px !important;
+    height: 110px !important;
+  }
+}
