@@ -77,7 +77,7 @@ async function getPortfolioScheduleTruth(connection = pool) {
        s.agreement_id,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
+           AND COALESCE(s.due_date, '') <> ''
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
