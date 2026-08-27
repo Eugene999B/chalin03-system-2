@@ -34,13 +34,6 @@ async function getDirectScheduleNextDue(connection, agreementId) {
       WHERE s.agreement_id = ?
         AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
         AND COALESCE(s.due_date, '') <> ''
-        AND GREATEST(
-          COALESCE(s.scheduled_amount, 0)
-          + COALESCE(s.late_charge_amount, 0)
-          - COALESCE(s.waived_charge_amount, 0)
-          - COALESCE(s.amount_paid, 0),
-          0
-        ) > 0.009
       ORDER BY s.due_date, s.sequence_number
       LIMIT 1`,
     [Number(agreementId)]
