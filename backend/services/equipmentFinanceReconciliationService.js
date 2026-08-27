@@ -32,8 +32,15 @@ async function getDirectScheduleNextDue(connection, agreementId) {
     `SELECT s.due_date
        FROM equipment_installment_schedule s
       WHERE s.agreement_id = ?
-        AND s.schedule_status IN ('upcoming','due','partial','overdue')
+        AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
         AND COALESCE(s.due_date, '') <> ''
+        AND GREATEST(
+          COALESCE(s.scheduled_amount, 0)
+          + COALESCE(s.late_charge_amount, 0)
+          - COALESCE(s.waived_charge_amount, 0)
+          - COALESCE(s.amount_paid, 0),
+          0
+        ) > 0.009
       ORDER BY s.due_date, s.sequence_number
       LIMIT 1`,
     [Number(agreementId)]
@@ -72,6 +79,7 @@ function operationalize(result, truth = {}, directNextDue = null) {
       ...(result?.calculated || {}),
       first_schedule_due_date: firstDue,
       next_due_date: nextDue,
+      next_installment_due_date: nextDue,
       final_schedule_due_date: finalDue,
     },
   };
