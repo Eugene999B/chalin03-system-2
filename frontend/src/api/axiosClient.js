@@ -154,7 +154,7 @@ axiosClient.interceptors.response.use(
       return Promise.reject(new axios.CanceledError("A stale authenticated request was replaced by the current session."));
     }
     if (isTemporaryProfileFailure) {
-      try { sessionStorage.setItem("chalin03_session_warning", errorMessage || "Fresh profile details could not be loaded. Your verified session remains active."); } catch {}
+      try { sessionStorage.setItem("chalin03_session_warning", errorMessage || "Fresh profile details could not be loaded. Your verified session remains active."); } catch (_storageError) { /* Session storage may be unavailable; keep the verified session active. */ }
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
     if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage && !isChangePasswordCredentialFailure) {
