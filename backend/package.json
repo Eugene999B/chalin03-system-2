@@ -4,7 +4,7 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runDebtCustomerIdentityReconciliationStartup.js && node scripts/bootstrapInstallmentResetOwnership.js && node -r ./services/exportWorkbookSafetyBootstrap.js -r ./scripts/installmentDeepDeleteRouteBootstrap.js -r ./scripts/equipmentFinanceDepositBoundaryBootstrap.js server.js",
+    "start": "node -r ./services/exportWorkbookSafetyBootstrap.js server.js",
     "maintenance:legacy-startup-repairs": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
     "dev": "nodemon server.js",
     "create-admin": "node scripts/createAdmin.js",
@@ -43,9 +43,7 @@
     "test": "node --test tests/*.test.js",
     "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js"
   },
-  "engines": {
-    "node": ">=20"
-  },
+  "engines": {"node": ">=20"},
   "keywords": ["chalin03", "sales", "inventory"],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
@@ -64,7 +62,5 @@
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
   },
-  "devDependencies": {
-    "nodemon": "^3.0.0"
-  }
+  "devDependencies": {"nodemon": "^3.0.0"}
 }
