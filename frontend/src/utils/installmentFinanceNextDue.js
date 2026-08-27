@@ -29,27 +29,33 @@ function nextDueFromSchedule(schedule) {
 
 export async function enrichFinanceAccountsWithSchedule(accounts) {
   if (!Array.isArray(accounts) || !accounts.length) return accounts;
-  const resolved = await Promise.all(
-    accounts.map(async (account) => {
-      if (!account?.agreement_id) return account;
-      try {
-        const detail = await axiosClient.get(`${ACCOUNTS_PATH}/${account.agreement_id}`, { __skipFinanceNextDue: true });
-        const nextDue = nextDueFromSchedule(detail?.data?.schedule);
-        return nextDue
-          ? { ...account, next_due_date: nextDue, next_installment_due_date: nextDue }
-          : account;
-      } catch {
-        return account;
-      }
-    })
-  );
-  return resolved;
+  return Promise.all(accounts.map(async (account) => {
+    if (!account?.agreement_id) return account;
+    try {
+      const detail = await axiosClient.get(`${ACCOUNTS_PATH}/${account.agreement_id}`, { __skipFinanceNextDue: true });
+      const nextDue = nextDueFromSchedule(detail?.data?.schedule);
+      return nextDue
+        ? { ...account, next_due_date: nextDue, next_installment_due_date: nextDue }
+        : account;
+    } catch {
+      return account;
+    }
+  }));
 }
 
 export function installInstallmentFinanceNextDue() {
   if (installed || !axiosClient?.interceptors?.response) return;
   installed = true;
-  axiosClient.interceptors.response.use((response) => response);
+  axiosClient.interceptors.response.use(async (response) => {
+    if (response?.config?.__skipFinanceNextDue || normalizedPath(response?.config?.url) !== ACCOUNTS_PATH) {
+      return response;
+    }
+    const accounts = response?.data?.accounts;
+    if (!Array.isArray(accounts) || !accounts.length) return response;
+    const enriched = await enrichFinanceAccountsWithSchedule(accounts);
+    return { ...response, data: { ...response.data, accounts: enriched } };
+  });
 }
 
 export { nextDueFromSchedule };
+installInstallmentFinanceNextDue();
