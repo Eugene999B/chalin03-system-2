@@ -60,7 +60,7 @@ function operationalize(result, truth = {}, directNextDue = null) {
   const finalDue = firstValidDate([
     truth.final_due_date,
     result?.calculated?.final_schedule_due_date,
-    result?.evidence?.final_due_date,
+    result?.evidence?.final_schedule_due_date,
     agreement.final_due_date,
   ], createdDate);
 
@@ -68,6 +68,10 @@ function operationalize(result, truth = {}, directNextDue = null) {
     ...result,
     consistent: true,
     collection_operational: true,
+    next_due_date: nextDue,
+    next_installment_due_date: nextDue,
+    first_due_date: firstDue,
+    final_due_date: finalDue,
     calculated: {
       ...(result?.calculated || {}),
       first_schedule_due_date: firstDue,
