@@ -14,6 +14,7 @@ import "../styles/equipmentFinanceSignaturePolish.css";
 import "../styles/equipmentFinanceThreePageRouteSignature.css";
 import "../styles/installmentMobileProfessional.css";
 import "../styles/financeUiRealFix.css";
+import "../utils/installmentFinanceNextDue.js";
 
 const BLOCKED_FINANCE_PATHS = [
   "/equipment-installment-finance/shared-controls",
