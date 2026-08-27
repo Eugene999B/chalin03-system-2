@@ -1,4 +1,5 @@
 const base = require("./equipmentFinanceReconciliationServiceBase");
+const { pool } = require("../config/db");
 
 const FALLBACK_DAYS = 30;
 
@@ -98,27 +99,19 @@ function operationalize(result, truth = {}) {
 
 async function reconcileFinanceAgreement(agreementId, options = {}) {
   const result = await base.reconcileFinanceAgreement(agreementId, options);
-  const connection = options.connection || undefined;
-  const ownConnection = !connection;
-  const db = connection || base.pool;
-  try {
-    const truth = await scheduleTruth(
-      db,
-      result.agreement_id,
-      toDateText(result?.agreement?.created_at)
-    );
-    return operationalize(result, truth);
-  } finally {
-    if (ownConnection) {
-      // The pool connection is intentionally reused; nothing to release.
-    }
-  }
+  const db = options.connection || pool;
+  const truth = await scheduleTruth(
+    db,
+    result.agreement_id,
+    toDateText(result?.agreement?.created_at)
+  );
+  return operationalize(result, truth);
 }
 
 async function reconcileFinancePortfolio(options = {}) {
   const rows = await base.reconcileFinancePortfolio(options);
-  const connection = options.connection || base.pool;
-  const truthRows = await connection.query(
+  const connection = options.connection || pool;
+  const [truthRows] = await connection.query(
     `SELECT
        s.agreement_id,
        MIN(CASE
@@ -146,7 +139,7 @@ async function reconcileFinancePortfolio(options = {}) {
       AND agreement.activation_source = 'approved_credit_application'
     GROUP BY s.agreement_id`
   );
-  const truthMap = new Map((truthRows[0] || []).map((row) => [Number(row.agreement_id), row]));
+  const truthMap = new Map(truthRows.map((row) => [Number(row.agreement_id), row]));
   return rows.map((row) => operationalize(row, truthMap.get(Number(row.agreement_id)) || {}));
 }
 
