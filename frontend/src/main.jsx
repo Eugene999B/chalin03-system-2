@@ -16,8 +16,8 @@ import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v35";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v35-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v36";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v36-${APP_BUILD_ID}`;
 
 // Dedicated mobile experience release entry point.
 installCommandGateHistoryTracker();
