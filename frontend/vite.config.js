@@ -37,6 +37,28 @@ function restoreCompleteFinanceCustomerProfile() {
   };
 }
 
+function restoreSparePartsSmsIntelligence() {
+  return {
+    name: "restore-spare-parts-sms-intelligence",
+    enforce: "pre",
+    resolveId(source, importer) {
+      if (
+        source === "./pages/UsersSettingsPage" &&
+        importer?.endsWith("/App.jsx")
+      ) {
+        return fileURLToPath(
+          new URL(
+            "./src/pages/SparePartsUsersSettingsWithDebtRemindersPage.jsx",
+            import.meta.url
+          )
+        );
+      }
+
+      return null;
+    },
+  };
+}
+
 function resolveBuildId(environment = process.env) {
   const supplied =
     environment.RAILWAY_GIT_COMMIT_SHA ||
@@ -72,7 +94,11 @@ if (isCloudflarePagesBuild()) {
 const chalin03BuildId = resolveBuildId();
 
 export default defineConfig({
-  plugins: [restoreCompleteFinanceCustomerProfile(), react()],
+  plugins: [
+    restoreCompleteFinanceCustomerProfile(),
+    restoreSparePartsSmsIntelligence(),
+    react(),
+  ],
   define: {
     "import.meta.env.VITE_CHALIN03_BUILD_ID": JSON.stringify(
       chalin03BuildId
