@@ -76,14 +76,14 @@ async function main() {
           SELECT s.id
           FROM equipment_installment_schedule s
           LEFT JOIN (
-            SELECT a.schedule_id, SUM(a.allocated_amount) AS allocated_amount
+            SELECT a.schedule_id,
+                   SUM(CASE WHEN p.is_voided = FALSE THEN a.allocated_amount ELSE 0 END) AS allocated_amount
             FROM equipment_sale_payment_allocations a
             INNER JOIN equipment_sale_payments p ON p.id = a.payment_id
-            WHERE p.is_voided = FALSE
             GROUP BY a.schedule_id
           ) x ON x.schedule_id = s.id
           WHERE s.agreement_id = p_agreement_id
-            AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
+            AND s.schedule_status NOT IN ('cancelled','waived','rescheduled')
             AND COALESCE(x.allocated_amount, 0) <= 0.009
           ORDER BY s.due_date, s.sequence_number, s.id;
         DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
@@ -125,7 +125,7 @@ async function main() {
           GROUP BY a.schedule_id
         ) x ON x.schedule_id = s.id
         WHERE s.agreement_id = p_agreement_id
-          AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
+          AND s.schedule_status NOT IN ('cancelled','waived','rescheduled')
           AND COALESCE(x.allocated_amount, 0) <= 0.009;
 
         IF v_unpaid_count > 0 AND v_distributable > 0 THEN
@@ -158,7 +158,7 @@ async function main() {
                 WHERE p.is_voided = FALSE GROUP BY a.schedule_id
               ) x ON x.schedule_id = s.id
               WHERE s.agreement_id = p_agreement_id
-                AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
+                AND s.schedule_status NOT IN ('cancelled','waived','rescheduled')
                 AND GREATEST(s.scheduled_amount - COALESCE(x.allocated_amount, 0), 0) > 0.009
             ),
             agreement.final_due_date = (
@@ -254,7 +254,7 @@ async function main() {
               WHERE p.is_voided = FALSE GROUP BY al.schedule_id
             ) x ON x.schedule_id = s.id
             WHERE s.agreement_id = a.id
-              AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
+              AND s.schedule_status NOT IN ('cancelled','waived','rescheduled')
               AND GREATEST(s.scheduled_amount - COALESCE(x.allocated_amount, 0), 0) > 0.009
           ),
           a.final_due_date = (
