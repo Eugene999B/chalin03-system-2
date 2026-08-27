@@ -14,22 +14,11 @@ function normalizedPath(value) {
   }
 }
 
-function remaining(row) {
-  const scheduled = Number(row?.scheduled_amount);
-  if (!Number.isFinite(scheduled)) return null;
-  return Math.max(
-    scheduled + Number(row?.late_charge_amount || 0) - Number(row?.waived_charge_amount || 0) - Number(row?.amount_paid || 0),
-    0
-  );
-}
-
 function nextDueFromSchedule(schedule) {
   return [...(Array.isArray(schedule) ? schedule : [])]
     .filter((row) => {
       const status = String(row?.schedule_status || "").toLowerCase();
-      if (!row?.due_date || TERMINAL.has(status)) return false;
-      const outstanding = remaining(row);
-      return outstanding === null || outstanding > 0.01;
+      return Boolean(row?.due_date) && !TERMINAL.has(status);
     })
     .sort((left, right) => {
       const dateCompare = String(left.due_date).slice(0, 10).localeCompare(String(right.due_date).slice(0, 10));
