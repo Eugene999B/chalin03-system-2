@@ -21,13 +21,27 @@ function plusDays(value, days) {
 }
 
 function firstValidDate(candidates, createdDate) {
-  return candidates
-    .map(toDateText)
-    .find((value) => value && (!createdDate || value >= createdDate)) ||
-    (createdDate ? plusDays(createdDate, FALLBACK_DAYS) : null);
+  return (
+    candidates.map(toDateText).find((value) => value && (!createdDate || value >= createdDate)) ||
+    (createdDate ? plusDays(createdDate, FALLBACK_DAYS) : null)
+  );
 }
 
-function operationalize(result, truth = {}) {
+async function getDirectScheduleNextDue(connection, agreementId) {
+  const [rows] = await connection.query(
+    `SELECT s.due_date
+       FROM equipment_installment_schedule s
+      WHERE s.agreement_id = ?
+        AND s.schedule_status NOT IN ('cancelled','waived','rescheduled','paid')
+        AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
+      ORDER BY s.due_date, s.sequence_number
+      LIMIT 1`,
+    [Number(agreementId)]
+  );
+  return toDateText(rows[0]?.due_date);
+}
+
+function operationalize(result, truth = {}, directNextDue = null) {
   const agreement = result?.agreement || {};
   const createdDate = toDateText(agreement.created_at);
   const firstDue = firstValidDate([
@@ -37,18 +51,17 @@ function operationalize(result, truth = {}) {
     agreement.first_due_date,
   ], createdDate);
   const nextDue = firstValidDate([
+    directNextDue,
     truth.next_due_date,
     result?.calculated?.next_due_date,
     result?.evidence?.next_due_date,
     agreement.next_due_date,
-    firstDue,
   ], createdDate);
   const finalDue = firstValidDate([
     truth.final_due_date,
     result?.calculated?.final_schedule_due_date,
-    result?.evidence?.final_schedule_due_date,
+    result?.evidence?.final_due_date,
     agreement.final_due_date,
-    nextDue,
   ], createdDate);
 
   return {
@@ -67,15 +80,18 @@ function operationalize(result, truth = {}) {
 async function reconcileFinanceAgreement(agreementId, options = {}) {
   const result = await base.reconcileFinanceAgreement(agreementId, options);
   const db = options.connection || pool;
-  const truth = await getAgreementScheduleTruth(db, result.agreement_id);
-  return operationalize(result, truth);
+  const [truth, directNextDue] = await Promise.all([
+    getAgreementScheduleTruth(db, result.agreement_id),
+    getDirectScheduleNextDue(db, result.agreement_id),
+  ]);
+  return operationalize(result, truth, directNextDue);
 }
 
 async function reconcileFinancePortfolio(options = {}) {
   const rows = await base.reconcileFinancePortfolio(options);
   const connection = options.connection || pool;
   const truthMap = await getPortfolioScheduleTruth(connection);
-  return rows.map((row) => operationalize(row, truthMap.get(Number(row.agreement_id)) || {}));
+  return rows.map((row) => operationalize(row, truthMap.get(Number(row.agreement_id)) || {}, truthMap.get(Number(row.agreement_id))?.next_due_date || null));
 }
 
 async function assertFinanceMutationSafe(agreementId, options = {}) {
