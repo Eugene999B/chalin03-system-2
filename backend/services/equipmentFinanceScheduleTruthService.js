@@ -25,13 +25,14 @@ async function getAgreementScheduleTruth(connection = pool, agreementId) {
     `SELECT
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND ${remainingExpression()} > 0.009
+           AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND s.due_date < CURDATE()
-           AND ${remainingExpression()} > 0.009
+           AND COALESCE(s.scheduled_amount, 0) + COALESCE(s.late_charge_amount, 0)
+               - COALESCE(s.waived_charge_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS oldest_overdue_date,
        MIN(CASE
@@ -76,13 +77,14 @@ async function getPortfolioScheduleTruth(connection = pool) {
        s.agreement_id,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND ${remainingExpression()} > 0.009
+           AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND s.due_date < CURDATE()
-           AND ${remainingExpression()} > 0.009
+           AND COALESCE(s.scheduled_amount, 0) + COALESCE(s.late_charge_amount, 0)
+               - COALESCE(s.waived_charge_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS oldest_overdue_date,
        MIN(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS first_due_date,
