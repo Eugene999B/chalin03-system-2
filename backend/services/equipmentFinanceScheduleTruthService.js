@@ -10,26 +10,28 @@ function dateText(value) {
   return value ? String(value).slice(0, 10) : null;
 }
 
+function remainingExpression(alias = "s") {
+  return `GREATEST(
+    COALESCE(${alias}.scheduled_amount, 0)
+    + COALESCE(${alias}.late_charge_amount, 0)
+    - COALESCE(${alias}.waived_charge_amount, 0)
+    - COALESCE(a.allocated_amount, 0),
+    0
+  )`;
+}
+
 async function getAgreementScheduleTruth(connection = pool, agreementId) {
   const [rows] = await connection.query(
     `SELECT
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND ${remainingExpression()} > 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND s.due_date < CURDATE()
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND ${remainingExpression()} > 0.009
          THEN s.due_date
        END) AS oldest_overdue_date,
        MIN(CASE
@@ -40,18 +42,14 @@ async function getAgreementScheduleTruth(connection = pool, agreementId) {
        END) AS final_due_date,
        COALESCE(SUM(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-         THEN GREATEST(
-           s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-             - COALESCE(a.allocated_amount, 0),
-           0
-         )
+         THEN ${remainingExpression()}
          ELSE 0
        END), 0) AS schedule_outstanding
      FROM equipment_installment_schedule s
      LEFT JOIN (
        SELECT
          allocation.schedule_id,
-         SUM(allocation.allocated_amount) AS allocated_amount
+         SUM(COALESCE(allocation.allocated_amount, 0)) AS allocated_amount
        FROM equipment_sale_payment_allocations allocation
        INNER JOIN equipment_sale_payments payment
          ON payment.id = allocation.payment_id
@@ -78,39 +76,27 @@ async function getPortfolioScheduleTruth(connection = pool) {
        s.agreement_id,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND ${remainingExpression()} > 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND s.due_date < CURDATE()
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND ${remainingExpression()} > 0.009
          THEN s.due_date
        END) AS oldest_overdue_date,
        MIN(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS first_due_date,
        MAX(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS final_due_date,
        COALESCE(SUM(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-         THEN GREATEST(
-           s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-             - COALESCE(a.allocated_amount, 0),
-           0
-         )
+         THEN ${remainingExpression()}
          ELSE 0
        END), 0) AS schedule_outstanding
      FROM equipment_installment_schedule s
      LEFT JOIN (
        SELECT
          allocation.schedule_id,
-         SUM(allocation.allocated_amount) AS allocated_amount
+         SUM(COALESCE(allocation.allocated_amount, 0)) AS allocated_amount
        FROM equipment_sale_payment_allocations allocation
        INNER JOIN equipment_sale_payments payment
          ON payment.id = allocation.payment_id
