@@ -5,7 +5,9 @@ const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
-const { sendBossPaymentAlert } = require("../services/equipmentFinanceProfessionalService");
+const {
+  sendBossPaymentAlert,
+} = require("../services/equipmentFinanceProfessionalService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { workspaceRoleFor } = require("../security/equipmentDivisionAccess");
 const {
@@ -124,7 +126,11 @@ function percentage(value, fallback = null) {
 function idempotencyKey(value, prefix) {
   const key = cleanText(value, 191);
   if (key.length < 20 || !key.startsWith(prefix)) {
-    throw new FinanceLifecycleError(400, `A secure ${prefix} request key is required.`, "FINANCE_IDEMPOTENCY_KEY_REQUIRED");
+    throw new FinanceLifecycleError(
+      400,
+      `A secure ${prefix} request key is required.`,
+      "FINANCE_IDEMPOTENCY_KEY_REQUIRED"
+    );
   }
   return key;
 }
@@ -248,10 +254,17 @@ function accountSql({ lock = false } = {}) {
       ownership.transfer_date,
       ownership.status AS ownership_status_record,
       ownership.transfer_stage,
-      (SELECT COUNT(*) FROM hire_contract_assets hire_asset WHERE hire_asset.asset_id = agreement.asset_id AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count,
-      (SELECT MAX(payment.payment_date) FROM equipment_sale_payments payment WHERE payment.agreement_id = agreement.id AND payment.is_voided = FALSE) AS last_payment_at
+      (SELECT COUNT(*)
+         FROM hire_contract_assets hire_asset
+        WHERE hire_asset.asset_id = agreement.asset_id
+          AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count,
+      (SELECT MAX(payment.payment_date)
+         FROM equipment_sale_payments payment
+        WHERE payment.agreement_id = agreement.id
+          AND payment.is_voided = FALSE) AS last_payment_at
     FROM equipment_sale_agreements agreement
-    INNER JOIN equipment_credit_applications application ON application.id = agreement.credit_application_id
+    INNER JOIN equipment_credit_applications application
+      ON application.id = agreement.credit_application_id
     INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
     INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
     LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
@@ -260,7 +273,8 @@ function accountSql({ lock = false } = {}) {
     WHERE agreement.sale_type = 'installment'
       AND agreement.activation_source = 'approved_credit_application'
       AND agreement.id = ?
-    LIMIT 1 ${lock ? "FOR UPDATE" : ""}`;
+    LIMIT 1
+    ${lock ? "FOR UPDATE" : ""}`;
 }
 
 function accountListSql() {
@@ -295,10 +309,17 @@ function accountListSql() {
       ownership.id AS ownership_id, ownership.transfer_number,
       ownership.transfer_date, ownership.status AS ownership_status_record,
       ownership.transfer_stage,
-      (SELECT COUNT(*) FROM hire_contract_assets hire_asset WHERE hire_asset.asset_id = agreement.asset_id AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count,
-      (SELECT MAX(payment.payment_date) FROM equipment_sale_payments payment WHERE payment.agreement_id = agreement.id AND payment.is_voided = FALSE) AS last_payment_at
+      (SELECT COUNT(*)
+         FROM hire_contract_assets hire_asset
+        WHERE hire_asset.asset_id = agreement.asset_id
+          AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count,
+      (SELECT MAX(payment.payment_date)
+         FROM equipment_sale_payments payment
+        WHERE payment.agreement_id = agreement.id
+          AND payment.is_voided = FALSE) AS last_payment_at
     FROM equipment_sale_agreements agreement
-    INNER JOIN equipment_credit_applications application ON application.id = agreement.credit_application_id
+    INNER JOIN equipment_credit_applications application
+      ON application.id = agreement.credit_application_id
     INNER JOIN hire_customers customer ON customer.id = agreement.customer_id
     INNER JOIN fleet_assets asset ON asset.id = agreement.asset_id
     LEFT JOIN business_locations location ON location.id = agreement.hire_location_id
@@ -314,33 +335,20 @@ async function getAccount(connection, agreementId, { lock = false } = {}) {
   return rows[0] || null;
 }
 
-function paymentBreakdown(account, reconciliation = null) {
-  const totalPaid = Number(account.amount_paid || reconciliation?.calculated?.amount_paid || 0);
-  const depositRequired = Number(account.deposit_required || 0);
-  const depositReceived = Number(account.deposit_received || reconciliation?.calculated?.deposit_received || 0);
-  const financedAmount = Number(account.financed_amount || 0);
-  const installmentPaid = Math.max(totalPaid - depositReceived, 0);
-  const installmentOutstanding = Math.max(financedAmount - installmentPaid, 0);
-  const openingDepositOutstanding = Math.max(depositRequired - depositReceived, 0);
-  return {
-    installment_paid: Number(installmentPaid.toFixed(2)),
-    installment_outstanding_balance: Number(installmentOutstanding.toFixed(2)),
-    opening_deposit_outstanding: Number(openingDepositOutstanding.toFixed(2)),
-    next_installment_due_date: reconciliation?.calculated?.next_due_date || null,
-  };
-}
-
 function deliveryAllowed(account) {
   const paid = Number(account.amount_paid || 0);
   const total = Number(account.total_amount || 0);
   if (account.delivery_policy === "immediate") return true;
-  if (account.delivery_policy === "after_deposit") return paid + 0.01 >= Number(account.deposit_required || 0);
-  if (account.delivery_policy === "after_percentage") return total > 0 && (paid / total) * 100 + 0.0001 >= Number(account.delivery_threshold_percent || 0);
+  if (account.delivery_policy === "after_deposit") {
+    return paid + 0.01 >= Number(account.deposit_required || 0);
+  }
+  if (account.delivery_policy === "after_percentage") {
+    return total > 0 && (paid / total) * 100 + 0.0001 >= Number(account.delivery_threshold_percent || 0);
+  }
   return Number(account.outstanding_balance || 0) <= 0.01;
 }
 
-function publicAccount(account, reconciliation = null) {
-  const breakdown = paymentBreakdown(account, reconciliation);
+function publicAccount(account) {
   return {
     agreement_id: account.id,
     agreement_number: account.agreement_number,
@@ -371,19 +379,9 @@ function publicAccount(account, reconciliation = null) {
     amount_paid: Number(account.amount_paid || 0),
     outstanding_balance: Number(account.outstanding_balance || 0),
     overdue_amount: Number(account.overdue_amount || 0),
-    installment_paid: breakdown.installment_paid,
-    installment_outstanding_balance: breakdown.installment_outstanding_balance,
-    opening_deposit_outstanding: breakdown.opening_deposit_outstanding,
-    payment_balance_note:
-      breakdown.installment_outstanding_balance > 0
-        ? "Installment balance follows the existing payment schedule."
-        : breakdown.opening_deposit_outstanding > 0
-          ? "Installment schedule is fully paid; the remaining balance is an opening deposit outstanding."
-          : "No installment or opening deposit balance remains.",
     payment_frequency: account.payment_frequency,
     installment_count: Number(account.installment_count || 0),
-    next_due_date: breakdown.next_installment_due_date,
-    next_installment_due_date: breakdown.next_installment_due_date,
+    next_due_date: account.next_due_date,
     final_due_date: account.final_due_date,
     last_payment_at: account.last_payment_at,
     delivery_policy: account.delivery_policy,
@@ -413,7 +411,10 @@ async function nextFinanceNumber(sequence, prefix, user) {
   try {
     return await nextDocumentNumber(sequence, { userId: user || null });
   } catch (_error) {
-    return `${prefix}-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}-${crypto.randomInt(0, 10000).toString().padStart(4, "0")}`;
+    return `${prefix}-${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}-${crypto
+      .randomInt(0, 10000)
+      .toString()
+      .padStart(4, "0")}`;
   }
 }
 
@@ -433,28 +434,48 @@ async function allocateCollection(connection, paymentId, agreementId, amount) {
 
   for (const row of schedule) {
     if (remaining <= 0.001) break;
-    const lineTotal = Number((Number(row.scheduled_amount || 0) + Number(row.late_charge_amount || 0) - Number(row.waived_charge_amount || 0)).toFixed(2));
+    const lineTotal = Number(
+      (
+        Number(row.scheduled_amount || 0) +
+        Number(row.late_charge_amount || 0) -
+        Number(row.waived_charge_amount || 0)
+      ).toFixed(2)
+    );
     const lineBalance = Number(Math.max(lineTotal - Number(row.amount_paid || 0), 0).toFixed(2));
     if (lineBalance <= 0) continue;
     const allocated = Number(Math.min(remaining, lineBalance).toFixed(2));
     await connection.query(
-      `INSERT INTO equipment_sale_payment_allocations (payment_id, schedule_id, allocated_amount) VALUES (?, ?, ?)`,
+      `INSERT INTO equipment_sale_payment_allocations (
+         payment_id, schedule_id, allocated_amount
+       ) VALUES (?, ?, ?)`,
       [paymentId, row.id, allocated]
     );
     const newPaid = Number((Number(row.amount_paid || 0) + allocated).toFixed(2));
     const newStatus = newPaid + 0.01 >= lineTotal ? "paid" : "partial";
     await connection.query(
       `UPDATE equipment_installment_schedule
-       SET amount_paid = ?, schedule_status = ?, fully_paid_at = CASE WHEN ? = 'paid' THEN COALESCE(fully_paid_at, NOW()) ELSE fully_paid_at END
+       SET amount_paid = ?,
+           schedule_status = ?,
+           fully_paid_at = CASE WHEN ? = 'paid' THEN COALESCE(fully_paid_at, NOW()) ELSE fully_paid_at END
        WHERE id = ?`,
       [newPaid, newStatus, newStatus, row.id]
     );
-    allocations.push({ schedule_id: row.id, sequence_number: row.sequence_number, due_date: row.due_date, allocated_amount: allocated, schedule_status: newStatus });
+    allocations.push({
+      schedule_id: row.id,
+      sequence_number: row.sequence_number,
+      due_date: row.due_date,
+      allocated_amount: allocated,
+      schedule_status: newStatus,
+    });
     remaining = Number((remaining - allocated).toFixed(2));
   }
 
   if (remaining > 0.01) {
-    throw new FinanceLifecycleError(409, "The collection could not be allocated completely. No payment was saved.", "FINANCE_COLLECTION_ALLOCATION_INCOMPLETE");
+    throw new FinanceLifecycleError(
+      409,
+      "The collection could not be allocated completely. No payment was saved.",
+      "FINANCE_COLLECTION_ALLOCATION_INCOMPLETE"
+    );
   }
   return allocations;
 }
@@ -474,7 +495,11 @@ async function refreshAgreement(connection, agreementId) {
 router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     const readiness = await schemaStatus();
-    return res.status(readiness.ready ? 200 : 503).json({ status: readiness.ready ? "success" : "warning", readiness, scope: "company_wide_finance" });
+    return res.status(readiness.ready ? 200 : 503).json({
+      status: readiness.ready ? "success" : "warning",
+      readiness,
+      scope: "company_wide_finance",
+    });
   } catch (error) {
     return sendError(res, error, "Could not check Finance lifecycle readiness.");
   }
@@ -483,12 +508,17 @@ router.get("/readiness", requirePermission("fleet.assets.view"), async (_req, re
 router.get("/accounts", requirePermission("fleet.assets.view"), async (_req, res) => {
   try {
     await assertSchemaReady();
-    const [[rows], portfolio] = await Promise.all([pool.query(accountListSql()), reconcileFinancePortfolio()]);
-    const reconciliationByAgreement = new Map(portfolio.map((result) => [Number(result.agreement_id), result]));
+    const [[rows], portfolio] = await Promise.all([
+      pool.query(accountListSql()),
+      reconcileFinancePortfolio(),
+    ]);
+    const reconciliationByAgreement = new Map(
+      portfolio.map((result) => [Number(result.agreement_id), result])
+    );
     const accounts = rows.map((row) => {
       const reconciliation = reconciliationByAgreement.get(Number(row.id));
       return {
-        ...publicAccount({ ...row, ...(reconciliation?.calculated || {}) }, reconciliation),
+        ...publicAccount({ ...row, ...(reconciliation?.calculated || {}) }),
         reconciliation_consistent: reconciliation?.consistent !== false,
         reconciliation_mismatches: reconciliation?.mismatches || [],
       };
@@ -518,17 +548,48 @@ router.get("/accounts/:agreementId", requirePermission("fleet.assets.view"), asy
     const account = await getAccount(pool, agreementId);
     if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
     const reconciliation = await reconcileFinanceAgreement(agreementId);
-    const [[schedule], [payments], [allocations], [deliveries], [ownershipTransfers]] = await Promise.all([
-      pool.query(`SELECT * FROM equipment_installment_schedule WHERE agreement_id = ? ORDER BY sequence_number`, [agreementId]),
-      pool.query(`SELECT payment.*, user.full_name AS received_by_name FROM equipment_sale_payments payment LEFT JOIN users user ON user.id = payment.received_by WHERE payment.agreement_id = ? ORDER BY payment.payment_date DESC, payment.id DESC`, [agreementId]),
-      pool.query(`SELECT allocation.*, schedule.sequence_number, schedule.due_date, payment.receipt_number FROM equipment_sale_payment_allocations allocation INNER JOIN equipment_installment_schedule schedule ON schedule.id = allocation.schedule_id INNER JOIN equipment_sale_payments payment ON payment.id = allocation.payment_id WHERE schedule.agreement_id = ? ORDER BY payment.payment_date, allocation.id`, [agreementId]),
-      pool.query("SELECT * FROM equipment_deliveries WHERE agreement_id = ? ORDER BY id DESC", [agreementId]),
-      pool.query("SELECT * FROM equipment_ownership_transfers WHERE agreement_id = ? ORDER BY id DESC", [agreementId]),
-    ]);
+    const [[schedule], [payments], [allocations], [deliveries], [ownershipTransfers]] =
+      await Promise.all([
+        pool.query(
+          `SELECT * FROM equipment_installment_schedule
+           WHERE agreement_id = ? ORDER BY sequence_number`,
+          [agreementId]
+        ),
+        pool.query(
+          `SELECT payment.*, user.full_name AS received_by_name
+           FROM equipment_sale_payments payment
+           LEFT JOIN users user ON user.id = payment.received_by
+           WHERE payment.agreement_id = ?
+           ORDER BY payment.payment_date DESC, payment.id DESC`,
+          [agreementId]
+        ),
+        pool.query(
+          `SELECT allocation.*, schedule.sequence_number, schedule.due_date,
+                  payment.receipt_number
+           FROM equipment_sale_payment_allocations allocation
+           INNER JOIN equipment_installment_schedule schedule ON schedule.id = allocation.schedule_id
+           INNER JOIN equipment_sale_payments payment ON payment.id = allocation.payment_id
+           WHERE schedule.agreement_id = ?
+           ORDER BY payment.payment_date, allocation.id`,
+          [agreementId]
+        ),
+        pool.query(
+          "SELECT * FROM equipment_deliveries WHERE agreement_id = ? ORDER BY id DESC",
+          [agreementId]
+        ),
+        pool.query(
+          "SELECT * FROM equipment_ownership_transfers WHERE agreement_id = ? ORDER BY id DESC",
+          [agreementId]
+        ),
+      ]);
     return res.json({
       status: "success",
-      account: publicAccount({ ...account, ...reconciliation.calculated }, reconciliation),
-      reconciliation: { consistent: reconciliation.consistent, mismatches: reconciliation.mismatches, calculated: reconciliation.calculated },
+      account: publicAccount({ ...account, ...reconciliation.calculated }),
+      reconciliation: {
+        consistent: reconciliation.consistent,
+        mismatches: reconciliation.mismatches,
+        calculated: reconciliation.calculated,
+      },
       schedule,
       payments,
       payment_allocations: allocations,
@@ -537,7 +598,9 @@ router.get("/accounts/:agreementId", requirePermission("fleet.assets.view"), asy
       safeguards: {
         active_hire_count: Number(account.active_hire_count || 0),
         delivery_allowed: deliveryAllowed(account),
-        ownership_allowed: Number(account.outstanding_balance || 0) <= 0.01 && Boolean(account.controlled_delivery_completed_at),
+        ownership_allowed:
+          Number(account.outstanding_balance || 0) <= 0.01 &&
+          Boolean(account.controlled_delivery_completed_at),
       },
     });
   } catch (error) {
@@ -545,89 +608,428 @@ router.get("/accounts/:agreementId", requirePermission("fleet.assets.view"), asy
   }
 });
 
-router.post("/accounts/:agreementId/collections", requirePermission("fleet.assets.manage"), requireFinanceRole(COLLECTION_ROLES, "Installment collection"), async (req, res) => {
-  const connection = await pool.getConnection();
-  try {
-    await assertSchemaReady(connection);
-    const agreementId = positiveId(req.params.agreementId, "Agreement ID");
-    const amount = money(req.body?.amount);
-    const method = cleanText(req.body?.payment_method, 20).toLowerCase();
-    const key = idempotencyKey(req.body?.idempotency_key, "finance-collection");
-    if (amount === undefined || !PAYMENT_METHODS.has(method)) throw new FinanceLifecycleError(400, "Enter a valid collection amount and payment method.");
+router.post(
+  "/accounts/:agreementId/collections",
+  requirePermission("fleet.assets.manage"),
+  requireFinanceRole(COLLECTION_ROLES, "Installment collection"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      await assertSchemaReady(connection);
+      const agreementId = positiveId(req.params.agreementId, "Agreement ID");
+      const amount = money(req.body?.amount);
+      const method = cleanText(req.body?.payment_method, 20).toLowerCase();
+      const key = idempotencyKey(req.body?.idempotency_key, "finance-collection");
+      if (amount === undefined || !PAYMENT_METHODS.has(method)) {
+        throw new FinanceLifecycleError(400, "Enter a valid collection amount and payment method.");
+      }
 
-    await connection.beginTransaction();
-    const [replayRows] = await connection.query(`SELECT payment.id, payment.receipt_number, payment.agreement_id, payment.amount, payment.payment_stage FROM equipment_sale_payments payment WHERE payment.idempotency_key = ? LIMIT 1 FOR UPDATE`, [key]);
-    if (replayRows.length) {
-      const replay = replayRows[0];
-      if (Number(replay.agreement_id) !== agreementId || Math.abs(Number(replay.amount) - amount) > 0.01) throw new FinanceLifecycleError(409, "This request key was already used for different collection details.", "FINANCE_IDEMPOTENCY_CONFLICT");
+      await connection.beginTransaction();
+      const [replayRows] = await connection.query(
+        `SELECT payment.id, payment.receipt_number, payment.agreement_id,
+                payment.amount, payment.payment_stage
+         FROM equipment_sale_payments payment
+         WHERE payment.idempotency_key = ?
+         LIMIT 1 FOR UPDATE`,
+        [key]
+      );
+      if (replayRows.length) {
+        const replay = replayRows[0];
+        if (Number(replay.agreement_id) !== agreementId || Math.abs(Number(replay.amount) - amount) > 0.01) {
+          throw new FinanceLifecycleError(
+            409,
+            "This request key was already used for different collection details.",
+            "FINANCE_IDEMPOTENCY_CONFLICT"
+          );
+        }
+        await connection.commit();
+        const account = await getAccount(pool, agreementId);
+        return res.json({
+          status: "success",
+          replayed: true,
+          message: "This collection was already recorded. The original receipt is returned.",
+          payment_id: replay.id,
+          receipt_number: replay.receipt_number,
+          account: publicAccount(account),
+        });
+      }
+
+      let account = await getAccount(connection, agreementId, { lock: true });
+      if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+      const currentReconciliation = await assertFinanceMutationSafe(account.id, {
+        connection,
+        lock: false,
+      });
+      account = { ...account, ...currentReconciliation.calculated };
+      if (account.equipment_commitment_status !== "reserved") {
+        throw new FinanceLifecycleError(409, "Complete the opening deposit and machine reservation before collections.");
+      }
+      if (Number(account.deposit_received || 0) + 0.01 < Number(account.deposit_required || 0)) {
+        throw new FinanceLifecycleError(409, "The required opening deposit is not complete.");
+      }
+      if (!account.asset_is_active || Number(account.active_hire_count || 0) > 0) {
+        throw new FinanceLifecycleError(
+          409,
+          "The exact financed machine is inactive or currently committed to Hire.",
+          "EQUIPMENT_ACTIVE_ON_HIRE"
+        );
+      }
+      const outstanding = Number(currentReconciliation.calculated.outstanding_balance || 0);
+      if (amount > outstanding + 0.01) {
+        throw new FinanceLifecycleError(
+          400,
+          `Payment exceeds the final account balance of GHS ${outstanding.toFixed(2)}.`,
+          "FINANCE_COLLECTION_EXCEEDS_ACCOUNT_BALANCE"
+        );
+      }
+      const settlement = amount + 0.01 >= outstanding;
+      const paymentStage = settlement ? "settlement" : "installment_collection";
+      const paymentCategory = settlement ? "settlement" : "installment";
+      const paymentNumber = await nextFinanceNumber("EQUIPMENT_SALE_PAYMENT", "ESP", userId(req));
+      const receiptNumber = await nextFinanceNumber("EQUIPMENT_SALE_RECEIPT", "ESR", userId(req));
+      const [result] = await connection.query(
+        `INSERT INTO equipment_sale_payments (
+           payment_number, receipt_number, idempotency_key, hire_location_id,
+           agreement_id, credit_application_id, customer_id, payment_date,
+           payment_category, payment_stage, reservation_effect, amount,
+           payment_method, reference_number, notes, received_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, 'none', ?, ?, ?, ?, ?)`,
+        [
+          paymentNumber,
+          receiptNumber,
+          key,
+          account.hire_location_id,
+          account.id,
+          account.credit_application_id,
+          account.customer_id,
+          paymentCategory,
+          paymentStage,
+          amount,
+          method,
+          nullableText(req.body?.reference_number, 150),
+          nullableText(req.body?.notes, 1000),
+          userId(req),
+        ]
+      );
+      const allocations = await allocateCollection(connection, result.insertId, account.id, amount);
+      const refreshed = await refreshAgreement(connection, account.id);
+      await writeAuditEvent({
+        connection,
+        req,
+        action: "EQUIPMENT_FINANCE_COLLECTION_RECORDED",
+        details: `Recorded ${paymentStage} of GHS ${amount.toFixed(2)} for ${account.agreement_number}.`,
+        workspaceCode: "equipment_installment_finance",
+        hireLocationId: account.hire_location_id,
+        entityType: "equipment_sale_payment",
+        entityId: result.insertId,
+        metadata: {
+          agreement_id: account.id,
+          credit_application_id: account.credit_application_id,
+          receipt_number: receiptNumber,
+          payment_method: method,
+          allocations,
+          outstanding_balance: refreshed.balance,
+        },
+      });
       await connection.commit();
-      const account = await getAccount(pool, agreementId);
-      return res.json({ status: "success", replayed: true, message: "This collection was already recorded. The original receipt is returned.", receipt_number: replay.receipt_number, account: publicAccount(account) });
+
+      // The payment is already durable before any external SMS request begins.
+      const bossAlert = await sendBossPaymentAlert({
+        paymentId: result.insertId,
+        agreementId: account.id,
+        userId: userId(req),
+      });
+      const finalAccount = await getAccount(pool, account.id);
+      return res.status(201).json({
+        status: "success",
+        message: settlement
+          ? "Final settlement recorded. The account is ready for controlled ownership completion after delivery evidence."
+          : "Installment collection recorded and allocated across the oldest due and future schedule lines.",
+        payment_id: result.insertId,
+        receipt_number: receiptNumber,
+        payment_stage: paymentStage,
+        allocations,
+        account: publicAccount(finalAccount),
+        boss_payment_alert: bossAlert,
+        automatic_sms_sent: Boolean(bossAlert.ok),
+        sms: {
+          sent: Boolean(bossAlert.ok),
+          automatic: true,
+          purpose: "boss_payment_alert",
+          status: bossAlert.status || "skipped",
+        },
+      });
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch (_rollbackError) {
+        // Preserve the original error.
+      }
+      return sendError(res, error, "Could not record the Finance collection.");
+    } finally {
+      connection.release();
     }
-
-    const account = await getAccount(connection, agreementId, { lock: true });
-    if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
-    if (!account.reserved && Number(account.equipment_commitment_status) !== 1) {
-      throw new FinanceLifecycleError(409, "This Finance agreement must be reserved before an installment collection can be recorded.", "FINANCE_AGREEMENT_NOT_RESERVED");
-    }
-    if (account.ownership_id) throw new FinanceLifecycleError(409, "This Finance agreement has already transferred ownership and is closed to normal collections.", "FINANCE_AGREEMENT_CLOSED");
-
-    const reconciliation = await assertFinanceMutationSafe(agreementId, { connection });
-    const currentBalance = Number(reconciliation.calculated.outstanding_balance || 0);
-    if (amount > currentBalance + 0.01) throw new FinanceLifecycleError(409, `The collection cannot exceed the official outstanding balance of GHS ${currentBalance.toFixed(2)}.`, "FINANCE_COLLECTION_EXCEEDS_BALANCE");
-
-    const paymentNumber = await nextFinanceNumber("equipment_sale_payment_number", "EP", userId(req));
-    const receiptNumber = await nextFinanceNumber("equipment_sale_receipt_number", "ER", userId(req));
-    const [insert] = await connection.query(
-      `INSERT INTO equipment_sale_payments (
-         payment_number, receipt_number, agreement_id, credit_application_id,
-         customer_id, amount, payment_method, payment_category, payment_stage,
-         payment_date, value_date, reference_number, notes, received_by,
-         idempotency_key, reservation_effect
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'installment', 'installment_collection', CURDATE(), CURDATE(), ?, ?, ?, ?, 'none')`,
-      [paymentNumber, receiptNumber, agreementId, account.credit_application_id, account.customer_id, amount, method, nullableText(req.body?.reference_number, 120), nullableText(req.body?.notes, 1000), userId(req), key]
-    );
-    const allocations = await allocateCollection(connection, insert.insertId, agreementId, amount);
-    const refreshed = await refreshAgreement(connection, agreementId);
-    await writeAuditEvent({
-      connection,
-      req,
-      action: "EQUIPMENT_FINANCE_COLLECTION_RECORDED",
-      actionType: "equipment.finance.collection.record",
-      entityType: "equipment_sale_payment",
-      entityId: insert.insertId,
-      workspaceCode: "equipment_installment_finance",
-      hireLocationId: null,
-      severity: "notice",
-      outcome: "success",
-      details: `Recorded Finance collection ${receiptNumber} for agreement ${account.agreement_number}.`,
-      metadata: { agreement_id: agreementId, payment_id: insert.insertId, amount, method, allocations },
-    });
-    await connection.commit();
-    try { await sendBossPaymentAlert({ req, agreement: refreshed.reconciliation.agreement, payment: refreshed.reconciliation.calculated, amount, receiptNumber }); } catch (_error) {}
-
-    const latestAccount = await getAccount(pool, agreementId);
-    return res.status(201).json({
-      status: "success",
-      message: "Finance collection recorded successfully.",
-      receipt_number: receiptNumber,
-      payment_number: paymentNumber,
-      allocations,
-      account: publicAccount({ ...latestAccount, ...refreshed.reconciliation.calculated }, refreshed.reconciliation),
-      reconciliation: refreshed.reconciliation,
-    });
-  } catch (error) {
-    try { await connection.rollback(); } catch (_rollbackError) {}
-    return sendError(res, error, "Could not record the Finance collection.");
-  } finally {
-    connection.release();
   }
-});
+);
+
+router.post(
+  "/accounts/:agreementId/delivery",
+  requirePermission("fleet.assets.manage"),
+  requireFinanceRole(FINALISATION_ROLES, "Finance delivery handover"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      await assertSchemaReady(connection);
+      const agreementId = positiveId(req.params.agreementId, "Agreement ID");
+      const key = idempotencyKey(req.body?.idempotency_key, "finance-delivery");
+      const condition = cleanText(req.body?.condition_status, 40).toLowerCase();
+      const receivingPerson = cleanText(req.body?.receiving_person, 150);
+      const meterReading = money(req.body?.meter_reading, { minimum: 0, maximum: 1000000000 });
+      const fuelLevel = percentage(req.body?.fuel_level_percent, null);
+      if (!DELIVERY_CONDITIONS.has(condition) || !receivingPerson || meterReading === undefined || fuelLevel === undefined) {
+        throw new FinanceLifecycleError(
+          400,
+          "Enter the receiving person, machine condition, meter reading and fuel level."
+        );
+      }
+
+      await connection.beginTransaction();
+      const [replayRows] = await connection.query(
+        "SELECT * FROM equipment_deliveries WHERE idempotency_key = ? LIMIT 1 FOR UPDATE",
+        [key]
+      );
+      if (replayRows.length) {
+        await connection.commit();
+        return res.json({ status: "success", replayed: true, delivery: replayRows[0] });
+      }
+      let account = await getAccount(connection, agreementId, { lock: true });
+      if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+      const reconciliation = await assertFinanceMutationSafe(account.id, {
+        connection,
+        lock: false,
+      });
+      account = { ...account, ...reconciliation.calculated };
+      if (Number(account.active_hire_count || 0) > 0) {
+        throw new FinanceLifecycleError(409, "The financed machine is active on Hire and cannot be handed over.", "EQUIPMENT_ACTIVE_ON_HIRE");
+      }
+      if (account.equipment_commitment_status !== "reserved") {
+        throw new FinanceLifecycleError(409, "The exact machine must be reserved before delivery.");
+      }
+      if (!deliveryAllowed(account)) {
+        throw new FinanceLifecycleError(
+          409,
+          "The approved payment threshold for delivery has not been reached.",
+          "DELIVERY_PAYMENT_THRESHOLD_NOT_MET"
+        );
+      }
+      const [existing] = await connection.query(
+        "SELECT id FROM equipment_deliveries WHERE agreement_id = ? LIMIT 1 FOR UPDATE",
+        [agreementId]
+      );
+      if (existing.length) throw new FinanceLifecycleError(409, "Delivery was already recorded.");
+      const deliveryNumber = await nextFinanceNumber("EQUIPMENT_SALE_DELIVERY", "ESD", userId(req));
+      const [result] = await connection.query(
+        `INSERT INTO equipment_deliveries (
+           delivery_number, idempotency_key, hire_location_id, agreement_id,
+           credit_application_id, handover_stage, customer_id, asset_id,
+           delivery_datetime, destination, meter_reading, fuel_level_percent,
+           condition_status, attachments_tools, receiving_person, receiving_phone,
+           customer_signature_url, delivery_note_url, notes, status,
+           created_by, approved_by, approved_at
+         ) VALUES (?, ?, ?, ?, ?, 'finance_controlled', ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'delivered', ?, ?, NOW())`,
+        [
+          deliveryNumber,
+          key,
+          account.hire_location_id,
+          account.id,
+          account.credit_application_id,
+          account.customer_id,
+          account.asset_id,
+          nullableText(req.body?.destination, 255),
+          meterReading,
+          fuelLevel,
+          condition,
+          nullableText(req.body?.attachments_tools, 3000),
+          receivingPerson,
+          nullableText(req.body?.receiving_phone, 40),
+          nullableText(req.body?.customer_signature_url, 100000),
+          nullableText(req.body?.delivery_note_url, 3000),
+          nullableText(req.body?.notes, 3000),
+          userId(req),
+          userId(req),
+        ]
+      );
+      await connection.query(
+        `UPDATE equipment_sale_agreements
+         SET delivery_status = 'delivered', delivered_at = NOW(),
+             controlled_delivery_completed_at = NOW(),
+             controlled_delivery_completed_by = ?
+         WHERE id = ?`,
+        [userId(req), account.id]
+      );
+      if (meterReading > Number(account.current_meter || 0)) {
+        await connection.query(
+          "UPDATE fleet_assets SET current_meter = ?, updated_by = ? WHERE id = ?",
+          [meterReading, userId(req), account.asset_id]
+        );
+      }
+      await writeAuditEvent({
+        connection,
+        req,
+        action: "EQUIPMENT_FINANCE_DELIVERY_COMPLETED",
+        details: `Completed controlled Finance delivery ${deliveryNumber}.`,
+        workspaceCode: "equipment_installment_finance",
+        hireLocationId: account.hire_location_id,
+        entityType: "equipment_delivery",
+        entityId: result.insertId,
+        metadata: { agreement_id: account.id, asset_id: account.asset_id, handover_stage: "finance_controlled" },
+      });
+      await connection.commit();
+      return res.status(201).json({
+        status: "success",
+        message: "Controlled Finance delivery and handover evidence recorded.",
+        delivery_id: result.insertId,
+        delivery_number: deliveryNumber,
+        automatic_sms_sent: false,
+        sms: { sent: false, automatic: false },
+      });
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch (_rollbackError) {}
+      return sendError(res, error, "Could not complete Finance delivery.");
+    } finally {
+      connection.release();
+    }
+  }
+);
+
+router.post(
+  "/accounts/:agreementId/ownership-transfer",
+  requirePermission("fleet.assets.manage"),
+  requireFinanceRole(FINALISATION_ROLES, "Finance ownership transfer"),
+  async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+      await assertSchemaReady(connection);
+      const agreementId = positiveId(req.params.agreementId, "Agreement ID");
+      const key = idempotencyKey(req.body?.idempotency_key, "finance-ownership");
+      const transferDate = cleanText(req.body?.transfer_date, 20);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(transferDate)) {
+        throw new FinanceLifecycleError(400, "Enter a valid ownership-transfer date.");
+      }
+
+      await connection.beginTransaction();
+      const [replayRows] = await connection.query(
+        "SELECT * FROM equipment_ownership_transfers WHERE idempotency_key = ? LIMIT 1 FOR UPDATE",
+        [key]
+      );
+      if (replayRows.length) {
+        await connection.commit();
+        return res.json({ status: "success", replayed: true, ownership_transfer: replayRows[0] });
+      }
+      let account = await getAccount(connection, agreementId, { lock: true });
+      if (!account) throw new FinanceLifecycleError(404, "Finance agreement was not found.");
+      const reconciliation = await assertFinanceMutationSafe(account.id, {
+        connection,
+        lock: false,
+      });
+      account = { ...account, ...reconciliation.calculated };
+      if (Number(account.active_hire_count || 0) > 0) {
+        throw new FinanceLifecycleError(409, "The financed machine is active on Hire and ownership cannot transfer.", "EQUIPMENT_ACTIVE_ON_HIRE");
+      }
+      if (Number(account.outstanding_balance || 0) > 0.01) {
+        throw new FinanceLifecycleError(
+          409,
+          `Ownership cannot transfer while GHS ${Number(account.outstanding_balance).toFixed(2)} remains.`,
+          "OWNERSHIP_BALANCE_REMAINS"
+        );
+      }
+      if (!account.controlled_delivery_completed_at || account.delivery_status_record !== "delivered") {
+        throw new FinanceLifecycleError(409, "Complete the controlled delivery handover before ownership transfer.");
+      }
+      const [existing] = await connection.query(
+        "SELECT id FROM equipment_ownership_transfers WHERE agreement_id = ? LIMIT 1 FOR UPDATE",
+        [agreementId]
+      );
+      if (existing.length) throw new FinanceLifecycleError(409, "Ownership was already transferred.");
+      const transferNumber = await nextFinanceNumber("EQUIPMENT_OWNERSHIP_TRANSFER", "EOT", userId(req));
+      const [result] = await connection.query(
+        `INSERT INTO equipment_ownership_transfers (
+           transfer_number, idempotency_key, hire_location_id, agreement_id,
+           credit_application_id, transfer_stage, customer_id, asset_id,
+           transfer_date, ownership_document_url, registration_transfer_reference,
+           notes, status, issued_by, issued_at
+         ) VALUES (?, ?, ?, ?, ?, 'finance_controlled', ?, ?, ?, ?, ?, ?, 'issued', ?, NOW())`,
+        [
+          transferNumber,
+          key,
+          account.hire_location_id,
+          account.id,
+          account.credit_application_id,
+          account.customer_id,
+          account.asset_id,
+          transferDate,
+          nullableText(req.body?.ownership_document_url, 3000),
+          nullableText(req.body?.registration_transfer_reference, 150),
+          nullableText(req.body?.notes, 3000),
+          userId(req),
+        ]
+      );
+      await connection.query(
+        `UPDATE equipment_sale_agreements
+         SET ownership_status = 'transferred', agreement_status = 'completed',
+             completed_at = COALESCE(completed_at, NOW()),
+             controlled_ownership_completed_at = NOW(),
+             controlled_ownership_completed_by = ?
+         WHERE id = ?`,
+        [userId(req), account.id]
+      );
+      await connection.query(
+        `UPDATE equipment_asset_sale_locks
+         SET lock_status = 'sold', expires_at = NULL
+         WHERE agreement_id = ? AND released_at IS NULL`,
+        [account.id]
+      );
+      await connection.query(
+        `UPDATE fleet_assets
+         SET sale_status = 'sold', current_status = 'sold', sold_at = NOW(), updated_by = ?
+         WHERE id = ?`,
+        [userId(req), account.asset_id]
+      );
+      await writeAuditEvent({
+        connection,
+        req,
+        action: "EQUIPMENT_FINANCE_OWNERSHIP_TRANSFERRED",
+        details: `Completed controlled ownership transfer ${transferNumber}.`,
+        workspaceCode: "equipment_installment_finance",
+        hireLocationId: account.hire_location_id,
+        entityType: "equipment_ownership_transfer",
+        entityId: result.insertId,
+        metadata: { agreement_id: account.id, asset_id: account.asset_id, transfer_stage: "finance_controlled" },
+      });
+      await connection.commit();
+      return res.status(201).json({
+        status: "success",
+        message: "Ownership transfer completed and the exact machine was marked sold.",
+        transfer_id: result.insertId,
+        transfer_number: transferNumber,
+        automatic_sms_sent: false,
+        sms: { sent: false, automatic: false },
+      });
+    } catch (error) {
+      try {
+        await connection.rollback();
+      } catch (_rollbackError) {}
+      return sendError(res, error, "Could not complete Finance ownership transfer.");
+    } finally {
+      connection.release();
+    }
+  }
+);
 
 module.exports = router;
 module.exports.COLLECTION_ROLES = COLLECTION_ROLES;
 module.exports.FINALISATION_ROLES = FINALISATION_ROLES;
+module.exports.allocateCollection = allocateCollection;
 module.exports.schemaStatus = schemaStatus;
-module.exports.deliveryAllowed = deliveryAllowed;
-module.exports.publicAccount = publicAccount;
-module.exports.paymentBreakdown = paymentBreakdown;
