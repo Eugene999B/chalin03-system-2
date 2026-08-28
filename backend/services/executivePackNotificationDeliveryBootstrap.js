@@ -3,7 +3,6 @@ const { pool } = require("../config/db");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 
 const INSTALL_FLAG = Symbol.for("chalin03.executivePackNotificationDeliveryInstalled");
-const FIRST_MESSAGE_CODES = new Set(["executive-snapshot", "audit-summary", "manager-today"]);
 
 function isExecutivePackRequest(request) {
   if (String(request?.method || "").toUpperCase() !== "POST") return false;
@@ -12,16 +11,15 @@ function isExecutivePackRequest(request) {
   const body = request?.body || {};
   const category = String(body.category || "").trim().toLowerCase();
   const source = String(body.source_reference || "").trim();
-  if (category !== "executive" || !source.startsWith("executive-message-pack:")) return false;
-  return FIRST_MESSAGE_CODES.has(source.split(":").pop());
+  return category === "executive" && source.startsWith("executive-message-pack:");
 }
 
 async function deliverExecutivePackSms(request) {
   try {
     if (!isExecutivePackRequest(request)) return;
+
     const recipientId = Number(request.body?.target_user_id);
     const sourceReference = String(request.body?.source_reference || "").trim();
-
     if (!Number.isInteger(recipientId) || recipientId <= 0) {
       console.warn("Executive intelligence SMS skipped: invalid recipient user id.", { sourceReference });
       return;
@@ -44,9 +42,11 @@ async function deliverExecutivePackSms(request) {
       return;
     }
 
-    const audience = sourceReference.split(":")[3] || "executive";
-    const message = `CHALIN 03: Your ${audience} intelligence pack is ready. Separate insight and action messages have been delivered to your notification centre.`;
+    const title = String(request.body?.title || "Chalin 03 Executive Intelligence").trim();
+    const rawMessage = String(request.body?.message || "").trim();
+    if (!rawMessage) return;
 
+    const message = `CHALIN 03 — ${title}\n${rawMessage}`;
     const result = await sendSmsAlertToPhone({
       branchId: Number(request.user?.branch_id || 1),
       phone,
@@ -70,7 +70,6 @@ async function deliverExecutivePackSms(request) {
 function installExecutivePackNotificationDelivery() {
   if (globalThis[INSTALL_FLAG]) return false;
   const originalEnd = http.ServerResponse.prototype.end;
-
   http.ServerResponse.prototype.end = function executivePackAwareEnd(...args) {
     const request = this.req;
     const result = originalEnd.apply(this, args);
