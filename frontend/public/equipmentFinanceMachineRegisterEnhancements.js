@@ -1,5 +1,8 @@
 (() => {
-  const STYLE_ID = "chalin03-finance-machine-register-enhancements-v1";
+  const STYLE_ID = "chalin03-finance-machine-register-enhancements-v2";
+  const ENHANCED_ATTR = "data-chalin03-finance-machine-enhanced";
+  let inFlight = null;
+  let refreshTimer = null;
 
   function installStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -47,7 +50,10 @@
 
   async function fetchJson(url) {
     try {
-      const response = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+      const response = await fetch(url, {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
       if (!response.ok) return null;
       return await response.json();
     } catch {
@@ -61,7 +67,9 @@
 
   function statusFor(machine, accounts) {
     const code = String(machine?.asset_code || "").trim().toLowerCase();
-    const account = accounts.find((item) => String(item?.asset_code || "").trim().toLowerCase() === code);
+    const account = accounts.find(
+      (item) => String(item?.asset_code || "").trim().toLowerCase() === code
+    );
     const accountStatus = String(account?.agreement_status || "").toLowerCase();
     const outstanding = Number(account?.outstanding_balance || 0);
 
@@ -86,7 +94,9 @@
       const codeNode = body?.querySelector(":scope > p");
       if (!body || !codeNode) return;
       const code = String(codeNode.textContent || "").trim().toLowerCase();
-      const machine = machines.find((item) => String(item?.asset_code || "").trim().toLowerCase() === code);
+      const machine = machines.find(
+        (item) => String(item?.asset_code || "").trim().toLowerCase() === code
+      );
       if (!machine) return;
 
       const image = card.querySelector(".finance-pro__machine-image");
@@ -113,28 +123,53 @@
         if (cleaned) warning.textContent = `Still needed: ${cleaned}`;
         else warning.remove();
       }
+      card.setAttribute(ENHANCED_ATTR, "true");
     });
   }
 
   async function enhance() {
     installStyles();
     if (!document.querySelector(".finance-pro__machine-card")) return;
-    const [machinesData, accountsData] = await Promise.all([
+    if (inFlight) return inFlight;
+    inFlight = Promise.all([
       fetchJson("/api/equipment-catalogue/sales/professional/machine-register"),
       fetchJson("/api/equipment-catalogue/sales/finance-lifecycle/accounts"),
-    ]);
-    const machines = Array.isArray(machinesData?.machines) ? machinesData.machines : [];
-    const accounts = normalizeAccounts(accountsData);
-    enhanceCards(machines, accounts);
+    ])
+      .then(([machinesData, accountsData]) => {
+        const machines = Array.isArray(machinesData?.machines) ? machinesData.machines : [];
+        enhanceCards(machines, normalizeAccounts(accountsData));
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+    return inFlight;
+  }
+
+  function scheduleEnhance() {
+    window.clearTimeout(refreshTimer);
+    refreshTimer = window.setTimeout(enhance, 120);
   }
 
   function boot() {
     enhance();
-    const observer = new MutationObserver(() => enhance());
+    const observer = new MutationObserver((mutations) => {
+      const relevant = mutations.some((mutation) =>
+        [...mutation.addedNodes].some((node) =>
+          node.nodeType === 1 && (
+            node.matches?.(".finance-pro__machine-card") ||
+            node.querySelector?.(".finance-pro__machine-card")
+          )
+        )
+      );
+      if (relevant) scheduleEnhance();
+    });
     observer.observe(document.documentElement, { childList: true, subtree: true });
     window.setTimeout(() => observer.disconnect(), 120000);
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
-  else boot();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot, { once: true });
+  } else {
+    boot();
+  }
 })();
