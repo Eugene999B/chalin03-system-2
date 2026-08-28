@@ -110,7 +110,44 @@
 }
 
 .group-operations-map__node > span {
-  font-size: 22px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-bottom: 2px;
+  border: 1px solid rgba(247, 200, 61, 0.48);
+  border-radius: 10px;
+  color: #f7c83d;
+  background: rgba(247, 200, 61, 0.08);
+  font: 900 11px/1 Arial, sans-serif;
+  letter-spacing: .08em;
+}
+
+.group-operations-map__node.is-parts > span {
+  font-size: 0;
+}
+
+.group-operations-map__node.is-parts > span::after {
+  content: "P";
+  font-size: 14px;
+}
+
+.group-operations-map__node.is-mining > span {
+  font-size: 0;
+}
+
+.group-operations-map__node.is-mining > span::after {
+  content: "M";
+  font-size: 14px;
+}
+
+.group-operations-map__node.is-hire > span {
+  font-size: 0;
+}
+
+.group-operations-map__node.is-hire > span::after {
+  content: "H";
+  font-size: 14px;
 }
 
 .group-operations-map__node strong {
