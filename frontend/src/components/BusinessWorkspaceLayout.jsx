@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import WorkspaceContextSelector from "./WorkspaceContextSelector";
+import { getChalinThemeMode, setChalinTheme } from "../utils/chalinTheme.js";
 import "../styles/businessWorkspaceLayout.css";
 import "../styles/systemTheme.css";
 
@@ -50,16 +51,6 @@ function isNavigationItemActive(item, location) {
   return new URLSearchParams(location.search).toString() === target.search;
 }
 
-function getInitialTheme() {
-  try {
-    const saved = localStorage.getItem("chalin03-theme");
-    if (saved === "light" || saved === "dark") return saved;
-  } catch {
-    // Ignore storage restrictions and use a safe default.
-  }
-  return "light";
-}
-
 export default function BusinessWorkspaceLayout({
   workspaceName,
   icon,
@@ -77,7 +68,7 @@ export default function BusinessWorkspaceLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState(getInitialTheme);
+  const [themeMode, setThemeModeState] = useState(() => getChalinThemeMode());
 
   const visibleSections = useMemo(
     () =>
@@ -88,14 +79,12 @@ export default function BusinessWorkspaceLayout({
   );
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.setAttribute("data-chalin-theme", themeMode);
-    try {
-      localStorage.setItem("chalin03-theme", themeMode);
-    } catch {
-      // Theme remains active for the current session when storage is unavailable.
-    }
-  }, [themeMode]);
+    const handleThemeChange = (event) => {
+      setThemeModeState(event.detail?.mode || getChalinThemeMode());
+    };
+    window.addEventListener("chalin03-theme-change", handleThemeChange);
+    return () => window.removeEventListener("chalin03-theme-change", handleThemeChange);
+  }, []);
 
   useEffect(() => {
     function onResize() {
@@ -116,7 +105,9 @@ export default function BusinessWorkspaceLayout({
   }
 
   function toggleTheme() {
-    setThemeMode((current) => (current === "dark" ? "light" : "dark"));
+    const next = themeMode === "dark" ? "light" : "dark";
+    setChalinTheme(next);
+    setThemeModeState(next);
   }
 
   const displayName = user?.full_name || user?.username || "Authorized User";
