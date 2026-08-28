@@ -44,7 +44,6 @@ async function run() {
     await connection.query(`
       INSERT INTO customer_feature_controls (branch_id, customer_identity_editing_enabled, customer_merge_enabled)
       SELECT id, 1, 1 FROM branches
-      WHERE is_active = TRUE
       ON DUPLICATE KEY UPDATE branch_id = VALUES(branch_id)
     `);
 
