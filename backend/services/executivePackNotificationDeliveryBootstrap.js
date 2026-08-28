@@ -14,6 +14,56 @@ function isExecutivePackRequest(request) {
   return category === "executive" && source.startsWith("executive-message-pack:");
 }
 
+function cleanLine(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function buildHumanSms({ title, rawMessage, rawAction, audience }) {
+  const cleanTitle = cleanLine(title) || "Business update";
+  const cleanMessage = cleanLine(rawMessage);
+  const cleanAction = cleanLine(rawAction);
+  const audienceText = audience === "auditor"
+    ? "Audit Review"
+    : audience === "manager"
+      ? "Management Update"
+      : "Executive Update";
+
+  const parts = [
+    `CHALIN 03 — ${audienceText}`,
+    cleanTitle,
+    cleanMessage,
+  ];
+
+  if (cleanAction) {
+    parts.push(`What to do next: ${cleanAction}`);
+  }
+
+  parts.push("This review covers the current Spare Parts and Installment Finance position and is intended to support a clear management decision.");
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function splitNotificationMessage(value) {
+  const text = String(value || "").trim();
+  if (!text) return { message: "", action: "" };
+
+  const marker = /\n\s*Recommended action:\s*/i;
+  const match = text.match(marker);
+  if (!match || typeof match.index !== "number") {
+    return { message: text, action: "" };
+  }
+
+  const message = text.slice(0, match.index).trim();
+  const remainder = text.slice(match.index + match[0].length);
+  const scopeMarker = /\n\s*Scope:\s*/i;
+  const scopeMatch = remainder.match(scopeMarker);
+  const action = (scopeMatch && typeof scopeMatch.index === "number"
+    ? remainder.slice(0, scopeMatch.index)
+    : remainder
+  ).trim();
+
+  return { message, action };
+}
+
 async function deliverExecutivePackSms(request) {
   try {
     if (!isExecutivePackRequest(request)) return;
@@ -43,10 +93,20 @@ async function deliverExecutivePackSms(request) {
     }
 
     const title = String(request.body?.title || "Chalin 03 Executive Intelligence").trim();
-    const rawMessage = String(request.body?.message || "").trim();
+    const parsed = splitNotificationMessage(request.body?.message);
+    const rawMessage = parsed.message;
+    const rawAction = parsed.action;
     if (!rawMessage) return;
 
-    const message = `CHALIN 03 — ${title}\n${rawMessage}`;
+    const sourceParts = sourceReference.split(":");
+    const audience = sourceParts[3] || "executive";
+    const message = buildHumanSms({
+      title,
+      rawMessage,
+      rawAction,
+      audience,
+    });
+
     const result = await sendSmsAlertToPhone({
       branchId: Number(request.user?.branch_id || 1),
       phone,
