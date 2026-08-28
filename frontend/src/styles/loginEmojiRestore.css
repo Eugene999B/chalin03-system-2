@@ -1,0 +1,106 @@
+.gate4.biometric-login .gate4__workspace-tabs button > span {
+  color: inherit !important;
+  font-size: 22px !important;
+  background: #f2f5f7 !important;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button > span::before,
+.gate4.biometric-login .gate4__workspace-tabs button > span::after {
+  background-image: none !important;
+  content: none !important;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button:nth-child(1) > span::before {
+  content: "🧰" !important;
+  display: block !important;
+  color: inherit !important;
+  font-size: 22px !important;
+  background: none !important;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button:nth-child(2) > span::before {
+  content: "⛏️" !important;
+  display: block !important;
+  color: inherit !important;
+  font-size: 22px !important;
+  background: none !important;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button:nth-child(3) > span::before {
+  content: "🚜" !important;
+  display: block !important;
+  color: inherit !important;
+  font-size: 22px !important;
+  background: none !important;
+}
+
+.gate4.biometric-login .gate4__context-icon {
+  color: inherit !important;
+  font-size: 23px !important;
+  background: #f2f4f3 !important;
+}
+
+.gate4.biometric-login .gate4__context-icon::after {
+  content: none !important;
+}
+
+.gate4.biometric-login.gate4.biometric-login .gate4__context-icon::before {
+  content: "🧰" !important;
+  display: block !important;
+  color: inherit !important;
+  font-size: 23px !important;
+}
+
+.gate4.biometric-login.group-login--mining .gate4__context-icon::before {
+  content: "⛏️" !important;
+}
+
+.gate4.biometric-login.group-login--equipment_hire .gate4__context-icon::before {
+  content: "🚜" !important;
+}
+
+.gate4.biometric-login .group-operations-map__node > span {
+  width: 58px !important;
+  height: 58px !important;
+  font-size: 0 !important;
+  color: transparent !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(0,0,0,.08)) !important;
+}
+
+.gate4.biometric-login .group-operations-map__node > span::before {
+  content: none !important;
+  background-image: none !important;
+}
+
+.gate4.biometric-login .group-operations-map__node.is-parts > span::after {
+  content: "🧰" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  color: initial !important;
+  font-size: 32px !important;
+  background: none !important;
+}
+
+.gate4.biometric-login .group-operations-map__node.is-mining > span::after {
+  content: "⛏️" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  color: initial !important;
+  font-size: 32px !important;
+  background: none !important;
+}
+
+.gate4.biometric-login .group-operations-map__node.is-hire > span::after {
+  content: "🚜" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  color: initial !important;
+  font-size: 32px !important;
+  background: none !important;
+}
