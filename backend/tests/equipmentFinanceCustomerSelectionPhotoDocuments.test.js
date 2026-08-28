@@ -71,10 +71,10 @@ test("existing Finance customer cards have an unmistakable selected state", () =
   assert.match(startRedirect, /EquipmentFinanceCustomerPhotoPanel/);
 });
 
-test("passport picture is compressed without cropping and bridged only to Finance start", () => {
-  assert.match(photoPanel, /accept="image\/jpeg,image\/png,image\/webp"/);
+test("customer picture accepts normal browser image types, is compressed without cropping, and is bridged only to Finance start", () => {
+  assert.match(photoPanel, /accept="image\/\*"/);
   assert.match(photoPanel, /capture="user"/);
-  assert.match(photoPanel, /Full image preserved/);
+  assert.match(photoPanel, /Any normal image/);
   assert.match(photoUtility, /MAX_DIMENSION = 1280/);
   assert.match(photoUtility, /TARGET_BYTES = 480 \* 1024/);
   assert.match(photoUtility, /context\.drawImage\(image, 0, 0, width, height\)/);
