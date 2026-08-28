@@ -1,16 +1,9 @@
 const { AsyncLocalStorage } = require("node:async_hooks");
-
 const PDFDocument = require("pdfkit");
 const sharp = require("sharp");
-
 const { pool } = require("../config/db");
-const {
-  decryptDocument,
-} = require("./equipmentFinancePrivateDocumentsService");
-const {
-  renderCompletionPdf: renderBasePdf,
-  renderCompletionWord: renderBaseWord,
-} = require("./equipmentFinanceCompletionRendererService");
+const { decryptDocument } = require("./equipmentFinancePrivateDocumentsService");
+const { renderCompletionPdf: renderBasePdf, renderCompletionWord: renderBaseWord } = require("./equipmentFinanceCompletionRendererService");
 
 const PHOTO_DOCUMENT_TYPES = new Set([
   "installment_agreement",
@@ -45,46 +38,43 @@ function snapshotIdentity(document) {
     customerId: Number(agreement.customer_id || 0) || null,
   };
 }
-async function profilePhotoFallback(customerId) {
-  if (!customerId) return null;
+
+async function latestCustomerPhoto(document) {
+  if (!PHOTO_DOCUMENT_TYPES.has(document.document_type)) return null;
+  const { applicationId } = snapshotIdentity(document);
+  // A photo is included only when it was explicitly added to the current
+  // installment application. Never fall back to an older master-customer photo.
+  if (!applicationId) return null;
   try {
-    const [rows] = await pool.query("SELECT profile_photo_data_url FROM hire_customers WHERE id = ? AND profile_photo_data_url IS NOT NULL LIMIT 1", [customerId]);
-    const dataUrl = String(rows[0]?.profile_photo_data_url || "");
-    const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/i.exec(dataUrl);
-    if (!match) return null;
-    const buffer = Buffer.from(match[1], "base64");
-    if (!buffer.length) return null;
-    return { buffer, mimeType: "image/jpeg", dataUrl, documentId: null, documentNumber: "Customer profile photo", checksum: null, fileName: "customer-profile-photo.jpg" };
+    const [rows] = await pool.query(
+      "SELECT document.* FROM equipment_finance_private_documents document WHERE document.application_id = ? AND document.document_type = 'customer_passport_photo' AND document.document_status IN ('active','archived') ORDER BY CASE WHEN document.document_status = 'active' THEN 0 ELSE 1 END, document.version_number DESC, document.id DESC LIMIT 1",
+      [applicationId]
+    );
+    const row = rows[0];
+    if (!row) return null;
+    let buffer = decryptDocument(row);
+    let mimeType = String(row.mime_type || "").toLowerCase();
+    if (mimeType === "image/webp") {
+      buffer = await sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
+      mimeType = "image/png";
+    }
+    if (!["image/jpeg", "image/png"].includes(mimeType)) return null;
+    return {
+      buffer,
+      mimeType,
+      dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`,
+      documentId: Number(row.id),
+      documentNumber: row.document_number,
+      checksum: row.content_checksum,
+      fileName: row.original_file_name,
+    };
   } catch (error) {
     if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) return null;
-    console.error("Finance customer profile photo fallback warning:", error);
+    console.error("Finance customer photo document-render warning:", error);
     return null;
   }
 }
-async function latestCustomerPhoto(document) {
-  if (!PHOTO_DOCUMENT_TYPES.has(document.document_type)) return null;
-  const { applicationId, customerId } = snapshotIdentity(document);
-  if (!applicationId && !customerId) return null;
-  try {
-    const conditions = ["document.document_type = 'customer_passport_photo'", "document.document_status IN ('active','archived')"];
-    const values = [];
-    if (applicationId && customerId) { conditions.push("(document.application_id = ? OR document.customer_id = ?)"); values.push(applicationId, customerId); }
-    else if (applicationId) { conditions.push("document.application_id = ?"); values.push(applicationId); }
-    else { conditions.push("document.customer_id = ?"); values.push(customerId); }
-    const [rows] = await pool.query(`SELECT document.* FROM equipment_finance_private_documents document WHERE ${conditions.join(" AND ")} ORDER BY CASE WHEN document.application_id = ? THEN 0 ELSE 1 END, CASE WHEN document.document_status = 'active' THEN 0 ELSE 1 END, document.version_number DESC, document.id DESC LIMIT 1`, [...values, applicationId || -1]);
-    const row = rows[0];
-    if (!row) return profilePhotoFallback(customerId);
-    let buffer = decryptDocument(row);
-    let mimeType = String(row.mime_type || "").toLowerCase();
-    if (mimeType === "image/webp") { buffer = await sharp(buffer).png({ compressionLevel: 9 }).toBuffer(); mimeType = "image/png"; }
-    if (!["image/jpeg", "image/png"].includes(mimeType)) return profilePhotoFallback(customerId);
-    return { buffer, mimeType, dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`, documentId: Number(row.id), documentNumber: row.document_number, checksum: row.content_checksum, fileName: row.original_file_name };
-  } catch (error) {
-    if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) return profilePhotoFallback(customerId);
-    console.error("Finance customer photo document-render warning:", error);
-    return profilePhotoFallback(customerId);
-  }
-}
+
 function pageWidth(doc) { return doc.page.width - doc.page.margins.left - doc.page.margins.right; }
 function drawFact(doc, x, y, width, title, value) {
   doc.fillColor("#6b7a71").font("Helvetica").fontSize(7).text(title, x, y, { width });
@@ -129,7 +119,10 @@ function installPdfPatch() {
   Object.defineProperty(PDFDocument.prototype, PATCH_SYMBOL, { value: true, configurable: false });
   PDFDocument.prototype.bufferedPageRange = function patchedBufferedPageRange(...args) {
     const context = annexContext.getStore();
-    if (context?.photo && !context.appended) { context.appended = true; appendIdentityAnnex(this, context); }
+    if (context?.photo && !context.appended) {
+      context.appended = true;
+      appendIdentityAnnex(this, context);
+    }
     return original.apply(this, args);
   };
 }
