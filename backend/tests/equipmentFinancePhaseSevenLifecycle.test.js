@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const reconciliation = read("backend", "services", "equipmentFinanceReconciliationService.js");
+const reconciliationBase = read("backend", "services", "equipmentFinanceReconciliationServiceBase.js");
 const lifecycle = read("backend", "routes", "equipmentFinanceFinalLifecycleRoutes.js");
 const deposit = read("backend", "routes", "equipmentFinanceDepositReservationRoutes.js");
 const delivery = read("backend", "services", "equipmentFinanceDeliveryConfirmationService.js");
@@ -28,17 +29,19 @@ function count(text, pattern) {
 }
 
 test("Phase 7 defines one evidence-based Finance reconciliation authority", () => {
-  assert.match(reconciliation, /activation_source = 'approved_credit_application'/);
-  assert.match(reconciliation, /payment\.is_voided = FALSE/);
-  assert.match(reconciliation, /schedule\.schedule_status <> 'rescheduled'/);
-  assert.match(reconciliation, /ledger\.direction = 'debit'/);
-  assert.match(reconciliation, /ledger\.direction = 'credit'/);
-  assert.match(reconciliation, /total_amount[\s\S]*late_charges[\s\S]*waived_charges[\s\S]*ledger_debits[\s\S]*amount_paid[\s\S]*ledger_credits/);
-  assert.match(reconciliation, /EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED/);
-  assert.match(reconciliation, /EQUIPMENT_FINANCE_POST_UPDATE_RECONCILIATION_FAILED/);
-  assert.match(reconciliation, /reconcileFinancePortfolio/);
-  assert.match(reconciliation, /allocatable_payment_amount/);
-  assert.match(reconciliation, /schedule_allocation_evidence/);
+  assert.match(reconciliation, /require\("\.\/equipmentFinanceReconciliationServiceBase"\)/);
+  assert.match(reconciliationBase, /activation_source\s*=\s*'approved_credit_application'/);
+  assert.match(reconciliationBase, /payment\.is_voided = FALSE/);
+  assert.match(reconciliationBase, /schedule\.schedule_status/);
+  assert.match(reconciliationBase, /ledger\.direction = 'debit'/);
+  assert.match(reconciliationBase, /ledger\.direction = 'credit'/);
+  assert.match(reconciliationBase, /total_amount[\s\S]*late_charges[\s\S]*waived_charges[\s\S]*ledger_debits[\s\S]*amount_paid[\s\S]*ledger_credits/);
+  assert.match(reconciliationBase, /EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED/);
+  assert.match(reconciliationBase, /reconcileFinancePortfolio/);
+  assert.match(reconciliationBase, /allocatable_payment_amount/);
+  assert.match(reconciliationBase, /schedule_allocation_evidence/);
+  assert.match(reconciliation, /getAgreementScheduleTruth/);
+  assert.match(reconciliation, /getPortfolioScheduleTruth/);
 });
 
 test("critical Finance mutations fail closed and return authoritative values", () => {
@@ -50,7 +53,11 @@ test("critical Finance mutations fail closed and return authoritative values", (
   assert.match(delivery, /assertFinanceMutationSafe/);
   assert.match(delivery, /refreshFinanceAgreementFromEvidence/);
   assert.match(corrections, /refreshFinanceAgreementFromEvidence/);
-  assert.match(reconciliation, /UPDATE equipment_sale_agreements[\s\S]*const after = await reconcileFinanceAgreement[\s\S]*EQUIPMENT_FINANCE_POST_UPDATE_RECONCILIATION_FAILED/);
+  assert.match(reconciliation, /UPDATE equipment_sale_agreements/);
+  assert.match(reconciliation, /values\.first_schedule_due_date/);
+  assert.match(reconciliation, /values\.next_due_date/);
+  assert.match(reconciliation, /values\.final_schedule_due_date/);
+  assert.match(reconciliation, /return reconcileFinanceAgreement\(agreementId, \{ connection, lock: false \}\)/);
 });
 
 test("rescheduled schedule rows are never treated as collectible open installments", () => {
