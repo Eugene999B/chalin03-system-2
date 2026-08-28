@@ -12,10 +12,7 @@ function number(value) {
 }
 
 function money(value) {
-  return `GHS ${number(value).toLocaleString("en-GH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `GHS ${number(value).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function dateOnly(value) {
@@ -27,7 +24,6 @@ function rangeDates(from, to) {
   const end = dateOnly(to) || new Date().toISOString().slice(0, 10);
   const suppliedStart = dateOnly(from);
   if (suppliedStart && suppliedStart <= end) return { from: suppliedStart, to: end };
-
   const start = new Date(`${end}T00:00:00Z`);
   start.setUTCDate(start.getUTCDate() - DEFAULT_RANGE_DAYS + 1);
   return { from: start.toISOString().slice(0, 10), to: end };
@@ -38,20 +34,12 @@ function cleanArray(values, mapper = (value) => value) {
 }
 
 async function tableColumns(tableName) {
-  const [rows] = await pool.query(
-    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
-    [tableName]
-  );
+  const [rows] = await pool.query(`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`, [tableName]);
   return new Set(rows.map((row) => row.COLUMN_NAME));
 }
 
 async function tableExists(tableName) {
-  const [rows] = await pool.query(
-    `SELECT 1 FROM information_schema.TABLES
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1`,
-    [tableName]
-  );
+  const [rows] = await pool.query(`SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? LIMIT 1`, [tableName]);
   return rows.length > 0;
 }
 
@@ -59,37 +47,32 @@ async function loadSparePartsIntelligence(from, to) {
   const [salesRows, expenseRows, productRows, debtRows] = await Promise.all([
     pool.query(
       `SELECT
-         COUNT(*) AS sales_count,
-         COALESCE(SUM(total),0) AS sales_total,
-         COALESCE(SUM(amount_paid),0) AS payments_received,
-         COALESCE(SUM(balance),0) AS sales_balance,
+         COUNT(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN 1 END) AS sales_count,
+         COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN total ELSE 0 END),0) AS sales_total,
+         COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN amount_paid ELSE 0 END),0) AS payments_received,
+         COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN balance ELSE 0 END),0) AS sales_balance,
          COALESCE(SUM(CASE WHEN is_voided = 1 THEN 1 ELSE 0 END),0) AS voided_sales_count,
          COALESCE(SUM(CASE WHEN is_voided = 1 THEN total ELSE 0 END),0) AS voided_sales_value
-       FROM sales
-       WHERE DATE(created_at) BETWEEN ? AND ?`,
+       FROM sales WHERE DATE(created_at) BETWEEN ? AND ?`,
       [from, to]
     ),
     pool.query(
-      `SELECT COUNT(*) AS expense_count, COALESCE(SUM(amount),0) AS expenses_total
-       FROM expenses WHERE expense_date BETWEEN ? AND ?`,
+      `SELECT COUNT(*) AS expense_count, COALESCE(SUM(amount),0) AS expenses_total FROM expenses WHERE expense_date BETWEEN ? AND ?`,
       [from, to]
     ),
     pool.query(
-      `SELECT
-         COUNT(*) AS product_count,
-         COALESCE(SUM(quantity * cost_price),0) AS stock_cost_value,
-         COALESCE(SUM(quantity * selling_price),0) AS stock_retail_value,
-         COALESCE(SUM(CASE WHEN quantity <= low_stock_threshold THEN 1 ELSE 0 END),0) AS low_stock_count,
-         COALESCE(SUM(CASE WHEN quantity <= 0 THEN 1 ELSE 0 END),0) AS out_of_stock_count
+      `SELECT COUNT(*) AS product_count,
+              COALESCE(SUM(quantity * cost_price),0) AS stock_cost_value,
+              COALESCE(SUM(quantity * selling_price),0) AS stock_retail_value,
+              COALESCE(SUM(CASE WHEN quantity <= low_stock_threshold THEN 1 ELSE 0 END),0) AS low_stock_count,
+              COALESCE(SUM(CASE WHEN quantity <= 0 THEN 1 ELSE 0 END),0) AS out_of_stock_count
        FROM products WHERE is_active = TRUE`,
       []
     ),
     pool.query(
       `SELECT COUNT(*) AS overdue_accounts, COALESCE(SUM(balance),0) AS overdue_balance
        FROM debts
-       WHERE balance > 0
-         AND due_date IS NOT NULL
-         AND due_date < CURDATE()
+       WHERE balance > 0 AND due_date IS NOT NULL AND due_date < CURDATE()
          AND LOWER(COALESCE(status,'active')) NOT IN ('paid','void','cancelled')`,
       []
     ),
@@ -99,14 +82,12 @@ async function loadSparePartsIntelligence(from, to) {
   const expenses = expenseRows[0][0] || {};
   const products = productRows[0][0] || {};
   const debts = debtRows[0][0] || {};
-
-  const payments = number(sales.payments_received);
   const revenue = number(sales.sales_total);
+  const payments = number(sales.payments_received);
   const costs = number(expenses.expenses_total);
   const collectionRate = revenue > 0 ? (payments / revenue) * 100 : 0;
-  const cashMargin = revenue - costs;
-
   const signals = [];
+
   if (number(sales.voided_sales_count) > 0) {
     signals.push({
       severity: number(sales.voided_sales_count) >= 5 ? "high" : "medium",
@@ -121,7 +102,7 @@ async function loadSparePartsIntelligence(from, to) {
       severity: "high",
       title: "Revenue capacity may be constrained",
       detail: `${number(products.out_of_stock_count)} product(s) are at zero stock, while ${number(products.low_stock_count)} are at or below restock level.`,
-      action: "Prioritise fast-moving critical parts before lost sales accumulate.",
+      action: "Prioritise critical replenishment before lost sales accumulate.",
       path: "/low-stock",
     });
   }
@@ -141,7 +122,7 @@ async function loadSparePartsIntelligence(from, to) {
     payments_received: payments,
     outstanding_sales_balance: number(sales.sales_balance),
     expenses: costs,
-    estimated_operating_result: cashMargin,
+    estimated_operating_result: revenue - costs,
     collection_rate: Number(collectionRate.toFixed(1)),
     product_count: number(products.product_count),
     stock_cost_value: number(products.stock_cost_value),
@@ -150,6 +131,8 @@ async function loadSparePartsIntelligence(from, to) {
     out_of_stock_count: number(products.out_of_stock_count),
     overdue_debt_accounts: number(debts.overdue_accounts),
     overdue_debt_balance: number(debts.overdue_balance),
+    voided_sales_count: number(sales.voided_sales_count),
+    voided_sales_value: number(sales.voided_sales_value),
     signals,
   };
 }
@@ -173,7 +156,7 @@ async function loadFinanceSignals(from, to) {
       severity: "critical",
       title: "High-risk financed machines need executive review",
       detail: `${number(summary.critical_risk_accounts)} active account(s) are in the critical risk band.`,
-      action: "Open the Finance collections portfolio and document the recovery decision for each critical account.",
+      action: "Review each account, guarantor position and recovery decision today.",
       path: "/equipment-installment-finance/collections",
     });
   } else if (number(summary.high_risk_accounts) > 0) {
@@ -202,18 +185,17 @@ async function loadFinanceSignals(from, to) {
     const dateColumn = columns.has("payment_date") ? "payment_date" : columns.has("created_at") ? "created_at" : null;
     const categoryColumn = columns.has("payment_category") ? "payment_category" : null;
     if (amountColumn && dateColumn) {
-      const categoryClause = categoryColumn ? `, SUM(CASE WHEN LOWER(COALESCE(${categoryColumn},'')) IN ('refund','reversal','reversed') THEN 1 ELSE 0 END) AS reversals,
-         COALESCE(SUM(CASE WHEN LOWER(COALESCE(${categoryColumn},'')) IN ('refund','reversal','reversed') THEN ${amountColumn} ELSE 0 END),0) AS reversed_amount` : `, 0 AS reversals, 0 AS reversed_amount`;
+      const categoryClause = categoryColumn
+        ? `, SUM(CASE WHEN LOWER(COALESCE(${categoryColumn},'')) IN ('refund','reversal','reversed') THEN 1 ELSE 0 END) AS reversals,
+           COALESCE(SUM(CASE WHEN LOWER(COALESCE(${categoryColumn},'')) IN ('refund','reversal','reversed') THEN ${amountColumn} ELSE 0 END),0) AS reversed_amount`
+        : `, 0 AS reversals, 0 AS reversed_amount`;
       const [rows] = await pool.query(
-        `SELECT COUNT(*) AS payments,
-                COALESCE(SUM(${amountColumn}),0) AS amount
-                ${categoryClause}
+        `SELECT COUNT(*) AS payments, COALESCE(SUM(${amountColumn}),0) AS amount ${categoryClause}
          FROM equipment_sale_payments
          WHERE DATE(${dateColumn}) BETWEEN ? AND ?
            AND agreement_id IN (
              SELECT id FROM equipment_sale_agreements
-             WHERE sale_type = 'installment'
-               AND activation_source = 'approved_credit_application'
+             WHERE sale_type = 'installment' AND activation_source = 'approved_credit_application'
            )`,
         [from, to]
       );
@@ -277,11 +259,9 @@ function buildActions(spare, finance) {
     actions.push({ severity: "high", title: "Improve Spare Parts cash conversion", detail: `Only ${spare.collection_rate.toFixed(1)}% of recorded Spare Parts sales value was collected in the period.`, action: "Review credit sales ageing and top outstanding balances.", path: "/debts" });
   }
   if (finance.portfolio_at_risk_rate >= 20) {
-    actions.push({ severity: "high", title: "Protect the Finance book", detail: `${finance.portfolio_at_risk_rate.toFixed(1)}% of outstanding Finance exposure is currently in the overdue bucket.`, action: "Escalate the highest-value overdue agreements and record recovery decisions.", path: "/equipment-installment-finance/collections" });
+    actions.push({ severity: "high", title: "Protect the Finance book", detail: `${finance.portfolio_at_risk_rate.toFixed(1)}% of outstanding Finance exposure is currently overdue.`, action: "Escalate the highest-value overdue agreements and record recovery decisions.", path: "/equipment-installment-finance/collections" });
   }
-  if (!actions.length) {
-    actions.push({ severity: "low", title: "No urgent exception detected", detail: "The monitored Spare Parts and Installment indicators are currently within the configured review thresholds.", action: "Keep daily reconciliation, collection follow-up and independent review disciplined.", path: "/group-executive-control" });
-  }
+  if (!actions.length) actions.push({ severity: "low", title: "No urgent exception detected", detail: "The monitored Spare Parts and Installment indicators are currently within the configured review thresholds.", action: "Keep daily reconciliation, collection follow-up and independent review disciplined.", path: "/group-executive-control" });
   return actions.slice(0, 10);
 }
 
@@ -289,36 +269,31 @@ function buildAudienceMessage(intelligence, audience) {
   const { range, spare_parts: spare, installment_finance: finance, actions } = intelligence;
   const urgent = actions.filter((item) => ["critical", "high"].includes(item.severity));
   const audienceName = audience === "auditor" ? "Audit briefing" : audience === "manager" ? "Management action briefing" : "Boss / Executive briefing";
-
   const lines = [
     `${audienceName}: ${range.from} to ${range.to}.`,
-    `Spare Parts: ${money(spare.revenue)} sales across ${spare.sales_count} sale(s); ${money(spare.payments_received)} collected (${spare.collection_rate.toFixed(1)}% collection); ${money(spare.estimated_operating_result)} estimated revenue less recorded expenses; ${spare.low_stock_count} low-stock and ${spare.out_of_stock_count} zero-stock product(s).`,
+    `Spare Parts: ${money(spare.revenue)} completed sales across ${spare.sales_count} sale(s); ${money(spare.payments_received)} collected (${spare.collection_rate.toFixed(1)}% collection); ${money(spare.estimated_operating_result)} estimated revenue less recorded expenses; ${spare.low_stock_count} low-stock and ${spare.out_of_stock_count} zero-stock product(s).`,
     `Installment Finance: ${finance.active_accounts} active agreement(s); ${money(finance.outstanding_amount)} outstanding; ${money(finance.overdue_amount)} overdue; ${finance.overdue_accounts} overdue account(s); ${finance.critical_risk_accounts + finance.high_risk_accounts} high/critical-risk account(s); ${money(finance.due_next_7_days)} due in the next 7 days.`,
   ];
-
   if (audience === "auditor") {
-    lines.push(`Control focus: ${finance.reversals_in_period} Finance reversal/refund record(s) in the period and ${spare.signals.filter((item) => item.title.includes("Voided")).length ? spare.voided_sales_count || 0 : 0} Spare Parts voided-sale signal(s). These are review indicators, not accusations.`);
+    lines.push(`Control focus: ${finance.reversals_in_period} Finance reversal/refund record(s) in the period and ${spare.voided_sales_count} Spare Parts voided sale(s). These are review indicators, not accusations.`);
     lines.push(`Audit priority: ${urgent.length ? urgent.map((item) => `${item.title} — ${item.action}`).join(" ") : "No urgent control exception is currently surfaced."}`);
+    lines.push("Confirm transaction evidence, approval history and supporting documents before reaching a conclusion.");
   } else if (audience === "manager") {
-    lines.push(`What needs doing: ${urgent.length ? urgent.map((item) => `${item.title}: ${item.action}`).join(" ") : "Keep the current control rhythm and close the next collection cycle cleanly."}`);
+    lines.push(`What needs to happen next: ${actions.slice(0, 5).map((item) => `${item.title}: ${item.action}`).join(" ")}`);
   } else {
-    lines.push(`Executive picture: ${urgent.length ? urgent.map((item) => `${item.title}. ${item.detail} Decision: ${item.action}`).join(" ") : "The two monitored businesses are producing no urgent exception from the current indicators."}`);
-    lines.push(`What I would do next: protect cash collection, address the highest-risk installment accounts, and review any unusual transaction/control signals before they become financial surprises.`);
+    lines.push(`What deserves your attention now: ${urgent.length ? urgent.map((item) => `${item.title}. ${item.detail} Decision: ${item.action}`).join(" ") : "Continue protecting cash collection, stock availability and disciplined Finance follow-up."}`);
+    lines.push("This briefing is designed to answer four executive questions: what is happening, why it matters, what looks unusual, and what decision should happen next. Risk signals are review prompts, not accusations.");
   }
-
   return lines.join(" ");
 }
 
 async function buildExecutiveIntelligence({ from, to } = {}) {
   const range = rangeDates(from, to);
-  const [spare, finance] = await Promise.all([
-    loadSparePartsIntelligence(range.from, range.to),
-    loadFinanceSignals(range.from, range.to),
-  ]);
+  const [spare, finance] = await Promise.all([loadSparePartsIntelligence(range.from, range.to), loadFinanceSignals(range.from, range.to)]);
   const actions = buildActions(spare, finance);
-  const riskPoints = actions.reduce((score, item) => score + ({ critical: 35, high: 20, medium: 8, low: 0 }[item.severity] || 0), 0);
-  const healthScore = Math.max(0, Math.min(100, 100 - Math.min(100, riskPoints)));
-  return {
+  const riskWeight = actions.reduce((score, item) => score + ({ critical: 34, high: 18, medium: 7, low: 0 }[item.severity] || 0), 0);
+  const healthScore = Math.max(0, Math.min(100, 100 - riskWeight));
+  const intelligence = {
     generated_at: new Date().toISOString(),
     range,
     scope: "Spare Parts + Installment Finance",
@@ -327,41 +302,23 @@ async function buildExecutiveIntelligence({ from, to } = {}) {
     spare_parts: spare,
     installment_finance: finance,
     actions,
-    messages: {
-      executive: buildAudienceMessage({ range, spare_parts: spare, installment_finance: finance, actions }, "executive"),
-      auditor: buildAudienceMessage({ range, spare_parts: spare, installment_finance: finance, actions }, "auditor"),
-      manager: buildAudienceMessage({ range, spare_parts: spare, installment_finance: finance, actions }, "manager"),
-    },
   };
+  intelligence.messages = {
+    executive: buildAudienceMessage(intelligence, "executive"),
+    auditor: buildAudienceMessage(intelligence, "auditor"),
+    manager: buildAudienceMessage(intelligence, "manager"),
+  };
+  return intelligence;
 }
 
 async function listRecipients() {
-  const [rows] = await pool.query(
-    `SELECT id, full_name, username, role, phone, is_active
-     FROM users
-     WHERE is_active = TRUE
-       AND role IS NOT NULL
-     ORDER BY role, full_name, username`
-  );
-  return rows.map((row) => ({
-    id: Number(row.id),
-    name: row.full_name || row.username || `User #${row.id}`,
-    username: row.username || "",
-    role: String(row.role).toLowerCase(),
-    phone_available: Boolean(row.phone),
-  }));
+  const [rows] = await pool.query(`SELECT id, full_name, username, role, phone, is_active FROM users WHERE is_active = TRUE AND role IS NOT NULL ORDER BY role, full_name, username`);
+  return rows.map((row) => ({ id: Number(row.id), name: row.full_name || row.username || `User #${row.id}`, username: row.username || "", role: String(row.role).toLowerCase(), phone_available: Boolean(row.phone) }));
 }
 
 function selectedRecipients(allRecipients, { userIds, roles } = {}) {
-  const wantedUsers = new Set(cleanArray(userIds, (value) => {
-    const n = Number(value);
-    return Number.isInteger(n) && n > 0 ? n : null;
-  }));
-  const wantedRoles = new Set(cleanArray(roles, (value) => {
-    const role = String(value).trim().toLowerCase();
-    return ALLOWED_ROLES.includes(role) ? role : null;
-  }));
-
+  const wantedUsers = new Set(cleanArray(userIds, (value) => { const n = Number(value); return Number.isInteger(n) && n > 0 ? n : null; }));
+  const wantedRoles = new Set(cleanArray(roles, (value) => { const role = String(value).trim().toLowerCase(); return ALLOWED_ROLES.includes(role) ? role : null; }));
   const users = allRecipients.filter((recipient) => wantedUsers.has(recipient.id) || wantedRoles.has(recipient.role));
   if (!users.length) throw new Error("Select at least one recipient.");
   if (users.length > MAX_RECIPIENTS) throw new Error(`A maximum of ${MAX_RECIPIENTS} recipients may be selected per dispatch.`);
@@ -369,7 +326,7 @@ function selectedRecipients(allRecipients, { userIds, roles } = {}) {
 }
 
 async function createNotificationForRecipient({ recipient, message, title, severity, intelligence, createdBy }) {
-  const notificationKey = `executive.manual.${createdBy}.${recipient.id}.${Date.now()}.${Math.random().toString(16).slice(2,8)}`;
+  const notificationKey = `executive.manual.${createdBy}.${recipient.id}.${Date.now()}.${Math.random().toString(16).slice(2, 8)}`;
   const metadata = {
     intelligence_scope: intelligence.scope,
     intelligence_range: intelligence.range,
@@ -379,68 +336,34 @@ async function createNotificationForRecipient({ recipient, message, title, sever
   };
   const [result] = await pool.query(
     `INSERT INTO notifications (
-       notification_key, workspace_code, branch_id, target_user_id,
-       target_role, target_permission, category, notification_type,
-       severity, title, message, action_path, source_type, source_reference,
-       status, auto_generated, occurred_at, metadata_json, created_by
+       notification_key, workspace_code, branch_id, target_user_id, target_role,
+       target_permission, category, notification_type, severity, title, message,
+       action_path, source_type, source_reference, status, auto_generated,
+       occurred_at, metadata_json, created_by
      ) VALUES (?, 'group', NULL, ?, NULL, 'notifications.view', 'executive',
        'executive_intelligence', ?, ?, ?, ?, 'executive_intelligence', ?,
        'active', FALSE, NOW(), ?, ?)`,
-    [
-      notificationKey,
-      recipient.id,
-      severity,
-      title,
-      message,
-      "/group-executive-control",
-      intelligence.range.from + "_" + intelligence.range.to,
-      JSON.stringify(metadata),
-      createdBy,
-    ]
+    [notificationKey, recipient.id, severity, title, message, "/group-executive-control", `${intelligence.range.from}_${intelligence.range.to}`, JSON.stringify(metadata), createdBy]
   );
   return Number(result.insertId);
 }
 
-async function dispatchExecutiveIntelligence({ from, to, audience = "executive", userIds = [], roles = [], sendSms = true, createdBy }) {
+async function dispatchExecutiveIntelligence({ from, to, audience = "executive", userIds = [], roles = [], sendSms = false, createdBy }) {
   const intelligence = await buildExecutiveIntelligence({ from, to });
   const recipients = selectedRecipients(await listRecipients(), { userIds, roles });
   const message = intelligence.messages[audience] || intelligence.messages.executive;
-  const severity = intelligence.actions.some((item) => item.severity === "critical")
-    ? "critical"
-    : intelligence.actions.some((item) => item.severity === "high")
-      ? "high"
-      : "medium";
-  const title = audience === "auditor"
-    ? "Chalin 03 Executive Audit Intelligence"
-    : audience === "manager"
-      ? "Chalin 03 Management Action Intelligence"
-      : "Chalin 03 Deep Executive Intelligence";
-
+  const severity = intelligence.actions.some((item) => item.severity === "critical") ? "critical" : intelligence.actions.some((item) => item.severity === "high") ? "high" : "medium";
+  const title = audience === "auditor" ? "Chalin 03 Executive Audit Intelligence" : audience === "manager" ? "Chalin 03 Management Action Intelligence" : "Chalin 03 Deep Executive Intelligence";
   const dispatched = [];
   for (const recipient of recipients) {
-    const notificationId = await createNotificationForRecipient({
-      recipient,
-      message,
-      title,
-      severity,
-      intelligence,
-      createdBy,
-    });
-
-    let sms = null;
+    const notificationId = await createNotificationForRecipient({ recipient, message, title, severity, intelligence, createdBy });
+    let sms = { status: "not_requested" };
     if (sendSms) {
       const [phoneRows] = await pool.query(`SELECT phone FROM users WHERE id = ? LIMIT 1`, [recipient.id]);
       const phone = phoneRows[0]?.phone;
       if (phone) {
         try {
-          sms = await sendSmsAlertToPhone({
-            branchId: 1,
-            phone,
-            message,
-            smsType: "executive_intelligence",
-            sourceReference: `notification:${notificationId}`,
-            sentBy: createdBy,
-          });
+          sms = await sendSmsAlertToPhone({ branchId: 1, phone, message, smsType: "executive_intelligence", sourceReference: `notification:${notificationId}`, sentBy: createdBy });
         } catch (error) {
           sms = { ok: false, status: "failed", error: error.message };
         }
@@ -448,21 +371,9 @@ async function dispatchExecutiveIntelligence({ from, to, audience = "executive",
         sms = { ok: false, status: "no_phone" };
       }
     }
-
-    dispatched.push({
-      recipient: recipient.name,
-      role: recipient.role,
-      notification_id: notificationId,
-      sms_status: sms?.status || (sendSms ? "no_sms" : "not_requested"),
-    });
+    dispatched.push({ recipient: recipient.name, role: recipient.role, notification_id: notificationId, sms_status: sms?.status || "not_requested" });
   }
-
-  return {
-    intelligence,
-    audience,
-    recipient_count: dispatched.length,
-    dispatched,
-  };
+  return { intelligence, audience, recipient_count: dispatched.length, dispatched };
 }
 
 module.exports = {
