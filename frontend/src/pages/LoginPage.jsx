@@ -6,6 +6,7 @@ import "../styles/chalin03LoginBespoke.css";
 import "../styles/loginBusinessSelectionSync.css";
 import "../styles/loginArtworkScale.css";
 import "../styles/loginBusinessSelectionOriginalScale.css";
+import "../styles/loginEmojiRestore.css";
 
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
