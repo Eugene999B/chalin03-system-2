@@ -25,7 +25,7 @@ export default function CustomerFeatureControlsPanel() {
   }, [isAdmin]);
 
   async function toggle(field, label) {
-    const next = !Boolean(controls[field]);
+    const next = !controls[field];
     const previous = controls;
     setControls((current) => ({ ...current, [field]: next }));
     setSaving(field); setNotice(""); setError("");
