@@ -10,6 +10,7 @@ import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
 import "./index.css";
+import "./styles/systemTheme.css";
 import "./styles/userPermissionManager.mobile.css";
 import "./styles/commandGateExtensions.css";
 import "./styles/mobileExperience.css";
