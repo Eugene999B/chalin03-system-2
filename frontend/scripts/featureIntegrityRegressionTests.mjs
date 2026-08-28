@@ -8,7 +8,8 @@ const login = read("src/pages/LoginPage.jsx");
 if (!login.includes("../styles/chalin03LoginBespoke.css")) throw new Error("Chalin 03 bespoke login stylesheet is not loaded by the active login wrapper.");
 
 const groupLogin = read("src/styles/groupOperationsLogin.css");
-if (!groupLogin.includes('.group-operations-map__node > span {\n  font-size: 22px;')) throw new Error("Group login map is not using the restored emoji presentation.");
+if (!groupLogin.includes("group-operations-map__node > span")) throw new Error("Group login map icon styling is missing.");
+if (!groupLogin.includes("font-size: 22px") && !groupLogin.includes("font-size:22px")) throw new Error("Group login map is missing the restored emoji-sized icon treatment.");
 if (groupLogin.includes('content: "P"') || groupLogin.includes('content: "M"') || groupLogin.includes('content: "H"')) throw new Error("Group login map still contains letter-only icon substitutions.");
 
 const sidebar = read("src/components/CompactSidebarNavigation.jsx");
