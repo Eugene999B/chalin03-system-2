@@ -1,0 +1,1 @@
+Follow-up release: make restored Chalin 03 Users & Settings integration deterministic and remove legacy login emoji markers.
