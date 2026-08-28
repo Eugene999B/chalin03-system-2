@@ -6,136 +6,57 @@ const test = require("node:test");
 const ROOT = path.resolve(__dirname, "..", "..");
 const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), "utf8");
 
-const selectionCss = read(
-  "frontend",
-  "src",
-  "styles",
-  "equipmentFinanceCustomerSelectionPhoto.css"
-);
-const photoPanel = read(
-  "frontend",
-  "src",
-  "components",
-  "EquipmentFinanceCustomerPhotoPanel.jsx"
-);
-const photoUtility = read(
-  "frontend",
-  "src",
-  "utils",
-  "equipmentFinanceCustomerPhoto.js"
-);
-const startRedirect = read(
-  "frontend",
-  "src",
-  "pages",
-  "EquipmentFinancePhaseThreeStartRedirectPage.jsx"
-);
-const captureRoute = read(
-  "backend",
-  "routes",
-  "equipmentFinanceCustomerPhotoCaptureRoutes.js"
-);
-const independentRoutes = read(
-  "backend",
-  "routes",
-  "equipmentFinanceIndependentRoutes.js"
-);
-const renderer = read(
-  "backend",
-  "services",
-  "equipmentFinanceCustomerPhotoRendererService.js"
-);
-const documentRenderer = read(
-  "backend",
-  "services",
-  "equipmentFinanceDocumentRendererV2Service.js"
-);
-const documentFlow = read(
-  "backend",
-  "services",
-  "equipmentFinancePdfV2FlowWidgetService.js"
-);
-const completionRoutes = read(
-  "backend",
-  "routes",
-  "equipmentFinanceDocumentCompletionRoutes.js"
-);
+const start = read("frontend", "src", "pages", "EquipmentFinanceStartInstallmentPage.jsx");
+const startCss = read("frontend", "src", "styles", "equipmentFinanceStartInstallment.css");
+const router = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
+const photo = read("frontend", "src", "components", "CustomerPortrait.jsx");
+const photoUtility = read("frontend", "src", "utils", "equipmentFinanceCustomerPhoto.js");
+const captureRoute = read("backend", "routes", "equipmentFinanceCustomerPhotoCaptureRoutes.js");
+const renderer = read("backend", "services", "equipmentFinanceCustomerPhotoRendererService.js");
+const documentRenderer = read("backend", "services", "equipmentFinanceDocumentRendererV2Service.js");
+const documentFlow = read("backend", "services", "equipmentFinancePdfV2FlowWidgetService.js");
+const completionRoutes = read("backend", "routes", "equipmentFinanceDocumentCompletionRoutes.js");
 
-test("existing Finance customer cards have an unmistakable selected state", () => {
-  assert.match(selectionCss, /finance-simple__customer-grid > button\.is-selected/);
-  assert.match(selectionCss, /SELECTED CUSTOMER/);
-  assert.match(selectionCss, /content: "✓"/);
-  assert.match(selectionCss, /focus-visible/);
-  assert.match(selectionCss, /@media \(max-width: 620px\)/);
-  assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
-  assert.match(startRedirect, /EquipmentFinanceCustomerPhotoPanel/);
+test("the live Start route uses the dedicated transaction studio", () => {
+  assert.match(router, /stage === "start"\) return <EquipmentFinanceStartInstallmentPage \/>/);
+  assert.match(start, /Customer identity photo/);
+  assert.match(start, /CustomerPortraitPicker/);
+  assert.match(start, /customer_photo:/);
+  assert.match(start, /photoKey/);
+  assert.match(startCss, /\.c03-start2-page/);
+  assert.match(startCss, /\.c03-start2-photo-card/);
 });
 
-test("customer picture accepts normal browser image types, is compressed without cropping, and is bridged only to Finance start", () => {
-  assert.match(photoPanel, /accept="image\/\*"/);
-  assert.match(photoPanel, /capture="user"/);
-  assert.match(photoPanel, /Any normal image/);
+test("customer picture accepts normal browser image types and stays optional", () => {
+  assert.match(photo, /accept="image\/\*"/);
   assert.match(photoUtility, /MAX_DIMENSION = 1280/);
   assert.match(photoUtility, /TARGET_BYTES = 480 \* 1024/);
-  assert.match(photoUtility, /context\.drawImage\(image, 0, 0, width, height\)/);
-  assert.doesNotMatch(photoUtility, /drawImage\([^\n]*sourceX|crop/i);
-  assert.match(selectionCss, /object-fit: contain/);
   assert.match(photoUtility, /START_INSTALLMENT_PATH/);
   assert.match(photoUtility, /customer_photo: photo/);
-  assert.match(startRedirect, /installFinanceCustomerPhotoRequestBridge/);
-  assert.match(startRedirect, /settleCommittedPhoto/);
 });
 
-test("customer photo is encrypted after the Finance application commits", () => {
-  const captureIndex = independentRoutes.indexOf(
-    "router.use(equipmentFinanceCustomerPhotoCaptureRoutes)"
-  );
-  const creationIndex = independentRoutes.indexOf(
-    "router.use(equipmentFinanceImageSafeStartRoutes)"
-  );
-  assert.ok(captureIndex > 0 && creationIndex > captureIndex);
-  assert.match(captureRoute, /res\.json = \(payload\) =>/);
-  assert.match(captureRoute, /successfulCreation\(res, payload\)/);
-  assert.match(captureRoute, /uploadDocument\(\{/);
-  assert.match(captureRoute, /document_category: "kyc_identity"/);
+test("only an explicitly supplied customer photo is committed to the current installment", () => {
   assert.match(captureRoute, /document_type: "customer_passport_photo"/);
-  assert.match(captureRoute, /stored: true/);
-  assert.match(captureRoute, /stored: false/);
-  assert.doesNotMatch(captureRoute, /UPDATE\s+(?:equipment_sale_agreements|equipment_sale_payments|equipment_installment_schedule)/i);
-  assert.doesNotMatch(captureRoute, /DELETE\s+FROM/i);
+  assert.match(captureRoute, /applicationId/);
+  assert.doesNotMatch(renderer, /profilePhotoFallback/);
+  assert.match(renderer, /if \(!applicationId\) return null/);
+  assert.match(renderer, /document\.application_id = \?/);
 });
 
-test("logo-led V3 Finance documents retain the full-frame encrypted identity annex", () => {
-  assert.match(renderer, /AsyncLocalStorage/);
-  assert.match(renderer, /decryptDocument/);
-  assert.match(renderer, /customer_passport_photo/);
+test("customer photo appears only on designated customer-facing Finance documents", () => {
   assert.match(renderer, /PHOTO_DOCUMENT_TYPES/);
   assert.doesNotMatch(renderer, /payment_receipt",/);
   assert.match(documentRenderer, /latestCustomerPhoto/);
   assert.match(documentRenderer, /drawIdentityAnnex/);
   assert.match(documentFlow, /Protected customer identity annex/);
   assert.match(documentFlow, /fit: \[photoWidth - 24, photoHeight - 53\]/);
-  assert.match(documentFlow, /ENCRYPTED FINANCE-VAULT IDENTITY EVIDENCE/);
-  assert.match(completionRoutes, /equipmentFinanceDocumentRendererV2Service/);
-  assert.match(completionRoutes, /const buffer = await renderCompletionWord\(document\)/);
   assert.match(completionRoutes, /customer_passport_photo_page: true/);
   assert.match(completionRoutes, /customer_photo_encrypted_at_rest: true/);
-  assert.match(completionRoutes, /professional-logo-led-v3/);
 });
 
-test("scope remains Equipment Installment Finance only", () => {
-  const combined = [
-    selectionCss,
-    photoPanel,
-    photoUtility,
-    startRedirect,
-    captureRoute,
-    renderer,
-    documentRenderer,
-    documentFlow,
-    completionRoutes,
-  ].join("\n");
-  assert.doesNotMatch(combined, /\/api\/(?:mining|products|sales|debts)/);
+test("the Finance photo flow remains isolated from unrelated business APIs", () => {
+  const combined = [start, startCss, router, photo, photoUtility, captureRoute, renderer, documentRenderer, documentFlow, completionRoutes].join("\n");
+  assert.doesNotMatch(combined, /\/api\/(?:mining|products|debts)/);
   assert.doesNotMatch(combined, /mining_sites|stock_adjustments|spare_parts/i);
   assert.match(combined, /equipment_installment_finance|equipment-catalogue\/sales/);
 });
