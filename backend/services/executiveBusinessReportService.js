@@ -205,7 +205,7 @@ async function sendToRoles(notification, rule, roles) {
       `INSERT INTO notification_escalations
         (notification_id, escalation_channel, status, destination_masked, provider_reference, response_message, attempted_by)
        VALUES (?, 'sms', ?, ?, ?, ?, ?)`,
-      [notification.id, 'sms', result?.phone ? `${String(result.phone).slice(0,7)}***` : null, result?.provider_message_id || null, result?.message || result?.error || null, user.id]
+      [notification.id, result?.status || (result?.ok ? "submitted" : "failed"), result?.phone ? `${String(result.phone).slice(0,7)}***` : null, result?.provider_message_id || null, result?.message || result?.error || null, user.id]
     );
   }
 }
@@ -229,6 +229,7 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
   const recipientRoles = configuredRecipientRoles(rule);
   const message = buildMessage(type, period, metrics, "Management");
   const targetRole = recipientRoles.join(",");
+  const notificationType = type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence";
 
   let notificationId = existing[0]?.id;
   if (notificationId) {
@@ -240,33 +241,35 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
     const [insert] = await pool.query(
       `INSERT INTO notifications (notification_key, rule_id, rule_code, workspace_code, target_role, target_permission, category, notification_type, severity, title, message, action_path, source_type, source_reference, status, auto_generated, occurred_at, metadata_json)
        VALUES (?, ?, ?, 'group', ?, 'notifications.view', 'executive', ?, ?, ?, ?, '/group-executive-control', 'executive_business_report', ?, 'active', TRUE, NOW(), ?)`,
-      [notificationKey, rule.id, rule.rule_code, targetRole, type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence", metrics.estimatedOperatingResult < 0 ? "high" : "medium", message.title, message.message, period.key, JSON.stringify({ type, period, metrics, advice: message.advice, recipientRoles })]
+      [notificationKey, rule.id, rule.rule_code, targetRole, notificationType, metrics.estimatedOperatingResult < 0 ? "high" : "medium", message.title, message.message, period.key, JSON.stringify({ type, period, metrics, advice: message.advice, recipientRoles })]
     );
     notificationId = insert.insertId;
   }
 
   await sendToRoles(
-    {
-      id: notificationId,
-      notification_key: notificationKey,
-      message: message.message,
-      type: type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence",
-    },
+    { id: notificationId, notification_key: notificationKey, message: message.message, type: notificationType },
     rule,
     recipientRoles
   );
 
-  const ownerMessage = `${message.title}: ${message.message}`;
   if (rule.sms_allowed) {
     await sendOwnerSmsAlert({
       branchId: 1,
-      message: ownerMessage,
-      smsType: type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence",
+      message: `${message.title}: ${message.message}`,
+      smsType: notificationType,
       sourceReference: notificationKey,
     });
   }
 
-  return { skipped: false, type, period, metrics, advice: message.advice, recipientRoles, notification_id: notificationId };
+  return {
+    skipped: false,
+    type,
+    period,
+    metrics,
+    advice: message.advice,
+    recipientRoles,
+    notification_id: notificationId,
+  };
 }
 
 async function runScheduledBusinessReports({ date = new Date(), logger = console } = {}) {
