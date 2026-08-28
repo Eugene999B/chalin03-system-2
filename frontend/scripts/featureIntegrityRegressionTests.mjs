@@ -56,4 +56,33 @@ if (vite.includes("restoreSparePartsSmsIntelligence")) {
   throw new Error("Users & Settings still depends on the importer-specific Vite substitution.");
 }
 
+const darkMode = read("src/styles/darkMode.css");
+for (const requiredToken of [
+  "--c03-dm-bg",
+  ".c03-dark-mode input",
+  ".c03-dark-mode table",
+  ".c03-dark-mode nav",
+  ".c03-dark-mode .gate4.biometric-login .gate4__submit",
+]) {
+  if (!darkMode.includes(requiredToken)) {
+    throw new Error(`Global dark mode is missing permanent coverage for ${requiredToken}.`);
+  }
+}
+
+const darkModeScript = read("public/darkMode.js");
+if (!darkModeScript.includes('localStorage.setItem(STORAGE_KEY')) {
+  throw new Error("Dark mode preference is not persisted per browser.");
+}
+if (!darkModeScript.includes("c03-theme-toggle")) {
+  throw new Error("Global dark mode toggle is not mounted.");
+}
+
+const index = read("index.html");
+if (!index.includes('href="/src/styles/darkMode.css"')) {
+  throw new Error("Dark mode stylesheet is not mounted before application rendering.");
+}
+if (!index.includes('src="/darkMode.js"')) {
+  throw new Error("Global dark mode controller is not mounted from the application shell.");
+}
+
 console.log("Feature-integrity regression contracts passed.");
