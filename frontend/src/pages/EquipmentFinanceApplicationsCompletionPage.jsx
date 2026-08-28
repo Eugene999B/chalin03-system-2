@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import EquipmentFinanceApplicationsOptionalPage from "./EquipmentFinanceApplicationsOptionalPage.jsx";
 import "../styles/installmentCompletionPhaseOne.css";
 import "../styles/equipmentFinanceProductionHotfix.css";
+import "../styles/equipmentFinanceApplicationsRefined.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
 const ADMIN_ROLES = new Set(["admin", "administrator", "system_admin", "system_administrator", "super_admin"]);
@@ -120,7 +121,6 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
   const rootRef = useRef(null);
   const applicationsRef = useRef(new Map());
   const lookupsRef = useRef(new Map());
-
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return undefined;
@@ -158,15 +158,8 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
       scheduleHydration();
     }).catch(() => undefined);
     scheduleHydration();
-    return () => {
-      active = false;
-      observer.disconnect();
-      if (frame) window.cancelAnimationFrame(frame);
-      releaseHydratedImages(root);
-    };
+    return () => { active = false; observer.disconnect(); if (frame) window.cancelAnimationFrame(frame); releaseHydratedImages(root); };
   }, [administrator]);
-
-  return <div ref={rootRef} data-testid="finance-applications-completion-layer"><EquipmentFinanceApplicationsOptionalPage /></div>;
+  return <div ref={rootRef} className="finance-applications-refined" data-testid="finance-applications-completion-layer"><EquipmentFinanceApplicationsOptionalPage /></div>;
 }
-
 export { addAdministratorApprovalNote, addCaseLink, applicationNumberFromCard, caseOperationsPath, hydrateApplicationImage, hydrateCard, isAdministrator, markAdministratorActions, markAdministratorDecisionDialogs, protectedApplicationImagePath };
