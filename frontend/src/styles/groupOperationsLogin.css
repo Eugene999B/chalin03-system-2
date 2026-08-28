@@ -6,110 +6,47 @@
     radial-gradient(circle at 86% 76%, rgba(41, 182, 246, 0.14), transparent 32%),
     linear-gradient(155deg, #071628, #0a223a 62%, #071321) !important;
 }
-
 .group-login__story .gate4__story-copy small { color: #f7c83d; }
 .group-login__story .gate4__story-copy h1 { max-width: 640px; }
 .group-login__story .gate4__story-copy h1 span { color: #f7c83d; }
 .group-login__story .gate4__story-copy p { max-width: 610px; }
-
 .group-login .biometric-login__continue strong,
 .group-login .biometric-login__continue small { font-size: inherit !important; }
 .group-login .biometric-login__continue strong::after,
 .group-login .biometric-login__continue small::after { content: none !important; }
-
-.group-operations-map {
-  position: relative;
-  width: min(430px, 92%);
-  aspect-ratio: 360 / 250;
-  margin: 20px auto 12px;
-}
-.group-operations-map > svg {
-  position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible;
-}
-.group-operations-map > svg path {
-  fill: none; stroke: rgba(247, 200, 61, 0.72); stroke-width: 3;
-  stroke-linecap: round; stroke-dasharray: 7 8;
-  filter: drop-shadow(0 0 8px rgba(247, 200, 61, 0.3));
-}
-.group-operations-map__centre,
-.group-operations-map__node {
-  position: absolute; display: grid; place-items: center; text-align: center;
-  border: 1px solid rgba(255,255,255,.18);
-  box-shadow: 0 18px 44px rgba(0,0,0,.25);
-  backdrop-filter: blur(12px);
-}
-.group-operations-map__centre {
-  left: 50%; top: 48%; width: 104px; height: 104px;
-  transform: translate(-50%,-50%); border-radius: 34px; color: #fff;
-  background: linear-gradient(145deg, rgba(255,255,255,.17), rgba(255,255,255,.06));
-}
-.group-operations-map__centre img {
-  width: 48px; height: 48px; object-fit: contain; border-radius: 14px; background: #fff;
-}
+.group-operations-map { position: relative; width: min(430px, 92%); aspect-ratio: 360 / 250; margin: 20px auto 12px; }
+.group-operations-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.group-operations-map > svg path { fill: none; stroke: rgba(247, 200, 61, 0.72); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 7 8; filter: drop-shadow(0 0 8px rgba(247, 200, 61, 0.3)); }
+.group-operations-map__centre,.group-operations-map__node { position: absolute; display: grid; place-items: center; text-align: center; border: 1px solid rgba(255,255,255,.18); box-shadow: 0 18px 44px rgba(0,0,0,.25); backdrop-filter: blur(12px); }
+.group-operations-map__centre { left: 50%; top: 48%; width: 104px; height: 104px; transform: translate(-50%,-50%); border-radius: 34px; color: #fff; background: linear-gradient(145deg, rgba(255,255,255,.17), rgba(255,255,255,.06)); }
+.group-operations-map__centre img { width: 48px; height: 48px; object-fit: contain; border-radius: 14px; background: #fff; }
 .group-operations-map__centre strong { margin-top: 5px; font-size: 12px; letter-spacing: .08em; }
 .group-operations-map__centre small { color: #f7c83d; font-size: 8px; font-weight: 900; letter-spacing: .2em; }
-.group-operations-map__node {
-  width: 132px; min-height: 74px; padding: 9px 10px; border-radius: 22px;
-  color: #eef8ff; background: rgba(13,43,72,.9); gap: 3px;
-}
-
-/* Purpose-built artwork replaces legacy emoji glyphs without touching login behavior. */
-.group-operations-map__node > span {
-  width: 58px;
-  height: 58px;
-  display: block;
-  margin: 0 auto 2px;
-  position: relative;
-  font-size: 0;
-  color: transparent;
-  border: 0;
-  border-radius: 18px;
-  background:
-    linear-gradient(145deg, rgba(255,255,255,.16), rgba(0,0,0,.08));
-  box-shadow:
-    inset 0 1px rgba(255,255,255,.24),
-    0 8px 22px rgba(0,0,0,.18);
-}
-
-.group-operations-map__node > span::before,
-.group-operations-map__node > span::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 80% 80%;
-}
-
-.group-operations-map__node.is-parts > span::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%23ffd96a'/%3E%3Cstop offset='1' stop-color='%23f29f27'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='13' y='25' width='70' height='53' rx='10' fill='none' stroke='url(%23g)' stroke-width='6'/%3E%3Cpath d='M30 25v-6c0-5 4-9 9-9h18c5 0 9 4 9 9v6' fill='none' stroke='%23f7c83d' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M13 43h70M43 43v8h10v-8' fill='none' stroke='%23f7c83d' stroke-width='5' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-
-.group-operations-map__node.is-mining > span::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M18 25c19-8 36-8 55 0' fill='none' stroke='%23f2a24a' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M31 24l37 49' fill='none' stroke='%23e8edf3' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M21 73h46' fill='none' stroke='%23f2c94c' stroke-width='7' stroke-linecap='round'/%3E%3Ccircle cx='31' cy='24' r='6' fill='%23ffd36a'/%3E%3C/svg%3E");
-}
-
-.group-operations-map__node.is-hire > span::before {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cdefs%3E%3ClinearGradient id='b' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%2356ccf2'/%3E%3Cstop offset='1' stop-color='%232f80ed'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M15 61h47l9 9H15z' fill='url(%23b)' stroke='%23d9f3ff' stroke-width='4'/%3E%3Cpath d='M50 28h20l9 33H50z' fill='none' stroke='%2356ccf2' stroke-width='6'/%3E%3Cpath d='M57 28V18h13v10' fill='none' stroke='%23f2c94c' stroke-width='5'/%3E%3Ccircle cx='30' cy='76' r='9' fill='%23182b45' stroke='%23f2c94c' stroke-width='4'/%3E%3Ccircle cx='68' cy='76' r='9' fill='%23182b45' stroke='%23f2c94c' stroke-width='4'/%3E%3C/svg%3E");
-}
-
+.group-operations-map__node { width: 132px; min-height: 74px; padding: 9px 10px; border-radius: 22px; color: #eef8ff; background: rgba(13,43,72,.9); gap: 3px; }
+.group-operations-map__node > span { width: 58px; height: 58px; display: block; margin: 0 auto 2px; position: relative; font-size: 0; color: transparent; border: 0; border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(0,0,0,.08)); box-shadow: inset 0 1px rgba(255,255,255,.24), 0 8px 22px rgba(0,0,0,.18); }
+.group-operations-map__node > span::before,.group-operations-map__node > span::after { content: ""; position: absolute; inset: 0; background-repeat: no-repeat; background-position: center; background-size: 80% 80%; }
+.group-operations-map__node.is-parts > span::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect x='13' y='25' width='70' height='53' rx='10' fill='none' stroke='%23f2b52c' stroke-width='6'/%3E%3Cpath d='M30 25v-6c0-5 4-9 9-9h18c5 0 9 4 9 9v6' fill='none' stroke='%23d9a827' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M13 43h70M43 43v8h10v-8' fill='none' stroke='%23f3c64d' stroke-width='5'/%3E%3C/svg%3E"); }
+.group-operations-map__node.is-mining > span::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M18 25c19-8 36-8 55 0' fill='none' stroke='%23e68a32' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M31 24l37 49' fill='none' stroke='%23b7c0ca' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M21 73h46' fill='none' stroke='%23d9a827' stroke-width='7' stroke-linecap='round'/%3E%3Ccircle cx='31' cy='24' r='6' fill='%23ffd36a'/%3E%3C/svg%3E"); }
+.group-operations-map__node.is-hire > span::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M15 61h47l9 9H15z' fill='%232f80ed' stroke='%23145b86' stroke-width='4'/%3E%3Cpath d='M50 28h20l9 33H50z' fill='none' stroke='%2356ccf2' stroke-width='6'/%3E%3Cpath d='M57 28V18h13v10' fill='none' stroke='%23d9a827' stroke-width='5'/%3E%3Ccircle cx='30' cy='76' r='9' fill='%23182b45' stroke='%23d9a827' stroke-width='4'/%3E%3Ccircle cx='68' cy='76' r='9' fill='%23182b45' stroke='%23d9a827' stroke-width='4'/%3E%3C/svg%3E"); }
 .group-operations-map__node strong { margin-top: 2px; font-size: 12px; }
 .group-operations-map__node small { margin-top: 2px; color: rgba(232,244,255,.68); font-size: 9px; }
 .group-operations-map__node.is-parts { left: 1%; top: 0; }
 .group-operations-map__node.is-mining { right: 1%; top: 0; }
 .group-operations-map__node.is-hire { left: 50%; bottom: 0; transform: translateX(-50%); }
-
-.group-login__dashboard-note {
-  display: grid; gap: 4px; padding: 12px 14px;
-  border: 1px solid #dbe3ef; border-radius: 15px; background: #f8fafc;
-}
+.group-login__dashboard-note { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #dbe3ef; border-radius: 15px; background: #f8fafc; }
 .group-login__dashboard-note strong { color: #10223a; font-size: 13px; }
 .group-login__dashboard-note small { color: #68778b; line-height: 1.45; }
+@media (max-width: 980px) { .group-operations-map { width: min(380px, 96%); } .group-operations-map__node { width: 116px; } }
+@media (max-width: 760px) { .group-login__story { display: none !important; } }
 
-@media (max-width: 980px) {
-  .group-operations-map { width: min(380px, 96%); }
-  .group-operations-map__node { width: 116px; }
-}
-@media (max-width: 760px) {
-  .group-login__story { display: none !important; }
-}
+/* High-specificity final artwork layer. It intentionally defeats the older bespoke SP/MO/EH/03 pseudo-elements. */
+.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button > span::before,
+.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button > span::after { content: "" !important; display: block !important; width: 100% !important; height: 100% !important; background-repeat: no-repeat !important; background-position: center !important; background-size: 80% 80% !important; }
+.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button > span { color: transparent !important; font-size: 0 !important; }
+.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button:nth-child(1)>span::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect x='13' y='25' width='70' height='53' rx='10' fill='none' stroke='%23f2b52c' stroke-width='6'/%3E%3Cpath d='M30 25v-6c0-5 4-9 9-9h18c5 0 9 4 9 9v6' fill='none' stroke='%23d9a827' stroke-width='6'/%3E%3Cpath d='M13 43h70M43 43v8h10v-8' fill='none' stroke='%23f3c64d' stroke-width='5'/%3E%3C/svg%3E") !important;}
+.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button:nth-child(2)>span::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M18 25c19-8 36-8 55 0' fill='none' stroke='%23e68a32' stroke-width='7'/%3E%3Cpath d='M31 24l37 49' fill='none' stroke='%23b7c0ca' stroke-width='7'/%3E%3Cpath d='M21 73h46' fill='none' stroke='%23d9a827' stroke-width='7'/%3E%3C/svg%3E") !important;}
+.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button:nth-child(3)>span::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Cpath d='M15 61h47l9 9H15z' fill='%232f80ed' stroke='%23145b86' stroke-width='4'/%3E%3Cpath d='M50 28h20l9 33H50z' fill='none' stroke='%2356ccf2' stroke-width='6'/%3E%3Cpath d='M57 28V18h13v10' fill='none' stroke='%23d9a827' stroke-width='5'/%3E%3Ccircle cx='30' cy='76' r='9' fill='%23182b45' stroke='%23d9a827' stroke-width='4'/%3E%3Ccircle cx='68' cy='76' r='9' fill='%23182b45' stroke='%23d9a827' stroke-width='4'/%3E%3C/svg%3E") !important;}
+.gate4.biometric-login.gate4.biometric-login .gate4__context-icon::after{content:"" !important; color:transparent !important; font-size:0 !important;}
+.gate4.biometric-login.gate4.biometric-login .gate4__context-icon { color:transparent !important; font-size:0 !important; }
+.gate4.biometric-login.gate4.biometric-login .gate4__logo::after { content:"" !important; }
+.gate4.biometric-login.gate4.biometric-login .group-operations-map__node > span::before{content:"" !important;}
