@@ -86,3 +86,11 @@
   width: 48px !important;
   height: 48px !important;
 }
+
+/* YELLOW SIGN-IN BUTTON: change text only. Keep the yellow button itself unchanged. */
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__submit strong,
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__submit strong::after,
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__submit small,
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__submit small::after {
+  color: #07182c !important;
+}
