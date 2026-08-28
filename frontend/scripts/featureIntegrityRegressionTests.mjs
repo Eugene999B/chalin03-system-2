@@ -24,9 +24,18 @@ const wrapper = read("src/pages/SparePartsUsersSettingsWithDebtRemindersPage.jsx
 if (!wrapper.includes("CustomerFeatureControlsPanel")) throw new Error("Customer feature controls are no longer mounted in Users & Settings.");
 if (!wrapper.includes("ExecutiveBusinessIntelligenceSettingsPanel")) throw new Error("Executive intelligence controls are no longer mounted in Users & Settings.");
 
+const customer = read("src/components/CustomerFeatureControlsPanel.jsx");
+for (const token of ["role=\"dialog\"", "Customer Data Guardrails", "Open settings", "role=\"switch\"", "customer_merge_enabled"]) {
+  if (!customer.includes(token)) throw new Error(`Customer settings dialog is missing ${token}.`);
+}
+if (!customer.includes("setOpen(false)")) throw new Error("Customer settings dialog has no close behavior.");
+
 const executive = read("src/components/ExecutiveBusinessIntelligenceSettingsPanel.jsx");
 for (const ruleCode of ["group.executive.weekly_business_intelligence", "group.executive.monthly_business_intelligence"]) {
   if (!executive.includes(ruleCode)) throw new Error(`Executive settings are missing ${ruleCode}.`);
+}
+for (const token of ["role=\"dialog\"", "Open settings", "role=\"switch\""]) {
+  if (!executive.includes(token)) throw new Error(`Executive settings dialog is missing ${token}.`);
 }
 
 const vite = read("vite.config.js");
