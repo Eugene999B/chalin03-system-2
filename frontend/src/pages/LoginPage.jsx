@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import LoginPageGroupOperations from "./LoginPageGroupOperations.jsx";
 import "../styles/chalin03LoginBespoke.css";
 import "../styles/loginBusinessSelectionSync.css";
+import "../styles/loginArtworkScale.css";
 
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
@@ -32,9 +33,6 @@ export default function LoginPage() {
   useEffect(() => {
     if (!clearingPreviousSession) return undefined;
 
-    // Existing layout buttons start the server logout request and navigate here.
-    // Clear the browser session immediately so Login cannot see stale auth state
-    // and redirect the user back into a workspace before logout finishes.
     void logout();
     clearStoredSession();
     window.location.replace(
@@ -48,10 +46,6 @@ export default function LoginPage() {
     function unlockPasswordOnFirstTap(event) {
       const input = event.target.closest?.('input[data-lpignore="true"]');
       if (!input) return;
-
-      // Some mobile browsers do not open the keyboard when a read-only input is
-      // unlocked only during focus. Remove the DOM flag on pointer-down; the
-      // controlled component's focus handler then records the same state.
       input.readOnly = false;
       window.queueMicrotask(() => input.focus({ preventScroll: true }));
     }
