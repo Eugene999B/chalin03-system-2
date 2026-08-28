@@ -20,7 +20,7 @@ assert.match(start, /Customer identity photo/);
 assert.match(start, /customer_photo:/);
 assert.match(start, /CustomerPortraitPicker/);
 assert.match(start, /photoKey/);
-assert.match(photo, //photo`/);
+assert.match(photo, /CustomerPortrait/);
 assert.match(photo, /accept="image\/\*"/);
 assert.match(modalCss, /\.finance-simple__dialog-backdrop/);
 assert.match(startCss, /\.c03-start2-page/);
