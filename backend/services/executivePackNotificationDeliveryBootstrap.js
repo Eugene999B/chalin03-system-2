@@ -25,7 +25,7 @@ async function deliverExecutivePackSms(request) {
       return;
     }
 
-    const smsSourceReference = `${sourceReference}:sms`;
+    const smsSourceReference = `${sourceReference}:recipient:${recipientId}:sms`;
     const [existing] = await pool.query(
       `SELECT id FROM sms_log WHERE source_reference = ? ORDER BY id DESC LIMIT 1`,
       [smsSourceReference]
