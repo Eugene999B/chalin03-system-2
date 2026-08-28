@@ -1,0 +1,182 @@
+/* Chalin 03 global dark mode. High-contrast, no-invisible-text contract. */
+.c03-theme-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2147483000;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 999px;
+  color: #07182c;
+  background: #f5c542;
+  box-shadow: 0 8px 24px rgba(0,0,0,.24);
+  cursor: pointer;
+  font: 800 16px/1 Arial,sans-serif;
+}
+
+.c03-theme-toggle:hover { transform: translateY(-1px); }
+.c03-theme-toggle:focus-visible { outline: 3px solid #56ccf2; outline-offset: 2px; }
+
+.c03-dark-mode,
+.c03-dark-mode body {
+  background: #07111f !important;
+}
+
+.c03-dark-mode body {
+  color: #eef4fb;
+}
+
+.c03-dark-mode .c03-theme-toggle {
+  color: #fff;
+  background: #12375a;
+  border-color: rgba(255,255,255,.22);
+}
+
+/* Common application surfaces. */
+.c03-dark-mode main,
+.c03-dark-mode section,
+.c03-dark-mode article,
+.c03-dark-mode aside,
+.c03-dark-mode header,
+.c03-dark-mode footer,
+.c03-dark-mode [class*="card"],
+.c03-dark-mode [class*="panel"],
+.c03-dark-mode [class*="modal"],
+.c03-dark-mode [class*="drawer"],
+.c03-dark-mode [class*="dialog"] {
+  --c03-dark-surface: #101b2b;
+  --c03-dark-surface-2: #152338;
+  --c03-dark-border: #2b3a50;
+  --c03-dark-text: #eef4fb;
+  --c03-dark-muted: #aebdd0;
+}
+
+.c03-dark-mode [class*="card"],
+.c03-dark-mode [class*="panel"],
+.c03-dark-mode [class*="modal"],
+.c03-dark-mode [class*="drawer"],
+.c03-dark-mode [class*="dialog"] {
+  color: var(--c03-dark-text);
+  background-color: var(--c03-dark-surface);
+  border-color: var(--c03-dark-border);
+}
+
+.c03-dark-mode p,
+.c03-dark-mode label,
+.c03-dark-mode small,
+.c03-dark-mode span,
+.c03-dark-mode li,
+.c03-dark-mode td,
+.c03-dark-mode th,
+.c03-dark-mode dt,
+.c03-dark-mode dd {
+  color: inherit;
+}
+
+.c03-dark-mode input,
+.c03-dark-mode select,
+.c03-dark-mode textarea {
+  color: #f4f8fd !important;
+  background: #0c1727 !important;
+  border-color: #394b63 !important;
+  caret-color: #fff !important;
+}
+
+.c03-dark-mode input::placeholder,
+.c03-dark-mode textarea::placeholder {
+  color: #93a5bc !important;
+  opacity: 1 !important;
+}
+
+.c03-dark-mode option {
+  color: #eef4fb;
+  background: #101b2b;
+}
+
+.c03-dark-mode table {
+  color: #eef4fb;
+  background: #101b2b;
+}
+
+.c03-dark-mode thead,
+.c03-dark-mode th {
+  background: #17263a !important;
+  color: #f4f8fd !important;
+}
+
+.c03-dark-mode td {
+  border-color: #2b3a50 !important;
+}
+
+.c03-dark-mode a {
+  color: #72d8ff;
+}
+
+.c03-dark-mode button:not(.c03-theme-toggle) {
+  color: inherit;
+}
+
+/* Preserve readable status colors. */
+.c03-dark-mode [class*="success"],
+.c03-dark-mode [class*="warning"],
+.c03-dark-mode [class*="error"],
+.c03-dark-mode [class*="danger"],
+.c03-dark-mode [class*="info"] {
+  color: inherit;
+}
+
+/* Login: turn the white access surface into a true dark surface while preserving
+   yellow branding and strong field/button contrast. */
+.c03-dark-mode .gate4.biometric-login .gate4__access {
+  background: linear-gradient(180deg, #101b2b, #0c1727) !important;
+  color: #eef4fb !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__access-heading p,
+.c03-dark-mode .gate4.biometric-login .gate4__field > span,
+.c03-dark-mode .gate4.biometric-login .gate4__quick-links button,
+.c03-dark-mode .gate4.biometric-login .gate4__divider {
+  color: #b7c4d5 !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__workspace-tabs button,
+.c03-dark-mode .gate4.biometric-login .gate4__context-strip {
+  color: #eef4fb !important;
+  background: #132033 !important;
+  border-color: #35465d !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__workspace-tabs button.is-selected {
+  color: #f8fbff !important;
+  background: linear-gradient(145deg, rgba(245,197,66,.23), #172638 78%) !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__workspace-tabs button > span,
+.c03-dark-mode .gate4.biometric-login .gate4__context-icon {
+  background: #1b2a3f !important;
+  border-color: #40536c !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__submit {
+  background: linear-gradient(135deg, #ffe37c, #f5c542 55%, #e7ad24) !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__submit strong {
+  color: #07182c !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__submit small {
+  color: rgba(7,24,44,.72) !important;
+}
+
+.c03-dark-mode .gate4.biometric-login .gate4__story {
+  background: linear-gradient(145deg, rgba(255,255,255,.02), transparent 52%) !important;
+}
+
+@media (max-width: 760px) {
+  .c03-theme-toggle { right: 10px; bottom: 10px; width: 32px; height: 32px; }
+}
