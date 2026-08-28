@@ -12,79 +12,82 @@
 
 .finance-applications-refined .finance-simple {
   width: min(100%, 1480px);
-  padding: 0.65rem 1rem 1.25rem;
+  padding: 0.55rem 0.85rem 1.05rem;
 }
 
 .finance-applications-refined .finance-simple__hero {
-  padding: 0.85rem 1.1rem;
-  border-radius: 0.95rem;
-  box-shadow: 0 7px 22px rgba(25, 55, 36, 0.06);
+  padding: 0.75rem 1rem;
+  border-radius: 0.9rem;
+  box-shadow: 0 6px 18px rgba(25, 55, 36, 0.055);
 }
 
 .finance-applications-refined .finance-simple__hero h1 {
-  font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
 }
 
 .finance-applications-refined .finance-simple__hero span {
-  margin-top: 0.35rem;
-  font-size: 0.88rem;
+  margin-top: 0.3rem;
+  font-size: 0.84rem;
 }
 
 .finance-applications-refined .finance-simple__metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-  margin-top: 0.65rem;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
 }
 
 .finance-applications-refined .finance-simple__metric {
-  padding: 0.62rem 0.75rem;
-  border-radius: 0.75rem;
+  padding: 0.52rem 0.68rem;
+  border-radius: 0.7rem;
 }
 
 .finance-applications-refined .finance-simple__metric strong {
-  font-size: 1.05rem;
+  font-size: 1rem;
 }
 
 .finance-applications-refined .finance-simple__section {
-  margin-top: 0.65rem;
-  padding: 0.75rem;
-  border-radius: 0.9rem;
-  box-shadow: 0 5px 18px rgba(30, 51, 37, 0.045);
+  margin-top: 0.55rem;
+  padding: 0.65rem;
+  border-radius: 0.82rem;
+  box-shadow: 0 4px 15px rgba(30, 51, 37, 0.04);
 }
 
 .finance-applications-refined .finance-simple__toolbar {
   align-items: center;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.35rem;
 }
 
 .finance-applications-refined .finance-simple__toolbar h2 {
-  font-size: 1rem;
+  font-size: 0.96rem;
 }
 
 .finance-applications-refined .finance-simple__actions {
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .finance-applications-refined .finance-simple__actions input,
 .finance-applications-refined .finance-simple__actions select,
 .finance-applications-refined .finance-simple__actions button {
-  min-height: 38px;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.82rem;
+  min-height: 36px;
+  padding: 0.42rem 0.6rem;
+  font-size: 0.8rem;
 }
 
+/* Compact multi-column case board. Detailed information lives in the case dialog. */
 .finance-applications-refined .finance-simple__cards {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
-  margin-top: 0.55rem;
+  margin-top: 0.42rem;
+  align-items: start;
 }
 
 .finance-applications-refined .finance-simple__card {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto;
-  min-height: 92px;
-  border-radius: 0.8rem;
+  grid-template-columns: 68px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 86px;
+  border-radius: 0.68rem;
   border: 1px solid var(--ifx-line);
   background: #fff;
   overflow: hidden;
@@ -92,56 +95,65 @@
 }
 
 .finance-applications-refined .finance-simple__machine-image {
-  width: 88px;
-  height: 92px;
+  width: 68px;
+  height: 86px;
   aspect-ratio: auto;
   background: #eef3ef;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
 
 .finance-applications-refined .finance-simple__machine-image img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  padding: 0.3rem;
+  padding: 0.22rem;
 }
 
 .finance-applications-refined .finance-simple__card-body {
   min-width: 0;
-  padding: 0.55rem 0.7rem;
+  padding: 0.43rem 0.5rem;
 }
 
 .finance-applications-refined .finance-simple__card-head {
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .finance-applications-refined .finance-simple__card-head small {
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   color: var(--ifx-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .finance-applications-refined .finance-simple__card-head h3 {
-  margin: 0.08rem 0;
-  font-size: 0.98rem;
-  line-height: 1.15;
+  margin: 0.02rem 0;
+  font-size: 0.82rem;
+  line-height: 1.1;
 }
 
 .finance-applications-refined .finance-simple__card-head p {
   margin: 0;
-  font-size: 0.76rem;
+  font-size: 0.66rem;
   color: var(--ifx-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .finance-applications-refined .finance-simple__facts {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.3rem;
-  margin: 0.4rem 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.22rem;
+  margin: 0.28rem 0 0;
 }
 
 .finance-applications-refined .finance-simple__facts div {
   min-width: 0;
-  padding: 0.35rem 0.45rem;
-  border-radius: 0.48rem;
+  padding: 0.25rem 0.3rem;
+  border-radius: 0.38rem;
   background: var(--ifx-soft);
 }
 
@@ -150,59 +162,86 @@
 }
 
 .finance-applications-refined .finance-simple__facts span {
-  font-size: 0.61rem;
+  font-size: 0.54rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .finance-applications-refined .finance-simple__facts strong {
-  font-size: 0.74rem;
-  line-height: 1.15;
+  font-size: 0.64rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .finance-applications-refined .finance-simple__card-actions {
-  min-width: 112px;
-  justify-content: center;
-  align-content: center;
-  padding: 0.45rem;
-  border-left: 1px solid var(--ifx-line);
-  background: #fbfcfb;
+  grid-column: 2;
+  display: flex;
+  flex-direction: row;
+  gap: 0.25rem;
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0.3rem 0 0;
+  border: 0;
+  background: transparent;
 }
 
 .finance-applications-refined .finance-simple__card-actions button,
 .finance-applications-refined .finance-simple__card-actions a {
-  width: 100%;
-  min-height: 34px;
-  padding: 0.42rem 0.55rem;
-  border-radius: 0.55rem;
-  font-size: 0.75rem;
+  width: auto;
+  min-height: 30px;
+  flex: 0 1 auto;
+  padding: 0.3rem 0.42rem;
+  border-radius: 0.45rem;
+  font-size: 0.65rem;
 }
 
 .finance-applications-refined .finance-simple__sticky-actions {
-  margin-top: 0.55rem;
-  padding: 0.55rem;
-  border-radius: 0.8rem;
+  margin-top: 0.45rem;
+  padding: 0.48rem;
+  border-radius: 0.72rem;
 }
 
+/* The case dialog has its own scroll area and visible scroll controls. */
 .finance-applications-refined .finance-simple__dialog-backdrop {
-  padding: 1rem;
-  background: rgba(8, 21, 13, 0.58);
+  padding: 0.7rem;
+  background: rgba(8, 21, 13, 0.62);
 }
 
 .finance-applications-refined .finance-simple__dialog {
-  width: min(100%, 900px);
-  max-height: calc(100vh - 2rem);
-  padding: 0.9rem;
-  border-radius: 1rem;
+  position: relative;
+  width: min(100%, 980px);
+  max-height: calc(100vh - 1.4rem);
+  padding: 0.78rem;
+  border-radius: 0.9rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+}
+
+.finance-applications-refined .finance-simple__dialog::-webkit-scrollbar {
+  width: 11px;
+}
+
+.finance-applications-refined .finance-simple__dialog::-webkit-scrollbar-thumb {
+  border: 3px solid #fff;
+  border-radius: 999px;
+  background: #7b8e81;
+}
+
+.finance-applications-refined .finance-simple__dialog::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #eef3ef;
 }
 
 .finance-applications-refined .finance-simple__dialog > .finance-simple__machine-image {
-  width: 180px;
-  height: 120px;
-  margin: 0.65rem 0;
+  width: 135px;
+  height: 90px;
+  margin: 0.4rem 0;
   border: 1px solid var(--ifx-line);
-  border-radius: 0.7rem;
+  border-radius: 0.6rem;
 }
 
 .finance-applications-refined .finance-simple__dialog > .finance-simple__machine-image img {
@@ -210,57 +249,70 @@
 }
 
 .finance-applications-refined .finance-simple__summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-top: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.4rem;
 }
 
 .finance-applications-refined .finance-simple__summary article {
-  padding: 0.62rem;
-  border-radius: 0.65rem;
+  min-width: 0;
+  padding: 0.48rem;
+  border-radius: 0.55rem;
 }
 
 .finance-applications-refined .finance-simple__summary span {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
 }
 
 .finance-applications-refined .finance-simple__summary strong {
-  font-size: 0.82rem;
-  line-height: 1.25;
+  font-size: 0.74rem;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
 }
 
 .finance-applications-refined .finance-simple__dialog .finance-simple__section {
-  margin-top: 0.55rem;
-  padding: 0.65rem;
+  margin-top: 0.42rem;
+  padding: 0.52rem;
   box-shadow: none;
 }
 
-@media (max-width: 900px) {
-  .finance-applications-refined .finance-simple__metrics {
+.finance-applications-refined .finance-dialog-scroll-controls {
+  position: sticky;
+  top: 0.2rem;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.32rem;
+  margin-bottom: 0.3rem;
+  pointer-events: none;
+}
+
+.finance-applications-refined .finance-dialog-scroll-controls button {
+  pointer-events: auto;
+  min-height: 29px;
+  padding: 0.28rem 0.48rem;
+  border: 1px solid #b8c8bc;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ifx-green);
+  font-size: 0.68rem;
+  font-weight: 800;
+  box-shadow: 0 3px 9px rgba(20, 45, 29, 0.1);
+}
+
+@media (max-width: 1180px) {
+  .finance-applications-refined .finance-simple__cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .finance-applications-refined .finance-simple__card {
-    grid-template-columns: 78px minmax(0, 1fr);
+@media (max-width: 860px) {
+  .finance-applications-refined .finance-simple__cards {
+    grid-template-columns: 1fr;
   }
 
-  .finance-applications-refined .finance-simple__machine-image {
-    width: 78px;
-    height: 96px;
-  }
-
-  .finance-applications-refined .finance-simple__card-actions {
-    grid-column: 2;
-    min-width: 0;
-    flex-direction: row;
-    border-left: 0;
-    border-top: 1px solid var(--ifx-line);
-  }
-
-  .finance-applications-refined .finance-simple__card-actions button,
-  .finance-applications-refined .finance-simple__card-actions a {
-    width: auto;
-    flex: 1;
+  .finance-applications-refined .finance-simple__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .finance-applications-refined .finance-simple__summary {
@@ -270,18 +322,14 @@
 
 @media (max-width: 620px) {
   .finance-applications-refined .finance-simple {
-    padding: 0.45rem;
+    padding: 0.4rem;
   }
 
   .finance-applications-refined .finance-simple__hero {
-    padding: 0.75rem;
+    padding: 0.68rem;
   }
 
   .finance-applications-refined .finance-simple__metrics {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .finance-applications-refined .finance-simple__facts {
     grid-template-columns: 1fr 1fr;
   }
 
