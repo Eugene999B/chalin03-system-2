@@ -15,38 +15,43 @@ function isExecutivePackRequest(request) {
 }
 
 function cleanLine(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
+  return String(value || "").replace(/\\s+/g, " ").trim();
 }
 
 function buildHumanSms({ title, rawMessage, rawAction, audience }) {
   const cleanTitle = cleanLine(title) || "Business update";
   const cleanMessage = cleanLine(rawMessage);
   const cleanAction = cleanLine(rawAction);
-  const audienceText = audience === "auditor"
-    ? "Audit Review"
+  const intro = audience === "auditor"
+    ? "Hello, I wanted to bring one control matter to your attention from the latest Chalin 03 review."
     : audience === "manager"
-      ? "Management Update"
-      : "Executive Update";
+      ? "Hi, here is a quick management note from the latest Chalin 03 review."
+      : "Hi, I wanted to personally flag this for your attention from the latest Chalin 03 review.";
+
+  const close = audience === "auditor"
+    ? "Please follow the evidence trail before drawing a conclusion."
+    : audience === "manager"
+      ? "Please make sure someone owns the follow-up and that it is closed properly."
+      : "Please take a look when you can and make sure the right decision or follow-up is made.";
 
   const parts = [
-    `CHALIN 03 — ${audienceText}`,
-    cleanTitle,
-    cleanMessage,
+    intro,
+    `${cleanTitle}: ${cleanMessage}`,
   ];
 
   if (cleanAction) {
-    parts.push(`What to do next: ${cleanAction}`);
+    parts.push(`My suggestion: ${cleanAction}`);
   }
 
-  parts.push("This review covers the current Spare Parts and Installment Finance position and is intended to support a clear management decision.");
-  return parts.filter(Boolean).join("\n\n");
+  parts.push(close);
+  return parts.filter(Boolean).join("\\n\\n");
 }
 
 function splitNotificationMessage(value) {
   const text = String(value || "").trim();
   if (!text) return { message: "", action: "" };
 
-  const marker = /\n\s*Recommended action:\s*/i;
+  const marker = /\\n\\s*Recommended action:\\s*/i;
   const match = text.match(marker);
   if (!match || typeof match.index !== "number") {
     return { message: text, action: "" };
@@ -54,7 +59,7 @@ function splitNotificationMessage(value) {
 
   const message = text.slice(0, match.index).trim();
   const remainder = text.slice(match.index + match[0].length);
-  const scopeMarker = /\n\s*Scope:\s*/i;
+  const scopeMarker = /\\n\\s*Scope:\\s*/i;
   const scopeMatch = remainder.match(scopeMarker);
   const action = (scopeMatch && typeof scopeMatch.index === "number"
     ? remainder.slice(0, scopeMatch.index)
