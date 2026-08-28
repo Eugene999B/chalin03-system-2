@@ -126,7 +126,7 @@ export default function CompactSidebarNavigation({ sections, onNavigate }) {
                     onClick={onNavigate}
                     title={item.description}
                   >
-                    <span className="premium-nav-icon">{item.icon}</span>
+                    <span className="premium-nav-icon" aria-hidden="true" />
                     <span className="premium-nav-text">{item.title}</span>
                   </NavLink>
                 ))}
