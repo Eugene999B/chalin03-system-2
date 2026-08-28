@@ -45,16 +45,10 @@ router.put("/feature-controls", requireRole("admin"), async (req, res) => {
     const storeId = branchId(req);
     const controls = await updateCustomerFeatureControls(storeId, req.body || {});
     await writeAuditEvent({
-      req,
-      branchId: storeId,
-      userId: req.user?.id || null,
-      action: "UPDATE_CUSTOMER_FEATURE_CONTROLS",
-      actionType: "UPDATE_CUSTOMER_FEATURE_CONTROLS",
-      outcome: "success",
-      severity: "notice",
-      workspaceCode: "spare_parts",
-      entityType: "customer_feature_controls",
-      entityId: storeId,
+      req, branchId: storeId, userId: req.user?.id || null,
+      action: "UPDATE_CUSTOMER_FEATURE_CONTROLS", actionType: "UPDATE_CUSTOMER_FEATURE_CONTROLS",
+      outcome: "success", severity: "notice", workspaceCode: "spare_parts",
+      entityType: "customer_feature_controls", entityId: storeId,
       details: "Updated customer identity editing and customer merge feature controls.",
       metadata: controls,
     });
@@ -93,46 +87,27 @@ router.patch("/customer/:customerId/identity", requireRole("admin", "manager"), 
         await connection.rollback();
         return res.status(404).json({ status: "error", code: "CUSTOMER_NOT_FOUND", message: "Customer was not found in the selected store." });
       }
-      const [debtRows] = await connection.query(
-        `SELECT COUNT(*) AS debt_count FROM debts WHERE branch_id = ? AND customer_id = ?`,
-        [storeId, customerId]
-      );
+      const [debtRows] = await connection.query(`SELECT COUNT(*) AS debt_count FROM debts WHERE branch_id = ? AND customer_id = ?`, [storeId, customerId]);
       const debtCount = Number(debtRows[0]?.debt_count || 0);
       if (debtCount > 0 && !phone) {
         await connection.rollback();
         return res.status(400).json({ status: "error", code: "DEBT_CUSTOMER_PHONE_REQUIRED", message: "This customer has debt records, so a phone number is required before the identity can be saved." });
       }
-      await connection.query(
-        `UPDATE customers SET name = ?, phone = ?, location = ? WHERE id = ? AND branch_id = ?`,
-        [name, phone || null, location, customerId, storeId]
-      );
+      await connection.query(`UPDATE customers SET name = ?, phone = ?, location = ? WHERE id = ? AND branch_id = ?`, [name, phone || null, location, customerId, storeId]);
       await writeAuditEvent({
-        connection,
-        req,
-        branchId: storeId,
-        userId: req.user?.id || null,
-        action: "EDIT_CUSTOMER_IDENTITY",
-        actionType: "EDIT_CUSTOMER_IDENTITY",
-        outcome: "success",
-        severity: "notice",
-        workspaceCode: "spare_parts",
-        entityType: "customer",
-        entityId: customerId,
+        connection, req, branchId: storeId, userId: req.user?.id || null,
+        action: "EDIT_CUSTOMER_IDENTITY", actionType: "EDIT_CUSTOMER_IDENTITY",
+        outcome: "success", severity: "notice", workspaceCode: "spare_parts",
+        entityType: "customer", entityId: customerId,
         details: `Updated customer identity from ${customer.name || "unnamed"} to ${name}.`,
-        metadata: {
-          before: { name: customer.name, phone: customer.phone, location: customer.location },
-          after: { name, phone: phone || null, location },
-          debt_count: debtCount,
-        },
+        metadata: { before: { name: customer.name, phone: customer.phone, location: customer.location }, after: { name, phone: phone || null, location }, debt_count: debtCount },
       });
       await connection.commit();
       return res.json({ status: "success", message: "Customer details updated successfully.", customer: { id: customerId, name, phone: phone || null, location }, debt_count: debtCount });
     } catch (transactionError) {
       try { await connection.rollback(); } catch {}
       throw transactionError;
-    } finally {
-      connection.release();
-    }
+    } finally { connection.release(); }
   } catch (error) {
     console.error("Edit customer identity error:", error);
     return res.status(500).json({ status: "error", message: "Could not update the selected customer details." });

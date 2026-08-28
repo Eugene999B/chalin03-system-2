@@ -118,6 +118,7 @@ axiosClient.interceptors.request.use((config) => {
   if (requestToken) config.headers.Authorization = `Bearer ${requestToken}`; else if (config.headers?.Authorization) delete config.headers.Authorization;
   if (workspaceCode) config.headers["X-Chalin03-Workspace"] = String(workspaceCode);
   if (financeScreen) { config.headers["X-Chalin03-Division"] = "installment_finance"; if (config.headers?.["X-Chalin03-Context-Id"]) delete config.headers["X-Chalin03-Context-Id"]; } else if (workspaceContextId) config.headers["X-Chalin03-Context-Id"] = workspaceContextId;
+  // Branch headers are sent only for the Spare Parts workspace
   if (branchId) config.headers["X-Chalin03-Branch-Id"] = String(branchId);
   if (branchCode) config.headers["X-Chalin03-Branch-Code"] = String(branchCode);
   if (branchName) config.headers["X-Chalin03-Branch-Name"] = String(branchName);
@@ -154,7 +155,7 @@ axiosClient.interceptors.response.use(
       return Promise.reject(new axios.CanceledError("A stale authenticated request was replaced by the current session."));
     }
     if (isTemporaryProfileFailure) {
-      try { sessionStorage.setItem("chalin03_session_warning", errorMessage || "Fresh profile details could not be loaded. Your verified session remains active."); } catch {}
+      try { sessionStorage.setItem("chalin03_session_warning", errorMessage || "Fresh profile details could not be loaded. Your verified session remains active."); } catch { /* Session storage may be unavailable; keep the verified session active. */ }
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
     if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage && !isChangePasswordCredentialFailure) {

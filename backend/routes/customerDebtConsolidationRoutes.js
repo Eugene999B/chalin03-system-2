@@ -10,7 +10,7 @@ const {
 
 const router = express.Router();
 
-// Customer identity maintenance is mounted before legacy /:customerId routes.
+// Identity maintenance must be mounted before legacy /:customerId routes.
 router.use(customerIdentityMaintenanceRoutes);
 
 async function guardCustomerMergeFeature(req, res, next) {
