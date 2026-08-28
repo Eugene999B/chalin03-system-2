@@ -56,14 +56,11 @@ function addCaseLink(container, application) {
 }
 
 function addAdministratorApprovalNote(container) {
-  if (!container || container.querySelector('[data-admin-direct-approval-note="true"]')) {
-    return;
-  }
+  if (!container || container.querySelector('[data-admin-direct-approval-note="true"]')) return;
   const note = document.createElement("span");
   note.className = "finance-simple__admin-approval-note";
   note.dataset.adminDirectApprovalNote = "true";
-  note.textContent =
-    "Administrator approval is immediate: confirming Submit for Review approves this installment directly. No separate manager review is required.";
+  note.textContent = "Administrator approval is immediate: confirming this action approves the installment directly.";
   container.prepend(note);
 }
 
@@ -74,33 +71,8 @@ function markAdministratorActions(container, administrator) {
   );
   if (!submitButton) return;
   submitButton.dataset.adminApprovalAction = "true";
-  submitButton.title =
-    "Administrator approval is immediate. Confirming this action approves the installment directly.";
+  submitButton.title = "Administrator approval is immediate. Confirming this action approves the installment directly.";
   addAdministratorApprovalNote(container);
-}
-
-function markAdministratorDecisionDialogs(root, administrator) {
-  if (!administrator || !root) return;
-  root.querySelectorAll('.finance-simple__dialog[role="dialog"]').forEach((dialog) => {
-    const heading = dialog.querySelector(".finance-simple__section-header h2");
-    if (clean(heading?.textContent).toLowerCase() !== "submit for manager review") return;
-
-    const form = dialog.querySelector("form");
-    if (form && !dialog.querySelector('[data-admin-direct-approval-note="true"]')) {
-      const notice = document.createElement("div");
-      notice.className = "finance-simple__notice is-info finance-simple__admin-dialog-note";
-      notice.dataset.adminDirectApprovalNote = "true";
-      notice.textContent =
-        "Administrator approval is immediate. Confirming this action approves the installment now; no separate manager review is required.";
-      dialog.insertBefore(notice, form);
-    }
-
-    const confirmButton = dialog.querySelector('button[type="submit"]');
-    if (confirmButton) {
-      confirmButton.dataset.adminApprovalAction = "true";
-      confirmButton.title = "Approve this installment immediately as administrator.";
-    }
-  });
 }
 
 function imageFallback(imageContainer, message) {
@@ -113,44 +85,30 @@ function imageFallback(imageContainer, message) {
 async function hydrateApplicationImage(imageContainer, application) {
   if (!application?.has_image || !imageContainer) return;
   if (["loading", "loaded"].includes(imageContainer.dataset.completionImageState)) return;
-
   imageContainer.dataset.completionImageState = "loading";
   imageContainer.replaceChildren();
-
   try {
-    const response = await axiosClient.get(protectedApplicationImagePath(application.id), {
-      responseType: "blob",
-    });
-    if (!(response.data instanceof Blob) || response.data.size < 1) {
-      throw new Error("The excavator picture response was empty.");
-    }
-
+    const response = await axiosClient.get(protectedApplicationImagePath(application.id), { responseType: "blob" });
+    if (!(response.data instanceof Blob) || response.data.size < 1) throw new Error("The excavator picture response was empty.");
     const objectUrl = URL.createObjectURL(response.data);
     if (!imageContainer.isConnected) {
       URL.revokeObjectURL(objectUrl);
       return;
     }
-
     const image = document.createElement("img");
     image.alt = application.asset_name || "Finance excavator";
     image.loading = "lazy";
     image.decoding = "async";
     image.dataset.completionObjectUrl = objectUrl;
-    image.addEventListener(
-      "error",
-      () => {
-        URL.revokeObjectURL(objectUrl);
-        imageFallback(imageContainer, "Excavator picture unavailable");
-      },
-      { once: true }
-    );
+    image.addEventListener("error", () => {
+      URL.revokeObjectURL(objectUrl);
+      imageFallback(imageContainer, "Excavator picture unavailable");
+    }, { once: true });
     image.src = objectUrl;
     imageContainer.replaceChildren(image);
     imageContainer.dataset.completionImageState = "loaded";
   } catch {
-    if (imageContainer.isConnected) {
-      imageFallback(imageContainer, "Excavator picture unavailable");
-    }
+    if (imageContainer.isConnected) imageFallback(imageContainer, "Excavator picture unavailable");
   }
 }
 
@@ -158,12 +116,7 @@ function hydrateCard(card, application, { administrator = false } = {}) {
   if (!(card instanceof HTMLElement) || !application?.id) return;
   card.dataset.completionPhaseOneCard = "true";
   card.dataset.financeApplicationId = String(application.id);
-
-  void hydrateApplicationImage(
-    card.querySelector(".finance-simple__machine-image"),
-    application
-  );
-
+  void hydrateApplicationImage(card.querySelector(".finance-simple__machine-image"), application);
   const actions = card.querySelector(".finance-simple__card-actions");
   addCaseLink(actions, application);
   markAdministratorActions(actions, administrator);
@@ -178,12 +131,31 @@ function hydrateDialog(dialog, application, { administrator = false } = {}) {
 }
 
 function releaseHydratedImages(root) {
-  root
-    ?.querySelectorAll("img[data-completion-object-url]")
-    .forEach((image) => {
-      const objectUrl = image.dataset.completionObjectUrl;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    });
+  root?.querySelectorAll("img[data-completion-object-url]").forEach((image) => {
+    const objectUrl = image.dataset.completionObjectUrl;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  });
+}
+
+function markAdministratorDecisionDialogs(root, administrator) {
+  if (!administrator || !root) return;
+  root.querySelectorAll('.finance-simple__dialog[role="dialog"]').forEach((dialog) => {
+    const heading = dialog.querySelector(".finance-simple__section-header h2");
+    if (clean(heading?.textContent).toLowerCase() !== "submit for manager review") return;
+    const form = dialog.querySelector("form");
+    if (form && !dialog.querySelector('[data-admin-direct-approval-note="true"]')) {
+      const notice = document.createElement("div");
+      notice.className = "finance-simple__notice is-info finance-simple__admin-dialog-note";
+      notice.dataset.adminDirectApprovalNote = "true";
+      notice.textContent = "Administrator approval is immediate. Confirming this action approves the installment now; no separate manager review is required.";
+      dialog.insertBefore(notice, form);
+    }
+    const confirmButton = dialog.querySelector('button[type="submit"]');
+    if (confirmButton) {
+      confirmButton.dataset.adminApprovalAction = "true";
+      confirmButton.title = "Approve this installment immediately as administrator.";
+    }
+  });
 }
 
 export default function EquipmentFinanceApplicationsCompletionPage() {
@@ -196,14 +168,17 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return undefined;
-
     let active = true;
     let frame = 0;
+
+    const scheduleHydration = () => {
+      if (!active || frame) return;
+      frame = window.requestAnimationFrame(applyKnownApplications);
+    };
 
     const applyKnownApplications = () => {
       frame = 0;
       if (!active) return;
-
       root.querySelectorAll(".finance-simple__card").forEach((card) => {
         const applicationNumber = applicationNumberFromCard(card);
         const application = applicationsRef.current.get(applicationNumber);
@@ -212,20 +187,9 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
           return;
         }
         if (!applicationNumber || lookupsRef.current.has(applicationNumber)) return;
-
-        const lookup = axiosClient
-          .get(API, {
-            params: {
-              page: 1,
-              page_size: 1,
-              status: "all",
-              search: applicationNumber,
-            },
-          })
+        const lookup = axiosClient.get(API, { params: { page: 1, page_size: 1, status: "all", search: applicationNumber } })
           .then((response) => {
-            const found = (response.data?.applications || []).find(
-              (item) => clean(item.application_number) === applicationNumber
-            );
+            const found = (response.data?.applications || []).find((item) => clean(item.application_number) === applicationNumber);
             if (found) applicationsRef.current.set(applicationNumber, found);
           })
           .catch(() => undefined)
@@ -235,49 +199,25 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
           });
         lookupsRef.current.set(applicationNumber, lookup);
       });
-
-      root
-        .querySelectorAll('.finance-simple__dialog[aria-label="Credit application file"]')
-        .forEach((dialog) => {
-          const applicationNumber = applicationNumberFromDialog(dialog);
-          const application = applicationsRef.current.get(applicationNumber);
-          if (application) hydrateDialog(dialog, application, { administrator });
-        });
-
+      root.querySelectorAll('.finance-simple__dialog[aria-label="Credit application file"]').forEach((dialog) => {
+        const application = applicationsRef.current.get(applicationNumberFromDialog(dialog));
+        if (application) hydrateDialog(dialog, application, { administrator });
+      });
       markAdministratorDecisionDialogs(root, administrator);
     };
 
-    const scheduleHydration = () => {
-      if (!active || frame) return;
-      frame = window.requestAnimationFrame(applyKnownApplications);
-    };
-
     const observer = new MutationObserver((mutations) => {
-      if (
-        mutations.some(
-          (mutation) =>
-            mutation.type === "characterData" || mutation.addedNodes.length > 0
-        )
-      ) {
-        scheduleHydration();
-      }
+      if (mutations.some((mutation) => mutation.type === "characterData" || mutation.addedNodes.length > 0)) scheduleHydration();
     });
     observer.observe(root, { childList: true, characterData: true, subtree: true });
 
-    axiosClient
-      .get(API, {
-        params: { page: 1, page_size: 100, status: "all" },
-      })
+    axiosClient.get(API, { params: { page: 1, page_size: 100, status: "all" } })
       .then((response) => {
         if (!active) return;
-        for (const application of response.data?.applications || []) {
-          applicationsRef.current.set(clean(application.application_number), application);
-        }
+        for (const application of response.data?.applications || []) applicationsRef.current.set(clean(application.application_number), application);
         scheduleHydration();
       })
-      .catch(() => {
-        // The authoritative Applications page displays its own truthful error state.
-      });
+      .catch(() => undefined);
 
     scheduleHydration();
     return () => {
@@ -290,28 +230,6 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
 
   return (
     <div ref={rootRef} data-testid="finance-applications-completion-layer">
-      <section className="installment-completion installment-completion--embedded">
-        <div className="installment-completion__payment-guide">
-          <div className="installment-completion__section-heading">
-            <div>
-              <p className="installment-completion__eyebrow">Application register and decisions</p>
-              <h2>Applications & Approvals</h2>
-              <span>
-                Use this page for the complete register, draft work and authorised decisions.
-                Administrators can approve an installment directly without waiting for a separate
-                manager review. Assigned staff work remains in the Inbox, and the full history of
-                one record remains in Case Operations.
-              </span>
-            </div>
-            <div className="installment-completion__quick-links">
-              <Link to="/equipment-installment-finance/applications?stage=inbox">Task Inbox</Link>
-              <Link to="/equipment-installment-finance/applications?stage=case-operations">
-                Case Operations
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
       <EquipmentFinanceApplicationsOptionalPage />
     </div>
   );
