@@ -1,3 +1,5 @@
+/* Chalin 03 login: use the original business emojis as the visible icons. */
+
 .gate4.biometric-login .gate4__workspace-tabs button > span {
   color: inherit !important;
   font-size: 22px !important;
@@ -104,3 +106,6 @@
   font-size: 32px !important;
   background: none !important;
 }
+
+/* Fresh-build marker: intentionally presentation-neutral. */
+.login-emoji-restore-build-marker { display: none !important; }
