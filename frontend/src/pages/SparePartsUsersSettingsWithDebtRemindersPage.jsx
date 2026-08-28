@@ -1,4 +1,5 @@
 import UsersSettingsPage from "./UsersSettingsPage";
+import CustomerFeatureControlsPanel from "../components/CustomerFeatureControlsPanel";
 import DebtReminderSettingsPanel from "../components/DebtReminderSettingsPanel";
 import { useAuth } from "../context/AuthContext";
 
@@ -7,9 +8,11 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
 
   const role = String(user?.role || "").toLowerCase();
   const canManage = ["admin", "manager"].includes(role);
+  const canManageCustomerFeatureControls = role === "admin";
 
   return (
     <>
+      {canManageCustomerFeatureControls ? <CustomerFeatureControlsPanel /> : null}
       <UsersSettingsPage />
       {canManage ? (
         <div
