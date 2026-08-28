@@ -62,8 +62,7 @@ body {
   color: var(--chalin-text);
 }
 
-/* Shared application surfaces. These are deliberately scoped to common class names used
-   throughout Chalin 03, while allowing specialised dark pages to retain their own accents. */
+/* Shared application surfaces. */
 html[data-chalin-theme="dark"] .section-card,
 html[data-chalin-theme="dark"] .stat-card,
 html[data-chalin-theme="dark"] .receipt-modal,
@@ -156,7 +155,7 @@ html[data-chalin-theme="dark"] .installment-completion__empty {
   border-color: var(--chalin-border);
 }
 
-/* Finance pages intentionally retain a green identity in both modes. */
+/* Finance pages retain their green/gold identity in both modes. */
 html[data-chalin-theme="dark"] .finance-applications-refined {
   --ifx-green: #6bd68d;
   --ifx-ink: #eef4f1;
@@ -177,6 +176,69 @@ html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__di
 html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__dialog::-webkit-scrollbar-thumb {
   border-color: #121a24;
   background: #5e7467;
+}
+
+/* Global workspace top bar: a restrained green accent line keeps pages visually connected. */
+.bwl-topbar {
+  position: relative;
+  border-bottom-color: var(--chalin-border, #d8dee8);
+}
+
+.bwl-topbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, #185b35 0%, #2e8a50 55%, rgba(46, 138, 80, 0) 100%);
+  pointer-events: none;
+}
+
+html[data-chalin-theme="dark"] .bwl-topbar::after {
+  background: linear-gradient(90deg, #55c47a 0%, #2f9b59 55%, rgba(47, 155, 89, 0) 100%);
+}
+
+/* Finance-specific top bar: preserve the richer green/gold signature. */
+.bwl-shell.bwl-theme-finance-signature .bwl-topbar::after {
+  background: linear-gradient(90deg, #0d5238 0%, #2b8658 42%, #d9b85d 78%, rgba(217, 184, 93, 0) 100%);
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-topbar {
+  border-bottom-color: rgba(217, 184, 93, 0.16);
+  background:
+    radial-gradient(circle at 6% 0%, rgba(35, 131, 88, 0.12), transparent 30%),
+    rgba(6, 19, 14, 0.9);
+  color: #f4f8f5;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-topbar small {
+  color: #9fb1a7;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-topbar strong {
+  color: #f7fbf8;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-topbar strong > span {
+  border-color: rgba(217, 184, 93, 0.24);
+  background: rgba(217, 184, 93, 0.1);
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-separation-badge {
+  border-color: rgba(85, 196, 122, 0.22);
+  background: #143725;
+  color: #8fe3a5;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-theme-control {
+  border-color: rgba(217, 184, 93, 0.24);
+  background: rgba(217, 184, 93, 0.08);
+  color: #f5d97b;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-content {
+  background: #06130e;
 }
 
 /* Theme control */
