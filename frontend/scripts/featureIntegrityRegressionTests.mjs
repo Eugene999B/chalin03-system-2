@@ -9,6 +9,11 @@ if (!login.includes("../styles/chalin03LoginBespoke.css")) {
   throw new Error("Chalin 03 bespoke login stylesheet is not loaded by the active login wrapper.");
 }
 
+const groupLogin = read("src/styles/groupOperationsLogin.css");
+if (!groupLogin.includes('.group-operations-map__node.is-parts > span::after')) {
+  throw new Error("Group login map has regressed to legacy emoji presentation.");
+}
+
 const sidebar = read("src/components/CompactSidebarNavigation.jsx");
 if (sidebar.includes('{item.icon}</span>')) {
   throw new Error("Sidebar navigation has regressed to rendering emoji icon data directly.");
@@ -33,6 +38,11 @@ for (const ruleCode of [
   if (!executive.includes(ruleCode)) {
     throw new Error(`Executive settings are missing ${ruleCode}.`);
   }
+}
+
+const vite = read("vite.config.js");
+if (!vite.includes('if (source === "./pages/UsersSettingsPage")')) {
+  throw new Error("Users & Settings restoration still depends on an importer-specific Vite substitution.");
 }
 
 console.log("Feature-integrity regression contracts passed.");
