@@ -21,7 +21,7 @@ import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
-import UsersSettingsPage from "./pages/UsersSettingsPage";
+import UsersSettingsControlRoomPage from "./pages/UsersSettingsControlRoomPage";
 import UserPermissionManagerPage from "./pages/UserPermissionManagerPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
@@ -311,7 +311,7 @@ export default function App() {
 
             <Route
               path="users-settings"
-              element={rolePage(adminOnlyRoles, <UsersSettingsPage />)}
+              element={rolePage(adminOnlyRoles, <UsersSettingsControlRoomPage />)}
             />
             <Route
               path="user-permissions"
@@ -421,112 +421,9 @@ export default function App() {
                 <MiningOperationsPage section="production" />
               )}
             />
-            <Route
-              path="equipment"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.equipment,
-                <MiningOperationsPage section="equipment" />
-              )}
-            />
-            <Route
-              path="fuel"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.fuel,
-                <MiningOperationsPage section="fuel" />
-              )}
-            />
-            <Route
-              path="expenses"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.expenses,
-                <MiningOperationsPage section="expenses" />
-              )}
-            />
-            <Route
-              path="incidents"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.incidents,
-                <MiningOperationsPage section="incidents" />
-              )}
-            />
-            <Route
-              path="control-centre"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.control,
-                <MiningControlCentrePage />
-              )}
-            />
-            <Route
-              path="fleet"
-              element={permissionPage(MINING_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
-            />
-            <Route
-              path="documents"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.documents,
-                <OperationsDocumentsAccountingPage workspaceScope="mining" />
-              )}
-            />
-            <Route
-              path="shared-controls"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.shared,
-                <SharedReportsDocumentsPage />
-              )}
-            />
-            <Route
-              path="workers"
-              element={permissionOnlyPage(
-                "workers.view",
-                <Release2FinalControlPage mode="workers" />
-              )}
-            />
-            <Route
-              path="payroll"
-              element={permissionOnlyPage(
-                "payroll.view",
-                <PayrollProcessingCentrePage />
-              )}
-            />
-            <Route
-              path="employment-documents"
-              element={permissionOnlyPage(
-                "workers.documents.view",
-                <EmploymentDocumentsPage />
-              )}
-            />
-            <Route
-              path="document-signature-settings"
-              element={permissionOnlyPage(
-                "security.admin",
-                <DocumentSignatureSettingsPage />
-              )}
-            />
-            <Route
-              path="administration"
-              element={permissionPage(
-                MINING_SECTION_PERMISSIONS.administration,
-                <WorkspaceAdministrationPage workspace="mining" />
-              )}
-            />
-            <Route
-              path="notifications"
-              element={permissionOnlyPage(
-                "notifications.view",
-                <NotificationCentrePage />
-              )}
-            />
-            <Route
-              path="help"
-              element={safe(<WorkspaceHelpPage workspace="mining" />)}
-            />
-            <Route
-              path="change-password"
-              element={safe(<ChangePasswordPage />)}
-            />
           </Route>
 
-          {/* Equipment Hire is an operational division with its own sidebar. */}
+          {/* Equipment Sales & Hire has its own protected workspace. */}
           <Route
             path="/equipment-hire-operations"
             element={
@@ -535,335 +432,51 @@ export default function App() {
               </WorkspaceShell>
             }
           >
-            <Route
-              index
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.overview,
-                <EquipmentHireOperationsPage section="overview" />
-              )}
-            />
-            <Route
-              path="customers"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.customers,
-                <EquipmentHireOperationsPage section="customers" />
-              )}
-            />
-            <Route
-              path="enquiries"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.enquiries,
-                <EquipmentHireOperationsPage section="enquiries" />
-              )}
-            />
-            <Route
-              path="availability"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.availability,
-                <EquipmentHireOperationsPage section="availability" />
-              )}
-            />
-            <Route
-              path="quotations"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.quotations,
-                <EquipmentHireOperationsPage section="quotations" />
-              )}
-            />
-            <Route
-              path="contracts"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.contracts,
-                <EquipmentHireOperationsPage section="contracts" />
-              )}
-            />
-            <Route
-              path="commercial-control"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.commercial,
-                <HireCommercialControlPage />
-              )}
-            />
-            <Route
-              path="operations"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.operations,
-                <EquipmentHireOperationsPage section="operations" />
-              )}
-            />
-            <Route
-              path="finance"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.finance,
-                <EquipmentHireOperationsPage section="finance" />
-              )}
-            />
-            <Route
-              path="returns"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.returns,
-                <EquipmentHireOperationsPage section="returns" />
-              )}
-            />
-            <Route
-              path="reports"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.reports,
-                <EquipmentHireOperationsPage section="reports" />
-              )}
-            />
-            <Route
-              path="fleet"
-              element={permissionPage(HIRE_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
-            />
-            <Route
-              path="documents"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.documents,
-                <OperationsDocumentsAccountingPage workspaceScope="equipment_hire" />
-              )}
-            />
-            <Route
-              path="shared-controls"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.shared,
-                <SharedReportsDocumentsPage />
-              )}
-            />
-            <Route
-              path="workforce"
-              element={permissionOnlyPage(
-                "workers.view",
-                <EquipmentBusinessWorkforcePage />
-              )}
-            />
-            <Route
-              path="workers"
-              element={permissionOnlyPage(
-                "workers.view",
-                <Release2FinalControlPage mode="workers" />
-              )}
-            />
-            <Route
-              path="payroll"
-              element={permissionOnlyPage(
-                "payroll.view",
-                <PayrollProcessingCentrePage />
-              )}
-            />
-            <Route
-              path="employment-documents"
-              element={permissionOnlyPage(
-                "workers.documents.view",
-                <EmploymentDocumentsPage />
-              )}
-            />
-            <Route
-              path="document-signature-settings"
-              element={permissionOnlyPage(
-                "security.admin",
-                <DocumentSignatureSettingsPage />
-              )}
-            />
-            <Route
-              path="administration"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.administration,
-                <WorkspaceAdministrationPage workspace="equipment_hire" />
-              )}
-            />
-            <Route
-              path="notifications"
-              element={permissionOnlyPage(
-                "notifications.view",
-                <NotificationCentrePage />
-              )}
-            />
-            <Route
-              path="help"
-              element={safe(<WorkspaceHelpPage workspace="equipment_hire" />)}
-            />
-            <Route
-              path="change-password"
-              element={safe(<ChangePasswordPage />)}
-            />
+            <Route index element={safe(<EquipmentHireOperationsPage />)} />
+            <Route path="/equipment-hire-operations/:target" element={<LegacyWorkspaceRedirect target="overview" />} />
           </Route>
 
-          {/* Installment Finance is a separate division using the same protected equipment data. */}
+          {/* Professional Equipment Installment Finance. */}
           <Route
-            path="/equipment-installment-finance"
+            path="/equipment-installment-finance/*"
             element={
               <WorkspaceShell allowedWorkspaces={EQUIPMENT_HIRE_WORKSPACE}>
                 <InstallmentFinanceLayout />
               </WorkspaceShell>
             }
           >
-            <Route
-              index
-              element={permissionOnlyPage(
-                "fleet.assets.view",
-                <EquipmentInstallmentCommandPage />
-              )}
-            />
-            <Route
-              path="applications"
-              element={permissionOnlyPage(
-                "fleet.assets.view",
-                <EquipmentSalesWorkspacePage />
-              )}
-            />
-            <Route
-              path="reports"
-              element={permissionOnlyPage(
-                "fleet.assets.view",
-                <EquipmentSalesReportsPage />
-              )}
-            />
-            <Route
-              path="catalogue"
-              element={permissionPage(HIRE_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
-            />
-            <Route
-              path="customers"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.customers,
-                <EquipmentHireOperationsPage section="customers" />
-              )}
-            />
-            <Route
-              path="documents"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.documents,
-                <OperationsDocumentsAccountingPage workspaceScope="equipment_hire" />
-              )}
-            />
-            <Route
-              path="shared-controls"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.shared,
-                <SharedReportsDocumentsPage />
-              )}
-            />
-            <Route
-              path="workforce"
-              element={permissionOnlyPage(
-                "workers.view",
-                <EquipmentBusinessWorkforcePage />
-              )}
-            />
-            <Route
-              path="workers"
-              element={permissionOnlyPage(
-                "workers.view",
-                <Release2FinalControlPage mode="workers" />
-              )}
-            />
-            <Route
-              path="payroll"
-              element={permissionOnlyPage(
-                "payroll.view",
-                <PayrollProcessingCentrePage />
-              )}
-            />
-            <Route
-              path="employment-documents"
-              element={permissionOnlyPage(
-                "workers.documents.view",
-                <EmploymentDocumentsPage />
-              )}
-            />
-            <Route
-              path="document-signature-settings"
-              element={permissionOnlyPage(
-                "security.admin",
-                <DocumentSignatureSettingsPage />
-              )}
-            />
-            <Route
-              path="administration"
-              element={permissionPage(
-                HIRE_SECTION_PERMISSIONS.administration,
-                <WorkspaceAdministrationPage workspace="equipment_hire" />
-              )}
-            />
-            <Route
-              path="notifications"
-              element={permissionOnlyPage(
-                "notifications.view",
-                <NotificationCentrePage />
-              )}
-            />
-            <Route
-              path="help"
-              element={safe(<WorkspaceHelpPage workspace="equipment_hire" />)}
-            />
-            <Route
-              path="change-password"
-              element={safe(<ChangePasswordPage />)}
-            />
+            <Route index element={safe(<EquipmentInstallmentCommandPage />)} />
+            <Route path="applications" element={safe(<EquipmentInstallmentCommandPage />)} />
+            <Route path="reports" element={rolePage(adminManagerRoles, <EquipmentSalesReportsPage />)} />
+            <Route path="workforce" element={permissionOnlyPage("workers.view", <EquipmentBusinessWorkforcePage />)} />
           </Route>
 
-          {/* Group Executive is a separate management shell, not a business sidebar. */}
           <Route
-            path="/group-executive-control"
+            path="/equipment-sales-workspace"
+            element={
+              <WorkspaceShell allowedWorkspaces={EQUIPMENT_HIRE_WORKSPACE}>
+                {safe(<EquipmentSalesWorkspacePage />)}
+              </WorkspaceShell>
+            }
+          />
+
+          {/* Group executive area. */}
+          <Route
+            path="/group-executive"
             element={
               <WorkspaceShell allowedWorkspaces={ALL_WORKSPACES}>
-                <PermissionRoute permissions={["executive.operations.view"]}>
-                  <GroupExecutiveLayout />
-                </PermissionRoute>
+                <GroupExecutiveLayout />
               </WorkspaceShell>
             }
           >
-            <Route index element={safe(<GroupExecutiveControlPage />)} />
-            <Route
-              path="operations"
-              element={permissionOnlyPage(
-                "executive.operations.view",
-                <Release2FinalControlPage mode="executive" />
-              )}
-            />
-            <Route
-              path="notifications"
-              element={permissionOnlyPage(
-                "notifications.view",
-                <NotificationCentrePage executiveMode />
-              )}
-            />
-            <Route
-              path="shared-controls"
-              element={permissionOnlyPage(
-                "shared.control.view",
-                <SharedReportsDocumentsPage executiveMode />
-              )}
-            />
-            <Route
-              path="configuration"
-              element={permissionOnlyPage(
-                "security.admin",
-                <GroupConfigurationPage />
-              )}
-            />
+            <Route index element={rolePage(adminManagerRoles, <GroupExecutiveControlPage />)} />
+            <Route path="configuration" element={rolePage(adminOnlyRoles, <GroupConfigurationPage />)} />
+            <Route path="workspaces" element={permissionOnlyPage("system.diagnostics", <WorkspaceAdministrationPage />)} />
+            <Route path="documents" element={permissionOnlyPage("shared.control.view", <OperationsDocumentsAccountingPage />)} />
+            <Route path="hire-commercial" element={permissionOnlyPage("hire.commercial.view", <HireCommercialControlPage />)} />
           </Route>
 
-          {/* Old shared links now redirect into the active business workspace. */}
-          <Route
-            path="/fleet-assets"
-            element={
-              <ProtectedRoute>
-                <LegacyWorkspaceRedirect target="fleet" />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/operations-documents-accounting"
-            element={
-              <ProtectedRoute>
-                <LegacyWorkspaceRedirect target="documents" />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </BrowserRouter>
       </WorkspaceContextProvider>
