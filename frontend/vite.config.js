@@ -41,11 +41,8 @@ function restoreSparePartsSmsIntelligence() {
   return {
     name: "restore-spare-parts-sms-intelligence",
     enforce: "pre",
-    resolveId(source, importer) {
-      if (
-        source === "./pages/UsersSettingsPage" &&
-        importer?.endsWith("/App.jsx")
-      ) {
+    resolveId(source) {
+      if (source === "./pages/UsersSettingsPage") {
         return fileURLToPath(
           new URL(
             "./src/pages/SparePartsUsersSettingsWithDebtRemindersPage.jsx",
