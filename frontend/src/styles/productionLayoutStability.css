@@ -12,7 +12,6 @@
   min-width: 100vw !important;
   height: 100dvh !important;
   min-height: 100dvh !important;
-  max-height: 100dvh !important;
   margin: 0 !important;
   padding: 24px !important;
   overflow: hidden !important;
@@ -31,13 +30,8 @@
   overflow: hidden !important;
 }
 
-.finance-simple__dialog > form,
-.finance-simple__dialog > .finance-simple__section,
-.finance-accounts__dialog > .finance-accounts__two-column {
-  min-height: 0;
-}
-
 .finance-simple__dialog > form {
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
 }

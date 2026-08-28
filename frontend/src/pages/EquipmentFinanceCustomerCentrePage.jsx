@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import { CustomerPortrait, CustomerPortraitPicker } from "../components/CustomerPortrait";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
+import "../styles/customerProfilePortrait.css";
 
 const API = "/equipment-catalogue/sales/phase-one/customers";
 
@@ -16,6 +18,7 @@ const EMPTY_CUSTOMER = {
   address: "",
   contact_person: "",
   risk_notes: "",
+  profile_photo_data_url: "",
   is_active: true,
 };
 
@@ -55,6 +58,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_CUSTOMER);
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+  const [photoProblem, setPhotoProblem] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,15 +102,17 @@ export default function EquipmentFinanceCustomerCentrePage() {
   function openCreate() {
     setSelectedCustomer(null);
     setEditing({ id: null });
-    setForm(EMPTY_CUSTOMER);
+    setForm({ ...EMPTY_CUSTOMER });
     setConfirmDuplicate(false);
+    setPhotoProblem("");
     setProblem("");
   }
 
-  function openEdit(customer) {
+  async function openEdit(customer) {
     setSelectedCustomer(null);
     setEditing(customer);
     setForm({
+      ...EMPTY_CUSTOMER,
       customer_name: customer.customer_name || "",
       customer_type: customer.customer_type || "individual",
       phone: customer.phone || "",
@@ -118,7 +124,16 @@ export default function EquipmentFinanceCustomerCentrePage() {
       is_active: Boolean(customer.is_active),
     });
     setConfirmDuplicate(false);
+    setPhotoProblem("");
     setProblem("");
+    try {
+      const response = await axiosClient.get(`${API}/${customer.id}/photo`);
+      setValue("profile_photo_data_url", response.data?.photo || "");
+    } catch (error) {
+      if (error?.response?.status !== 503) {
+        setPhotoProblem(errorMessage(error, "The customer photo could not be loaded."));
+      }
+    }
   }
 
   async function save(event) {
@@ -132,6 +147,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
         ? await axiosClient.put(`${API}/${editing.id}`, payload)
         : await axiosClient.post(API, payload);
       setEditing(null);
+      setForm(EMPTY_CUSTOMER);
       setNotice(response.data?.message || "Finance customer saved.");
       await load();
     } catch (error) {
@@ -234,14 +250,11 @@ export default function EquipmentFinanceCustomerCentrePage() {
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelectedCustomer(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Finance customer details" onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header">
-              <div>
-                <p className="finance-simple__eyebrow">Selected customer</p>
-                <h2>{selectedCustomer.customer_name}</h2>
-                <span className="finance-simple__muted">{selectedCustomer.customer_code} · {selectedCustomer.customer_type || "individual"}</span>
-              </div>
+              <div><p className="finance-simple__eyebrow">Selected customer</p><h2>{selectedCustomer.customer_name}</h2><span className="finance-simple__muted">{selectedCustomer.customer_code} · {selectedCustomer.customer_type || "individual"}</span></div>
               <button type="button" onClick={() => setSelectedCustomer(null)}>Close</button>
             </div>
             <div className="finance-simple__summary">
+              <article><span>Photo</span><strong><CustomerPortrait customerId={selectedCustomer.id} name={selectedCustomer.customer_name} size={64} /></strong></article>
               <article><span>Phone</span><strong>{selectedCustomer.phone || "Not recorded"}</strong></article>
               <article><span>WhatsApp</span><strong>{selectedCustomer.whatsapp_phone || "Not recorded"}</strong></article>
               <article><span>Email</span><strong>{selectedCustomer.email || "Not recorded"}</strong></article>
@@ -250,25 +263,8 @@ export default function EquipmentFinanceCustomerCentrePage() {
               <article><span>Agreements</span><strong>{selectedCustomer.finance_agreement_count || 0}</strong></article>
               <article><span>Outstanding</span><strong>{money(selectedCustomer.outstanding_balance)}</strong></article>
             </div>
-            <div className="finance-simple__section">
-              <h3>Address</h3>
-              <p>{selectedCustomer.address || "No address recorded."}</p>
-              {selectedCustomer.risk_notes ? (
-                <details>
-                  <summary>Show internal risk / service note</summary>
-                  <p>{selectedCustomer.risk_notes}</p>
-                </details>
-              ) : null}
-            </div>
-            <div className="finance-simple__sticky-actions">
-              <span>Actions apply only to this selected customer.</span>
-              <div>
-                {canManage ? <button type="button" onClick={() => openEdit(selectedCustomer)}>Edit Customer</button> : null}
-                <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${selectedCustomer.id}`}>
-                  Start Installment
-                </Link>
-              </div>
-            </div>
+            <div className="finance-simple__section"><h3>Address</h3><p>{selectedCustomer.address || "No address recorded."}</p>{selectedCustomer.risk_notes ? <details><summary>Show internal risk / service note</summary><p>{selectedCustomer.risk_notes}</p></details> : null}</div>
+            <div className="finance-simple__sticky-actions"><span>Actions apply only to this selected customer.</span><div>{canManage ? <button type="button" onClick={() => openEdit(selectedCustomer)}>Edit Customer</button> : null}<Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${selectedCustomer.id}`}>Start Installment</Link></div></div>
           </section>
         </div>
       ) : null}
@@ -281,6 +277,16 @@ export default function EquipmentFinanceCustomerCentrePage() {
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
             <form onSubmit={save}>
+              <div className="customer-centre__photo-row">
+                <CustomerPortraitPicker
+                  value={form.profile_photo_data_url}
+                  name={form.customer_name || "Customer"}
+                  onChange={(value) => setValue("profile_photo_data_url", value)}
+                  onError={setPhotoProblem}
+                  compact
+                />
+                {photoProblem ? <div className="finance-simple__notice is-error" role="alert">{photoProblem}</div> : null}
+              </div>
               <div className="finance-simple__grid">
                 <Field title="Full name"><input value={form.customer_name} onChange={(event) => setValue("customer_name", event.target.value)} required /></Field>
                 <Field title="Customer type"><select value={form.customer_type} onChange={(event) => setValue("customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Company</option><option value="contractor">Contractor</option><option value="government">Government</option></select></Field>

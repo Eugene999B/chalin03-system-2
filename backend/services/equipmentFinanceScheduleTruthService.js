@@ -1,6 +1,6 @@
 const { pool } = require("../config/db");
 
-const TERMINAL_STATUSES = new Set(["cancelled", "waived", "rescheduled"]);
+const TERMINAL_STATUSES = new Set(["paid", "cancelled", "waived", "rescheduled"]);
 
 function amount(value) {
   return Number(Number(value || 0).toFixed(2));
@@ -10,27 +10,29 @@ function dateText(value) {
   return value ? String(value).slice(0, 10) : null;
 }
 
+function remainingExpression(alias = "s") {
+  return `GREATEST(
+    COALESCE(${alias}.scheduled_amount, 0)
+    + COALESCE(${alias}.late_charge_amount, 0)
+    - COALESCE(${alias}.waived_charge_amount, 0)
+    - COALESCE(a.allocated_amount, 0),
+    0
+  )`;
+}
+
 async function getAgreementScheduleTruth(connection = pool, agreementId) {
   const [rows] = await connection.query(
     `SELECT
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND DATE(s.due_date) >= DATE(agreement.created_at)
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND s.due_date < CURDATE()
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND COALESCE(s.scheduled_amount, 0) + COALESCE(s.late_charge_amount, 0)
+               - COALESCE(s.waived_charge_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS oldest_overdue_date,
        MIN(CASE
@@ -41,22 +43,18 @@ async function getAgreementScheduleTruth(connection = pool, agreementId) {
        END) AS final_due_date,
        COALESCE(SUM(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-         THEN GREATEST(
-           s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-             - COALESCE(a.allocated_amount, 0),
-           0
-         )
+         THEN ${remainingExpression()}
          ELSE 0
        END), 0) AS schedule_outstanding
      FROM equipment_installment_schedule s
-     INNER JOIN equipment_sale_agreements agreement ON agreement.id = s.agreement_id
      LEFT JOIN (
        SELECT
          allocation.schedule_id,
-         SUM(CASE WHEN payment.is_voided = FALSE THEN allocation.allocated_amount ELSE 0 END) AS allocated_amount
+         SUM(COALESCE(allocation.allocated_amount, 0)) AS allocated_amount
        FROM equipment_sale_payment_allocations allocation
        INNER JOIN equipment_sale_payments payment
          ON payment.id = allocation.payment_id
+       WHERE payment.is_voided = FALSE
        GROUP BY allocation.schedule_id
      ) a ON a.schedule_id = s.id
      WHERE s.agreement_id = ?`,
@@ -79,47 +77,35 @@ async function getPortfolioScheduleTruth(connection = pool) {
        s.agreement_id,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND DATE(s.due_date) >= DATE(agreement.created_at)
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND COALESCE(s.due_date, '') <> ''
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND s.due_date < CURDATE()
-           AND GREATEST(
-             s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-               - COALESCE(a.allocated_amount, 0),
-             0
-           ) > 0.009
+           AND COALESCE(s.scheduled_amount, 0) + COALESCE(s.late_charge_amount, 0)
+               - COALESCE(s.waived_charge_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS oldest_overdue_date,
        MIN(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS first_due_date,
        MAX(CASE WHEN s.schedule_status <> 'rescheduled' THEN s.due_date END) AS final_due_date,
        COALESCE(SUM(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-         THEN GREATEST(
-           s.scheduled_amount + s.late_charge_amount - s.waived_charge_amount
-             - COALESCE(a.allocated_amount, 0),
-           0
-         )
+         THEN ${remainingExpression()}
          ELSE 0
        END), 0) AS schedule_outstanding
      FROM equipment_installment_schedule s
-     INNER JOIN equipment_sale_agreements agreement ON agreement.id = s.agreement_id
      LEFT JOIN (
        SELECT
          allocation.schedule_id,
-         SUM(CASE WHEN payment.is_voided = FALSE THEN allocation.allocated_amount ELSE 0 END) AS allocated_amount
+         SUM(COALESCE(allocation.allocated_amount, 0)) AS allocated_amount
        FROM equipment_sale_payment_allocations allocation
        INNER JOIN equipment_sale_payments payment
          ON payment.id = allocation.payment_id
+       WHERE payment.is_voided = FALSE
        GROUP BY allocation.schedule_id
      ) a ON a.schedule_id = s.id
-    GROUP BY s.agreement_id`,
+     GROUP BY s.agreement_id`,
   );
 
   return new Map(

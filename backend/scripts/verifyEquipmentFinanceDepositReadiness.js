@@ -27,6 +27,7 @@ async function verify() {
           database_name: databaseName,
           missing_columns: readiness.missing_columns,
           missing_triggers: readiness.missing_triggers,
+          invalid_triggers: readiness.invalid_triggers,
           missing_migrations: readiness.missing_migrations,
         },
         null,
