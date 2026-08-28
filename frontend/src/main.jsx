@@ -9,6 +9,7 @@ import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttentio
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
+import { initializeChalinTheme } from "./utils/chalinTheme.js";
 import "./index.css";
 import "./styles/systemTheme.css";
 import "./styles/userPermissionManager.mobile.css";
@@ -21,6 +22,7 @@ const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v38";
 const APP_SHELL_RELEASE = `browser-cache-integrity-v38-${APP_BUILD_ID}`;
 
+initializeChalinTheme();
 installCommandGateHistoryTracker();
 installCriticalFinanceWorkspacePreload();
 
