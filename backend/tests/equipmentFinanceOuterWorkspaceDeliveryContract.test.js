@@ -38,7 +38,7 @@ test("critical Finance workspace is retained in the entry bundle", () => {
 
 test("Finance app-shell rollout uses a deployment-specific cache and rejects retired assets", () => {
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
-  assert.match(main, /browser-cache-integrity-v35/);
+  assert.match(main, /browser-cache-integrity-v38/);
   assert.match(
     main,
     /register\([\s\S]*`\/sw\.js\?release=\$\{encodeURIComponent\(APP_SHELL_RELEASE\)\}`/
