@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router";
 import "../styles/installmentFinanceWorkspaceEnhancements.css";
@@ -46,88 +46,6 @@ function clickExisting(selector, textPattern) {
   target.scrollIntoView({ behavior: "smooth", block: "center" });
   target.focus?.();
   return true;
-}
-
-function StartGuide({ portalTarget }) {
-  const [progress, setProgress] = useState({ done: 0, total: 0, percent: 0 });
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    const root = document.querySelector(".finance-profile");
-    if (!root) return undefined;
-    const sections = [...root.querySelectorAll(".finance-profile__section")];
-
-    const update = () => {
-      const values = sections.map((section) => {
-        const fields = [...section.querySelectorAll("input,select,textarea")].filter((el) => el.type !== "hidden");
-        if (!fields.length) return false;
-        return fields.every((el) => el.type === "checkbox" ? el.checked : String(el.value || "").trim() !== "");
-      });
-      const done = values.filter(Boolean).length;
-      const total = values.length || 1;
-      setProgress({ done, total, percent: Math.round((done / total) * 100) });
-      const viewport = window.innerHeight || 900;
-      let nearest = 0;
-      let distance = Number.POSITIVE_INFINITY;
-      sections.forEach((section, index) => {
-        const value = Math.abs(section.getBoundingClientRect().top - viewport * 0.22);
-        if (value < distance) { distance = value; nearest = index; }
-      });
-      setActive(nearest);
-    };
-
-    update();
-    root.addEventListener("input", update, true);
-    root.addEventListener("change", update, true);
-    window.addEventListener("scroll", update, { passive: true });
-    const timer = window.setInterval(update, 1000);
-    return () => {
-      root.removeEventListener("input", update, true);
-      root.removeEventListener("change", update, true);
-      window.removeEventListener("scroll", update);
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const labels = useMemo(() => {
-    const root = document.querySelector(".finance-profile");
-    return root ? [...root.querySelectorAll(".finance-profile__section h3")].map((node, index) => node.textContent?.trim() || `Step ${index + 1}`) : [];
-  }, [portalTarget]);
-
-  return (
-    <div className="c03-ifx-start">
-      <div className="c03-ifx-start__summary">
-        <div>
-          <span className="c03-ifx-kicker">Guided application</span>
-          <strong>{progress.percent}% ready</strong>
-          <small>{progress.done} of {progress.total} sections complete</small>
-        </div>
-        <div className="c03-ifx-progress" aria-label={`${progress.percent}% complete`}>
-          <span style={{ width: `${progress.percent}%` }} />
-        </div>
-      </div>
-      <div className="c03-ifx-tasklist" aria-label="Installment application steps">
-        {labels.map((label, index) => (
-          <button
-            type="button"
-            key={`${label}-${index}`}
-            className={index === active ? "is-current" : index < progress.done ? "is-done" : ""}
-            onClick={() => document.querySelectorAll(".finance-profile__section")[index]?.scrollIntoView({ behavior: "smooth", block: "start" })}
-          >
-            <span>{index + 1}</span>
-            <strong>{label}</strong>
-            <small>{index < progress.done ? "Complete" : index === active ? "Current" : "Pending"}</small>
-          </button>
-        ))}
-      </div>
-      <div className="c03-ifx-hints">
-        <span><b>Best path:</b> customer → equipment → terms → review → save.</span>
-        <button type="button" onClick={() => clickExisting(".finance-profile", /save.*profile/i)}>Save customer profile</button>
-        <Link to={`${BASE}/applications?stage=machines`}>Choose excavator</Link>
-        <Link to={`${BASE}/applications?stage=customer-portfolios`}>Open customer profile</Link>
-      </div>
-    </div>
-  );
 }
 
 function CorrectionsGuide() {
@@ -201,13 +119,11 @@ export default function InstallmentFinanceWorkspaceEnhancements() {
 
   if (!routeIsFinance(location) || !portalTarget) return null;
 
-  const contextual = stage === "start"
-    ? <StartGuide portalTarget={portalTarget} />
-    : stage === "corrections"
-      ? <CorrectionsGuide />
-      : stage === "customer-portfolios"
-        ? <CustomerGuide />
-        : null;
+  const contextual = stage === "corrections"
+    ? <CorrectionsGuide />
+    : stage === "customer-portfolios"
+      ? <CustomerGuide />
+      : null;
 
   return createPortal(
     <div className="c03-ifx-root" data-c03-ifx-stage={stage}>
