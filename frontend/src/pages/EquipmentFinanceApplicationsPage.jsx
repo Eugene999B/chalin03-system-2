@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/equipmentFinanceApplicationsModern.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
 const EDITABLE_STATUSES = new Set(["draft", "changes_requested"]);
@@ -197,7 +198,7 @@ function LazyApplicationImage({ application }) {
   }, [application?.has_image, application?.id, visible]);
 
   return application?.has_image ? (
-    <div ref={containerRef} className="finance-simple__machine-image">
+    <div ref={containerRef} className="finance-simple__machine-image finance-applications-v2__thumb-frame">
       {source ? (
         <img
           src={source}
@@ -205,9 +206,16 @@ function LazyApplicationImage({ application }) {
           loading="lazy"
           decoding="async"
         />
-      ) : null}
+      ) : (
+        <span aria-hidden="true">🚜</span>
+      )}
     </div>
-  ) : null;
+  ) : (
+    <div className="finance-applications-v2__thumb-frame finance-applications-v2__thumb-frame--empty" aria-label="No excavator photograph">
+      <span aria-hidden="true">🚜</span>
+      <small>No photo</small>
+    </div>
+  );
 }
 
 export default function EquipmentFinanceApplicationsPage() {
@@ -349,9 +357,6 @@ export default function EquipmentFinanceApplicationsPage() {
   useEffect(() => {
     const timer = window.setTimeout(loadList, search ? 300 : 0);
     return () => {
-      // StrictMode replays effect cleanup immediately after the first mount.
-      // Only cancel the pending debounce timer here. A newer real loadList()
-      // call still aborts the older request at the top of loadList.
       window.clearTimeout(timer);
     };
   }, [loadList, search]);
@@ -402,8 +407,6 @@ export default function EquipmentFinanceApplicationsPage() {
     if (requestedApplicationId) {
       void openDetail(requestedApplicationId);
     }
-    // Do not abort during effect cleanup: React StrictMode immediately replays
-    // this effect. A newer openDetail() call still cancels the stale request.
   }, [openDetail, requestedApplicationId]);
 
   function closeDetail() {
@@ -582,86 +585,47 @@ export default function EquipmentFinanceApplicationsPage() {
   const schemaProblems = readinessProblems(readiness);
 
   return (
-    <main className="finance-simple">
-      <header className="finance-simple__hero">
+    <main className="finance-simple finance-applications-v2">
+      <header className="finance-simple__hero finance-applications-v2__hero">
         <div>
-          <p>Applications and approvals</p>
+          <p>Applications &amp; approvals</p>
           <h1>Credit Applications</h1>
-          <span>
-            Every company-wide draft stays visible and resumable without selecting an
-            Equipment Hire location.
-          </span>
+          <span>One compact register for finding, reviewing and approving equipment installment cases.</span>
         </div>
         <div className="finance-simple__hero-actions">
-          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">
-            Help with approvals
-          </Link>
-          {canManage ? (
-            <Link className="finance-simple__button is-primary" to="/equipment-installment-finance/applications?stage=start">
-              + Start New Installment
-            </Link>
-          ) : null}
+          <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">Approval guide</Link>
+          {canManage ? <Link className="finance-simple__button is-primary" to="/equipment-installment-finance/applications?stage=start">+ New installment</Link> : null}
         </div>
       </header>
 
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
-      <div className="finance-simple__notice is-info">
-        Finance is company-wide. No Hire-location selection is needed. List responses contain metadata only; the selected file
-        and protected excavator image load separately.
-      </div>
 
       {listFailure ? (
         <section className="finance-simple__notice is-error" role="alert">
           <h2>Application register could not be verified</h2>
           <p>{listFailure.message}</p>
           <p><strong>Diagnostic code:</strong> {listFailure.code}</p>
-          {listFailure.request_id ? (
-            <p><strong>Request ID:</strong> {listFailure.request_id}</p>
-          ) : null}
-          {hasLoadedList ? (
-            <p>The last successfully verified register remains visible below; it was not replaced with false zero totals.</p>
-          ) : (
-            <p>No zero totals are being shown because the register has not completed successfully.</p>
-          )}
-          <button type="button" onClick={loadList} disabled={loading}>
-            {loading ? "Retrying…" : "Retry application check"}
-          </button>
+          {listFailure.request_id ? <p><strong>Request ID:</strong> {listFailure.request_id}</p> : null}
+          {hasLoadedList ? <p>The last verified register remains visible below.</p> : <p>No zero totals are being shown because the register has not completed successfully.</p>}
+          <button type="button" onClick={loadList} disabled={loading}>{loading ? "Retrying…" : "Retry application check"}</button>
         </section>
       ) : null}
 
       {readiness.ready === false ? (
         <section className="finance-simple__section">
           <h2>Credit application foundation is not ready</h2>
-          <p>
-            {readiness.operator_message ||
-              "The production application, quotation or approval schema needs attention."}
-          </p>
-          {schemaProblems.length ? (
-            <ul>
-              {schemaProblems.map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          ) : null}
-          {readiness.database?.version ? (
-            <p><strong>Database version:</strong> {readiness.database.version}</p>
-          ) : null}
-          {readiness.migration ? (
-            <p>
-              <strong>Phase 1 migration record:</strong>{" "}
-              {readiness.migration.recorded ? "present" : "not recorded"}
-            </p>
-          ) : null}
-          {readiness.request_id ? (
-            <p><strong>Schema-check request ID:</strong> {readiness.request_id}</p>
-          ) : null}
-          <button type="button" onClick={loadList} disabled={loading}>
-            {loading ? "Checking…" : "Retry schema check"}
-          </button>
+          <p>{readiness.operator_message || "The production application, quotation or approval schema needs attention."}</p>
+          {schemaProblems.length ? <ul>{schemaProblems.map((item) => <li key={item}>{item}</li>)}</ul> : null}
+          {readiness.database?.version ? <p><strong>Database version:</strong> {readiness.database.version}</p> : null}
+          {readiness.migration ? <p><strong>Phase 1 migration record:</strong> {readiness.migration.recorded ? "present" : "not recorded"}</p> : null}
+          {readiness.request_id ? <p><strong>Schema-check request ID:</strong> {readiness.request_id}</p> : null}
+          <button type="button" onClick={loadList} disabled={loading}>{loading ? "Checking…" : "Retry schema check"}</button>
         </section>
       ) : null}
 
       {hasLoadedList ? (
-        <section className="finance-simple__metrics">
+        <section className="finance-simple__metrics finance-applications-v2__metrics">
           <article className="finance-simple__metric"><span>Drafts / changes</span><strong>{metrics.drafts}</strong></article>
           <article className="finance-simple__metric"><span>Awaiting review</span><strong>{metrics.review}</strong></article>
           <article className="finance-simple__metric"><span>Approved</span><strong>{metrics.approved}</strong></article>
@@ -669,89 +633,53 @@ export default function EquipmentFinanceApplicationsPage() {
         </section>
       ) : null}
 
-      <section className="finance-simple__section">
-        <div className="finance-simple__toolbar">
+      <section className="finance-simple__section finance-applications-v2__register">
+        <div className="finance-simple__toolbar finance-applications-v2__toolbar">
           <div>
             <p className="finance-simple__eyebrow">Application register</p>
-            <h2>{hasLoadedList ? `${pagination.total || 0} record(s)` : "Register not yet verified"}</h2>
+            <h2>{hasLoadedList ? `${pagination.total || 0} cases` : "Register not yet verified"}</h2>
+            <span className="finance-simple__muted">Open a case to see detailed information and decision controls.</span>
           </div>
-          <div className="finance-simple__actions">
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search customer, application, offer or excavator"
-            />
-            <select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="all">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="submitted">Submitted</option>
-              <option value="under_review">Under review</option>
-              <option value="changes_requested">Changes requested</option>
-              <option value="approved">Approved</option>
-              <option value="declined">Declined</option>
-              <option value="withdrawn">Withdrawn / cancelled</option>
+          <div className="finance-simple__actions finance-applications-v2__filters">
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Search customer, application or excavator" />
+            <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+              <option value="all">All statuses</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="under_review">Under review</option><option value="changes_requested">Changes requested</option><option value="approved">Approved</option><option value="declined">Declined</option><option value="withdrawn">Withdrawn / cancelled</option>
             </select>
             <input type="date" aria-label="From date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
             <input type="date" aria-label="To date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
-            <button type="button" onClick={loadList} disabled={loading}>
-              {listFailure ? "Retry" : "Refresh"}
-            </button>
+            <button type="button" onClick={loadList} disabled={loading}>{loading ? "Loading…" : "Refresh"}</button>
           </div>
         </div>
 
         {loading ? <div className="finance-simple__empty">Loading credit applications…</div> : null}
-        {!loading && hasLoadedList && !listFailure && !applications.length ? (
-          <div className="finance-simple__empty">
-            <h3>No matching applications</h3>
-            <p>Use Start New Installment to create a recoverable company-wide draft.</p>
-          </div>
-        ) : null}
+        {!loading && hasLoadedList && !listFailure && !applications.length ? <div className="finance-simple__empty"><h3>No matching applications</h3><p>Use New Installment to create a recoverable company-wide draft.</p></div> : null}
 
-        <div className="finance-simple__cards">
+        <div className="finance-applications-v2__list">
           {applications.map((application) => (
-            <article className="finance-simple__card" key={application.id}>
-              <div className="finance-simple__machine-image"><span>🚜</span></div>
-              <div className="finance-simple__card-body">
-                <div className="finance-simple__card-head">
+            <article className="finance-applications-v2__case" key={application.id}>
+              <LazyApplicationImage application={application} />
+              <div className="finance-applications-v2__case-main">
+                <div className="finance-applications-v2__case-heading">
                   <div>
-                    <small>{application.application_number}</small>
+                    <span className="finance-applications-v2__case-number">{application.application_number}</span>
                     <h3>{application.customer_name}</h3>
-                    <p>{application.asset_code} — {application.asset_name}</p>
+                    <p>{application.asset_code} · {application.asset_name}</p>
                   </div>
                   <Pill value={application.application_status} />
                 </div>
-                <div className="finance-simple__facts">
-                  <div><span>Installment Offer</span><strong>{application.quotation_number || "Automatic offer"}</strong></div>
-                  <div><span>Quoted total</span><strong>{money(application.quoted_total)}</strong></div>
-                  <div><span>Deposit</span><strong>{money(application.proposed_deposit)}</strong></div>
+                <div className="finance-applications-v2__case-facts">
+                  <div><span>Offer</span><strong>{application.quotation_number || "Automatic offer"}</strong></div>
                   <div><span>Financed</span><strong>{money(application.financed_amount)}</strong></div>
+                  <div><span>Deposit</span><strong>{money(application.proposed_deposit)}</strong></div>
                   <div><span>KYC</span><strong><Pill value={application.kyc_status} /></strong></div>
                   <div><span>Affordability</span><strong><Pill value={application.affordability_status} /></strong></div>
                   <div><span>Risk</span><strong><Pill value={application.risk_band} /></strong></div>
-                  <div><span>Origin metadata</span><strong>{application.equipment_origin_name || "Not recorded"}</strong></div>
                 </div>
-                <div className="finance-simple__card-actions">
-                  <button type="button" onClick={() => openDetail(application)}>View file</button>
-                  {canManage && EDITABLE_STATUSES.has(application.application_status) ? (
-                    <button className="is-primary" type="button" onClick={() => openDetail(application, { editAfterOpen: true })}>
-                      {application.application_status === "draft" ? "Resume Draft" : "Edit Draft"}
-                    </button>
-                  ) : null}
-                  {canManage && EDITABLE_STATUSES.has(application.application_status) ? (
-                    <button type="button" onClick={() => requestDecision(application, "submit")}>Submit</button>
-                  ) : null}
-                  {canReview && application.application_status === "submitted" ? (
-                    <button className="is-primary" type="button" onClick={() => requestDecision(application, "start_review")}>Start review</button>
-                  ) : null}
+                <div className="finance-applications-v2__case-actions">
+                  <button type="button" onClick={() => openDetail(application)}>Open case</button>
+                  {canManage && EDITABLE_STATUSES.has(application.application_status) ? <button className="is-primary" type="button" onClick={() => openDetail(application, { editAfterOpen: true })}>{application.application_status === "draft" ? "Resume draft" : "Edit draft"}</button> : null}
+                  {canManage && EDITABLE_STATUSES.has(application.application_status) ? <button type="button" onClick={() => requestDecision(application, "submit")}>Submit</button> : null}
+                  {canReview && application.application_status === "submitted" ? <button className="is-primary" type="button" onClick={() => requestDecision(application, "start_review")}>Start review</button> : null}
                 </div>
               </div>
             </article>
@@ -759,80 +687,56 @@ export default function EquipmentFinanceApplicationsPage() {
         </div>
 
         {hasLoadedList ? (
-          <div className="finance-simple__sticky-actions">
+          <div className="finance-simple__sticky-actions finance-applications-v2__pagination">
             <span>Page {pagination.page || page} of {pagination.total_pages || 1}</span>
-            <div>
-              <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-              <button type="button" disabled={loading || page >= Number(pagination.total_pages || 1)} onClick={() => setPage((value) => value + 1)}>Next</button>
-            </div>
+            <div><button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button><button type="button" disabled={loading || page >= Number(pagination.total_pages || 1)} onClick={() => setPage((value) => value + 1)}>Next</button></div>
           </div>
         ) : null}
       </section>
 
-      {detailLoading ? <div className="finance-simple__notice is-info">Opening selected application…</div> : null}
+      {detailLoading ? <div className="finance-applications-v2__loading" role="status">Opening application…</div> : null}
 
       {detail ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={closeDetail}>
-          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Credit application file" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header">
-              <div>
-                <p className="finance-simple__eyebrow">Application file</p>
-                <h2>{detail.application?.application_number}</h2>
-                <span className="finance-simple__muted">
-                  {detail.application?.customer_name} · {detail.application?.asset_code} {detail.application?.asset_name}
-                </span>
-              </div>
-              <button type="button" onClick={closeDetail}>Close</button>
-            </div>
+        <div className="finance-simple__dialog-backdrop finance-applications-v2__dialog-backdrop" role="presentation" onMouseDown={closeDetail}>
+          <section className="finance-simple__dialog finance-applications-v2__dialog" role="dialog" aria-modal="true" aria-label="Credit application file" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="finance-applications-v2__dialog-head">
+              <div><span>Application file</span><h2>{detail.application?.application_number}</h2><p>{detail.application?.customer_name} · {detail.application?.asset_code} · {detail.application?.asset_name}</p></div>
+              <div className="finance-applications-v2__dialog-head-actions"><Pill value={detail.application?.application_status} /><button type="button" onClick={closeDetail}>Close</button></div>
+            </header>
 
-            <LazyApplicationImage application={detail.application} />
+            <div className="finance-applications-v2__detail-top">
+              <div className="finance-applications-v2__detail-photo"><LazyApplicationImage application={detail.application} /></div>
+              <div className="finance-applications-v2__detail-overview">
+                <div className="finance-applications-v2__info-card"><span>Customer</span><strong>{detail.application?.customer_name}</strong><small>{detail.application?.customer_phone || "No phone recorded"}</small></div>
+                <div className="finance-applications-v2__info-card"><span>Excavator</span><strong>{detail.application?.asset_code}</strong><small>{detail.application?.asset_name}</small></div>
+                <div className="finance-applications-v2__info-card"><span>Financed amount</span><strong>{money(detail.application?.financed_amount)}</strong><small>Deposit {money(detail.application?.proposed_deposit)}</small></div>
+                <div className="finance-applications-v2__info-card"><span>Credit risk</span><strong>{label(detail.application?.risk_band)}</strong><small>Affordability {label(detail.application?.affordability_status)}</small></div>
+              </div>
+            </div>
 
             {!edit ? (
               <>
-                <div className="finance-simple__summary">
-                  <article><span>Status</span><strong>{label(detail.application?.application_status)}</strong></article>
-                  <article><span>Automatic Installment Offer</span><strong>{detail.application?.quotation_number}</strong></article>
-                  <article><span>Customer ID</span><strong>{detail.kyc?.id_type || "Not recorded"}: {detail.kyc?.id_number || "Not recorded"}</strong></article>
-                  <article><span>Employment</span><strong>{label(detail.kyc?.employment_type)} · {detail.kyc?.occupation || "Not recorded"}</strong></article>
-                  <article><span>Guarantor</span><strong>{detail.kyc?.guarantor_name || "Not recorded"}</strong><small>{detail.kyc?.guarantor_phone}</small></article>
-                  <article><span>Asset holder</span><strong>{detail.active_asset_locks?.[0]?.agreement_number || detail.application?.application_number}</strong></article>
+                <div className="finance-applications-v2__detail-sections">
+                  <section className="finance-applications-v2__detail-card"><header><div><span>01</span><h3>Customer &amp; KYC</h3></div>{detail.kyc?.kyc_status ? <Pill value={detail.kyc.kyc_status} /> : null}</header><div className="finance-applications-v2__fact-grid"><div><span>ID</span><strong>{detail.kyc?.id_type || "Not recorded"}: {detail.kyc?.id_number || "Not recorded"}</strong></div><div><span>Employment</span><strong>{label(detail.kyc?.employment_type)} · {detail.kyc?.occupation || "Not recorded"}</strong></div><div><span>Address</span><strong>{detail.kyc?.residential_address || "Not recorded"}</strong></div><div><span>Guarantor</span><strong>{detail.kyc?.guarantor_name || "Not recorded"}</strong></div></div></section>
+                  <section className="finance-applications-v2__detail-card"><header><div><span>02</span><h3>Commercial terms</h3></div><Pill value={detail.application?.application_status} /></header><div className="finance-applications-v2__fact-grid"><div><span>Quotation</span><strong>{detail.application?.quotation_number || "Automatic offer"}</strong></div><div><span>Selling price</span><strong>{money(detail.application?.quoted_total)}</strong></div><div><span>Deposit</span><strong>{money(detail.application?.proposed_deposit)}</strong></div><div><span>Financed</span><strong>{money(detail.application?.financed_amount)}</strong></div></div></section>
+                  <section className="finance-applications-v2__detail-card"><header><div><span>03</span><h3>Assessment</h3></div></header><div className="finance-applications-v2__fact-grid"><div><span>KYC</span><strong><Pill value={detail.application?.kyc_status} /></strong></div><div><span>Affordability</span><strong><Pill value={detail.application?.affordability_status} /></strong></div><div><span>Income</span><strong>{money(Number(detail.application?.monthly_salary_income || 0) + Number(detail.application?.monthly_business_income || 0) + Number(detail.application?.monthly_other_income || 0))}</strong></div><div><span>Existing debt</span><strong>{money(detail.application?.existing_monthly_debt)}</strong></div></div></section>
+                  <section className="finance-applications-v2__detail-card"><header><div><span>04</span><h3>Decision history</h3></div></header><div className="finance-applications-v2__history">{detail.decisions?.length ? detail.decisions.map((item) => <article key={item.id}><div><strong>{label(item.action_type)} → {label(item.to_status)}</strong><small>{item.decided_by_name || "System"}</small></div><p>{item.notes || "No decision note recorded."}</p></article>) : <p>No decisions recorded.</p>}</div></section>
                 </div>
 
-                <div className="finance-simple__card-actions">
-                  {canManage && detail.editable ? <button className="is-primary" type="button" onClick={beginEdit}>Resume / Edit Draft</button> : null}
-                  {canManage && detail.editable ? <button type="button" onClick={() => requestDecision(detail.application, "submit")}>Submit for Review</button> : null}
-                  {canManage && detail.application?.application_status === "draft" ? <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "cancel")}>Cancel Draft</button> : null}
+                <div className="finance-applications-v2__decision-actions">
+                  {canManage && detail.editable ? <button className="is-primary" type="button" onClick={beginEdit}>Resume / edit draft</button> : null}
+                  {canManage && detail.editable ? <button type="button" onClick={() => requestDecision(detail.application, "submit")}>Submit for review</button> : null}
+                  {canManage && detail.application?.application_status === "draft" ? <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "cancel")}>Cancel draft</button> : null}
                   {canManage && detail.withdrawable ? <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "withdraw")}>Withdraw</button> : null}
-                  {canReview && detail.application?.application_status === "submitted" ? <button type="button" onClick={() => requestDecision(detail.application, "start_review")}>Start Review</button> : null}
+                  {canReview && detail.application?.application_status === "submitted" ? <button type="button" onClick={() => requestDecision(detail.application, "start_review")}>Start review</button> : null}
                   {canReview && ["submitted", "under_review"].includes(detail.application?.application_status) && detail.application?.kyc_status !== "verified" ? <button type="button" onClick={() => requestDecision(detail.application, "verify")}>Review KYC</button> : null}
-                  {canReview && detail.application?.application_status === "under_review" ? (
-                    <>
-                      <button type="button" onClick={() => requestDecision(detail.application, "request_changes")}>Request Changes</button>
-                      <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "decline")}>Decline</button>
-                      <button className="is-primary" type="button" onClick={() => requestDecision(detail.application, "approve")}>Approve</button>
-                    </>
-                  ) : null}
+                  {canReview && detail.application?.application_status === "under_review" ? <><button type="button" onClick={() => requestDecision(detail.application, "request_changes")}>Request changes</button><button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "decline")}>Decline</button><button className="is-primary" type="button" onClick={() => requestDecision(detail.application, "approve")}>Approve</button></> : null}
                 </div>
-
-                <section className="finance-simple__section">
-                  <p className="finance-simple__eyebrow">Decision history</p>
-                  {detail.decisions?.length ? detail.decisions.map((item) => (
-                    <article key={item.id} className="finance-simple__notice is-info">
-                      <strong>{label(item.action_type)} → {label(item.to_status)}</strong>
-                      <p>{item.notes || "No note"}</p>
-                      <small>{item.decided_by_name || "System"}</small>
-                    </article>
-                  )) : <p>No decisions recorded.</p>}
-                </section>
               </>
             ) : (
               <form onSubmit={(event) => { event.preventDefault(); saveEdit({ manual: true }); }}>
-                <div className="finance-simple__notice is-info" role="status">
-                  <strong>Draft recovery:</strong> this is application {detail.application?.application_number}, not a new application. Changes autosave after 900 ms.
-                  <br />
-                  Save status: {label(autosaveState)}.
-                </div>
-                <div className="finance-simple__form-grid">
+                <div className="finance-simple__notice is-info"><strong>Draft recovery</strong> · {detail.application?.application_number} · changes autosave after 900 ms · status {label(autosaveState)}.</div>
+                <div className="finance-applications-v2__edit-grid">
                   <Field title="Selling price"><input inputMode="decimal" value={edit.payload.offer.selling_price} onChange={(event) => updateEdit("offer", "selling_price", event.target.value)} /></Field>
                   <Field title="Deposit"><input inputMode="decimal" value={edit.payload.offer.deposit} onChange={(event) => updateEdit("offer", "deposit", event.target.value)} /></Field>
                   <Field title="Frequency"><select value={edit.payload.offer.payment_frequency} onChange={(event) => updateEdit("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option><option value="custom">Custom days</option></select></Field>
@@ -853,13 +757,7 @@ export default function EquipmentFinanceApplicationsPage() {
                   <Field title="Monthly household expenses"><input inputMode="decimal" value={edit.payload.affordability.monthly_household_expenses} onChange={(event) => updateEdit("affordability", "monthly_household_expenses", event.target.value)} /></Field>
                   <Field title="Existing monthly debt"><input inputMode="decimal" value={edit.payload.affordability.existing_monthly_debt} onChange={(event) => updateEdit("affordability", "existing_monthly_debt", event.target.value)} /></Field>
                 </div>
-                <div className="finance-simple__sticky-actions">
-                  <span>Optional fields may remain blank and never block submission or approval.</span>
-                  <div>
-                    <button type="button" onClick={() => { editRef.current = null; setEdit(null); }}>Close editor</button>
-                    <button className="is-primary" type="submit" disabled={saving || !edit.dirty}>{saving ? "Saving…" : "Save Draft"}</button>
-                  </div>
-                </div>
+                <div className="finance-simple__sticky-actions"><span>Optional fields can remain blank. The original application is preserved.</span><div><button type="button" onClick={() => setEdit(null)}>Cancel edit</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save changes"}</button></div></div>
               </form>
             )}
           </section>
@@ -867,29 +765,14 @@ export default function EquipmentFinanceApplicationsPage() {
       ) : null}
 
       {decision ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setDecision(null)}>
-          <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={decision.title} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="finance-simple__section-header">
-              <div>
-                <p className="finance-simple__eyebrow">Controlled decision</p>
-                <h2>{decision.title}</h2>
-                <span className="finance-simple__muted">{decision.application.application_number} · {decision.application.customer_name}</span>
-              </div>
-              <button type="button" onClick={() => setDecision(null)}>Close</button>
-            </div>
-            <form onSubmit={confirmDecision}>
-              <Field title="Reason / note" wide>
-                <textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} placeholder="Enter a clear reason for cancellation, withdrawal, rejection, decline or requested changes." />
-              </Field>
-              <div className="finance-simple__sticky-actions">
-                <span>No payment, delivery or ownership transfer happens here.</span>
-                <div>
-                  <button type="button" onClick={() => setDecision(null)}>Close</button>
-                  <button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Confirm Action"}</button>
-                </div>
-              </div>
-            </form>
-          </section>
+        <div className="finance-simple__dialog-backdrop finance-applications-v2__decision-backdrop" role="presentation" onMouseDown={() => !saving && setDecision(null)}>
+          <form className="finance-simple__dialog finance-applications-v2__decision-dialog" onSubmit={confirmDecision} onMouseDown={(event) => event.stopPropagation()}>
+            <span className="finance-applications-v2__dialog-eyebrow">Application decision</span>
+            <h2>{decision.title}</h2>
+            <p>{decision.application?.application_number} · {decision.application?.customer_name}</p>
+            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
+            <div className="finance-applications-v2__decision-footer"><button type="button" onClick={() => setDecision(null)} disabled={saving}>Cancel</button><button className={decision.kind === "approve" ? "is-primary" : decision.kind === "decline" || decision.kind === "cancel" || decision.kind === "withdraw" ? "is-danger" : "is-primary"} type="submit" disabled={saving}>{saving ? "Working…" : "Confirm action"}</button></div>
+          </form>
         </div>
       ) : null}
     </main>
