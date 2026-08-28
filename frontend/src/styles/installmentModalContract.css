@@ -57,6 +57,15 @@
   margin-top: 0;
 }
 
+.finance-simple__dialog > form > .finance-simple__grid {
+  padding-bottom: 96px;
+  scroll-padding-bottom: 96px;
+}
+
+.finance-simple__dialog .finance-simple__check {
+  scroll-margin-bottom: 96px;
+}
+
 .finance-simple__dialog > form > .finance-simple__photo-grid {
   flex: 0 0 auto;
   max-height: min(250px, 24vh);
