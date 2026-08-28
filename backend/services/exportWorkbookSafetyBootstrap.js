@@ -1,6 +1,7 @@
 require("./equipmentCreditOptionalApprovalBootstrap");
 require("./operationalApprovalBootstrap");
 require("./stockLedgerSummaryBootstrap");
+require("./executivePackNotificationDeliveryBootstrap");
 
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
