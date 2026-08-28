@@ -34,12 +34,15 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  scroll-padding-bottom: 6rem;
+  padding-bottom: 6rem;
 }
 
 .finance-simple__dialog > form > .finance-simple__sticky-actions {
   position: sticky;
   bottom: 0;
   z-index: 2;
+  margin-bottom: 0;
 }
 
 .finance-simple:has(.finance-simple__steps) {
