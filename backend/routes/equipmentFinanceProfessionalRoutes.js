@@ -42,6 +42,13 @@ function sendError(res, error, fallback) {
   return res.status(statusCode).json(payload);
 }
 
+function normalizeLegalReviewDate(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return value;
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[T\s].*)?$/);
+  return match ? match[1] : value;
+}
+
 router.get(
   "/professional/readiness",
   requirePermission("fleet.assets.view"),
@@ -86,8 +93,13 @@ router.put(
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
+      const submittedSettings = req.body?.settings || req.body || {};
+      const settings = { ...submittedSettings };
+      if (Object.prototype.hasOwnProperty.call(settings, "legal_review_date")) {
+        settings.legal_review_date = normalizeLegalReviewDate(settings.legal_review_date);
+      }
       const result = await updateProfessionalSettings({
-        body: req.body?.settings || req.body || {},
+        body: settings,
         reason: req.body?.reason,
         userId: userId(req),
         req,
