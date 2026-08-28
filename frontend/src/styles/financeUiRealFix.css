@@ -35,7 +35,25 @@
   }
 }
 
-/* Start New Installment: the route-specific signature layer must not reintroduce the blank top area. */
+/* Start New Installment: eliminate the inherited top whitespace in the actual Finance content lane. */
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content {
+  padding-top: 4px !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .c03-ifx-root {
+  margin-top: 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-nav {
+  margin-top: 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-start {
+  margin-top: .35rem !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-optional-profile-shell,
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-profile {
+  margin-top: .35rem !important;
+}
+
+/* Keep the older start-wizard route compact as well, without affecting other Finance screens. */
 body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple.finance-start-wizard,
 body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple {
   padding-top: .35rem !important;
@@ -104,5 +122,22 @@ body.finance-installment-page--start .bwl-theme-finance-signature .finance-simpl
   .finance-customer-photo__preview {
     min-height: 110px !important;
     height: 110px !important;
+  }
+}
+
+/* The new guided shell should sit directly beneath the sticky Finance header, not create a second blank band. */
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-root,
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-root > * {
+  max-width: none;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-nav__identity {
+  min-width: 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-nav__links {
+  min-width: 0;
+}
+@media (max-width: 800px) {
+  body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content {
+    padding-top: 4px !important;
   }
 }
