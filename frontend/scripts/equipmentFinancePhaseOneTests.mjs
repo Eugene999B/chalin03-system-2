@@ -110,7 +110,9 @@ assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
-assert.match(collections, /Official balances are returned by the backend/i);
+// Authoritative collection balances are loaded from the backend account-detail API.
+assert.match(collections, /axiosClient\.get\(\x60\$\{API\}\/accounts\//);
+assert.match(collections, /response\.data\?\.schedule/);
 assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
 assert.match(guide, /Complete lifecycle/);
