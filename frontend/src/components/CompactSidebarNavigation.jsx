@@ -115,21 +115,24 @@ export default function CompactSidebarNavigation({ sections, onNavigate }) {
 
             {isOpen ? (
               <div className="compact-nav-items" id={sectionId}>
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === "/"}
-                    className={({ isActive: linkActive }) =>
-                      `premium-nav-link ${linkActive ? "active" : ""}`
-                    }
-                    onClick={onNavigate}
-                    title={item.description}
-                  >
-                    <span className="premium-nav-icon">{item.icon}</span>
-                    <span className="premium-nav-text">{item.title}</span>
-                  </NavLink>
-                ))}
+                {section.items.map((item) => {
+                  const marker = String(item.title || "•").trim().charAt(0).toUpperCase();
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      end={item.path === "/"}
+                      className={({ isActive: linkActive }) =>
+                        `premium-nav-link ${linkActive ? "active" : ""}`
+                      }
+                      onClick={onNavigate}
+                      title={item.description}
+                    >
+                      <span className="premium-nav-icon" aria-hidden="true">{marker}</span>
+                      <span className="premium-nav-text">{item.title}</span>
+                    </NavLink>
+                  );
+                })}
               </div>
             ) : null}
           </section>
