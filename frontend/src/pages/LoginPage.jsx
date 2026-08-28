@@ -3,6 +3,7 @@ import { openEmergencyCommand } from "../components/EmergencyCommandOverlay";
 import { useAuth } from "../context/AuthContext";
 import LoginPageGroupOperations from "./LoginPageGroupOperations.jsx";
 import "../styles/chalin03LoginBespoke.css";
+import "../styles/loginBusinessSelectionSync.css";
 
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
@@ -55,6 +56,29 @@ export default function LoginPage() {
       window.queueMicrotask(() => input.focus({ preventScroll: true }));
     }
 
+    function syncGroupBusinessSelection(event) {
+      const node = event.target.closest?.(".group-operations-map__node");
+      if (!node) return;
+
+      const targetIndex = node.classList.contains("is-parts")
+        ? 0
+        : node.classList.contains("is-mining")
+          ? 1
+          : node.classList.contains("is-hire")
+            ? 2
+            : -1;
+
+      if (targetIndex < 0) return;
+
+      const tabs = document.querySelectorAll(
+        ".gate4__workspace-tabs button"
+      );
+      const target = tabs[targetIndex];
+      if (!target) return;
+
+      target.click();
+    }
+
     let lastEmergencyArrival = "";
     function restoreEmergencyMode() {
       const rawArrival = sessionStorage.getItem("chalin03_command_arrival") || "";
@@ -72,10 +96,12 @@ export default function LoginPage() {
     }
 
     document.addEventListener("pointerdown", unlockPasswordOnFirstTap, true);
+    document.addEventListener("click", syncGroupBusinessSelection, true);
     const emergencyTimer = window.setInterval(restoreEmergencyMode, 100);
 
     return () => {
       document.removeEventListener("pointerdown", unlockPasswordOnFirstTap, true);
+      document.removeEventListener("click", syncGroupBusinessSelection, true);
       window.clearInterval(emergencyTimer);
     };
   }, []);
