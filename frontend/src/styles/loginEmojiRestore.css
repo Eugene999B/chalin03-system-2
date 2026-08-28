@@ -1,111 +1,88 @@
-/* Chalin 03 login: use the original business emojis as the visible icons. */
+/* Chalin 03 login: final business-icon separation. */
 
-.gate4.biometric-login .gate4__workspace-tabs button > span {
-  color: inherit !important;
+/* RIGHT WHITE PANEL: show the literal emoji text already rendered by the JSX.
+   Higher specificity intentionally defeats the legacy SVG/letter-marker rule. */
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button > span {
+  color: #0b1d31 !important;
   font-size: 22px !important;
+  line-height: 1 !important;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif !important;
+  display: grid !important;
+  place-items: center !important;
   background: #f2f5f7 !important;
+  -webkit-text-fill-color: currentColor !important;
 }
 
-.gate4.biometric-login .gate4__workspace-tabs button > span::before,
-.gate4.biometric-login .gate4__workspace-tabs button > span::after {
-  background-image: none !important;
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button > span::before,
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__workspace-tabs button > span::after {
   content: none !important;
-}
-
-.gate4.biometric-login .gate4__workspace-tabs button:nth-child(1) > span::before {
-  content: "🧰" !important;
-  display: block !important;
-  color: inherit !important;
-  font-size: 22px !important;
+  display: none !important;
   background: none !important;
+  background-image: none !important;
 }
 
-.gate4.biometric-login .gate4__workspace-tabs button:nth-child(2) > span::before {
-  content: "⛏️" !important;
-  display: block !important;
-  color: inherit !important;
+/* RIGHT WHITE PANEL CONTEXT ICON: keep it as the real emoji too. */
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__context-icon {
+  color: #0b1d31 !important;
   font-size: 22px !important;
-  background: none !important;
-}
-
-.gate4.biometric-login .gate4__workspace-tabs button:nth-child(3) > span::before {
-  content: "🚜" !important;
-  display: block !important;
-  color: inherit !important;
-  font-size: 22px !important;
-  background: none !important;
-}
-
-.gate4.biometric-login .gate4__context-icon {
-  color: inherit !important;
-  font-size: 23px !important;
+  line-height: 1 !important;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif !important;
+  display: grid !important;
+  place-items: center !important;
   background: #f2f4f3 !important;
+  -webkit-text-fill-color: currentColor !important;
 }
 
-.gate4.biometric-login .gate4__context-icon::after {
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__context-icon::before,
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .gate4__context-icon::after {
   content: none !important;
-}
-
-.gate4.biometric-login.gate4.biometric-login .gate4__context-icon::before {
-  content: "🧰" !important;
-  display: block !important;
-  color: inherit !important;
-  font-size: 23px !important;
-}
-
-.gate4.biometric-login.group-login--mining .gate4__context-icon::before {
-  content: "⛏️" !important;
-}
-
-.gate4.biometric-login.group-login--equipment_hire .gate4__context-icon::before {
-  content: "🚜" !important;
-}
-
-.gate4.biometric-login .group-operations-map__node > span {
-  width: 58px !important;
-  height: 58px !important;
-  font-size: 0 !important;
-  color: transparent !important;
-  background: linear-gradient(145deg, rgba(255,255,255,.16), rgba(0,0,0,.08)) !important;
-}
-
-.gate4.biometric-login .group-operations-map__node > span::before {
-  content: none !important;
+  display: none !important;
+  background: none !important;
   background-image: none !important;
 }
 
-.gate4.biometric-login .group-operations-map__node.is-parts > span::after {
-  content: "🧰" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  display: grid !important;
-  place-items: center !important;
-  color: initial !important;
-  font-size: 32px !important;
-  background: none !important;
+/* LEFT GROUP OPERATIONS MAP: compact and decorative only. */
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__node {
+  pointer-events: none !important;
+  cursor: default !important;
+  width: 132px !important;
+  min-height: 74px !important;
+  padding: 9px 10px !important;
 }
 
-.gate4.biometric-login .group-operations-map__node.is-mining > span::after {
-  content: "⛏️" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  display: grid !important;
-  place-items: center !important;
-  color: initial !important;
-  font-size: 32px !important;
-  background: none !important;
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__node:hover {
+  transform: none !important;
 }
 
-.gate4.biometric-login .group-operations-map__node.is-hire > span::after {
-  content: "🚜" !important;
-  position: absolute !important;
-  inset: 0 !important;
-  display: grid !important;
-  place-items: center !important;
-  color: initial !important;
-  font-size: 32px !important;
-  background: none !important;
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__node > span {
+  width: 36px !important;
+  height: 36px !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+  color: inherit !important;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif !important;
+  background: rgba(255,255,255,.08) !important;
+  box-shadow: none !important;
 }
 
-/* Fresh-build marker: intentionally presentation-neutral. */
-.login-emoji-restore-build-marker { display: none !important; }
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__node > span::before,
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__node > span::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map {
+  width: min(430px, 92%) !important;
+}
+
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__centre {
+  width: 104px !important;
+  height: 104px !important;
+}
+
+.gate4.biometric-login.gate4.biometric-login.gate4.biometric-login .group-operations-map__centre img {
+  width: 48px !important;
+  height: 48px !important;
+}
