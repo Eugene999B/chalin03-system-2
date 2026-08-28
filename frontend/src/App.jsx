@@ -21,7 +21,7 @@ import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
-import UsersSettingsPage from "./pages/UsersSettingsPage";
+import SparePartsUsersSettingsWithDebtRemindersPage from "./pages/SparePartsUsersSettingsWithDebtRemindersPage";
 import UserPermissionManagerPage from "./pages/UserPermissionManagerPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
@@ -311,7 +311,7 @@ export default function App() {
 
             <Route
               path="users-settings"
-              element={rolePage(adminOnlyRoles, <UsersSettingsPage />)}
+              element={rolePage(adminOnlyRoles, <SparePartsUsersSettingsWithDebtRemindersPage />)}
             />
             <Route
               path="user-permissions"
