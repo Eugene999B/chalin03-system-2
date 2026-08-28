@@ -4,6 +4,7 @@ const { sendOwnerSmsAlert, sendSmsAlertToPhone } = require("./smsAlertService");
 const WEEKLY_RULE = "group.executive.weekly_business_intelligence";
 const MONTHLY_RULE = "group.executive.monthly_business_intelligence";
 const DEFAULT_CLOSE_HOUR = 20;
+const DEFAULT_RECIPIENT_ROLES = ["admin", "manager", "auditor"];
 
 function numeric(value) {
   const n = Number(value);
@@ -17,7 +18,6 @@ function money(value) {
 function currentPeriod(type, date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
 
   if (type === "weekly") {
     const copy = new Date(date);
@@ -26,7 +26,11 @@ function currentPeriod(type, date = new Date()) {
     const start = copy.toISOString().slice(0, 10);
     const end = new Date(copy);
     end.setDate(end.getDate() + 6);
-    return { start, end: end.toISOString().slice(0, 10), key: `${start}_${end.toISOString().slice(0, 10)}` };
+    return {
+      start,
+      end: end.toISOString().slice(0, 10),
+      key: `${start}_${end.toISOString().slice(0, 10)}`,
+    };
   }
 
   const start = `${year}-${month}-01`;
@@ -37,7 +41,9 @@ function currentPeriod(type, date = new Date()) {
 
 function configuredCloseHour(env = process.env) {
   const value = Number(env.EXECUTIVE_BUSINESS_CLOSE_HOUR ?? DEFAULT_CLOSE_HOUR);
-  return Number.isFinite(value) ? Math.min(23, Math.max(0, Math.floor(value))) : DEFAULT_CLOSE_HOUR;
+  return Number.isFinite(value)
+    ? Math.min(23, Math.max(0, Math.floor(value)))
+    : DEFAULT_CLOSE_HOUR;
 }
 
 function isWeeklySendWindow(date = new Date(), env = process.env) {
@@ -50,13 +56,21 @@ function isMonthEndSendWindow(date = new Date(), env = process.env) {
   return tomorrow.getMonth() !== date.getMonth() && date.getHours() >= configuredCloseHour(env);
 }
 
+function configuredRecipientRoles(rule) {
+  const configured = String(rule?.target_role || "")
+    .split(",")
+    .map((role) => role.trim().toLowerCase())
+    .filter((role) => ["admin", "manager", "auditor"].includes(role));
+  return configured.length ? [...new Set(configured)] : DEFAULT_RECIPIENT_ROLES;
+}
+
 async function ensureRules() {
   await pool.query(
     `INSERT INTO notification_rules
       (rule_code, rule_name, workspace_code, category, default_severity, target_role, target_permission, escalation_minutes, sms_allowed, is_enabled, description)
      VALUES
-      (?, 'Weekly business intelligence', 'group', 'executive', 'high', 'admin', 'notifications.view', 60, TRUE, TRUE, 'Weekly business performance, cash, debt, operations and risk intelligence sent after Saturday closing.'),
-      (?, 'Monthly business intelligence', 'group', 'executive', 'high', 'admin', 'notifications.view', 60, TRUE, TRUE, 'Month-end business performance and management intelligence sent after the final daily closing of the month.')
+      (?, 'Weekly business intelligence', 'group', 'executive', 'high', 'admin,manager,auditor', 'notifications.view', 60, TRUE, TRUE, 'Weekly business performance, cash, debt, operations and risk intelligence sent after Saturday closing.'),
+      (?, 'Monthly business intelligence', 'group', 'executive', 'high', 'admin,manager,auditor', 'notifications.view', 60, TRUE, TRUE, 'Month-end business performance and management intelligence sent after the final daily closing of the month.')
      ON DUPLICATE KEY UPDATE rule_name = VALUES(rule_name), description = VALUES(description)`,
     [WEEKLY_RULE, MONTHLY_RULE]
   );
@@ -157,7 +171,7 @@ function buildAdvice(metrics, type) {
 
 function buildMessage(type, period, metrics, recipientLabel) {
   const title = type === "weekly" ? "Chalin 03 Weekly Business Intelligence" : "Chalin 03 Monthly Business Intelligence";
-  const periodLabel = type === "weekly" ? `${period.start} to ${period.end}` : `${period.start.slice(0,7)}`;
+  const periodLabel = type === "weekly" ? `${period.start} to ${period.end}` : period.start.slice(0, 7);
   const advice = buildAdvice(metrics, type);
   const resultLabel = metrics.estimatedOperatingResult >= 0 ? "estimated operating surplus" : "estimated operating shortfall";
   return {
@@ -173,7 +187,7 @@ function buildMessage(type, period, metrics, recipientLabel) {
 }
 
 async function sendToRoles(notification, rule, roles) {
-  if (!rule?.sms_allowed) return;
+  if (!rule?.sms_allowed || !roles.length) return;
   const [users] = await pool.query(
     `SELECT id, role, phone FROM users WHERE is_active = TRUE AND phone IS NOT NULL AND phone <> '' AND role IN (${roles.map(() => '?').join(',')})`,
     roles
@@ -191,57 +205,96 @@ async function sendToRoles(notification, rule, roles) {
       `INSERT INTO notification_escalations
         (notification_id, escalation_channel, status, destination_masked, provider_reference, response_message, attempted_by)
        VALUES (?, 'sms', ?, ?, ?, ?, ?)`,
-      [notification.id, result?.status || (result?.ok ? 'submitted' : 'failed'), result?.phone ? `${String(result.phone).slice(0,7)}***` : null, result?.provider_message_id || null, result?.message || result?.error || null, user.id]
+      [notification.id, 'sms', result?.phone ? `${String(result.phone).slice(0,7)}***` : null, result?.provider_message_id || null, result?.message || result?.error || null, user.id]
     );
   }
 }
 
 async function sendBusinessReport(type, { force = false, date = new Date() } = {}) {
   const rules = await ensureRules();
-  const rule = type === 'weekly' ? rules.weekly : rules.monthly;
-  if (!rule || !Number(rule.is_enabled)) return { skipped: true, reason: 'report_rule_disabled' };
+  const rule = type === "weekly" ? rules.weekly : rules.monthly;
+  if (!rule || !Number(rule.is_enabled)) return { skipped: true, reason: "report_rule_disabled" };
 
   if (!force) {
-    if (type === 'weekly' && !isWeeklySendWindow(date)) return { skipped: true, reason: 'not_weekly_send_window' };
-    if (type === 'monthly' && !isMonthEndSendWindow(date)) return { skipped: true, reason: 'not_month_end_send_window' };
+    if (type === "weekly" && !isWeeklySendWindow(date)) return { skipped: true, reason: "not_weekly_send_window" };
+    if (type === "monthly" && !isMonthEndSendWindow(date)) return { skipped: true, reason: "not_month_end_send_window" };
   }
 
   const period = currentPeriod(type, date);
   const metrics = await buildBusinessMetrics(period.start, period.end);
-  const notificationKey = `${type === 'weekly' ? WEEKLY_RULE : MONTHLY_RULE}.${period.key}`;
+  const notificationKey = `${type === "weekly" ? WEEKLY_RULE : MONTHLY_RULE}.${period.key}`;
   const [existing] = await pool.query(`SELECT id FROM notifications WHERE notification_key = ? LIMIT 1`, [notificationKey]);
-  if (existing.length && !force) return { skipped: true, reason: 'already_sent', notification_id: existing[0].id, period };
+  if (existing.length && !force) return { skipped: true, reason: "already_sent", notification_id: existing[0].id, period };
 
-  const recipientRoles = type === 'weekly' ? ['admin','manager','auditor'] : ['admin','manager','auditor'];
-  const message = buildMessage(type, period, metrics, 'Management');
+  const recipientRoles = configuredRecipientRoles(rule);
+  const message = buildMessage(type, period, metrics, "Management");
+  const targetRole = recipientRoles.join(",");
 
   let notificationId = existing[0]?.id;
   if (notificationId) {
-    await pool.query(`UPDATE notifications SET title=?, message=?, status='active', metadata_json=?, updated_at=NOW() WHERE id=?`, [message.title, message.message, JSON.stringify({ type, period, metrics, advice: message.advice }), notificationId]);
+    await pool.query(
+      `UPDATE notifications SET title=?, message=?, target_role=?, status='active', metadata_json=?, updated_at=NOW() WHERE id=?`,
+      [message.title, message.message, targetRole, JSON.stringify({ type, period, metrics, advice: message.advice, recipientRoles }), notificationId]
+    );
   } else {
     const [insert] = await pool.query(
       `INSERT INTO notifications (notification_key, rule_id, rule_code, workspace_code, target_role, target_permission, category, notification_type, severity, title, message, action_path, source_type, source_reference, status, auto_generated, occurred_at, metadata_json)
-       VALUES (?, ?, ?, 'group', 'admin', 'notifications.view', 'executive', ?, ?, ?, ?, '/group-executive-control', 'executive_business_report', ?, 'active', TRUE, NOW(), ?)`,
-      [notificationKey, rule.id, rule.rule_code, type === 'weekly' ? 'weekly_business_intelligence' : 'monthly_business_intelligence', metrics.estimatedOperatingResult < 0 ? 'high' : 'medium', message.title, message.message, period.key, JSON.stringify({ type, period, metrics, advice: message.advice })]
+       VALUES (?, ?, ?, 'group', ?, 'notifications.view', 'executive', ?, ?, ?, ?, '/group-executive-control', 'executive_business_report', ?, 'active', TRUE, NOW(), ?)`,
+      [notificationKey, rule.id, rule.rule_code, targetRole, type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence", metrics.estimatedOperatingResult < 0 ? "high" : "medium", message.title, message.message, period.key, JSON.stringify({ type, period, metrics, advice: message.advice, recipientRoles })]
     );
     notificationId = insert.insertId;
   }
 
-  await sendToRoles({ id: notificationId, notification_key: notificationKey, message: message.message, type: type === 'weekly' ? 'weekly_business_intelligence' : 'monthly_business_intelligence' }, rule, recipientRoles);
+  await sendToRoles(
+    {
+      id: notificationId,
+      notification_key: notificationKey,
+      message: message.message,
+      type: type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence",
+    },
+    rule,
+    recipientRoles
+  );
 
   const ownerMessage = `${message.title}: ${message.message}`;
   if (rule.sms_allowed) {
-    await sendOwnerSmsAlert({ branchId: 1, message: ownerMessage, smsType: type === 'weekly' ? 'weekly_business_intelligence' : 'monthly_business_intelligence', sourceReference: notificationKey });
+    await sendOwnerSmsAlert({
+      branchId: 1,
+      message: ownerMessage,
+      smsType: type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence",
+      sourceReference: notificationKey,
+    });
   }
 
-  return { skipped: false, type, period, metrics, advice: message.advice, notification_id: notificationId };
+  return { skipped: false, type, period, metrics, advice: message.advice, recipientRoles, notification_id: notificationId };
 }
 
 async function runScheduledBusinessReports({ date = new Date(), logger = console } = {}) {
   const results = {};
-  try { results.weekly = await sendBusinessReport('weekly', { date }); } catch (error) { logger.warn('Weekly business intelligence skipped:', error.message); results.weekly = { skipped: true, reason: error.message }; }
-  try { results.monthly = await sendBusinessReport('monthly', { date }); } catch (error) { logger.warn('Monthly business intelligence skipped:', error.message); results.monthly = { skipped: true, reason: error.message }; }
+  try {
+    results.weekly = await sendBusinessReport("weekly", { date });
+  } catch (error) {
+    logger.warn("Weekly business intelligence skipped:", error.message);
+    results.weekly = { skipped: true, reason: error.message };
+  }
+  try {
+    results.monthly = await sendBusinessReport("monthly", { date });
+  } catch (error) {
+    logger.warn("Monthly business intelligence skipped:", error.message);
+    results.monthly = { skipped: true, reason: error.message };
+  }
   return results;
 }
 
-module.exports = { WEEKLY_RULE, MONTHLY_RULE, DEFAULT_CLOSE_HOUR, configuredCloseHour, isWeeklySendWindow, isMonthEndSendWindow, sendBusinessReport, runScheduledBusinessReports };
+module.exports = {
+  WEEKLY_RULE,
+  MONTHLY_RULE,
+  DEFAULT_CLOSE_HOUR,
+  DEFAULT_RECIPIENT_ROLES,
+  configuredCloseHour,
+  configuredRecipientRoles,
+  isWeeklySendWindow,
+  isMonthEndSendWindow,
+  sendBusinessReport,
+  runScheduledBusinessReports,
+};
