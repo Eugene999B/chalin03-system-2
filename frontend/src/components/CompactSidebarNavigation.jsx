@@ -116,7 +116,7 @@ export default function CompactSidebarNavigation({ sections, onNavigate }) {
             {isOpen ? (
               <div className="compact-nav-items" id={sectionId}>
                 {section.items.map((item) => {
-                  const marker = String(item.title || "•").trim().charAt(0).toUpperCase();
+                  const icon = String(item.icon || "•").trim() || "•";
                   return (
                     <NavLink
                       key={item.path}
@@ -128,7 +128,7 @@ export default function CompactSidebarNavigation({ sections, onNavigate }) {
                       onClick={onNavigate}
                       title={item.description}
                     >
-                      <span className="premium-nav-icon" aria-hidden="true">{marker}</span>
+                      <span className="premium-nav-icon" aria-hidden="true">{icon}</span>
                       <span className="premium-nav-text">{item.title}</span>
                     </NavLink>
                   );
