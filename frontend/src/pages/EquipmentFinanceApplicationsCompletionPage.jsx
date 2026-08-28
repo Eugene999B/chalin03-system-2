@@ -115,6 +115,24 @@ function markAdministratorDecisionDialogs(root, administrator) {
     }
   });
 }
+function addDialogScrollControls(dialog) {
+  if (!dialog || dialog.querySelector(".finance-dialog-scroll-controls")) return;
+  const controls = document.createElement("div");
+  controls.className = "finance-dialog-scroll-controls";
+  controls.setAttribute("aria-label", "Application file scrolling controls");
+  const top = document.createElement("button");
+  top.type = "button";
+  top.textContent = "↑ Top";
+  top.title = "Scroll to the top of the application file";
+  top.addEventListener("click", () => dialog.scrollTo({ top: 0, behavior: "smooth" }));
+  const bottom = document.createElement("button");
+  bottom.type = "button";
+  bottom.textContent = "↓ Bottom";
+  bottom.title = "Scroll to the bottom of the application file";
+  bottom.addEventListener("click", () => dialog.scrollTo({ top: dialog.scrollHeight, behavior: "smooth" }));
+  controls.append(top, bottom);
+  dialog.prepend(controls);
+}
 export default function EquipmentFinanceApplicationsCompletionPage() {
   const { user } = useAuth();
   const administrator = useMemo(() => isAdministrator(user), [user]);
@@ -143,6 +161,7 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
         lookupsRef.current.set(applicationNumber, lookup);
       });
       root.querySelectorAll('.finance-simple__dialog[aria-label="Credit application file"]').forEach((dialog) => {
+        addDialogScrollControls(dialog);
         const application = applicationsRef.current.get(applicationNumberFromDialog(dialog));
         if (application) hydrateDialog(dialog, application, { administrator });
       });
@@ -152,7 +171,7 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
       if (mutations.some((mutation) => mutation.type === "characterData" || mutation.addedNodes.length > 0)) scheduleHydration();
     });
     observer.observe(root, { childList: true, characterData: true, subtree: true });
-    axiosClient.get(API, { params: { page: 1, page_size: 100, status: "all" } }).then((response) => {
+    axiosClient.get(API, { params: { page: 1, page_size: 100, status: "all" }).then((response) => {
       if (!active) return;
       for (const application of response.data?.applications || []) applicationsRef.current.set(clean(application.application_number), application);
       scheduleHydration();
@@ -162,4 +181,4 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
   }, [administrator]);
   return <div ref={rootRef} className="finance-applications-refined" data-testid="finance-applications-completion-layer"><EquipmentFinanceApplicationsOptionalPage /></div>;
 }
-export { addAdministratorApprovalNote, addCaseLink, applicationNumberFromCard, caseOperationsPath, hydrateApplicationImage, hydrateCard, isAdministrator, markAdministratorActions, markAdministratorDecisionDialogs, protectedApplicationImagePath };
+export { addAdministratorApprovalNote, addCaseLink, applicationNumberFromCard, caseOperationsPath, hydrateApplicationImage, hydrateCard, markAdministratorActions, markAdministratorDecisionDialogs, protectedApplicationImagePath, addDialogScrollControls };
