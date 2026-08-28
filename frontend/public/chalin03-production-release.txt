@@ -1,0 +1,2 @@
+Chalin 03 production frontend release marker: Users & Settings dialog deployment.
+Do not remove unless superseded by a newer deployment marker.
