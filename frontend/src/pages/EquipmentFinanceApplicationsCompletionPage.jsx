@@ -8,7 +8,6 @@ import "../styles/equipmentFinanceApplicationsRefined.css";
 
 const API = "/equipment-catalogue/sales/credit-applications";
 const ADMIN_ROLES = new Set(["admin", "administrator", "system_admin", "system_administrator", "super_admin"]);
-
 function clean(value) { return String(value || "").trim(); }
 function caseOperationsPath(applicationId) {
   const params = new URLSearchParams({ stage: "case-operations", case_type: "application", case_id: String(applicationId) });
@@ -171,7 +170,7 @@ export default function EquipmentFinanceApplicationsCompletionPage() {
       if (mutations.some((mutation) => mutation.type === "characterData" || mutation.addedNodes.length > 0)) scheduleHydration();
     });
     observer.observe(root, { childList: true, characterData: true, subtree: true });
-    axiosClient.get(API, { params: { page: 1, page_size: 100, status: "all" }).then((response) => {
+    axiosClient.get(API, { params: { page: 1, page_size: 100, status: "all" } }).then((response) => {
       if (!active) return;
       for (const application of response.data?.applications || []) applicationsRef.current.set(clean(application.application_number), application);
       scheduleHydration();
