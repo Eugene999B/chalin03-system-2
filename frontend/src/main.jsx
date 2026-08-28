@@ -18,6 +18,8 @@ import "./styles/mobileExperience.css";
 import "./styles/adminMobileHotfix.css";
 import "./styles/productionLayoutStability.css";
 import "./styles/themeHardening.css";
+import "./styles/chalinDarkModeV4.css";
+import "./styles/chalinDarkModeV4Compat.css";
 
 const APP_BUILD_ID =
   import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v38";
