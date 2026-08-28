@@ -1,0 +1,54 @@
+name: one-shot-ui-route-repair
+
+on:
+  push:
+    branches:
+      - fix/restore-original-icons-and-login-ui
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Repair explicit Users & Settings route and regression contracts
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path("frontend/src/App.jsx")
+          text = app.read_text()
+          text = text.replace(
+              'import UsersSettingsPage from "./pages/UsersSettingsPage";',
+              'import SparePartsUsersSettingsWithDebtRemindersPage from "./pages/SparePartsUsersSettingsWithDebtRemindersPage";'
+          )
+          text = text.replace(
+              'element={rolePage(adminOnlyRoles, <UsersSettingsPage />)}',
+              'element={rolePage(adminOnlyRoles, <SparePartsUsersSettingsWithDebtRemindersPage />)}'
+          )
+          app.write_text(text)
+
+          wrapper = Path("frontend/src/pages/SparePartsUsersSettingsWithDebtRemindersPage.jsx")
+          text = wrapper.read_text()
+          text = text.replace(
+              'import UsersSettingsPage from "./UsersSettingsPage";',
+              'import UsersSettingsPage from "./UsersSettingsPage";'
+          )
+          wrapper.write_text(text)
+
+          test = Path("frontend/scripts/featureIntegrityRegressionTests.mjs")
+          test.write_text('''import fs from "node:fs";\nimport path from "node:path";\n\nconst root = path.resolve(process.cwd());\nconst read = (file) => fs.readFileSync(path.join(root, file), "utf8");\n\nconst login = read("src/pages/LoginPage.jsx");\nif (!login.includes("../styles/chalin03LoginBespoke.css")) {\n  throw new Error("Chalin 03 bespoke login stylesheet is not loaded by the active login wrapper.");\n}\n\nconst groupLogin = read("src/styles/groupOperationsLogin.css");\nif (!groupLogin.includes('.group-operations-map__node > span {\\n  font-size: 22px;')) {\n  throw new Error("Group login map is not using the restored emoji presentation.");\n}\nif (groupLogin.includes('content: "P"') || groupLogin.includes('content: "M"') || groupLogin.includes('content: "H"')) {\n  throw new Error("Group login map still contains letter-only icon substitutions.");\n}\n\nconst sidebar = read("src/components/CompactSidebarNavigation.jsx");\nif (!sidebar.includes('{icon}</span>')) {\n  throw new Error("Sidebar navigation is not rendering the original emoji icon data.");\n}\nif (sidebar.includes("charAt(0).toUpperCase()")) {\n  throw new Error("Sidebar navigation still derives first-letter markers instead of using its original icons.");\n}\n\nconst app = read("src/App.jsx");\nif (!app.includes('import SparePartsUsersSettingsWithDebtRemindersPage from "./pages/SparePartsUsersSettingsWithDebtRemindersPage";')) {\n  throw new Error("Users & Settings route does not explicitly import the restored wrapper.");\n}\nif (!app.includes('<SparePartsUsersSettingsWithDebtRemindersPage />')) {\n  throw new Error("Users & Settings route is not explicitly wired to the restored wrapper.");\n}\n\nconst wrapper = read("src/pages/SparePartsUsersSettingsWithDebtRemindersPage.jsx");\nif (!wrapper.includes("CustomerFeatureControlsPanel")) {\n  throw new Error("Customer feature controls are no longer mounted in Users & Settings.");\n}\nif (!wrapper.includes("ExecutiveBusinessIntelligenceSettingsPanel")) {\n  throw new Error("Executive intelligence controls are no longer mounted in Users & Settings.");\n}\n\nconst executive = read("src/components/ExecutiveBusinessIntelligenceSettingsPanel.jsx");\nfor (const ruleCode of [\n  "group.executive.weekly_business_intelligence",\n  "group.executive.monthly_business_intelligence",\n]) {\n  if (!executive.includes(ruleCode)) {\n    throw new Error(`Executive settings are missing ${ruleCode}.`);\n  }\n}\n\nconst vite = read("vite.config.js");\nif (vite.includes("restoreSparePartsSmsIntelligence")) {\n  throw new Error("Users & Settings still depends on the importer-specific Vite substitution.");\n}\n\nconsole.log("Feature-integrity regression contracts passed.");\n''')
+          PY
+
+          rm -f .github/workflows/one-shot-ui-route-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/App.jsx frontend/scripts/featureIntegrityRegressionTests.mjs .github/workflows/one-shot-ui-route-repair.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: wire restored Users Settings route explicitly [skip ci]"
+          git push origin HEAD:fix/restore-original-icons-and-login-ui
