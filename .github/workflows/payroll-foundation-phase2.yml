@@ -42,6 +42,6 @@ jobs:
       - name: Additive migration safety
         shell: bash
         run: |
-          git fetch origin feature/equipment-finance-phase1-integrity-verification-20260807 --depth=1
-          base_sha="$(git merge-base HEAD origin/feature/equipment-finance-phase1-integrity-verification-20260807)"
+          git fetch origin main --depth=1
+          base_sha="$(git merge-base HEAD origin/main)"
           node scripts/verifyMigrationSafety.js --repo-root .. --base "$base_sha" --head HEAD

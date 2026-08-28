@@ -1,4 +1,5 @@
 import CustomerFeatureControlsPanel from "../components/CustomerFeatureControlsPanel";
+import ExecutiveBusinessIntelligenceSettingsPanel from "../components/ExecutiveBusinessIntelligenceSettingsPanel";
 import UsersSettingsPage from "./UsersSettingsPage";
 import DebtReminderSettingsPanel from "../components/DebtReminderSettingsPanel";
 import { useAuth } from "../context/AuthContext";
@@ -11,6 +12,7 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
   return (
     <>
       <CustomerFeatureControlsPanel />
+      <ExecutiveBusinessIntelligenceSettingsPanel />
       <UsersSettingsPage />
       {canManage ? (
         <div style={{ marginTop: 18, marginBottom: 18 }}>
