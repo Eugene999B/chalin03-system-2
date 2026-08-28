@@ -1,2 +1,2 @@
-Chalin 03 production frontend release marker: live Excavators component full-photo layout and lifecycle status repair.
+Chalin 03 production frontend release marker: Excavator register v4 full-photo lifecycle card layout.
 Do not remove unless superseded by a newer deployment marker.
