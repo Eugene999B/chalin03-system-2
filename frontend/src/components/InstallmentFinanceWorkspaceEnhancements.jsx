@@ -112,12 +112,17 @@ export default function InstallmentFinanceWorkspaceEnhancements() {
   const stage = getStage(location);
 
   useEffect(() => {
-    if (!routeIsFinance(location)) return undefined;
+    if (!routeIsFinance(location) || stage === "start") {
+      setPortalTarget(null);
+      return undefined;
+    }
     const timer = window.setTimeout(() => setPortalTarget(document.querySelector(".bwl-content")), 0);
     return () => window.clearTimeout(timer);
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, stage]);
 
-  if (!routeIsFinance(location) || !portalTarget) return null;
+  // Start New Installment owns its entire page hierarchy and must not receive
+  // the generic quick-navigation portal used by the other Finance screens.
+  if (stage === "start" || !routeIsFinance(location) || !portalTarget) return null;
 
   const contextual = stage === "corrections"
     ? <CorrectionsGuide />
