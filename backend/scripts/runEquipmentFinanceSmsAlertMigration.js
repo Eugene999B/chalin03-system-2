@@ -3,7 +3,7 @@ require("dotenv").config();
 
 const MIGRATION_RECORD = "20260829_equipment_finance_sms_alert_enum";
 const MIGRATION_LOCK = "chalin03:equipment-finance:sms-alert-enum";
-const REQUIRED_SMS_TYPE = "equipment_finance_payment_alert";
+const REQUIRED_SMS_TYPES = ["equipment_finance_payment_alert", "equipment_finance_boss_alert"];
 
 function truthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
@@ -52,14 +52,10 @@ async function smsTypeEnum(connection) {
   return String(rows[0].Type || "");
 }
 
-async function migrationExists(connection) {
-  const [[row]] = await connection.query("SELECT COUNT(*) AS applied FROM schema_migrations WHERE migration_name = ?", [MIGRATION_RECORD]);
-  return Number(row?.applied || 0) === 1;
-}
-
 async function ensureEnum(connection) {
   const current = await smsTypeEnum(connection);
-  if (current.includes(`'${REQUIRED_SMS_TYPE}'`)) return false;
+  const missing = REQUIRED_SMS_TYPES.filter((item) => !current.includes(`'${item}'`));
+  if (!missing.length) return false;
 
   const required = [
     "receipt",
@@ -68,7 +64,7 @@ async function ensureEnum(connection) {
     "daily_summary",
     "sale_confirmation",
     "security_alert",
-    REQUIRED_SMS_TYPE,
+    ...REQUIRED_SMS_TYPES,
     "other",
   ];
   const sqlEnum = required.map((item) => `'${item.replace(/'/g, "''")}'`).join(", ");
@@ -100,9 +96,11 @@ async function run() {
     await ensureMigrationRecord(connection);
 
     const verifiedType = await smsTypeEnum(connection);
-    if (!verifiedType.includes(`'${REQUIRED_SMS_TYPE}'`)) throw new Error("Equipment Installment SMS enum verification failed.");
+    for (const requiredType of REQUIRED_SMS_TYPES) {
+      if (!verifiedType.includes(`'${requiredType}'`)) throw new Error(`Equipment Installment SMS enum verification failed for ${requiredType}.`);
+    }
 
-    console.log(JSON.stringify({ verified: true, database_name: databaseName, migration: MIGRATION_RECORD, sms_type_added: changed, sms_type: REQUIRED_SMS_TYPE }));
+    console.log(JSON.stringify({ verified: true, database_name: databaseName, migration: MIGRATION_RECORD, sms_type_added: changed, sms_types: REQUIRED_SMS_TYPES }));
   } finally {
     if (locked) await connection.query("SELECT RELEASE_LOCK(?)", [MIGRATION_LOCK]).catch(() => {});
     await connection.end();
@@ -111,4 +109,4 @@ async function run() {
 
 if (require.main === module) run().catch((error) => { console.error("Equipment Installment SMS migration failed:"); console.error(error.message); process.exit(1); });
 
-module.exports = { MIGRATION_LOCK, MIGRATION_RECORD, REQUIRED_SMS_TYPE, run, smsTypeEnum };
+module.exports = { MIGRATION_LOCK, MIGRATION_RECORD, REQUIRED_SMS_TYPES, run, smsTypeEnum };
