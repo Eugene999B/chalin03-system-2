@@ -1,7 +1,6 @@
 -- CHALIN 03 EQUIPMENT FINANCE SMS ALERT ENUM ADDITIVE MIGRATION
--- Production fix for Equipment Installment Finance boss payment alerts.
+-- Production fix for Equipment Installment Finance boss alerts.
 -- Additive only: preserves all existing sms_type values and SMS history.
--- No runtime schema mutation.
 
 ALTER TABLE sms_log
   MODIFY COLUMN sms_type ENUM(
@@ -12,13 +11,14 @@ ALTER TABLE sms_log
     'sale_confirmation',
     'security_alert',
     'equipment_finance_payment_alert',
+    'equipment_finance_boss_alert',
     'other'
   ) NOT NULL DEFAULT 'other';
 
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
   '20260829_equipment_finance_sms_alert_enum',
-  'Adds equipment_finance_payment_alert to sms_log.sms_type for Equipment Installment Finance boss payment alerts.'
+  'Adds Equipment Finance payment and generic boss alert SMS types for controlled boss notifications.'
 )
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
@@ -31,4 +31,4 @@ FROM information_schema.COLUMNS
 WHERE TABLE_SCHEMA = DATABASE()
   AND TABLE_NAME = 'sms_log'
   AND COLUMN_NAME = 'sms_type'
-  AND COLUMN_TYPE LIKE '%equipment_finance_payment_alert%';
+  AND COLUMN_TYPE LIKE '%equipment_finance_boss_alert%';
