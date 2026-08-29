@@ -1,6 +1,9 @@
 (() => {
-  const STYLE_ID = "chalin03-equipment-status-filter-v1";
+  const STYLE_ID = "chalin03-equipment-status-filter-v2";
   const FIELD_MARKER = "data-chalin03-status-filter";
+  const ROOT_SELECTOR = ".equipment-catalogue";
+  const FILTER_SELECTOR = ".equipment-catalogue__filters";
+  const STATUS_VALUES = new Set(["not_for_sale", "available", "reserved", "installment_active", "sold", "cancelled"]);
 
   const LABELS = {
     "": "All excavators",
@@ -17,28 +20,43 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      .equipment-catalogue__filters [data-chalin03-status-filter] {
+      .equipment-catalogue ${FILTER_SELECTOR} [data-chalin03-status-filter] {
         min-width: 0;
+        padding: 10px 11px 11px;
+        border: 1px solid rgba(11,132,87,.28);
+        border-radius: 16px;
+        background: linear-gradient(135deg, rgba(223,246,235,.96), rgba(255,255,255,.99));
       }
-      .equipment-catalogue__filters [data-chalin03-status-filter] > span {
-        color: #6b5510;
+      .equipment-catalogue ${FILTER_SELECTOR} [data-chalin03-status-filter] > span {
+        color: #086744;
+        font-size: .76rem;
+        font-weight: 900;
+        letter-spacing: .055em;
+        text-transform: uppercase;
       }
-      .equipment-catalogue__filters [data-chalin03-status-filter] select {
-        font-weight: 760;
-        background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
-        background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
-        background-size: 6px 6px, 6px 6px;
-        background-repeat: no-repeat;
-        padding-right: 34px;
+      .equipment-catalogue ${FILTER_SELECTOR} [data-chalin03-status-filter] select {
+        display: block;
+        width: 100%;
+        min-height: 50px;
+        margin-top: 7px;
+        border: 1px solid rgba(11,132,87,.42);
+        border-radius: 13px;
+        color: #102239;
+        background: #fff;
+        font: inherit;
+        font-weight: 820;
       }
-      .equipment-catalogue__filters [data-chalin03-status-filter] select:focus {
-        border-color: #b28a12;
-        box-shadow: 0 0 0 3px rgba(178, 138, 18, 0.13);
+      .equipment-catalogue ${FILTER_SELECTOR} [data-chalin03-status-filter] select:focus {
+        border-color: #0b8457;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(11,132,87,.13);
       }
-      @media (max-width: 980px) {
-        .equipment-catalogue__filters [data-chalin03-status-filter] {
-          grid-column: span 1;
-        }
+      .equipment-catalogue ${FILTER_SELECTOR} [data-chalin03-status-filter] small {
+        display: block;
+        margin-top: 5px;
+        color: #4f6e61;
+        font-size: .7rem;
+        line-height: 1.35;
       }
     `;
     document.head.appendChild(style);
@@ -48,54 +66,78 @@
     return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
   }
 
-  function findStatusSelect() {
-    const candidates = [...document.querySelectorAll(".equipment-catalogue__filters select")];
-    return candidates.find((select) => {
-      const values = [...select.options].map((option) => normalize(option.value));
-      return values.some((value) => ["not_for_sale", "available", "reserved", "installment_active", "sold", "cancelled"].includes(value));
-    }) || null;
+  function findNativeStatusSelect(row) {
+    return [...row.querySelectorAll("select")].find((select) =>
+      [...select.options].some((option) => STATUS_VALUES.has(normalize(option.value)))
+    ) || null;
+  }
+
+  function buildVisibleStatusFilter(row, nativeSelect) {
+    let field = row.querySelector(`[${FIELD_MARKER}]`);
+    if (!field) {
+      field = document.createElement("label");
+      field.setAttribute(FIELD_MARKER, "ready");
+      const title = document.createElement("span");
+      title.textContent = "Availability status";
+      const select = document.createElement("select");
+      select.setAttribute("aria-label", "Filter excavators by availability status");
+      const hint = document.createElement("small");
+      hint.textContent = "Excavator Catalogue only";
+      field.append(title, select, hint);
+      row.appendChild(field);
+    }
+
+    const visibleSelect = field.querySelector("select");
+    if (!visibleSelect) return;
+
+    const currentValue = nativeSelect?.value || visibleSelect.value || "";
+    const options = ["", "available", "installment_active", "reserved", "sold", "not_for_sale"];
+    visibleSelect.replaceChildren(
+      ...options.map((value) => new Option(LABELS[value], value))
+    );
+    visibleSelect.value = options.includes(currentValue) ? currentValue : "";
+
+    if (visibleSelect.dataset.bound !== "true") {
+      visibleSelect.dataset.bound = "true";
+      visibleSelect.addEventListener("change", () => {
+        if (!nativeSelect) return;
+        nativeSelect.value = visibleSelect.value;
+        nativeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
   }
 
   function enhance() {
-    const root = document.querySelector(".equipment-catalogue");
+    const root = document.querySelector(ROOT_SELECTOR);
     if (!root) return;
     installStyles();
 
-    const select = findStatusSelect();
-    if (!select) return;
+    const row = root.querySelector(FILTER_SELECTOR);
+    if (!row) return;
 
-    const field = select.closest("label") || select.parentElement;
-    if (field?.dataset.chalin03StatusFilter === "ready") return;
-    if (field) field.dataset.chalin03StatusFilter = "ready";
+    const nativeSelect = findNativeStatusSelect(row);
+    if (!nativeSelect) return;
 
-    const label = field?.querySelector(":scope > span");
-    if (label) label.textContent = "Availability status";
+    buildVisibleStatusFilter(row, nativeSelect);
 
-    const existingEmpty = [...select.options].find((option) => option.value === "");
-    if (!existingEmpty) {
-      select.insertBefore(new Option(LABELS[""], ""), select.options[0] || null);
+    const nativeField = nativeSelect.closest("label");
+    if (nativeField) {
+      nativeField.style.position = "absolute";
+      nativeField.style.width = "1px";
+      nativeField.style.height = "1px";
+      nativeField.style.margin = "-1px";
+      nativeField.style.padding = "0";
+      nativeField.style.overflow = "hidden";
+      nativeField.style.clip = "rect(0,0,0,0)";
+      nativeField.style.whiteSpace = "nowrap";
+      nativeField.setAttribute("aria-hidden", "true");
     }
-
-    const known = new Set();
-    [...select.options].forEach((option) => {
-      const key = normalize(option.value);
-      if (Object.prototype.hasOwnProperty.call(LABELS, key)) {
-        option.textContent = LABELS[key];
-        known.add(key);
-      }
-    });
-
-    ["cancelled"].forEach((value) => {
-      if (!known.has(value)) select.appendChild(new Option(LABELS[value], value));
-    });
-
-    if (!select.getAttribute("aria-label")) select.setAttribute("aria-label", "Availability status");
-    if (!select.value) select.value = "";
   }
 
   function boot() {
+    installStyles();
     enhance();
-    const observer = new MutationObserver(() => window.setTimeout(enhance, 25));
+    const observer = new MutationObserver(() => window.setTimeout(enhance, 30));
     observer.observe(document.documentElement, { childList: true, subtree: true });
     window.setTimeout(() => observer.disconnect(), 300000);
   }
