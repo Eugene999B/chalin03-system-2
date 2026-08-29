@@ -1,2 +1,3 @@
-Chalin 03 production frontend release marker: Excavator register v4 final card layout and lifecycle status.
+Chalin 03 production frontend release marker: Excavator register v5 — professional availability status filter.
+Includes All excavators, Available for a new installment, Reserved / held, Under installment agreement, Sold / completed sale, Not offered for installment sale, and Cancelled / unavailable.
 Do not remove unless superseded by a newer deployment marker.
