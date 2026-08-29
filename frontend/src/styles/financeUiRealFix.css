@@ -1,35 +1,29 @@
-/* Real Finance UI fixes: keep dialogs in the same viewport regime as the sidebar. */
+/* Real Finance UI fixes.
+ * Modal overlays are viewport-owned. They must never switch between the viewport and
+ * the post-sidebar content lane based on window width, because docked DevTools changes
+ * window.innerWidth and can otherwise move the same dialog underneath the sidebar.
+ */
 .finance-simple__dialog-backdrop,
 .finance-accounts__backdrop {
   position: fixed !important;
-  top: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
+  inset: 0 !important;
   z-index: 1000000 !important;
   width: auto !important;
   height: 100dvh !important;
+  min-height: 100vh !important;
   margin: 0 !important;
   display: grid !important;
   place-items: center !important;
   padding: 24px !important;
   transform: none !important;
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
 }
-@media (min-width: 961px) {
-  .finance-simple__dialog-backdrop,
-  .finance-accounts__backdrop {
-    left: 300px !important;
-  }
-}
-@media (max-width: 960px) {
-  .finance-simple__dialog-backdrop,
-  .finance-accounts__backdrop {
-    left: 0 !important;
-  }
-}
+
 @media (max-width: 720px) {
   .finance-simple__dialog-backdrop,
   .finance-accounts__backdrop {
-    left: 0 !important;
+    inset: 0 !important;
     padding: 0 !important;
     place-items: end stretch !important;
   }
