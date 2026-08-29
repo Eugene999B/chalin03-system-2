@@ -1,16 +1,17 @@
+/* Installment dialog contract.
+ * The dialog backdrop belongs to the viewport, not to the sidebar-free content lane.
+ * This remains stable when docked DevTools changes window.innerWidth.
+ */
 .finance-simple__dialog-backdrop {
-  position: fixed;
-  z-index: 2000;
-  top: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  left: 300px !important;
+  position: fixed !important;
+  z-index: 2000 !important;
+  inset: 0 !important;
   width: auto !important;
   height: 100dvh !important;
-  min-height: 100vh;
+  min-height: 100vh !important;
   display: grid !important;
   place-items: center !important;
-  padding: 16px;
+  padding: 16px !important;
   margin: 0 !important;
   transform: none !important;
   background: rgba(8, 21, 13, 0.72);
@@ -89,13 +90,10 @@
 
 @media (max-width: 720px) {
   .finance-simple__dialog-backdrop {
-    top: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
+    inset: 0 !important;
+    width: auto !important;
     height: 100dvh !important;
-    padding: 0;
+    padding: 0 !important;
     place-items: end stretch !important;
   }
 
