@@ -22,6 +22,13 @@ const {
   previewProfessionalReminders,
   runProfessionalReminderSync,
 } = require("../services/equipmentFinanceProfessionalReminderService");
+const {
+  getPolicy,
+  updatePolicy,
+  getAgreementLateFee,
+  listPendingLateFees,
+  decideLateFee,
+} = require("../services/equipmentFinanceLateFeePolicyService");
 
 const router = express.Router();
 const RUN_CONFIRMATION = "RUN INSTALLMENT REMINDERS";
@@ -113,6 +120,91 @@ router.put(
       });
     } catch (error) {
       return sendError(res, error, "Could not save Professional Finance settings.");
+    }
+  }
+);
+
+router.get(
+  "/professional/installment-policy",
+  requirePermission("fleet.assets.view"),
+  async (_req, res) => {
+    try {
+      const policy = await getPolicy();
+      return res.json({ status: "success", policy });
+    } catch (error) {
+      return sendError(res, error, "Could not load the installment payment and late-fee policy.");
+    }
+  }
+);
+
+router.put(
+  "/professional/installment-policy",
+  requirePermission("fleet.assets.manage"),
+  async (req, res) => {
+    try {
+      const policy = await updatePolicy({
+        input: req.body?.policy || req.body || {},
+        userId: userId(req),
+        req,
+        reason: req.body?.reason,
+      });
+      return res.json({
+        status: "success",
+        message: "Installment payment and late-fee policy saved.",
+        policy,
+      });
+    } catch (error) {
+      return sendError(res, error, "Could not save the installment payment and late-fee policy.");
+    }
+  }
+);
+
+router.get(
+  "/professional/late-fees/pending",
+  requirePermission("fleet.assets.view"),
+  async (_req, res) => {
+    try {
+      const items = await listPendingLateFees();
+      return res.json({ status: "success", count: items.length, items });
+    } catch (error) {
+      return sendError(res, error, "Could not load pending Finance late-fee decisions.");
+    }
+  }
+);
+
+router.get(
+  "/professional/agreements/:agreementId/late-fee",
+  requirePermission("fleet.assets.view"),
+  async (req, res) => {
+    try {
+      const result = await getAgreementLateFee(req.params.agreementId);
+      return res.json({ status: "success", ...result });
+    } catch (error) {
+      return sendError(res, error, "Could not evaluate the Finance late fee.");
+    }
+  }
+);
+
+router.post(
+  "/professional/agreements/:agreementId/late-fee/decision",
+  requirePermission("fleet.assets.manage"),
+  async (req, res) => {
+    try {
+      const result = await decideLateFee({
+        agreementId: req.params.agreementId,
+        decision: req.body?.decision,
+        userId: userId(req),
+        reason: req.body?.reason,
+      });
+      return res.json({
+        status: "success",
+        message: result.status === "applied"
+          ? "The late fee was approved and added to the Finance schedule."
+          : "The late fee was declined and waived.",
+        result,
+      });
+    } catch (error) {
+      return sendError(res, error, "Could not save the Finance late-fee decision.");
     }
   }
 );
