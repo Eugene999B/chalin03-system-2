@@ -1,10 +1,54 @@
+const express = require("express");
+const { requireAuth } = require("../middleware/authMiddleware");
+const { requireWorkspaceCategory } = require("./categoryIsolationService");
+const equipmentFinanceProfessionalRoutes = require("../routes/equipmentFinanceProfessionalRoutes");
+
+// Railway preloads this bootstrap in production before server.js constructs the app.
+// Keep the existing startup behavior, and attach the Finance Professional API when
+// the canonical Equipment Catalogue router is registered. This avoids replacing the
+// large catalogue router just to expose the additive Finance policy endpoints.
+const ROUTE_MOUNT_FLAG = Symbol.for("chalin03.equipmentFinanceProfessionalRoutesMounted");
+const originalExpressUse = express.application.use;
+if (!express.application[ROUTE_MOUNT_FLAG]) {
+  express.application.use = function chalin03FinanceAwareUse(...args) {
+    const result = originalExpressUse.apply(this, args);
+    const mountPath = args[0];
+    if (
+      mountPath === "/api/equipment-catalogue" &&
+      !this[ROUTE_MOUNT_FLAG]
+    ) {
+      const hireBoundary = requireWorkspaceCategory("equipment_hire");
+      originalExpressUse.call(
+        this,
+        "/api/equipment-catalogue/sales",
+        requireAuth,
+        hireBoundary,
+        equipmentFinanceProfessionalRoutes
+      );
+      Object.defineProperty(this, ROUTE_MOUNT_FLAG, {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false,
+      });
+      console.log("Equipment Finance Professional routes mounted at /api/equipment-catalogue/sales/professional.");
+    }
+    return result;
+  };
+  Object.defineProperty(express.application, ROUTE_MOUNT_FLAG, {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+}
+
 require("./equipmentCreditOptionalApprovalBootstrap");
 require("./operationalApprovalBootstrap");
 require("./stockLedgerSummaryBootstrap");
 require("./executivePackNotificationDeliveryBootstrap");
-// Railway always preloads this bootstrap in production; load Finance boss alerts here
-// so the watcher is active even when the platform overrides package.json startup.
 require("./equipmentFinanceBossAlertDeliveryBootstrap");
+require("./equipmentFinanceLateFeeScheduler").startEquipmentFinanceLateFeeScheduler();
 
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
@@ -61,10 +105,7 @@ function sanitizeWorksheetName(value, fallback = "Sheet") {
     .trim()
     .replace(/^'+|'+$/g, "");
 
-  if (!name) {
-    name = fallback;
-  }
-
+  if (!name) name = fallback;
   return name.slice(0, MAX_WORKSHEET_NAME_LENGTH);
 }
 
@@ -84,19 +125,11 @@ function createUniqueWorksheetName(workbook, value) {
 
 function installExportWorkbookSafety() {
   const prototype = ExcelJS.Workbook.prototype;
-
-  if (prototype[INSTALL_FLAG]) {
-    return false;
-  }
+  if (prototype[INSTALL_FLAG]) return false;
 
   const originalAddWorksheet = prototype.addWorksheet;
-
   prototype.addWorksheet = function addSafeWorksheet(name, options) {
-    return originalAddWorksheet.call(
-      this,
-      createUniqueWorksheetName(this, name),
-      options
-    );
+    return originalAddWorksheet.call(this, createUniqueWorksheetName(this, name), options);
   };
 
   Object.defineProperty(prototype, INSTALL_FLAG, {
@@ -105,7 +138,6 @@ function installExportWorkbookSafety() {
     enumerable: false,
     writable: false,
   });
-
   return true;
 }
 
