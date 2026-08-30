@@ -5,6 +5,7 @@ require("./executivePackNotificationDeliveryBootstrap");
 // Railway always preloads this bootstrap in production; load Finance boss alerts here
 // so the watcher is active even when the platform overrides package.json startup.
 require("./equipmentFinanceBossAlertDeliveryBootstrap");
+require("./equipmentFinanceLateFeeScheduler").startEquipmentFinanceLateFeeScheduler();
 
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
