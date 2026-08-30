@@ -29,6 +29,9 @@ const {
   listPendingLateFees,
   decideLateFee,
 } = require("../services/equipmentFinanceLateFeePolicyService");
+const {
+  ensureEquipmentFinanceLateFeePolicySchema,
+} = require("../services/equipmentFinanceLateFeeSchemaService");
 
 const router = express.Router();
 const RUN_CONFIRMATION = "RUN INSTALLMENT REMINDERS";
@@ -129,6 +132,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (_req, res) => {
     try {
+      await ensureEquipmentFinanceLateFeePolicySchema();
       const policy = await getPolicy();
       return res.json({ status: "success", policy });
     } catch (error) {
@@ -142,6 +146,7 @@ router.put(
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
+      await ensureEquipmentFinanceLateFeePolicySchema();
       const policy = await updatePolicy({
         input: req.body?.policy || req.body || {},
         userId: userId(req),
@@ -164,6 +169,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (_req, res) => {
     try {
+      await ensureEquipmentFinanceLateFeePolicySchema();
       const items = await listPendingLateFees();
       return res.json({ status: "success", count: items.length, items });
     } catch (error) {
@@ -177,6 +183,7 @@ router.get(
   requirePermission("fleet.assets.view"),
   async (req, res) => {
     try {
+      await ensureEquipmentFinanceLateFeePolicySchema();
       const result = await getAgreementLateFee(req.params.agreementId);
       return res.json({ status: "success", ...result });
     } catch (error) {
@@ -190,6 +197,7 @@ router.post(
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
+      await ensureEquipmentFinanceLateFeePolicySchema();
       const result = await decideLateFee({
         agreementId: req.params.agreementId,
         decision: req.body?.decision,
