@@ -24,14 +24,14 @@ assert.equal(
     hostname: "chalin03.com",
     configured: "https://api.chalin03.com/api",
   }),
-  "/api"
+  "https://api.chalin03.com/api"
 );
 assert.equal(
   resolveApiBaseUrl({
     hostname: "www.chalin03.com",
     configured: "https://api.chalin03.com/api",
   }),
-  "/api"
+  "https://api.chalin03.com/api"
 );
 assert.equal(
   resolveApiBaseUrl({
@@ -146,10 +146,10 @@ assert.match(viteConfig, /process\.env\.VITE_API_URL = "\/api"/);
 assert.match(mediaBridge, /import\.meta\.env\.VITE_API_URL/);
 assert.match(commandGate, /import\.meta\.env\.VITE_API_URL/);
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
-assert.match(headersFile, /connect-src 'self'/);
+assert.match(headersFile, /connect-src 'self' https:\/\/api\.chalin03\.com/);
 assert.match(frontendWrangler, /global_fetch_strictly_public/);
 assert.match(frontendWrangler, /pages_build_output_dir = "\.\/dist"/);
 assert.match(rootWrangler, /global_fetch_strictly_public/);
 assert.match(rootWrangler, /pages_build_output_dir = "\.\/frontend\/dist"/);
 
-console.log("Same-origin Chalin 03 production API proxy contracts passed.");
+console.log("Chalin 03 production API routing and proxy contracts passed.");
