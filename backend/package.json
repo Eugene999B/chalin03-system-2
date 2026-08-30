@@ -59,7 +59,7 @@
     "jsonwebtoken": "^9.0.0",
     "mysql2": "^3.0.0",
     "pdfkit": "^0.19.1",
-    "qrcode": "^1.5.0",
+    "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
   },
   "devDependencies": {"nodemon": "^3.0.0"}
