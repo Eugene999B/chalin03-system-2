@@ -9,6 +9,7 @@ import "../styles/loginBusinessSelectionOriginalScale.css";
 import "../styles/loginEmojiRestore.css";
 import "../styles/loginMobileDesktopMatch.css";
 import "../styles/loginMobileOriginalDesign.css";
+import "../styles/loginMobileCompactFinal.css";
 
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
