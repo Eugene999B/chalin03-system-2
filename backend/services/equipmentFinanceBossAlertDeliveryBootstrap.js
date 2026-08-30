@@ -6,6 +6,10 @@ const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceBossAlertDeliveryInsta
 const POLL_MS = Math.max(1000, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
 const BATCH_SIZE = 100;
 const FINANCE_WORKSPACES = new Set(["equipment_installment_finance", "equipment_hire"]);
+const FINANCE_CATALOGUE_ACTIONS = new Set([
+  "equipment_catalogue_asset_created",
+  "equipment_catalogue_asset_updated",
+]);
 
 function clean(value, max = 240) {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
@@ -41,6 +45,7 @@ function isFinanceActivity(row) {
   const workspace = clean(row?.workspace_code, 100).toLowerCase();
   const details = clean(row?.details, 1000);
 
+  if (FINANCE_CATALOGUE_ACTIONS.has(action)) return true;
   if (FINANCE_WORKSPACES.has(workspace) && /(finance|installment|customer|payment|deposit|agreement|machine|equipment)/i.test(`${action} ${actionType} ${entityType} ${details}`)) return true;
   if (/equipment_finance|equipment\.finance|installment/.test(`${action} ${actionType} ${entityType}`)) return true;
   if (entityType.includes("equipment") || entityType === "fleet_asset" || entityType === "equipment_sale_payment" || entityType === "equipment_sale_agreement") {
@@ -52,10 +57,10 @@ function isFinanceActivity(row) {
 
 function eventKind(row, metadata) {
   const text = `${clean(row?.action, 220)} ${clean(row?.action_type, 220)} ${clean(row?.entity_type, 140)} ${clean(row?.details, 1000)}`.toLowerCase();
-  if (/machine.*(register|creat)|equipment.*(register|creat)|_machine_registered|machine\.register/.test(text)) return "machine_created";
+  if (/machine.*(register|creat)|equipment.*(register|creat)|equipment_catalogue_asset_created|_machine_registered|machine\.register/.test(text)) return "machine_created";
   if (/customer.*(creat|register)|customer\.creat/.test(text)) return "customer_created";
   if (/opening.*deposit|deposit.*reservation|deposit/.test(text)) return "deposit";
-  if (/payment/.test(text) || row?.entity_type === "equipment_sale_payment") return "payment";
+  if (/payment/.test(text) || String(row?.entity_type || "").toLowerCase() === "equipment_sale_payment") return "payment";
   if (/agreement.*(activat|creat)|agreement\.activat/.test(text)) return "agreement";
   if (/update|updated|edit|edited|change|changed|setting/.test(text) || hasAmountSignal(metadata, row?.details)) return "edited";
   return "finance_activity";
@@ -125,13 +130,16 @@ async function deliverFinanceActivityBossAlert(row) {
   const sourceReference = `equipment-finance-boss-activity:${Number(row.id)}`;
   if (await sourceAlreadyLogged(sourceReference)) return;
   const settings = await professionalBossSettings();
-  if (!settings.enabled || !settings.phone) return;
+  if (!settings.enabled || !settings.phone) {
+    console.warn(`Finance boss alert skipped for activity ${row.id}: enabled=${settings.enabled} phone_configured=${Boolean(settings.phone)}.`);
+    return;
+  }
   const result = await sendSmsAlertToPhone({
     branchId: Number(row.branch_id || 1),
     phone: settings.phone,
     message: buildActivityMessage(row),
     logMessage: `Boss alert: ${clean(row.action || row.entity_type || "Finance activity", 360)}.`,
-    smsType: "other",
+    smsType: "equipment_finance_boss_alert",
     sentBy: row.user_id || null,
     sourceReference,
   });
@@ -144,7 +152,9 @@ let pollPromise = null;
 async function initialiseActivityCursor() {
   try {
     const [[row]] = await pool.query("SELECT COALESCE(MAX(id), 0) AS max_id FROM activity_log");
-    activityCursor = Number(row?.max_id || 0);
+    const maxId = Number(row?.max_id || 0);
+    activityCursor = Math.max(0, maxId - 50);
+    console.log(`Finance boss alert watcher initialized at activity ${activityCursor}; recovering the latest 50 audit events.`);
   } catch (error) {
     console.warn("Finance boss alert cursor initialization skipped:", error.message);
     activityCursor = 0;
@@ -165,6 +175,7 @@ async function pollFinanceActivity() {
              workspace_code IN ('equipment_installment_finance', 'equipment_hire')
              OR action LIKE '%EQUIPMENT_FINANCE%'
              OR action LIKE '%equipment_finance%'
+             OR action LIKE 'EQUIPMENT_CATALOGUE_ASSET_%'
              OR action_type LIKE 'equipment.finance.%'
              OR entity_type IN ('equipment_sale_payment','equipment_sale_agreement','fleet_asset','equipment_customer')
            )
@@ -203,7 +214,7 @@ async function deliverEquipmentCreatedBossAlert(request) {
     phone: settings.phone,
     message: `CHALIN 03 — Installment Finance Alert New excavator/equipment registered: ${identity}.`,
     logMessage: `Boss alert: new equipment ${identity}.`,
-    smsType: "other",
+    smsType: "equipment_finance_boss_alert",
     sentBy: request?.user?.id || null,
     sourceReference: `equipment-created:${assetCode || assetName || Date.now()}`,
   });
