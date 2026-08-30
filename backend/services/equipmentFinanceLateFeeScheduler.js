@@ -1,10 +1,18 @@
+const { pool } = require("../config/db");
 const { listPendingLateFees } = require("./equipmentFinanceLateFeePolicyService");
+const { ensureEquipmentFinanceLateFeePolicySchema } = require("./equipmentFinanceLateFeeSchemaService");
 
 const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceLateFeeSchedulerInstalled");
 let scheduler = null;
 
 async function runEquipmentFinanceLateFeeEvaluation() {
   try {
+    const connection = await pool.getConnection();
+    try {
+      await ensureEquipmentFinanceLateFeePolicySchema(connection);
+    } finally {
+      connection.release();
+    }
     const pending = await listPendingLateFees();
     if (pending.length) {
       console.log(`Finance late-fee policy: ${pending.length} decision(s) waiting for management.`);
@@ -39,8 +47,6 @@ function startEquipmentFinanceLateFeeScheduler() {
     writable: false,
   });
 
-  // Run once shortly after the application has loaded so a newly crossed
-  // grace-period boundary is recognised without waiting for the next cycle.
   setTimeout(() => {
     void runEquipmentFinanceLateFeeEvaluation();
   }, 20 * 1000).unref?.();
