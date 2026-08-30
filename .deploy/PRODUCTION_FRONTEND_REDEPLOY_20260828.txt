@@ -1,10 +1,10 @@
 CHALIN 03 PRODUCTION REDEPLOY TRIGGER
 
-Purpose: force Cloudflare Pages and Railway to rebuild the exact production branch after the modal rollback.
+Purpose: force Cloudflare Pages and Railway to rebuild the exact production branch after the mobile login visual parity repair.
 
 Source of truth: production
 
 No application or database behavior is changed by this marker.
 
-Trigger sequence: 5
-Triggered at: 2026-08-29
+Trigger sequence: 6
+Triggered at: 2026-08-30
