@@ -2,6 +2,7 @@ const { pool } = require("../config/db");
 const { writeAuditEvent } = require("./auditTrailService");
 const { getProfessionalSettings } = require("./equipmentFinanceProfessionalService");
 const { getAgreementScheduleTruth } = require("./equipmentFinanceScheduleTruthService");
+const { verifyEquipmentFinanceLateFeePolicySchema } = require("./equipmentFinanceLateFeeSchemaService");
 
 const ACTIVE_AGREEMENT_STATUS = new Set(["active", "payment_due", "overdue", "due_soon", "defaulted"]);
 const TRIGGER_MODES = new Set(["each_missed_installment", "after_final_due_plus_grace"]);
@@ -49,33 +50,6 @@ function onOrAfter(left, right) {
 function normalizeWeekInterval(value, fallback = 1) {
   const number = Number(value);
   return Number.isInteger(number) && number >= 1 && number <= 4 ? number : fallback;
-}
-
-async function ensureDecisionTable(connection = pool) {
-  await connection.query(`
-    CREATE TABLE IF NOT EXISTS equipment_finance_late_fee_decisions (
-      id BIGINT AUTO_INCREMENT PRIMARY KEY,
-      agreement_id BIGINT NOT NULL,
-      schedule_id BIGINT NOT NULL,
-      trigger_mode VARCHAR(60) NOT NULL,
-      decision_mode VARCHAR(30) NOT NULL,
-      eligible_on DATE NOT NULL,
-      proposed_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
-      basis_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
-      fee_type VARCHAR(30) NOT NULL DEFAULT 'fixed',
-      fee_value DECIMAL(15,4) NOT NULL DEFAULT 0,
-      status ENUM('pending','applied','waived') NOT NULL DEFAULT 'pending',
-      decided_by INT NULL,
-      decided_at DATETIME NULL,
-      decision_reason VARCHAR(1000) NULL,
-      applied_at DATETIME NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_equipment_finance_late_fee_decision (agreement_id, schedule_id, trigger_mode),
-      INDEX idx_equipment_finance_late_fee_queue (status, eligible_on),
-      INDEX idx_equipment_finance_late_fee_agreement (agreement_id, status)
-    )
-  `);
 }
 
 function computeFee({ feeType, feeValue, cap, basisAmount }) {
@@ -295,7 +269,7 @@ async function evaluateAgreementLateFee(agreementId, { create = true, connection
   const connection = suppliedConnection || await pool.getConnection();
   const ownsConnection = !suppliedConnection;
   try {
-    await ensureDecisionTable(connection);
+    await verifyEquipmentFinanceLateFeePolicySchema(connection);
     const agreement = await loadAgreement(connection, agreementId);
     if (!ACTIVE_AGREEMENT_STATUS.has(String(agreement.agreement_status))) {
       return { eligible: false, reason: "The agreement is not active for late-fee evaluation.", policy, agreement };
@@ -368,7 +342,7 @@ async function listPendingLateFees() {
   const policy = await getPolicy();
   const connection = await pool.getConnection();
   try {
-    await ensureDecisionTable(connection);
+    await verifyEquipmentFinanceLateFeePolicySchema(connection);
     const [agreements] = await connection.query(
       `SELECT id
        FROM equipment_sale_agreements
@@ -404,7 +378,7 @@ async function decideLateFee({ agreementId, decision, userId, reason }) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    await ensureDecisionTable(connection);
+    await verifyEquipmentFinanceLateFeePolicySchema(connection);
     const [rows] = await connection.query(
       `SELECT d.*, a.agreement_number
        FROM equipment_finance_late_fee_decisions d
