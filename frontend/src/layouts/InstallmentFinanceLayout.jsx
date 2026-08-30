@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
 import InstallmentMobileEnhancements from "../components/InstallmentMobileEnhancements";
 import InstallmentFinanceWorkspaceEnhancements from "../components/InstallmentFinanceWorkspaceEnhancements";
+import InstallmentFinancePolicyAndLateFee from "../components/InstallmentFinancePolicyAndLateFee";
 import { useAuth } from "../context/AuthContext";
 import {
   EQUIPMENT_DIVISIONS,
@@ -111,6 +112,7 @@ export default function InstallmentFinanceLayout() {
         navigationSections={navigationSections}
       />
       <InstallmentFinanceWorkspaceEnhancements />
+      <InstallmentFinancePolicyAndLateFee />
     </>
   );
 }
