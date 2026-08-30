@@ -1,199 +1,450 @@
-/* Mobile login visual reset: keep desktop Command Gate appearance, only compact it to fit the phone. */
+/* Chalin 03 mobile visual restoration.
+   Presentation only: preserve the existing login DOM and every login function.
+   Mobile follows the established desktop navy / white / gold visual language,
+   while remaining compact enough for a phone viewport. */
+
 @media (max-width: 760px) {
   .gate4.biometric-login {
-    padding: 8px !important;
+    width: 100% !important;
     min-height: 100dvh !important;
+    padding: 0 !important;
+    margin: 0 !important;
     background: #07182c !important;
+    color: #10223a !important;
+    overflow-x: hidden !important;
   }
 
   .gate4.biometric-login .gate4__shell {
     width: 100% !important;
-    min-height: calc(100dvh - 16px) !important;
+    min-height: 100dvh !important;
     margin: 0 !important;
-    border-radius: 18px !important;
-    border: 1px solid rgba(255,255,255,.18) !important;
-    background: linear-gradient(145deg, rgba(7,24,44,.96), rgba(4,17,31,.94)) !important;
-    box-shadow: 0 18px 50px rgba(0,0,0,.35) !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #f5f7f8 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
   }
 
+  /* Keep the same branded header used by the desktop design. */
   .gate4.biometric-login .gate4__topbar {
-    min-height: 58px !important;
-    padding: 9px 12px !important;
+    display: flex !important;
+    min-height: 76px !important;
+    height: 76px !important;
+    box-sizing: border-box !important;
+    padding: 10px 18px !important;
+    background: linear-gradient(135deg, #061a30, #0a2947) !important;
+    border-bottom: 1px solid rgba(255,255,255,.14) !important;
+  }
+
+  .gate4.biometric-login .gate4__brand {
+    display: flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    gap: 10px !important;
   }
 
   .gate4.biometric-login .gate4__logo {
-    width: 40px !important;
-    height: 40px !important;
-    flex-basis: 40px !important;
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    flex: 0 0 42px !important;
     border-radius: 11px !important;
+    border: 1px solid rgba(243,198,77,.7) !important;
+    background:
+      linear-gradient(135deg, rgba(243,198,77,.18), rgba(243,198,77,.02)),
+      url('/chalin03-logo.png') center / 30px 30px no-repeat,
+      #07182c !important;
+    color: transparent !important;
+    font-size: 0 !important;
+    box-shadow: 0 7px 18px rgba(0,0,0,.2) !important;
   }
 
-  .gate4.biometric-login .gate4__brand strong { font-size: 14px !important; }
-  .gate4.biometric-login .gate4__brand small { font-size: 7px !important; }
-  .gate4.biometric-login .gate4__version { display: none !important; }
-  .gate4.biometric-login .gate4__online { min-height: 26px !important; font-size: 7px !important; }
-
-  .gate4.biometric-login .gate4__layout {
-    min-height: 0 !important;
+  .gate4.biometric-login .gate4__logo::after { content: none !important; }
+  .gate4.biometric-login .gate4__brand small {
     display: block !important;
+    color: rgba(255,255,255,.62) !important;
+    font-size: 8px !important;
+    line-height: 1.2 !important;
+    letter-spacing: .14em !important;
+    white-space: nowrap !important;
+  }
+  .gate4.biometric-login .gate4__brand strong {
+    display: block !important;
+    color: #fff !important;
+    font-size: 15px !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+  }
+  .gate4.biometric-login .gate4__status { margin-left: auto !important; }
+  .gate4.biometric-login .gate4__version { display: none !important; }
+  .gate4.biometric-login .gate4__online {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    min-height: 28px !important;
+    padding: 0 9px !important;
+    color: rgba(255,255,255,.78) !important;
+    background: rgba(255,255,255,.07) !important;
+    border: 1px solid rgba(255,255,255,.1) !important;
+    border-radius: 999px !important;
+    font-size: 8px !important;
   }
 
-  /* The desktop story is decorative. The real login/access panel remains fully functional. */
+  /* Mobile is the same right-hand access panel, not the old dark mobile redesign. */
+  .gate4.biometric-login .gate4__layout {
+    display: block !important;
+    min-height: 0 !important;
+    background: #f5f7f8 !important;
+  }
   .gate4.biometric-login .gate4__story,
   .gate4.biometric-login .group-login__story {
     display: none !important;
   }
 
   .gate4.biometric-login .gate4__access {
-    min-height: calc(100dvh - 74px) !important;
-    padding: 18px 14px 20px !important;
+    display: block !important;
+    min-height: calc(100dvh - 76px) !important;
+    box-sizing: border-box !important;
+    padding: 22px 24px 26px !important;
+    border-left: 0 !important;
+    border-top: 3px solid #d9a827 !important;
+    border-radius: 0 0 24px 24px !important;
     color: #10223a !important;
-    background: #f8fafc !important;
+    background: linear-gradient(180deg, #fbfcfc 0%, #f3f6f8 100%) !important;
   }
 
+  .gate4.biometric-login .gate4__access::before {
+    content: 'SECURE ACCESS' !important;
+    display: block !important;
+    margin: 0 0 12px !important;
+    color: #e0b536 !important;
+    font: 900 11px/1 Arial, sans-serif !important;
+    letter-spacing: .14em !important;
+  }
+
+  .gate4.biometric-login .gate4__access-heading { margin: 0 !important; }
+  .gate4.biometric-login .gate4__access-heading small { display: none !important; }
   .gate4.biometric-login .gate4__access-heading h2 {
-    font-size: 30px !important;
-    color: #10223a !important;
+    margin: 0 !important;
+    color: #07182c !important;
+    font-size: 38px !important;
+    line-height: .98 !important;
+    letter-spacing: -.045em !important;
   }
-
+  .gate4.biometric-login .gate4__access-heading h2::after {
+    content: none !important;
+    font-size: inherit !important;
+  }
   .gate4.biometric-login .gate4__access-heading p {
-    color: #66758a !important;
-    font-size: 11px !important;
+    display: none !important;
   }
 
-  .gate4.biometric-login .gate4__access-shield {
-    width: 46px !important;
-    height: 46px !important;
-    flex-basis: 46px !important;
-  }
-
+  /* Small, tidy business icons — the important part of the old good mobile UI. */
   .gate4.biometric-login .gate4__workspace-tabs {
+    display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-    gap: 6px !important;
-    margin-top: 16px !important;
+    gap: 10px !important;
+    margin: 22px 0 14px !important;
   }
 
   .gate4.biometric-login .gate4__workspace-tabs button {
-    min-height: 72px !important;
-    padding: 8px 4px !important;
-    border-radius: 13px !important;
-    color: #5b6b80 !important;
-    background: #fff !important;
+    position: relative !important;
+    min-width: 0 !important;
+    min-height: 96px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    padding: 9px 5px !important;
+    border: 2px solid #d7e0e9 !important;
+    border-radius: 18px !important;
+    clip-path: none !important;
+    color: #52637a !important;
+    background: #f9fbfc !important;
+    box-shadow: 0 3px 10px rgba(19,43,68,.04) !important;
+    text-align: center !important;
+    transform: none !important;
+  }
+
+  .gate4.biometric-login .gate4__workspace-tabs button.is-selected {
+    color: #15273d !important;
+    border-color: #d9e0e6 !important;
+    background: linear-gradient(145deg, #fffdf2, #fff !important) !important;
+    box-shadow: inset 0 0 0 1px rgba(217,168,39,.08), 0 5px 15px rgba(32,48,65,.07) !important;
   }
 
   .gate4.biometric-login .gate4__workspace-tabs button > span,
-  .gate4.biometric-login .gate4__workspace-tabs button > span::before {
-    width: 30px !important;
-    height: 30px !important;
-    font-size: 14px !important;
+  .gate4.biometric-login .gate4__workspace-tabs button > span::before,
+  .gate4.biometric-login .gate4__workspace-tabs button > span::after {
+    box-sizing: border-box !important;
+  }
+
+  .gate4.biometric-login .gate4__workspace-tabs button > span {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+    display: grid !important;
+    place-items: center !important;
+    border: 0 !important;
+    border-radius: 13px !important;
+    clip-path: none !important;
+    color: #172a40 !important;
+    font-size: 20px !important;
     line-height: 1 !important;
-    color: #38506d !important;
-    -webkit-text-fill-color: #38506d !important;
-    background: #eef3f8 !important;
+    font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif !important;
+    background: #edf2f5 !important;
+    box-shadow: none !important;
   }
-
-  .gate4.biometric-login .gate4__workspace-tabs button.is-selected > span,
-  .gate4.biometric-login .gate4__workspace-tabs button.is-selected > span::before {
-    color: #8a6500 !important;
-    -webkit-text-fill-color: #8a6500 !important;
-    background: rgba(245,197,66,.2) !important;
+  .gate4.biometric-login .gate4__workspace-tabs button > span::before,
+  .gate4.biometric-login .gate4__workspace-tabs button > span::after {
+    content: none !important;
+    display: none !important;
+    background: none !important;
   }
-
+  .gate4.biometric-login .gate4__workspace-tabs button:nth-child(1) > span::before,
+  .gate4.biometric-login .gate4__workspace-tabs button:nth-child(2) > span::before,
+  .gate4.biometric-login .gate4__workspace-tabs button:nth-child(3) > span::before {
+    display: none !important;
+    content: none !important;
+  }
   .gate4.biometric-login .gate4__workspace-tabs strong {
     display: block !important;
-    max-width: 100% !important;
-    color: #13263e !important;
-    -webkit-text-fill-color: #13263e !important;
-    font-size: 10px !important;
-    line-height: 1.15 !important;
-    white-space: normal !important;
+    width: 100% !important;
     overflow: visible !important;
-    text-overflow: clip !important;
-  }
-
-  .gate4.biometric-login .gate4__workspace-tabs button.is-selected strong {
-    color: #13263e !important;
-    -webkit-text-fill-color: #13263e !important;
-  }
-
-  .gate4.biometric-login .gate4__context-strip {
-    min-height: 58px !important;
-    margin-top: 9px !important;
-    padding: 8px 10px !important;
-    border-radius: 13px !important;
-    color: #10223a !important;
-    background: #fff !important;
-  }
-
-  .gate4.biometric-login .gate4__context-icon {
-    width: 34px !important;
-    height: 34px !important;
-    flex-basis: 34px !important;
-    font-size: 15px !important;
-    color: #8a6500 !important;
-    -webkit-text-fill-color: #8a6500 !important;
-  }
-
-  .gate4.biometric-login .gate4__context-strip small,
-  .gate4.biometric-login .gate4__context-strip strong,
-  .gate4.biometric-login .gate4__context-strip > span {
-    color: #10223a !important;
-    -webkit-text-fill-color: #10223a !important;
-  }
-
-  .gate4.biometric-login .gate4__context-strip small { color: #7b899b !important; -webkit-text-fill-color: #7b899b !important; }
-  .gate4.biometric-login .gate4__context-strip > span { color: #596a80 !important; -webkit-text-fill-color: #596a80 !important; }
-
-  .gate4.biometric-login .gate4__field > span {
     color: #53637a !important;
     -webkit-text-fill-color: #53637a !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    text-overflow: clip !important;
+  }
+  .gate4.biometric-login .gate4__workspace-tabs button.is-selected strong {
+    color: #15273d !important;
+    -webkit-text-fill-color: #15273d !important;
+  }
+  .gate4.biometric-login .gate4__workspace-tabs i {
+    position: absolute !important;
+    top: 7px !important;
+    right: 7px !important;
+    width: 22px !important;
+    height: 22px !important;
+    display: grid !important;
+    place-items: center !important;
+    border-radius: 50% !important;
+    color: #fff !important;
+    background: #249b62 !important;
+    font-size: 12px !important;
+    font-style: normal !important;
+  }
+  .gate4.biometric-login .gate4__workspace-tabs button:not(.is-selected) i {
+    display: none !important;
   }
 
-  .gate4.biometric-login .gate4__field input,
-  .gate4.biometric-login .gate4__field select {
-    height: 48px !important;
+  /* Selected store/context remains readable. */
+  .gate4.biometric-login .gate4__context-strip {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 66px !important;
+    box-sizing: border-box !important;
+    margin: 0 0 15px !important;
+    padding: 9px 12px !important;
+    border: 2px solid #d8e0e8 !important;
+    border-left: 4px solid #d9a827 !important;
+    border-radius: 17px !important;
+    color: #10223a !important;
+    background: #f8fafb !important;
+  }
+  .gate4.biometric-login .gate4__context-icon {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    flex: 0 0 40px !important;
+    display: grid !important;
+    place-items: center !important;
+    margin-right: 10px !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    color: #172a40 !important;
+    font-size: 19px !important;
+    line-height: 1 !important;
+    font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif !important;
+    background: #eef2f5 !important;
+  }
+  .gate4.biometric-login .gate4__context-icon::before,
+  .gate4.biometric-login .gate4__context-icon::after { content: none !important; }
+  .gate4.biometric-login .gate4__context-strip > div:nth-child(2) {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+  .gate4.biometric-login .gate4__context-strip small,
+  .gate4.biometric-login .gate4__context-strip strong {
+    display: block !important;
+    overflow: hidden !important;
+    color: #10223a !important;
+    -webkit-text-fill-color: #10223a !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+  .gate4.biometric-login .gate4__context-strip small {
+    margin-bottom: 3px !important;
+    color: #7b8999 !important;
+    -webkit-text-fill-color: #7b8999 !important;
+    font-size: 9px !important;
+    font-weight: 900 !important;
+    letter-spacing: .08em !important;
+    text-transform: uppercase !important;
+  }
+  .gate4.biometric-login .gate4__context-strip strong { font-size: 14px !important; }
+  .gate4.biometric-login .gate4__context-strip > span {
+    flex: 0 0 auto !important;
+    max-width: 31% !important;
+    padding: 8px !important;
+    border-radius: 12px !important;
+    color: #5b6a7c !important;
+    -webkit-text-fill-color: #5b6a7c !important;
+    background: #edf2f6 !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+    text-align: center !important;
+  }
+
+  .gate4.biometric-login .gate4__field--store { margin-bottom: 15px !important; }
+  .gate4.biometric-login .gate4__field > span {
+    display: block !important;
+    margin-bottom: 7px !important;
+    color: #53637a !important;
+    -webkit-text-fill-color: #53637a !important;
+    font-size: 11px !important;
+    font-weight: 900 !important;
+    letter-spacing: .06em !important;
+    text-transform: uppercase !important;
+  }
+  .gate4.biometric-login .gate4__field select,
+  .gate4.biometric-login .gate4__field input {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 50px !important;
+    box-sizing: border-box !important;
     color: #10223a !important;
     -webkit-text-fill-color: #10223a !important;
     background: #fff !important;
-    border-color: #cfd8e4 !important;
+    border: 2px solid #d2dbe5 !important;
+    border-radius: 16px !important;
     opacity: 1 !important;
   }
-
+  .gate4.biometric-login .gate4__field select { padding: 0 14px !important; }
+  .gate4.biometric-login .gate4__field input { padding: 0 14px !important; }
   .gate4.biometric-login .gate4__field input::placeholder {
-    color: #8d99aa !important;
-    -webkit-text-fill-color: #8d99aa !important;
+    color: #8c98a8 !important;
+    -webkit-text-fill-color: #8c98a8 !important;
     opacity: 1 !important;
   }
 
+  .gate4.biometric-login .gate4__divider {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin: 22px 0 15px !important;
+    color: #8995a5 !important;
+    font-size: 9px !important;
+    font-weight: 900 !important;
+    letter-spacing: .05em !important;
+    text-transform: uppercase !important;
+  }
+  .gate4.biometric-login .gate4__divider::before,
+  .gate4.biometric-login .gate4__divider::after {
+    content: '' !important;
+    height: 1px !important;
+    flex: 1 !important;
+    background: #d9e0e7 !important;
+  }
+  .gate4.biometric-login .gate4__divider span { white-space: nowrap !important; }
+
+  .gate4.biometric-login .gate4__form {
+    padding: 18px 0 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+  .gate4.biometric-login .gate4__password { position: relative !important; }
+  .gate4.biometric-login .gate4__password input { padding-right: 82px !important; }
   .gate4.biometric-login .gate4__password button {
-    color: #52637a !important;
+    position: absolute !important;
+    top: 4px !important;
+    right: 4px !important;
+    height: 42px !important;
+    min-width: 70px !important;
+    border: 0 !important;
+    border-radius: 13px !important;
+    color: #53637a !important;
     background: #eef2f7 !important;
+    font-weight: 900 !important;
   }
 
+  /* Restore the old, unmistakable gold sign-in button. */
   .gate4.biometric-login .gate4__submit {
-    min-height: 56px !important;
-    margin-top: 14px !important;
-    border-radius: 15px !important;
+    width: 100% !important;
+    min-height: 70px !important;
+    margin-top: 17px !important;
+    padding: 8px 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 14px !important;
+    box-sizing: border-box !important;
+    border: 0 !important;
+    border-radius: 20px !important;
+    clip-path: none !important;
     color: #07182c !important;
-    background: linear-gradient(135deg,#ffe37c,#f5c542 55%,#e7ad24) !important;
+    background: linear-gradient(135deg, #ffe47e 0%, #f5c542 58%, #efb82c 100%) !important;
+    box-shadow: 0 12px 25px rgba(210,164,39,.18) !important;
     opacity: 1 !important;
   }
-
+  .gate4.biometric-login .gate4__submit > span {
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    display: grid !important;
+    place-items: center !important;
+    border-radius: 15px !important;
+    color: #fff !important;
+    background: #07182c !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
+  }
+  .gate4.biometric-login .gate4__submit div { min-width: 0 !important; text-align: left !important; }
   .gate4.biometric-login .gate4__submit strong,
   .gate4.biometric-login .gate4__submit small {
+    display: block !important;
     color: #07182c !important;
     -webkit-text-fill-color: #07182c !important;
     opacity: 1 !important;
   }
+  .gate4.biometric-login .gate4__submit strong { font-size: 15px !important; line-height: 1.2 !important; }
+  .gate4.biometric-login .gate4__submit small { margin-top: 3px !important; font-size: 9px !important; }
 
-  .gate4.biometric-login .gate4__quick-links button,
-  .gate4.biometric-login .gate4__advanced-heading strong,
-  .gate4.biometric-login .gate4__advanced-heading small {
-    color: #52637a !important;
-    -webkit-text-fill-color: #52637a !important;
+  .gate4.biometric-login .gate4__quick-links {
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    margin-top: 16px !important;
+  }
+  .gate4.biometric-login .gate4__quick-links button {
+    padding: 3px 0 !important;
+    color: #5c6c80 !important;
+    -webkit-text-fill-color: #5c6c80 !important;
+    background: transparent !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
   }
 
   .gate4.biometric-login .gate4__passkey {
-    min-height: 62px !important;
+    min-height: 64px !important;
+    border-radius: 17px !important;
   }
+
+  .gate4.biometric-login .gate4__alert,
+  .gate4.biometric-login .gate4__progress-message { color: #10223a !important; }
 }
