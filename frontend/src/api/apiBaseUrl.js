@@ -32,12 +32,11 @@ function resolveApiBaseUrl({
 } = {}) {
   const normalizedHostname = normalizeHost(hostname);
 
-  // Production browser traffic intentionally stays on the same origin. Cloudflare
-  // Pages Functions then proxies /api/* server-side to api.chalin03.com. This
-  // removes browser CORS/preflight as a production dependency while keeping the
-  // Railway API, authentication and origin-protection controls authoritative.
+  // Production uses the official Chalin 03 API hostname directly. This avoids
+  // the Cloudflare same-origin Pages proxy becoming a second failure point while
+  // keeping Railway's API host/origin protections authoritative.
   if (OFFICIAL_FRONTEND_HOSTS.has(normalizedHostname)) {
-    return "/api";
+    return "https://api.chalin03.com/api";
   }
 
   return normalizeApiBaseUrl(configured || developmentFallback);
