@@ -51,13 +51,15 @@
     "@simplewebauthn/server": "^13.3.2",
     "bcryptjs": "^3.0.0",
     "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "exceljs": "npm:@excel.js/exceljs@0.9.0",
     "express": "^4.18.0",
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.0",
     "mysql2": "^3.0.0",
     "pdfkit": "^0.19.1",
-    "qrcode": "^1.5.0",
+    "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
   },
   "devDependencies": {"nodemon": "^3.0.0"}
