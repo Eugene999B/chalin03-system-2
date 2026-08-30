@@ -1,10 +1,7 @@
 -- CHALIN 03 EQUIPMENT FINANCE LATE-FEE POLICY
 -- ADDITIVE ONLY. No existing finance records are deleted or rewritten.
-
-ALTER TABLE equipment_finance_settings
-  ADD COLUMN default_week_interval_weeks TINYINT NOT NULL DEFAULT 1,
-  ADD COLUMN late_fee_trigger_mode ENUM('each_missed_installment','after_final_due_plus_grace') NOT NULL DEFAULT 'each_missed_installment',
-  ADD COLUMN late_fee_decision_mode ENUM('automatic','boss_approval') NOT NULL DEFAULT 'automatic';
+-- The application schema guard creates the three Finance Settings columns
+-- idempotently when required, so this migration only creates the decision table.
 
 CREATE TABLE IF NOT EXISTS equipment_finance_late_fee_decisions (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
