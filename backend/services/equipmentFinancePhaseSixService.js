@@ -577,8 +577,7 @@ async function getArrearsReport({ dateTo } = {}) {
             MIN(schedule.due_date) AS oldest_due_date,
             MAX(DATEDIFF(?, schedule.due_date)) AS days_overdue,
             COUNT(*) AS missed_lines,
-            COALESCE(SUM(GREATEST(schedule.scheduled_amount + schedule.late_charge_amount -
-              schedule.waived_charge_amount - schedule.amount_paid, 0)), 0) AS calculated_arrears,
+            COALESCE(SUM(GREATEST(schedule.scheduled_amount + schedule.late_charge_amount - schedule.waived_charge_amount - schedule.amount_paid, 0)), 0) AS calculated_arrears,
             MAX(reminder.sent_at) AS last_reminder_at,
             COALESCE(MAX(reminder.successful_reminders), 0) AS successful_reminders
        FROM equipment_sale_agreements agreement
@@ -1065,17 +1064,53 @@ async function listPhaseSixMessageHistory(limit = 100) {
       [safeLimit]
     ),
     pool.query(
-      `SELECT alert.id, 'boss_payment_alert' AS message_type, alert.payment_id,
-              alert.agreement_id, 'boss' AS recipient_type, alert.boss_phone AS recipient_phone,
-              alert.alert_message AS message_preview, alert.alert_status AS delivery_status,
-              alert.attempt_count, alert.last_error, alert.submitted_at AS sent_at,
-              alert.created_at, agreement.agreement_number,
-              agreement.customer_name_snapshot AS customer_name,
-              payment.receipt_number
-         FROM equipment_finance_payment_alerts alert
-         INNER JOIN equipment_sale_agreements agreement ON agreement.id = alert.agreement_id
-         INNER JOIN equipment_sale_payments payment ON payment.id = alert.payment_id
-        ORDER BY alert.created_at DESC, alert.id DESC LIMIT ?`,
+      `SELECT boss_messages.id, boss_messages.message_type, boss_messages.payment_id,
+              boss_messages.agreement_id, boss_messages.recipient_type,
+              boss_messages.recipient_phone, boss_messages.message_preview,
+              boss_messages.delivery_status, boss_messages.attempt_count,
+              boss_messages.last_error, boss_messages.sent_at,
+              boss_messages.created_at, boss_messages.agreement_number,
+              boss_messages.customer_name, boss_messages.receipt_number
+         FROM (
+           SELECT alert.id, 'boss_payment_alert' AS message_type,
+                  alert.payment_id, alert.agreement_id, 'boss' AS recipient_type,
+                  alert.boss_phone AS recipient_phone,
+                  alert.alert_message AS message_preview,
+                  alert.alert_status AS delivery_status,
+                  alert.attempt_count, alert.last_error,
+                  alert.submitted_at AS sent_at, alert.created_at,
+                  agreement.agreement_number,
+                  agreement.customer_name_snapshot AS customer_name,
+                  payment.receipt_number
+             FROM equipment_finance_payment_alerts alert
+             INNER JOIN equipment_sale_agreements agreement
+               ON agreement.id = alert.agreement_id
+              AND agreement.sale_type = 'installment'
+              AND agreement.activation_source = 'approved_credit_application'
+             INNER JOIN equipment_sale_payments payment
+               ON payment.id = alert.payment_id
+              AND payment.is_voided = FALSE
+
+           UNION ALL
+
+           SELECT sms.id, 'boss_activity_alert' AS message_type,
+                  NULL AS payment_id, NULL AS agreement_id,
+                  'boss' AS recipient_type, sms.recipient_phone,
+                  sms.message AS message_preview, sms.status AS delivery_status,
+                  sms.retry_count AS attempt_count, sms.status_reason AS last_error,
+                  sms.submitted_at AS sent_at, sms.created_at,
+                  NULL AS agreement_number, NULL AS customer_name,
+                  NULL AS receipt_number
+             FROM sms_log sms
+             INNER JOIN activity_log activity
+               ON activity.id = CAST(SUBSTRING_INDEX(sms.source_reference, ':', -1) AS UNSIGNED)
+              AND activity.workspace_code = 'equipment_installment_finance'
+              AND activity.outcome = 'success'
+            WHERE sms.sms_type = 'equipment_finance_boss_alert'
+              AND sms.source_reference LIKE 'equipment-finance-boss-activity:%'
+         ) boss_messages
+        ORDER BY boss_messages.created_at DESC, boss_messages.id DESC
+        LIMIT ?`,
       [safeLimit]
     ),
     pool.query(
@@ -1087,7 +1122,9 @@ async function listPhaseSixMessageHistory(limit = 100) {
               agreement.customer_name_snapshot AS customer_name, NULL AS receipt_number
          FROM equipment_sales_reminder_log reminder
          INNER JOIN equipment_sale_agreements agreement ON agreement.id = reminder.agreement_id
-        WHERE reminder.reminder_type IN ('due_soon','due_today','overdue')
+        WHERE agreement.sale_type = 'installment'
+          AND agreement.activation_source = 'approved_credit_application'
+          AND reminder.reminder_type IN ('due_soon','due_today','overdue')
         ORDER BY reminder.created_at DESC, reminder.id DESC LIMIT ?`,
       [safeLimit]
     ),
@@ -1138,7 +1175,6 @@ module.exports = {
   getArrearsReport,
   getCashFlowReport,
   getCustomerStatement,
-  getPortfolioDashboard,
   listPhaseSixMessageHistory,
   loadPaymentSnapshot,
   logAccountingExport,
