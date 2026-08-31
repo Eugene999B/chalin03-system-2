@@ -5,7 +5,7 @@ const { pool } = require("../config/db");
 const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceBossAlertDeliveryInstalled");
 const POLL_MS = Math.max(1000, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
 const BATCH_SIZE = 100;
-const FINANCE_WORKSPACES = new Set(["equipment_installment_finance", "equipment_hire"]);
+const FINANCE_WORKSPACES = new Set(["equipment_installment_finance"]);
 const FINANCE_CATALOGUE_ACTIONS = new Set([
   "equipment_catalogue_asset_created",
   "equipment_catalogue_asset_updated",
@@ -46,12 +46,13 @@ function isFinanceActivity(row) {
   const details = clean(row?.details, 1000);
 
   if (FINANCE_CATALOGUE_ACTIONS.has(action)) return true;
-  if (FINANCE_WORKSPACES.has(workspace) && /(finance|installment|customer|payment|deposit|agreement|machine|equipment)/i.test(`${action} ${actionType} ${entityType} ${details}`)) return true;
+  if (workspace === "equipment_installment_finance" && /(finance|installment|customer|payment|deposit|agreement|machine|equipment)/i.test(`${action} ${actionType} ${entityType} ${details}`)) return true;
   if (/equipment_finance|equipment\.finance|installment/.test(`${action} ${actionType} ${entityType}`)) return true;
+  if (workspace !== "equipment_installment_finance") return false;
   if (entityType.includes("equipment") || entityType === "fleet_asset" || entityType === "equipment_sale_payment" || entityType === "equipment_sale_agreement") {
     return /create|created|register|registered|update|updated|edit|edited|payment|deposit|agreement|reserve|reservation/i.test(`${action} ${actionType}`);
   }
-  if (/customer/.test(`${action} ${actionType} ${entityType}`) && FINANCE_WORKSPACES.has(workspace)) return true;
+  if (/customer/.test(`${action} ${actionType} ${entityType}`)) return true;
   return false;
 }
 
@@ -172,7 +173,7 @@ async function pollFinanceActivity() {
          WHERE id > ?
            AND outcome = 'success'
            AND (
-             workspace_code IN ('equipment_installment_finance', 'equipment_hire')
+             workspace_code = 'equipment_installment_finance'
              OR action LIKE '%EQUIPMENT_FINANCE%'
              OR action LIKE '%equipment_finance%'
              OR action LIKE 'EQUIPMENT_CATALOGUE_ASSET_%'
