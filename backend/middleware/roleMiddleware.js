@@ -1,3 +1,7 @@
+const {
+  canAccessSparePartsUserSettings,
+} = require("../services/sparePartsUserSettingsAccessService");
+
 const AUDITOR_FULL_AUDIT_PREFIXES = [
   "/api/audit-signoffs",
   "/api/accounting-intelligence",
@@ -27,6 +31,33 @@ function userRoles(req) {
     normalizeRole(req.user?.role),
     normalizeRole(req.user?.workspace_role),
   ].filter(Boolean);
+}
+
+function isUserSettingsApi(req) {
+  return getCleanPath(req).startsWith("/api/users");
+}
+
+async function enforceSparePartsUserSettingsAccess(req, res, next) {
+  if (!isUserSettingsApi(req)) return next();
+
+  try {
+    const allowed = await canAccessSparePartsUserSettings(req.user);
+    if (allowed) return next();
+
+    return res.status(403).json({
+      status: "error",
+      code: "SPARE_PARTS_USER_SETTINGS_SYSTEM_ADMIN_ONLY",
+      message:
+        "User Settings are currently restricted to the System Administrator for Spare Parts.",
+    });
+  } catch (error) {
+    console.error("Spare Parts User Settings access check failed:", error);
+    return res.status(503).json({
+      status: "error",
+      code: "SPARE_PARTS_USER_SETTINGS_ACCESS_CHECK_FAILED",
+      message: "User Settings access could not be verified safely.",
+    });
+  }
 }
 
 function canAuditorUseFullAuditRoute(req) {
@@ -60,13 +91,16 @@ function canAuditorReadOnlyRoute(req) {
 function requireRole(...allowedRoles) {
   const normalizedAllowedRoles = allowedRoles.map((role) => normalizeRole(role));
 
-  return function (req, res, next) {
+  return async function (req, res, next) {
     if (!req.user) {
       return res.status(401).json({
         status: "error",
         message: "Authentication required.",
       });
     }
+
+    await enforceSparePartsUserSettingsAccess(req, res, () => {});
+    if (res.headersSent) return;
 
     const currentRoles = userRoles(req);
 
