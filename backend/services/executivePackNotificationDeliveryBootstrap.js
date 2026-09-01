@@ -71,7 +71,8 @@ function buildDecisionReading({ intelligence, spare, finance, actions }) {
   const overdueDebt = Number(spare.overdue_debt_balance || 0);
   const overdueFinance = Number(finance.overdue_amount || 0);
   const riskAccounts = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
-  const pressureCount = Number(spare.stock_pressure_count || 0);
+  const outOfStock = Number(spare.out_of_stock_count || 0);
+  const lowStock = Math.max(0, Number(spare.low_stock_count || 0) - outOfStock);
   const voidCount = Number(spare.voided_sales_count || 0);
   const operatingResult = Number(spare.estimated_operating_result || 0);
   if (health < 65 || actions.some((item) => item.severity === "critical")) {
@@ -83,7 +84,7 @@ function buildDecisionReading({ intelligence, spare, finance, actions }) {
   if (overdueFinance > 0 || riskAccounts > 0) {
     return `Finance is the main risk point: ${money(overdueFinance)} is overdue across ${finance.overdue_accounts} account(s), with ${riskAccounts} high/critical-risk account(s).`;
   }
-  if (voidCount > 0 || pressureCount > 0) {
+  if (outOfStock > 0 || lowStock > 0 || voidCount > 0) {
     return `The core financial position is more controlled than the operating signals; close void and stock exceptions before they become lost cash or margin.`;
   }
   if (operatingResult < 0) {
@@ -103,7 +104,8 @@ function buildTwoMessageSms({ intelligence, role }) {
   const collectionGap = Number(spare.collection_gap_rate || Math.max(0, 100 - Number(spare.collection_rate || 0)));
   const expenseRatio = Number(spare.expense_ratio || 0);
   const operatingResult = Number(spare.estimated_operating_result || 0);
-  const stockPressure = Number(spare.stock_pressure_count || 0);
+  const outOfStock = Number(spare.out_of_stock_count || 0);
+  const lowStock = Math.max(0, Number(spare.low_stock_count || 0) - outOfStock);
   const financeRisk = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
   const overdueShare = Number(finance.overdue_share_of_outstanding || 0);
   const due7Share = Number(finance.due_next_7_days_share || 0);
@@ -115,10 +117,10 @@ function buildTwoMessageSms({ intelligence, role }) {
     analysis = `CHALIN 03 AUDIT ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}), leaving ${money(uncollected)} (${percent(collectionGap)}) uncollected. Expenses ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Voids ${spare.voided_sales_count}/${money(spare.voided_sales_value)}; Finance overdue ${money(finance.overdue_amount)}.`;
     advice = `CHALIN 03 AUDIT DECISION: ${primaryAction ? primaryAction.title : "No material exception surfaced"}. Test the largest variances, voids and Finance movements to source records, approvals, user responsibility and cut-off. ${secondaryAction ? secondaryAction.title + "." : "Close only when evidence agrees with the ledger."}`;
   } else if (role === "manager") {
-    analysis = `CHALIN 03 MANAGER ANALYSIS ${range}: Sales ${money(spare.revenue)}; ${percent(spare.collection_rate)} collected, ${money(uncollected)} outstanding. Expenses ${money(spare.expenses)} (${percent(expenseRatio)} of sales) leave ${money(operatingResult)} result proxy. Stock: ${spare.out_of_stock_count} zero, ${spare.low_stock_count} low; Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue.`;
+    analysis = `CHALIN 03 MANAGER ANALYSIS ${range}: Sales ${money(spare.revenue)}; ${percent(spare.collection_rate)} collected, ${money(uncollected)} outstanding. Expenses ${money(spare.expenses)} (${percent(expenseRatio)} of sales) leave ${money(operatingResult)} result proxy. Stock: ${outOfStock} zero, ${lowStock} low. Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue.`;
     advice = `CHALIN 03 MANAGER DECISION: ${decisionReading} ${primaryAction ? "Act first on " + primaryAction.title.toLowerCase() + "." : "Assign owners to the highest-value collection, stock and Finance actions."} Protect the next 7-day Finance inflow (${money(finance.due_next_7_days)}, ${percent(due7Share)} of outstanding).`;
   } else if (role === "admin") {
-    analysis = `CHALIN 03 ADMIN ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}), gap ${money(uncollected)}. Costs ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Finance ${money(finance.outstanding_amount)} outstanding/${money(finance.overdue_amount)} overdue; ${finance.overdue_accounts} overdue account(s), ${financeRisk} high/critical-risk. Stock pressure ${stockPressure}; ${spare.voided_sales_count} voids.`;
+    analysis = `CHALIN 03 ADMIN ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}), gap ${money(uncollected)}. Costs ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Finance ${money(finance.outstanding_amount)} outstanding/${money(finance.overdue_amount)} overdue; ${finance.overdue_accounts} overdue account(s), ${financeRisk} high/critical-risk. Stock ${outOfStock} zero/${lowStock} low; ${spare.voided_sales_count} voids.`;
     advice = `CHALIN 03 ADMIN DECISION: ${decisionReading} ${primaryAction ? "First control: " + primaryAction.title.toLowerCase() + "." : "Reconcile material exceptions and document closure."} Current Finance arrears represent ${percent(overdueShare)} of outstanding.`;
   } else {
     analysis = `CHALIN 03 EXECUTIVE ANALYSIS ${range}: Sales ${money(spare.revenue)}; ${percent(spare.collection_rate)} collected, ${money(uncollected)} still exposed. Costs ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Finance ${money(finance.outstanding_amount)} outstanding; overdue ${money(finance.overdue_amount)}; ${financeRisk} high/critical-risk account(s).`;
