@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   repair:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,10 +21,8 @@ jobs:
           from pathlib import Path
           path = Path('frontend/src/components/ExecutiveBusinessIntelligenceSettingsPanel.jsx')
           text = path.read_text()
-
           start = text.index('function buildMessagePack(intelligence, audience) {')
           end = text.index('\n\nexport default function ExecutiveBusinessIntelligenceSettingsPanel', start)
-
           new_function = r'''function buildMessagePack(intelligence, audience) {
   if (!intelligence) return [];
   const spare = intelligence.spare_parts || {};
@@ -75,7 +72,6 @@ jobs:
     { code: "executive-advice", title: "Executive Decision & Warning", severity: urgent.some((item) => item.severity === "critical") ? "critical" : urgent.length ? "high" : "medium", message: `${leadingSignal}. ${health < 65 ? "The evidence supports immediate intervention and close executive follow-through." : health < 85 ? "The evidence supports targeted intervention before the pressure becomes expensive." : "The evidence supports disciplined continuation with early-warning monitoring."}`, action: urgent.slice(0, 2).map((item) => `${item.title}: ${item.action}`).join(" | ") || "Keep cash collection, stock availability, Finance monitoring and independent reconciliation as protected management priorities." },
   ];
 }'''
-
           text = text[:start] + new_function + text[end:]
 
           old = '''      const requests = [];
@@ -87,11 +83,7 @@ jobs:
             category: "executive",
             severity: severityFor(item),
             title: item.title,
-            message: `${item.message}\
-\
-Recommended action: ${item.action}\
-\
-Scope: Spare Parts + Installment Finance. This is management intelligence and review guidance; unusual signals are not findings of misconduct.`,
+            message: `${item.message}\n\nRecommended action: ${item.action}\n\nScope: Spare Parts + Installment Finance. This is management intelligence and review guidance; unusual signals are not findings of misconduct.`,
             action_path: item.code === "executive-system" || item.code === "manager-system" || item.code === "audit-system" ? "/users-settings" : item.code.includes("finance") || item.code.includes("risk") ? "/equipment-installment-finance/collections" : "/group-executive-control",
             source_reference: `executive-message-pack:${range.from}:${range.to}:${audience}:${item.code}`,
           }));
@@ -108,12 +100,8 @@ Scope: Spare Parts + Installment Finance. This is management intelligence and re
             category: "executive",
             severity: severityFor(item),
             title: item.title,
-            message: `${item.message}\
-\
-Recommended action: ${item.action}\
-\
-Scope: Spare Parts + Installment Finance. This is management intelligence and review guidance; unusual signals are not findings of misconduct.`,
-            action_path: recipientAudience === "auditor" || recipientAudience === "admin" ? "/group-executive-control" : recipientAudience === "manager" ? "/group-executive-control" : "/group-executive-control",
+            message: `${item.message}\n\nRecommended action: ${item.action}\n\nScope: Spare Parts + Installment Finance. This is management intelligence and review guidance; unusual signals are not findings of misconduct.`,
+            action_path: "/group-executive-control",
             source_reference: `executive-message-pack:${range.from}:${range.to}:${recipientAudience}:${item.code}`,
           }));
         }
