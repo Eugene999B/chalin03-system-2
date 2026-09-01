@@ -12,13 +12,18 @@ function sampleIntelligence() {
       sales_count: 24,
       payments_received: 90000,
       collection_rate: 75,
+      uncollected_sales_value: 30000,
+      expenses: 18000,
+      expense_ratio: 15,
       estimated_operating_result: 72000,
       low_stock_count: 4,
       out_of_stock_count: 1,
+      stock_retail_at_low_stock: 10000,
       overdue_debt_balance: 18000,
       overdue_debt_accounts: 3,
       voided_sales_count: 2,
       voided_sales_value: 5000,
+      voided_sales_value_rate: 4.2,
     },
     installment_finance: {
       active_accounts: 8,
@@ -28,6 +33,7 @@ function sampleIntelligence() {
       critical_risk_accounts: 1,
       high_risk_accounts: 2,
       due_next_7_days: 30000,
+      due_next_7_days_share: 12,
       reversals_in_period: 1,
     },
     actions: [
@@ -46,6 +52,7 @@ test("executive briefing stays within Spare Parts and Installment Finance", () =
   assert.match(message, /Spare Parts/);
   assert.match(message, /Installment Finance/);
   assert.match(message, /critical/i);
+  assert.match(message, /uncollected/i);
   assert.doesNotMatch(message, /Mining|Fleet|Hire/);
 });
 
@@ -59,6 +66,7 @@ test("auditor briefing treats suspicious-looking activity as review signals, not
 
 test("manager briefing contains concrete next actions", () => {
   const message = buildAudienceMessage(sampleIntelligence(), "manager");
-  assert.match(message, /What needs to happen next/i);
+  assert.match(message, /Management decisions/i);
   assert.match(message, /Review the account and recovery decision today/i);
+  assert.match(message, /cash conversion/i);
 });
