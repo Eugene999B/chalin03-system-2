@@ -38,6 +38,12 @@ function userId(req) {
 
 function sendError(res, error, fallback) {
   const statusCode = Number(error.statusCode || 500);
+  console.error("Equipment Finance Phase 6 endpoint error:", {
+    statusCode,
+    code: error.code || "EQUIPMENT_FINANCE_PHASE6_ERROR",
+    message: error.message || fallback,
+    stack: error.stack,
+  });
   return res.status(statusCode).json({
     status: "error",
     code: error.code || "EQUIPMENT_FINANCE_PHASE6_ERROR",
@@ -266,7 +272,7 @@ router.get(
         `inline; filename="${receipt.filename}-thermal.pdf"`
       );
       res.setHeader("Cache-Control", "private, no-store");
-      return res.send(receipt.buffer);
+      return res.send(buffer);
     } catch (error) {
       return sendError(res, error, "Could not generate the thermal installment receipt.");
     }
