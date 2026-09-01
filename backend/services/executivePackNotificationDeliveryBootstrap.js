@@ -70,22 +70,26 @@ function buildDecisionReading({ intelligence, spare, finance, actions }) {
   const uncollected = Number(spare.uncollected_sales_value || 0);
   const overdueDebt = Number(spare.overdue_debt_balance || 0);
   const overdueFinance = Number(finance.overdue_amount || 0);
+  const riskAccounts = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
   const pressureCount = Number(spare.stock_pressure_count || 0);
   const voidCount = Number(spare.voided_sales_count || 0);
-  const riskAccounts = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
+  const operatingResult = Number(spare.estimated_operating_result || 0);
   if (health < 65 || actions.some((item) => item.severity === "critical")) {
-    return `Priority is immediate: protect cash, resolve the highest-risk exception and stop control leakage before exposure grows.`;
+    return `Immediate attention is justified: resolve the highest-value cash/control exposure first and prevent secondary leakage.`;
   }
-  if (uncollected > 0 && overdueDebt > overdueFinance && overdueDebt > 0) {
-    return `The clearest cash risk is customer collections: ${money(uncollected)} remains in sales balances and ${money(overdueDebt)} is overdue in customer debt.`;
+  if (uncollected > 0 && overdueDebt > 0 && overdueDebt >= overdueFinance) {
+    return `Cash conversion is the clearest weakness: ${money(uncollected)} remains uncollected and ${money(overdueDebt)} is already overdue in customer debt.`;
   }
   if (overdueFinance > 0 || riskAccounts > 0) {
-    return `Finance needs active protection: ${money(overdueFinance)} is overdue and ${riskAccounts} account(s) are high/critical risk.`;
+    return `Finance is the main risk point: ${money(overdueFinance)} is overdue across ${finance.overdue_accounts} account(s), with ${riskAccounts} high/critical-risk account(s).`;
   }
-  if (pressureCount > 0 || voidCount > 0) {
-    return `The financial position is currently more controlled than the operational signals: close stock and void exceptions before they become lost cash or revenue.`;
+  if (voidCount > 0 || pressureCount > 0) {
+    return `The core financial position is more controlled than the operating signals; close void and stock exceptions before they become lost cash or margin.`;
   }
-  return `The period is broadly controlled; preserve collection discipline, stock availability and Finance quality while watching early warning changes.`;
+  if (operatingResult < 0) {
+    return `The period is financially pressured because recorded expenses exceed sales value; cost discipline should precede discretionary expansion.`;
+  }
+  return `The period is broadly controlled; preserve cash discipline, stock availability and Finance quality while watching for drift.`;
 }
 
 function buildTwoMessageSms({ intelligence, role }) {
@@ -96,25 +100,29 @@ function buildTwoMessageSms({ intelligence, role }) {
   const primaryAction = actions[0];
   const secondaryAction = actions[1];
   const uncollected = Number(spare.uncollected_sales_value || 0);
-  const health = Number(intelligence?.health_score ?? 0);
-  const financeRisk = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
+  const collectionGap = Number(spare.collection_gap_rate || Math.max(0, 100 - Number(spare.collection_rate || 0)));
+  const expenseRatio = Number(spare.expense_ratio || 0);
+  const operatingResult = Number(spare.estimated_operating_result || 0);
   const stockPressure = Number(spare.stock_pressure_count || 0);
+  const financeRisk = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
+  const overdueShare = Number(finance.overdue_share_of_outstanding || 0);
+  const due7Share = Number(finance.due_next_7_days_share || 0);
   const decisionReading = buildDecisionReading({ intelligence, spare, finance, actions });
 
   let analysis;
   let advice;
   if (role === "auditor") {
-    analysis = `CHALIN 03 AUDIT ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}); uncollected ${money(uncollected)}. Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue; ${spare.voided_sales_count} voids/${money(spare.voided_sales_value)} and ${finance.reversals_in_period} Finance reversal/refund(s).`;
-    advice = `CHALIN 03 AUDIT DECISION: ${primaryAction ? primaryAction.title : "No material exception"}. Trace the evidence to source records, approval, user responsibility and cut-off. ${secondaryAction ? secondaryAction.title + "." : "Close exceptions only when supporting evidence agrees with the ledger."}`;
+    analysis = `CHALIN 03 AUDIT ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}), leaving ${money(uncollected)} (${percent(collectionGap)}) uncollected. Expenses ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Voids ${spare.voided_sales_count}/${money(spare.voided_sales_value)}; Finance overdue ${money(finance.overdue_amount)}.`;
+    advice = `CHALIN 03 AUDIT DECISION: ${primaryAction ? primaryAction.title : "No material exception surfaced"}. Test the largest variances, voids and Finance movements to source records, approvals, user responsibility and cut-off. ${secondaryAction ? secondaryAction.title + "." : "Close only when evidence agrees with the ledger."}`;
   } else if (role === "manager") {
-    analysis = `CHALIN 03 MANAGER ANALYSIS ${range}: Sales ${money(spare.revenue)}; ${percent(spare.collection_rate)} collected, leaving ${money(uncollected)} uncollected. Expenses ${money(spare.expenses)} (${percent(spare.expense_ratio)} of sales); result proxy ${money(spare.estimated_operating_result)}. Stock: ${spare.out_of_stock_count} zero, ${spare.low_stock_count} low. Finance ${money(finance.outstanding_amount)} outstanding.`;
-    advice = `CHALIN 03 MANAGER DECISION: ${decisionReading} ${primaryAction ? "Focus: " + primaryAction.action : "Assign owners to the most material collection, stock and Finance exceptions."}`;
+    analysis = `CHALIN 03 MANAGER ANALYSIS ${range}: Sales ${money(spare.revenue)}; ${percent(spare.collection_rate)} collected, ${money(uncollected)} outstanding. Expenses ${money(spare.expenses)} (${percent(expenseRatio)} of sales) leave ${money(operatingResult)} result proxy. Stock: ${spare.out_of_stock_count} zero, ${spare.low_stock_count} low; Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue.`;
+    advice = `CHALIN 03 MANAGER DECISION: ${decisionReading} ${primaryAction ? "Act first on " + primaryAction.title.toLowerCase() + "." : "Assign owners to the highest-value collection, stock and Finance actions."} Protect the next 7-day Finance inflow (${money(finance.due_next_7_days)}, ${percent(due7Share)} of outstanding).`;
   } else if (role === "admin") {
-    analysis = `CHALIN 03 ADMIN ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}); gap ${money(uncollected)}. Expenses ${money(spare.expenses)} (${percent(spare.expense_ratio)} of sales); result proxy ${money(spare.estimated_operating_result)}. Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue/${finance.overdue_accounts} account(s); ${spare.voided_sales_count} voids; ${spare.out_of_stock_count} zero-stock + ${spare.low_stock_count} low-stock.`;
-    advice = `CHALIN 03 ADMIN DECISION: ${decisionReading} ${primaryAction ? "First action: " + primaryAction.action : "Reconcile material exceptions, assign ownership and document closure."}`;
+    analysis = `CHALIN 03 ADMIN ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}), gap ${money(uncollected)}. Costs ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Finance ${money(finance.outstanding_amount)} outstanding/${money(finance.overdue_amount)} overdue; ${finance.overdue_accounts} overdue account(s), ${financeRisk} high/critical-risk. Stock pressure ${stockPressure}; ${spare.voided_sales_count} voids.`;
+    advice = `CHALIN 03 ADMIN DECISION: ${decisionReading} ${primaryAction ? "First control: " + primaryAction.title.toLowerCase() + "." : "Reconcile material exceptions and document closure."} Current Finance arrears represent ${percent(overdueShare)} of outstanding.`;
   } else {
-    analysis = `CHALIN 03 EXECUTIVE ANALYSIS ${range}: Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${percent(spare.collection_rate)}); ${money(uncollected)} remains uncollected. Recorded expenses ${money(spare.expenses)} (${percent(spare.expense_ratio)} of sales); result proxy ${money(spare.estimated_operating_result)}. Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue; ${financeRisk} high/critical-risk account(s).`;
-    advice = `CHALIN 03 EXECUTIVE DECISION: ${decisionReading} ${primaryAction ? "Decision trigger: " + primaryAction.title + "." : "Continue disciplined monitoring and act on any material deterioration."}`;
+    analysis = `CHALIN 03 EXECUTIVE ANALYSIS ${range}: Sales ${money(spare.revenue)}; ${percent(spare.collection_rate)} collected, ${money(uncollected)} still exposed. Costs ${money(spare.expenses)} (${percent(expenseRatio)} of sales); result proxy ${money(operatingResult)}. Finance ${money(finance.outstanding_amount)} outstanding; overdue ${money(finance.overdue_amount)}; ${financeRisk} high/critical-risk account(s).`;
+    advice = `CHALIN 03 EXECUTIVE DECISION: ${decisionReading} ${primaryAction ? "Decision trigger: " + primaryAction.title + "." : "Maintain disciplined monitoring and act on material deterioration."} Capital priority is cash conversion before further exposure.`;
   }
 
   return [trimSms(analysis), trimSms(advice)];
