@@ -1,8 +1,11 @@
 const http = require("node:http");
 const { pool } = require("../config/db");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
+const { buildExecutiveIntelligence } = require("./executiveIntelligenceService");
 
 const INSTALL_FLAG = Symbol.for("chalin03.executivePackNotificationDeliveryInstalled");
+const PENDING_DISPATCHES = new Map();
+const DISPATCH_DELAY_MS = 1200;
 
 function isExecutivePackRequest(request) {
   if (String(request?.method || "").toUpperCase() !== "POST") return false;
@@ -17,147 +20,121 @@ function cleanLine(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function splitNotificationMessage(value) {
-  const text = String(value || "").trim();
-  if (!text) return { message: "", action: "" };
-  const marker = /\n\s*Recommended action:\s*/i;
-  const match = text.match(marker);
-  if (!match || typeof match.index !== "number") return { message: cleanLine(text), action: "" };
-  const message = text.slice(0, match.index).trim();
-  const remainder = text.slice(match.index + match[0].length);
-  const scopeMarker = /\n\s*Scope:\s*/i;
-  const scopeMatch = remainder.match(scopeMarker);
-  const action = (scopeMatch && typeof scopeMatch.index === "number"
-    ? remainder.slice(0, scopeMatch.index)
-    : remainder).trim();
-  return { message: cleanLine(message), action: cleanLine(action) };
+function money(value) {
+  const n = Number(value);
+  return `GHS ${(Number.isFinite(n) ? n : 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function normalizeAudience(sourceReference) {
-  const parts = String(sourceReference || "").split(":");
-  const value = parts.find((part) => ["executive", "auditor", "manager"].includes(String(part).toLowerCase()));
-  return String(value || "executive").toLowerCase();
+function parsePackRequest(request) {
+  if (!isExecutivePackRequest(request)) return null;
+  const source = String(request.body?.source_reference || "").trim();
+  const parts = source.split(":");
+  const from = parts[1];
+  const to = parts[2];
+  const audience = parts[3];
+  const recipientId = Number(request.body?.target_user_id);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return null;
+  if (!Number.isInteger(recipientId) || recipientId <= 0) return null;
+  return { from, to, audience: String(audience || "executive").toLowerCase(), recipientId };
 }
 
-function buildHumanSms({ title, rawMessage, rawAction, audience }) {
-  const cleanTitle = cleanLine(title) || "Business update";
-  const insight = cleanLine(rawMessage);
-  const action = cleanLine(rawAction);
-  const titleKey = cleanTitle.toLowerCase();
-
-  if (audience === "auditor") {
-    if (titleKey.includes("exception") || titleKey.includes("risk")) {
-      return [
-        "CHALIN 03 — Audit Review",
-        `One point I would put on the review list is this: ${insight}`,
-        action ? `The useful next step is to ${action.toLowerCase().replace(/^please\s+/i, "")}` : "Trace the transaction back to its original evidence, approval and final outcome before deciding whether the pattern is significant.",
-        "Treat unusual activity as a prompt for evidence-led review, not as a conclusion of wrongdoing.",
-      ].join("\n\n");
-    }
-    return [
-      "CHALIN 03 — Audit Review",
-      `Here is the point I would want evidenced: ${insight}`,
-      action ? `For the review, ${action.replace(/^please\s+/i, "").replace(/^confirm\s+/i, "confirm ")}` : "Compare the management figure with the source records, approvals and reconciliation trail before relying on the summary.",
-      "The aim is to establish what happened, who approved it, what evidence supports it and whether the control worked as intended.",
-    ].join("\n\n");
-  }
-
-  if (audience === "manager") {
-    if (titleKey.includes("cash") || titleKey.includes("collection")) {
-      return [
-        "CHALIN 03 — Management",
-        `The immediate business issue here is cash conversion: ${insight}`,
-        action ? `I would act on this by ${action.replace(/^please\s+/i, "").replace(/\.$/, "")}.` : "Start with the oldest and largest balances, assign clear owners and check the result rather than only recording follow-up attempts.",
-        "A sale is only helping the business fully when the cash is actually collected and controlled.",
-      ].join("\n\n");
-    }
-    if (titleKey.includes("stock") || titleKey.includes("sales protection")) {
-      return [
-        "CHALIN 03 — Management",
-        `This needs attention because stock availability can quietly turn into lost sales: ${insight}`,
-        action ? `I would make this practical by ${action.replace(/^please\s+/i, "").replace(/\.$/, "")}.` : "Prioritise the fastest-moving parts and make sure the website stock position agrees with the physical store.",
-      ].filter(Boolean).join("\n\n");
-    }
-    return [
-      "CHALIN 03 — Management",
-      `${cleanTitle}: ${insight}`,
-      action ? `The practical move is to ${action.replace(/^please\s+/i, "")}` : "Give this a named owner, a date and a clear definition of what completion looks like.",
-      "The goal is not another report; it is a visible action that improves the business.",
-    ].join("\n\n");
-  }
-
-  if (titleKey.includes("cash") || titleKey.includes("collections")) {
-    return [
-      "CHALIN 03 — Executive",
-      `The number itself is only half the story. ${insight}`,
-      "What concerns me is the business effect: money that has been earned or is expected but is not yet safely back in the business reduces room to restock, invest and absorb surprises.",
-      action ? `My recommendation is to ${action.replace(/^please\s+/i, "")}` : "Keep the oldest and highest-value balances on the management agenda until responsibility and recovery are clear.",
-    ].join("\n\n");
-  }
-
-  if (titleKey.includes("risk") || titleKey.includes("suspicion")) {
-    return [
-      "CHALIN 03 — Executive",
-      `This is the area I would not ignore: ${insight}`,
-      "A warning signal is not proof of misconduct, but repeated exceptions can reveal weak controls, poor discipline or money being put at risk. The right response is to understand the pattern before it becomes expensive.",
-      action ? `I would ask management to ${action.replace(/^please\s+/i, "")}` : "Ask for the underlying records, approval trail and explanation for any pattern that looks unusual.",
-    ].join("\n\n");
-  }
-
-  if (titleKey.includes("decision") || titleKey.includes("desk")) {
-    return [
-      "CHALIN 03 — Executive",
-      `Here is the management point behind the figures: ${insight}`,
-      action ? `The decision I would put on the table is simple: ${action}` : "Decide who owns the issue, what must change and when management will review the result.",
-      "Small unresolved decisions become expensive operational problems when they are allowed to sit too long.",
-    ].join("\n\n");
-  }
-
-  if (titleKey.includes("website") || titleKey.includes("system")) {
-    return [
-      "CHALIN 03 — Executive",
-      `The website and operating system should be helping management control the business, not merely display it. ${insight}`,
-      action ? `The improvement I would prioritise is to ${action.replace(/^please\s+/i, "")}` : "Make risk, overdue cash, approvals, stock exceptions and important follow-up impossible to miss.",
-      "A good system should reduce the chance of a problem being missed in the first place.",
-    ].join("\n\n");
-  }
-
-  return [
-    "CHALIN 03 — Executive",
-    `${cleanTitle}: ${insight}`,
-    action ? `My recommendation is to ${action.replace(/^please\s+/i, "")}` : "This deserves a clear owner and a management follow-up rather than being left as a number in a report.",
-    "The purpose of this review is to turn information into a decision that improves the business.",
-  ].join("\n\n");
+function roleAudience(role) {
+  const normalized = String(role || "").toLowerCase();
+  if (normalized === "auditor") return "auditor";
+  if (normalized === "manager") return "manager";
+  if (normalized === "admin") return "admin";
+  return "executive";
 }
 
-async function deliverExecutivePackSms(request) {
+function trimSms(value, max = 360) {
+  const text = cleanLine(value);
+  if (text.length <= max) return text;
+  const clipped = text.slice(0, max - 1);
+  const boundary = clipped.lastIndexOf(" ");
+  return `${(boundary > max * 0.72 ? clipped.slice(0, boundary) : clipped).trim()}...`;
+}
+
+function buildTwoMessageSms({ intelligence, role }) {
+  const spare = intelligence?.spare_parts || {};
+  const finance = intelligence?.installment_finance || {};
+  const actions = [...(intelligence?.actions || [])].sort((a, b) => {
+    const weight = { critical: 0, high: 1, medium: 2, low: 3 };
+    return (weight[a.severity] ?? 9) - (weight[b.severity] ?? 9);
+  });
+  const urgent = actions.filter((item) => ["critical", "high"].includes(item.severity));
+  const range = `${intelligence?.range?.from || "-"} to ${intelligence?.range?.to || "-"}`;
+  const health = Number(intelligence?.health_score ?? 0);
+  const cashExposure = Number(spare.overdue_debt_balance || 0) + Number(finance.overdue_amount || 0);
+  const riskAccounts = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
+  const stockPressure = Number(spare.out_of_stock_count || 0) + Number(spare.low_stock_count || 0);
+  const riskText = urgent.slice(0, 2).map((item) => cleanLine(item.title)).join("; ") || "No critical or high exception is currently surfaced";
+
+  let reading;
+  if (health < 65 || urgent.some((item) => item.severity === "critical")) {
+    reading = `Evidence shows material pressure: ${riskAccounts} high/critical Finance account(s), ${money(cashExposure)} overdue cash exposure and ${stockPressure} stock-pressure item(s).`;
+  } else if (health < 85 || urgent.length) {
+    reading = `The picture is mixed: core activity is present, but ${riskAccounts} Finance risk account(s), ${money(cashExposure)} overdue cash exposure or stock pressure need active control.`;
+  } else {
+    reading = "The monitored control picture is stable, with no critical or high exception dominating the period. Keep the discipline that produced this position.";
+  }
+
+  let analysis;
+  let advice;
+  if (role === "auditor") {
+    analysis = `CHALIN 03 AUDIT ANALYSIS ${range}. Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${spare.collection_rate ?? 0}%); Finance outstanding ${money(finance.outstanding_amount)}; overdue ${money(finance.overdue_amount)}. Controls: ${spare.voided_sales_count ?? 0} voided sale(s), ${finance.reversals_in_period ?? 0} reversal/refund(s), ${finance.critical_risk_accounts ?? 0} critical-risk account(s). ${reading}`;
+    advice = `CHALIN 03 AUDIT ADVICE. Priority: ${riskText}. Warning: signals require evidence, not assumptions. Reconcile high-value exceptions to source records, approvals, cut-off and supporting documents; record the conclusion and closure.`;
+  } else if (role === "manager") {
+    analysis = `CHALIN 03 MANAGER ANALYSIS ${range}. Spare Parts sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${spare.collection_rate ?? 0}%); Finance outstanding ${money(finance.outstanding_amount)}; overdue ${money(finance.overdue_amount)}; ${spare.out_of_stock_count ?? 0} zero-stock, ${spare.low_stock_count ?? 0} low-stock. ${reading}`;
+    advice = `CHALIN 03 MANAGER ADVICE. Priority: ${riskText}. ${health < 65 ? "Intervention is required now." : health < 85 || urgent.length ? "Targeted intervention is required before pressure grows." : "Maintain disciplined execution and watch early warning changes."} Act on collections, priority stock and high-risk Finance accounts; give each issue an owner and review date.`;
+  } else if (role === "admin") {
+    analysis = `CHALIN 03 ADMIN ANALYSIS ${range}. Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${spare.collection_rate ?? 0}%); voided ${spare.voided_sales_count ?? 0}. Finance outstanding ${money(finance.outstanding_amount)}; overdue ${money(finance.overdue_amount)} across ${finance.overdue_accounts ?? 0} account(s). ${reading}`;
+    advice = `CHALIN 03 ADMIN ADVICE. Priority: ${riskText}. ${health < 65 ? "Control intervention is required." : health < 85 || urgent.length ? "Strengthen controls before the pressure becomes expensive." : "Keep the current control discipline and monitor for drift."} Verify approvals, user responsibility, customer records, stock integrity and notification delivery, then close exceptions with evidence.`;
+  } else {
+    analysis = `CHALIN 03 EXECUTIVE ANALYSIS ${range}. Spare Parts sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${spare.collection_rate ?? 0}%); recorded-result proxy ${money(spare.estimated_operating_result)}. Finance outstanding ${money(finance.outstanding_amount)}; overdue ${money(finance.overdue_amount)}. ${reading}`;
+    advice = `CHALIN 03 EXECUTIVE ADVICE. Priority: ${riskText}. ${health < 65 ? "The evidence supports immediate intervention." : health < 85 || urgent.length ? "The evidence supports targeted intervention before pressure compounds." : "The evidence supports disciplined continuation with early-warning monitoring."} Protect cash conversion, stock availability and Finance risk; require a named owner, decision and review date for material exceptions.`;
+  }
+
+  return [trimSms(analysis), trimSms(advice)];
+}
+
+async function deliverExecutivePackSmsBatch({ from, to, recipientId }) {
   try {
-    if (!isExecutivePackRequest(request)) return;
-    const recipientId = Number(request.body?.target_user_id);
-    const sourceReference = String(request.body?.source_reference || "").trim();
-    if (!Number.isInteger(recipientId) || recipientId <= 0) return;
-    const smsSourceReference = `${sourceReference}:recipient:${recipientId}:sms`;
+    const smsSourceReference = `executive-message-pack:${from}:${to}:${recipientId}:two-message`;
     const [existing] = await pool.query(`SELECT id FROM sms_log WHERE source_reference = ? ORDER BY id DESC LIMIT 1`, [smsSourceReference]);
     if (existing.length) return;
-    const [rows] = await pool.query(`SELECT phone FROM users WHERE id = ? AND is_active = TRUE LIMIT 1`, [recipientId]);
-    const phone = rows[0]?.phone;
-    if (!phone) return;
-    const title = cleanLine(request.body?.title) || "Business update";
-    const parsed = splitNotificationMessage(request.body?.message);
-    if (!parsed.message) return;
-    const audience = normalizeAudience(sourceReference);
-    const message = buildHumanSms({ title, rawMessage: parsed.message, rawAction: parsed.action, audience });
-    await sendSmsAlertToPhone({
-      branchId: Number(request.user?.branch_id || 1),
-      phone,
-      message,
-      smsType: "executive_intelligence_pack",
-      sentBy: request.user?.id || null,
-      sourceReference: smsSourceReference,
-    });
+
+    const [rows] = await pool.query(`SELECT phone, role FROM users WHERE id = ? AND is_active = TRUE LIMIT 1`, [recipientId]);
+    const recipient = rows[0];
+    if (!recipient?.phone) return;
+
+    const intelligence = await buildExecutiveIntelligence({ from, to });
+    const role = roleAudience(recipient.role);
+    const messages = buildTwoMessageSms({ intelligence, role });
+    for (const message of messages) {
+      await sendSmsAlertToPhone({
+        branchId: 1,
+        phone: recipient.phone,
+        message,
+        smsType: "executive_intelligence_pack",
+        sourceReference: `${smsSourceReference}:${messages.indexOf(message) + 1}`,
+      });
+    }
   } catch (error) {
-    console.error("Executive intelligence SMS delivery hook failed:", error.message);
+    console.error("Executive intelligence two-message SMS delivery failed:", error.message);
   }
+}
+
+function scheduleExecutivePackSms(request) {
+  const parsed = parsePackRequest(request);
+  if (!parsed) return;
+  const key = `${parsed.from}:${parsed.to}:${parsed.recipientId}`;
+  const prior = PENDING_DISPATCHES.get(key);
+  if (prior) clearTimeout(prior);
+  const timer = setTimeout(() => {
+    PENDING_DISPATCHES.delete(key);
+    void deliverExecutivePackSmsBatch(parsed);
+  }, DISPATCH_DELAY_MS);
+  PENDING_DISPATCHES.set(key, timer);
 }
 
 function installExecutivePackNotificationDelivery() {
@@ -166,7 +143,7 @@ function installExecutivePackNotificationDelivery() {
   http.ServerResponse.prototype.end = function executivePackAwareEnd(...args) {
     const request = this.req;
     const result = originalEnd.apply(this, args);
-    if (request && isExecutivePackRequest(request)) void deliverExecutivePackSms(request);
+    if (request && isExecutivePackRequest(request)) scheduleExecutivePackSms(request);
     return result;
   };
   Object.defineProperty(globalThis, INSTALL_FLAG, { value: true, configurable: false, enumerable: false, writable: false });
@@ -174,4 +151,4 @@ function installExecutivePackNotificationDelivery() {
 }
 
 installExecutivePackNotificationDelivery();
-module.exports = { installExecutivePackNotificationDelivery, buildHumanSms };
+module.exports = { installExecutivePackNotificationDelivery, buildTwoMessageSms };
