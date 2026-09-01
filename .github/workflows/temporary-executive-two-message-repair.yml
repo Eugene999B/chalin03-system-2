@@ -1,0 +1,132 @@
+name: Temporary Executive Intelligence Two-Message Repair
+
+on:
+  push:
+    branches: [tmp/executive-two-message]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp/executive-two-message
+          fetch-depth: 0
+      - name: Replace executive message logic
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('frontend/src/components/ExecutiveBusinessIntelligenceSettingsPanel.jsx')
+          text = path.read_text()
+
+          start = text.index('function buildMessagePack(intelligence, audience) {')
+          end = text.index('\n\nexport default function ExecutiveBusinessIntelligenceSettingsPanel', start)
+
+          new_function = r'''function buildMessagePack(intelligence, audience) {
+  if (!intelligence) return [];
+  const spare = intelligence.spare_parts || {};
+  const finance = intelligence.installment_finance || {};
+  const actions = [...(intelligence.actions || [])].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+  const urgent = actions.filter((item) => ["critical", "high"].includes(item.severity));
+  const range = `${formatDate(intelligence.range?.from)} → ${formatDate(intelligence.range?.to)}`;
+  const health = Number(intelligence.health_score ?? 0);
+  const cashPressure = Number(spare.overdue_debt_balance || 0) + Number(finance.overdue_amount || 0);
+  const riskAccounts = Number(finance.critical_risk_accounts || 0) + Number(finance.high_risk_accounts || 0);
+  const stockPressure = Number(spare.out_of_stock_count || 0) + Number(spare.low_stock_count || 0);
+  const topRisks = urgent.slice(0, 2).map((item) => item.title).join("; ");
+  const leadingSignal = topRisks || "No critical or high-severity exception is currently surfaced";
+
+  let reading;
+  if (health < 65 || urgent.some((item) => item.severity === "critical")) {
+    reading = `The evidence shows material control pressure: ${riskAccounts} high/critical Finance account(s), ${money(cashPressure)} exposed to overdue cash, and ${stockPressure} stock-pressure item(s). The immediate issue is protecting cash and reducing execution risk before it compounds.`;
+  } else if (health < 85 || urgent.length) {
+    reading = `The business picture is mixed: core activity is visible, but ${riskAccounts} Finance risk account(s), ${money(cashPressure)} overdue cash exposure, or stock pressure require active management. The headline is not enough; the exceptions are driving the real decision.`;
+  } else {
+    reading = `The period shows controlled activity with no critical/high exception dominating the picture. Management should preserve collection discipline, stock availability and Finance controls rather than relax them.`;
+  }
+
+  if (audience === "auditor") {
+    return [
+      { code: "audit-analysis", title: `Audit Analysis · ${range}`, severity: urgent.some((item) => item.severity === "critical") ? "critical" : urgent.length ? "high" : "medium", message: `Period ${range}. Sales ${money(spare.revenue)}; collected ${money(spare.payments_received)} (${spare.collection_rate ?? 0}%); Finance outstanding ${money(finance.outstanding_amount)}; overdue ${money(finance.overdue_amount)}. Evidence pressure: ${spare.voided_sales_count ?? 0} voided sale(s), ${finance.reversals_in_period ?? 0} reversal/refund(s), ${finance.critical_risk_accounts ?? 0} critical-risk account(s). ${reading}`, action: "Reconcile source records, approvals, cut-off and supporting evidence around the highest-value exceptions before concluding." },
+      { code: "audit-advice", title: "Audit Decision & Warning", severity: urgent.length ? "high" : "medium", message: `${leadingSignal}. Treat this as an evidence-priority decision, not a conclusion of misconduct. The most important question is whether unusual values can be fully explained, approved and traced to the underlying record.`, action: `Prioritise ${urgent.slice(0, 2).map((item) => item.title).join(" and ") || "the highest-value exceptions"}; require documentary support, responsible-user history and documented closure.` },
+    ];
+  }
+
+  if (audience === "manager") {
+    return [
+      { code: "manager-analysis", title: `Management Analysis · ${range}`, severity: urgent.length ? "high" : "medium", message: `Period ${range}. Spare Parts ${money(spare.revenue)} sales, ${money(spare.payments_received)} collected (${spare.collection_rate ?? 0}%); Finance ${money(finance.outstanding_amount)} outstanding, ${money(finance.overdue_amount)} overdue; ${spare.out_of_stock_count ?? 0} zero-stock and ${spare.low_stock_count ?? 0} low-stock item(s). ${reading}`, action: "Use the period exceptions to set owners, dates and follow-up rather than treating the totals as the work itself." },
+      { code: "manager-advice", title: "Manager Decision & Warning", severity: urgent.some((item) => item.severity === "critical") ? "critical" : urgent.length ? "high" : "medium", message: `${leadingSignal}. ${health < 65 ? "Do not allow normal operations to hide the exceptions; intervention is required." : health < 85 ? "Do not let acceptable activity mask cash, stock or Finance weaknesses." : "Maintain the controls that produced the current position and watch for early deterioration."}`, action: urgent.slice(0, 2).map((item) => `${item.title}: ${item.action}`).join(" | ") || "Protect collections, replenish priority stock, reconcile Finance and assign clear owners for the next review cycle." },
+    ];
+  }
+
+  if (audience === "admin") {
+    return [
+      { code: "admin-analysis", title: `Admin Control Analysis · ${range}`, severity: urgent.length ? "high" : "medium", message: `Period ${range}. Spare Parts sales ${money(spare.revenue)}, collections ${money(spare.payments_received)} (${spare.collection_rate ?? 0}%); ${spare.voided_sales_count ?? 0} voided sale(s). Finance has ${money(finance.outstanding_amount)} outstanding and ${money(finance.overdue_amount)} overdue across ${finance.overdue_accounts ?? 0} account(s). ${reading}`, action: "Check that users, approvals, transaction records and notification trails support the figures before operational sign-off." },
+      { code: "admin-advice", title: "Admin Decision & Warning", severity: urgent.some((item) => item.severity === "critical") ? "critical" : urgent.length ? "high" : "medium", message: `${leadingSignal}. The operational priority is to remove the source of control friction—late collections, unresolved approvals, stock gaps or data/process weakness—before it becomes a larger business problem.`, action: urgent.slice(0, 2).map((item) => item.action).join(" | ") || "Keep permissions, approvals, customer records, stock integrity and notification delivery under routine control review." },
+    ];
+  }
+
+  return [
+    { code: "executive-analysis", title: `Executive Analysis · ${range}`, severity: health < 65 ? "critical" : health < 85 ? "high" : "medium", message: `Period ${range}. Spare Parts ${money(spare.revenue)} sales; ${money(spare.payments_received)} collected (${spare.collection_rate ?? 0}%); estimated revenue less recorded expenses ${money(spare.estimated_operating_result)}. Finance ${money(finance.outstanding_amount)} outstanding and ${money(finance.overdue_amount)} overdue. ${reading}`, action: "Read the period through cash conversion, risk concentration, stock availability and control exceptions—not revenue alone." },
+    { code: "executive-advice", title: "Executive Decision & Warning", severity: urgent.some((item) => item.severity === "critical") ? "critical" : urgent.length ? "high" : "medium", message: `${leadingSignal}. ${health < 65 ? "The evidence supports immediate intervention and close executive follow-through." : health < 85 ? "The evidence supports targeted intervention before the pressure becomes expensive." : "The evidence supports disciplined continuation with early-warning monitoring."}`, action: urgent.slice(0, 2).map((item) => `${item.title}: ${item.action}`).join(" | ") || "Keep cash collection, stock availability, Finance monitoring and independent reconciliation as protected management priorities." },
+  ];
+}'''
+
+          text = text[:start] + new_function + text[end:]
+
+          old = '''      const requests = [];
+      for (const recipient of selectedRecipients) {
+        for (const item of messagePack) {
+          requests.push(axiosClient.post("/notifications/manual", {
+            workspace_code: "group",
+            target_user_id: Number(recipient.id),
+            category: "executive",
+            severity: severityFor(item),
+            title: item.title,
+            message: `${item.message}\
+\
+Recommended action: ${item.action}\
+\
+Scope: Spare Parts + Installment Finance. This is management intelligence and review guidance; unusual signals are not findings of misconduct.`,
+            action_path: item.code === "executive-system" || item.code === "manager-system" || item.code === "audit-system" ? "/users-settings" : item.code.includes("finance") || item.code.includes("risk") ? "/equipment-installment-finance/collections" : "/group-executive-control",
+            source_reference: `executive-message-pack:${range.from}:${range.to}:${audience}:${item.code}`,
+          }));
+        }
+      }'''
+          new = '''      const requests = [];
+      for (const recipient of selectedRecipients) {
+        const recipientAudience = recipient.role === "auditor" ? "auditor" : recipient.role === "manager" ? "manager" : recipient.role === "admin" ? "admin" : audience;
+        const recipientMessagePack = buildMessagePack(intelligence, recipientAudience);
+        for (const item of recipientMessagePack) {
+          requests.push(axiosClient.post("/notifications/manual", {
+            workspace_code: "group",
+            target_user_id: Number(recipient.id),
+            category: "executive",
+            severity: severityFor(item),
+            title: item.title,
+            message: `${item.message}\
+\
+Recommended action: ${item.action}\
+\
+Scope: Spare Parts + Installment Finance. This is management intelligence and review guidance; unusual signals are not findings of misconduct.`,
+            action_path: recipientAudience === "auditor" || recipientAudience === "admin" ? "/group-executive-control" : recipientAudience === "manager" ? "/group-executive-control" : "/group-executive-control",
+            source_reference: `executive-message-pack:${range.from}:${range.to}:${recipientAudience}:${item.code}`,
+          }));
+        }
+      }'''
+          if old not in text:
+              raise SystemExit('Target dispatch block not found; refusing unsafe edit.')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Commit application change to production
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/components/ExecutiveBusinessIntelligenceSettingsPanel.jsx
+          git commit -m "fix(executive-intelligence): send two role-specific messages"
+          git push origin HEAD:production
