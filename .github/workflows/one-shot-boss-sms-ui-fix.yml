@@ -1,0 +1,45 @@
+name: One-shot boss SMS history patch
+
+on:
+  push:
+    paths:
+      - ".github/workflows/one-shot-boss-sms-ui-fix.yml"
+      - ".maintenance/fix-boss-sms-history"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ hashFiles('.maintenance/fix-boss-sms-history') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply narrow SMS history fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('frontend/src/pages/EquipmentSalesReportsPage.jsx')
+          text = path.read_text()
+          old = '<td>{row.last_error || row.message_preview}</td>'
+          new = '<td>{row.message_preview || "Message not available"}</td>\n                      <td>{row.last_error || "—"}</td>'
+          if old not in text:
+              raise SystemExit('Expected SMS history rendering expression was not found; no change made.')
+          text = text.replace(old, new, 1)
+          text = text.replace('<tr><th>Created</th><th>Type</th><th>Agreement / Receipt</th><th>Recipient</th><th>Status</th><th>Evidence</th></tr>', '<tr><th>Created</th><th>Type</th><th>Agreement / Receipt</th><th>Recipient</th><th>Status</th><th>Message</th><th>Delivery note</th></tr>', 1)
+          text = text.replace('<tr><td colSpan="6">No Finance SMS evidence yet.</td></tr>', '<tr><td colSpan="7">No Finance SMS evidence yet.</td></tr>', 1)
+          path.write_text(text)
+          PY
+
+          rm -f .maintenance/fix-boss-sms-history .github/workflows/one-shot-boss-sms-ui-fix.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/pages/EquipmentSalesReportsPage.jsx .maintenance/fix-boss-sms-history .github/workflows/one-shot-boss-sms-ui-fix.yml
+          git diff --cached --check
+          git commit -m "fix(finance): show exact boss SMS message in history"
+          git push origin HEAD:main
