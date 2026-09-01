@@ -267,12 +267,9 @@ router.get(
     try {
       const receipt = await renderThermalReceiptPdf(req.params.paymentId);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${receipt.filename}-thermal.pdf"`
-      );
+      res.setHeader("Content-Disposition", `inline; filename="${receipt.filename}-thermal.pdf"`);
       res.setHeader("Cache-Control", "private, no-store");
-      return res.send(buffer);
+      return res.send(receipt.buffer);
     } catch (error) {
       return sendError(res, error, "Could not generate the thermal installment receipt.");
     }
