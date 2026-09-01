@@ -377,5 +377,30 @@ router.get(
   }
 );
 
+if (process.env.CHALIN03_PHASE6_PORTFOLIO_SELF_TEST === "1") {
+  setTimeout(async () => {
+    try {
+      const dashboard = await getPortfolioDashboard({
+        dateFrom: "2026-01-01",
+        dateTo: "2026-09-01",
+      });
+      console.info("CHALIN03 Phase 6 portfolio self-test passed:", {
+        agreement_count: dashboard?.summary?.agreement_count,
+        reconciliation_attention_count: dashboard?.summary?.reconciliation_attention_count,
+      });
+    } catch (error) {
+      console.error("CHALIN03 Phase 6 portfolio self-test FAILED:", {
+        name: error?.name,
+        code: error?.code,
+        errno: error?.errno,
+        sqlState: error?.sqlState,
+        sqlMessage: error?.sqlMessage,
+        message: error?.message,
+        stack: error?.stack,
+      });
+    }
+  }, 1500);
+}
+
 module.exports = router;
 module.exports.REMINDER_CONFIRMATION = REMINDER_CONFIRMATION;
