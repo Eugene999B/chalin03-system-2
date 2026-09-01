@@ -65,7 +65,9 @@ async function loadSparePartsIntelligence(from, to) {
               COALESCE(SUM(quantity * cost_price),0) AS stock_cost_value,
               COALESCE(SUM(quantity * selling_price),0) AS stock_retail_value,
               COALESCE(SUM(CASE WHEN quantity <= low_stock_threshold THEN 1 ELSE 0 END),0) AS low_stock_count,
-              COALESCE(SUM(CASE WHEN quantity <= 0 THEN 1 ELSE 0 END),0) AS out_of_stock_count
+              COALESCE(SUM(CASE WHEN quantity <= 0 THEN 1 ELSE 0 END),0) AS out_of_stock_count,
+              COALESCE(SUM(CASE WHEN quantity > 0 AND quantity <= low_stock_threshold THEN quantity * cost_price ELSE 0 END),0) AS low_stock_cost_value,
+              COALESCE(SUM(CASE WHEN quantity > 0 AND quantity <= low_stock_threshold THEN quantity * selling_price ELSE 0 END),0) AS low_stock_retail_value
        FROM products WHERE is_active = TRUE`,
       []
     ),
@@ -86,13 +88,21 @@ async function loadSparePartsIntelligence(from, to) {
   const payments = number(sales.payments_received);
   const costs = number(expenses.expenses_total);
   const collectionRate = revenue > 0 ? (payments / revenue) * 100 : 0;
+  const outstandingSales = number(sales.sales_balance);
+  const expenseRatio = revenue > 0 ? (costs / revenue) * 100 : 0;
+  const operatingMargin = revenue > 0 ? ((revenue - costs) / revenue) * 100 : 0;
+  const voidedValue = number(sales.voided_sales_value);
+  const voidedValueRate = revenue > 0 ? (voidedValue / revenue) * 100 : 0;
+  const stockRetailAtRisk = number(products.low_stock_retail_value) + number(products.out_of_stock_count) * 0;
+  const stockCostAtRisk = number(products.low_stock_cost_value);
+  const stockPressureCount = number(products.low_stock_count) + number(products.out_of_stock_count);
   const signals = [];
 
   if (number(sales.voided_sales_count) > 0) {
     signals.push({
       severity: number(sales.voided_sales_count) >= 5 ? "high" : "medium",
       title: "Voided sales require review",
-      detail: `${number(sales.voided_sales_count)} sale(s) were voided, representing ${money(sales.voided_sales_value)} in recorded value. This is a control signal, not a finding of misconduct.`,
+      detail: `${number(sales.voided_sales_count)} sale(s) were voided, representing ${money(voidedValue)} in recorded value (${voidedValueRate.toFixed(1)}% of completed sales value). This is a control signal, not a finding of misconduct.`,
       action: "Review the supporting reasons, approvals and original receipts for the voided transactions.",
       path: "/sales",
     });
@@ -101,7 +111,7 @@ async function loadSparePartsIntelligence(from, to) {
     signals.push({
       severity: "high",
       title: "Revenue capacity may be constrained",
-      detail: `${number(products.out_of_stock_count)} product(s) are at zero stock, while ${number(products.low_stock_count)} are at or below restock level.`,
+      detail: `${number(products.out_of_stock_count)} product(s) are at zero stock, while ${number(products.low_stock_count)} are at or below restock level; low-stock items represent about ${money(products.low_stock_retail_value)} of retail value still on hand.`,
       action: "Prioritise critical replenishment before lost sales accumulate.",
       path: "/low-stock",
     });
@@ -120,19 +130,27 @@ async function loadSparePartsIntelligence(from, to) {
     revenue,
     sales_count: number(sales.sales_count),
     payments_received: payments,
-    outstanding_sales_balance: number(sales.sales_balance),
+    outstanding_sales_balance: outstandingSales,
+    uncollected_sales_value: outstandingSales,
+    collection_gap_rate: Number(Math.max(0, 100 - collectionRate).toFixed(1)),
     expenses: costs,
+    expense_ratio: Number(expenseRatio.toFixed(1)),
     estimated_operating_result: revenue - costs,
+    operating_margin_proxy: Number(operatingMargin.toFixed(1)),
     collection_rate: Number(collectionRate.toFixed(1)),
     product_count: number(products.product_count),
     stock_cost_value: number(products.stock_cost_value),
     stock_retail_value: number(products.stock_retail_value),
+    stock_cost_at_low_stock: stockCostAtRisk,
+    stock_retail_at_low_stock: number(products.low_stock_retail_value),
     low_stock_count: number(products.low_stock_count),
     out_of_stock_count: number(products.out_of_stock_count),
+    stock_pressure_count: stockPressureCount,
     overdue_debt_accounts: number(debts.overdue_accounts),
     overdue_debt_balance: number(debts.overdue_balance),
     voided_sales_count: number(sales.voided_sales_count),
-    voided_sales_value: number(sales.voided_sales_value),
+    voided_sales_value: voidedValue,
+    voided_sales_value_rate: Number(voidedValueRate.toFixed(1)),
     signals,
   };
 }
@@ -218,21 +236,29 @@ async function loadFinanceSignals(from, to) {
     }
   }
 
+  const outstanding = number(summary.outstanding_amount);
+  const overdue = number(summary.overdue_amount);
+  const overdueShare = outstanding > 0 ? (overdue / outstanding) * 100 : 0;
+  const due7 = number(summary.due_next_7_days);
+  const due7Share = outstanding > 0 ? (due7 / outstanding) * 100 : 0;
+
   return {
     active_accounts: number(summary.active_accounts),
     financed_amount: number(summary.financed_amount),
     collected_amount: number(summary.collected_amount),
-    outstanding_amount: number(summary.outstanding_amount),
-    overdue_amount: number(summary.overdue_amount),
+    outstanding_amount: outstanding,
+    overdue_amount: overdue,
     overdue_accounts: number(summary.overdue_accounts),
     defaulted_accounts: number(summary.defaulted_accounts),
     critical_risk_accounts: number(summary.critical_risk_accounts),
     high_risk_accounts: number(summary.high_risk_accounts),
     due_today_accounts: number(summary.due_today_accounts),
-    due_next_7_days: number(summary.due_next_7_days),
+    due_next_7_days: due7,
+    due_next_7_days_share: Number(due7Share.toFixed(1)),
     due_next_30_days: number(summary.due_next_30_days),
     collection_rate: number(summary.collection_rate),
     portfolio_at_risk_rate: number(summary.portfolio_at_risk_rate),
+    overdue_share_of_outstanding: Number(overdueShare.toFixed(1)),
     payments_in_period: paymentActivity.payments,
     payments_amount_in_period: paymentActivity.amount,
     reversals_in_period: paymentActivity.reversals,
@@ -256,10 +282,13 @@ function buildActions(spare, finance) {
   const actions = [...spare.signals, ...finance.signals]
     .sort((a, b) => ({ critical: 0, high: 1, medium: 2, low: 3 }[a.severity] ?? 9) - ({ critical: 0, high: 1, medium: 2, low: 3 }[b.severity] ?? 9));
   if (spare.collection_rate < 80 && spare.revenue > 0) {
-    actions.push({ severity: "high", title: "Improve Spare Parts cash conversion", detail: `Only ${spare.collection_rate.toFixed(1)}% of recorded Spare Parts sales value was collected in the period.`, action: "Review credit sales ageing and top outstanding balances.", path: "/debts" });
+    actions.push({ severity: "high", title: "Improve Spare Parts cash conversion", detail: `Only ${spare.collection_rate.toFixed(1)}% of recorded Spare Parts sales value was collected in the period, leaving about ${money(spare.uncollected_sales_value)} uncollected.`, action: "Review the largest outstanding sales balances and assign focused collection follow-up.", path: "/debts" });
   }
   if (finance.portfolio_at_risk_rate >= 20) {
-    actions.push({ severity: "high", title: "Protect the Finance book", detail: `${finance.portfolio_at_risk_rate.toFixed(1)}% of outstanding Finance exposure is currently overdue.`, action: "Escalate the highest-value overdue agreements and record recovery decisions.", path: "/equipment-installment-finance/collections" });
+    actions.push({ severity: "high", title: "Protect the Finance book", detail: `${finance.portfolio_at_risk_rate.toFixed(1)}% of current outstanding Finance exposure is overdue.`, action: "Escalate the highest-value overdue agreements and record recovery decisions.", path: "/equipment-installment-finance/collections" });
+  }
+  if (spare.expense_ratio > 0 && spare.operating_margin_proxy < 0) {
+    actions.push({ severity: "high", title: "Recorded expenses exceed sales value", detail: `Recorded expenses are ${spare.expense_ratio.toFixed(1)}% of completed sales value, producing a negative operating-result proxy.`, action: "Review major expense lines and confirm which costs are necessary, exceptional or recoverable.", path: "/finance" });
   }
   if (!actions.length) actions.push({ severity: "low", title: "No urgent exception detected", detail: "The monitored Spare Parts and Installment indicators are currently within the configured review thresholds.", action: "Keep daily reconciliation, collection follow-up and independent review disciplined.", path: "/group-executive-control" });
   return actions.slice(0, 10);
@@ -268,21 +297,31 @@ function buildActions(spare, finance) {
 function buildAudienceMessage(intelligence, audience) {
   const { range, spare_parts: spare, installment_finance: finance, actions } = intelligence;
   const urgent = actions.filter((item) => ["critical", "high"].includes(item.severity));
-  const audienceName = audience === "auditor" ? "Audit briefing" : audience === "manager" ? "Management action briefing" : "Boss / Executive briefing";
+  const audienceName = audience === "auditor" ? "Audit evidence briefing" : audience === "manager" ? "Management decision briefing" : "Boss / Executive intelligence briefing";
+  const collectionGap = spare.uncollected_sales_value;
+  const financeRiskCount = finance.critical_risk_accounts + finance.high_risk_accounts;
+  const expenseSentence = spare.revenue > 0
+    ? `${money(spare.expenses)} recorded expenses consume ${spare.expense_ratio.toFixed(1)}% of sales, leaving ${money(spare.estimated_operating_result)} as the revenue-less-recorded-expense proxy.`
+    : `Recorded expenses are ${money(spare.expenses)} against no completed sales value in the selected period.`;
+  const stockSentence = `${spare.out_of_stock_count} zero-stock and ${spare.low_stock_count} low-stock product(s); ${money(spare.stock_retail_at_low_stock)} of retail value remains in low-stock items.`;
+  const financeSentence = `${finance.active_accounts} active Finance agreement(s) currently carry ${money(finance.outstanding_amount)} outstanding; ${money(finance.overdue_amount)} is overdue across ${finance.overdue_accounts} account(s), with ${financeRiskCount} high/critical-risk account(s).`;
   const lines = [
     `${audienceName}: ${range.from} to ${range.to}.`,
-    `Spare Parts: ${money(spare.revenue)} completed sales across ${spare.sales_count} sale(s); ${money(spare.payments_received)} collected (${spare.collection_rate.toFixed(1)}% collection); ${money(spare.estimated_operating_result)} estimated revenue less recorded expenses; ${spare.low_stock_count} low-stock and ${spare.out_of_stock_count} zero-stock product(s).`,
-    `Installment Finance: ${finance.active_accounts} active agreement(s); ${money(finance.outstanding_amount)} outstanding; ${money(finance.overdue_amount)} overdue; ${finance.overdue_accounts} overdue account(s); ${finance.critical_risk_accounts + finance.high_risk_accounts} high/critical-risk account(s); ${money(finance.due_next_7_days)} due in the next 7 days.`,
+    `Sales evidence: ${money(spare.revenue)} across ${spare.sales_count} completed sale(s); ${money(spare.payments_received)} collected (${spare.collection_rate.toFixed(1)}%), leaving ${money(collectionGap)} uncollected. ${expenseSentence}`,
+    `Operating evidence: ${stockSentence} ${spare.voided_sales_count} voided sale(s) account for ${money(spare.voided_sales_value)} recorded value (${spare.voided_sales_value_rate.toFixed(1)}% of completed sales).`,
+    `Finance evidence: ${financeSentence} ${money(finance.due_next_7_days)} is due within 7 days (${finance.due_next_7_days_share.toFixed(1)}% of current outstanding).`,
   ];
   if (audience === "auditor") {
-    lines.push(`Control focus: ${finance.reversals_in_period} Finance reversal/refund record(s) in the period and ${spare.voided_sales_count} Spare Parts voided sale(s). These are review indicators, not accusations.`);
-    lines.push(`Audit priority: ${urgent.length ? urgent.map((item) => `${item.title} — ${item.action}`).join(" ") : "No urgent control exception is currently surfaced."}`);
-    lines.push("Confirm transaction evidence, approval history and supporting documents before reaching a conclusion.");
+    lines.push(`Control interpretation: ${finance.reversals_in_period} Finance reversal/refund record(s) occurred in the selected period, and voids/stock pressure are review indicators requiring traceable evidence.`);
+    lines.push(`Audit priority: ${urgent.length ? urgent.slice(0, 3).map((item) => `${item.title} — ${item.action}`).join(" ") : "No urgent control exception is currently surfaced."}`);
+    lines.push("Conclusion standard: confirm transaction evidence, approval history, cut-off and supporting documents before reaching a conclusion.");
   } else if (audience === "manager") {
-    lines.push(`What needs to happen next: ${actions.slice(0, 5).map((item) => `${item.title}: ${item.action}`).join(" ")}`);
+    lines.push(`Management reading: ${spare.collection_rate < 80 ? `cash conversion is below 80%, so ${money(collectionGap)} should be treated as a collection opportunity rather than passive receivable.` : "cash conversion is currently acceptable, but still needs trend monitoring."} ${finance.overdue_amount > 0 ? `Finance also carries ${money(finance.overdue_amount)} in arrears.` : "Finance currently has no overdue balance."}`);
+    lines.push(`Management decisions: ${urgent.length ? urgent.slice(0, 3).map((item) => `${item.title}: ${item.action}`).join(" ") : "Protect collections, stock availability and Finance discipline; assign owners to emerging exceptions."}`);
   } else {
-    lines.push(`What deserves your attention now: ${urgent.length ? urgent.map((item) => `${item.title}. ${item.detail} Decision: ${item.action}`).join(" ") : "Continue protecting cash collection, stock availability and disciplined Finance follow-up."}`);
-    lines.push("This briefing is designed to answer four executive questions: what is happening, why it matters, what looks unusual, and what decision should happen next. Risk signals are review prompts, not accusations.");
+    lines.push(`Executive reading: the key question is where value is exposed. ${money(collectionGap)} remains uncollected from sales, while ${money(finance.outstanding_amount)} sits in the current Finance portfolio. ${finance.overdue_amount > 0 ? `${money(finance.overdue_amount)} is already overdue.` : "Finance arrears are currently zero, so the portfolio is not presently in arrears."}`);
+    lines.push(`Executive decision focus: ${urgent.length ? urgent.slice(0, 3).map((item) => `${item.title}. Decision: ${item.action}`).join(" ") : "Maintain cash conversion, protect stock availability and prevent today's controlled Finance position from deteriorating."}`);
+    lines.push("Risk signals are evidence-led review prompts, not accusations; decisions should follow the underlying records and approvals.");
   }
   return lines.join(" ");
 }
