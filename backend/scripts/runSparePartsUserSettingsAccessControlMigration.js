@@ -39,25 +39,23 @@ async function run() {
       )
     `);
 
-    const [[existingMigration]] = await connection.query(
-      "SELECT id FROM schema_migrations WHERE migration_name = ? LIMIT 1",
-      [MIGRATION_NAME]
-    );
-    if (existingMigration) {
-      console.log(JSON.stringify({ migration: MIGRATION_NAME, status: "already_applied" }));
-      return;
-    }
-
     const [columns] = await connection.query(
       "SHOW COLUMNS FROM settings LIKE ?",
       [COLUMN_NAME]
     );
 
+    let columnStatus = "present";
     if (columns.length === 0) {
       await connection.query(
-        `ALTER TABLE settings ADD COLUMN ${COLUMN_NAME} BOOLEAN NOT NULL DEFAULT FALSE AFTER receipt_prefix`
+        `ALTER TABLE settings ADD COLUMN ${COLUMN_NAME} TINYINT(1) NOT NULL DEFAULT 0 AFTER receipt_prefix`
       );
+      columnStatus = "added";
     }
+
+    const [[existingMigration]] = await connection.query(
+      "SELECT id FROM schema_migrations WHERE migration_name = ? LIMIT 1",
+      [MIGRATION_NAME]
+    );
 
     await connection.query(
       `INSERT INTO schema_migrations (migration_name, description)
@@ -71,9 +69,10 @@ async function run() {
 
     console.log(JSON.stringify({
       migration: MIGRATION_NAME,
-      status: "applied",
+      status: existingMigration ? "verified_and_repaired" : "applied",
       column: COLUMN_NAME,
-      default_value: false,
+      column_status: columnStatus,
+      default_value: 0,
     }));
   } finally {
     await connection.end();
