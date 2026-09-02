@@ -1,0 +1,80 @@
+/* Active Installments layout: keep the page full-width and make the register independently scrollable. */
+[data-testid="finance-active-installments"],
+.finance-accounts {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  overflow: visible;
+}
+
+[data-testid="finance-active-installments"] .finance-accounts__panel,
+.finance-accounts .finance-accounts__panel {
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+/* The account register is its own browsing surface, so lower accounts remain reachable
+   even when the surrounding workspace/viewport is height-constrained. */
+[data-testid="finance-active-installments"] .finance-accounts__grid,
+.finance-accounts .finance-accounts__grid {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  max-height: min(68dvh, 56rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0.2rem 0.2rem 0.45rem 0.2rem;
+  align-items: stretch;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+[data-testid="finance-active-installments"] .finance-accounts__grid > .finance-accounts__card,
+.finance-accounts .finance-accounts__grid > .finance-accounts__card {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  align-self: stretch;
+}
+
+/* Give the register a comfortable scrollbar without changing the desktop palette. */
+[data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar,
+.finance-accounts .finance-accounts__grid::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar-track,
+.finance-accounts .finance-accounts__grid::-webkit-scrollbar-track {
+  border-radius: 999px;
+}
+
+[data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar-thumb,
+.finance-accounts .finance-accounts__grid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(23, 99, 60, 0.36);
+}
+
+[data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar-thumb:hover,
+.finance-accounts .finance-accounts__grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(23, 99, 60, 0.56);
+}
+
+@media (max-width: 1180px) {
+  [data-testid="finance-active-installments"] .finance-accounts__grid,
+  .finance-accounts .finance-accounts__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: min(66dvh, 52rem);
+  }
+}
+
+@media (max-width: 760px) {
+  [data-testid="finance-active-installments"] .finance-accounts__grid,
+  .finance-accounts .finance-accounts__grid {
+    grid-template-columns: 1fr;
+    max-height: min(62dvh, 40rem);
+    padding-right: 0.15rem;
+  }
+}
