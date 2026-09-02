@@ -1,0 +1,1 @@
+Active Installments scroll-chain follow-up: page-level overflow remains reachable and the register uses a dedicated visible vertical scroll area on desktop. Frontend-only change.
