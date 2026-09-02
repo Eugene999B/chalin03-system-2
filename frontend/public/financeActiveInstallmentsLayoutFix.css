@@ -1,72 +1,92 @@
-/* Active Installments layout: keep the page full-width and make the register independently scrollable. */
+/* Active Installments layout: the page and the register must both remain reachable. */
+
+/* Do not let a surrounding workspace create a clipped scroll chain for this page. */
+html:has([data-testid="finance-active-installments"]),
+body:has([data-testid="finance-active-installments"]),
+.bwl-shell:has([data-testid="finance-active-installments"]),
+.bwl-shell:has([data-testid="finance-active-installments"]) .bwl-main,
+.bwl-shell:has([data-testid="finance-active-installments"]) .bwl-content {
+  min-height: 100vh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-y: visible !important;
+  overflow-x: clip;
+}
+
 [data-testid="finance-active-installments"],
 .finance-accounts {
   width: 100%;
   max-width: none;
   min-width: 0;
-  overflow: visible;
+  overflow: visible !important;
 }
 
 [data-testid="finance-active-installments"] .finance-accounts__panel,
 .finance-accounts .finance-accounts__panel {
   width: 100%;
+  max-width: none;
   min-width: 0;
-  overflow: visible;
+  overflow: visible !important;
 }
 
-/* The account register is its own browsing surface, so lower accounts remain reachable
-   even when the surrounding workspace/viewport is height-constrained. */
+/* The register is deliberately a browsing surface: all accounts stay inside this area
+   and can be reached with an obvious vertical scrollbar. */
 [data-testid="finance-active-installments"] .finance-accounts__grid,
 .finance-accounts .finance-accounts__grid {
   width: 100%;
   max-width: none;
   min-width: 0;
-  min-height: 0;
-  max-height: min(68dvh, 56rem);
-  overflow-y: auto;
-  overflow-x: hidden;
+  height: min(64dvh, 54rem);
+  max-height: min(64dvh, 54rem);
+  min-height: 24rem;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  padding: 0.2rem 0.2rem 0.45rem 0.2rem;
+  padding: 0.35rem 0.75rem 0.75rem 0.2rem;
   align-items: stretch;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
 }
 
 [data-testid="finance-active-installments"] .finance-accounts__grid > .finance-accounts__card,
 .finance-accounts .finance-accounts__grid > .finance-accounts__card {
   width: 100%;
   min-width: 0;
-  height: 100%;
+  height: auto;
+  min-height: 100%;
   align-self: stretch;
 }
 
-/* Give the register a comfortable scrollbar without changing the desktop palette. */
 [data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar,
 .finance-accounts .finance-accounts__grid::-webkit-scrollbar {
-  width: 10px;
+  width: 12px;
 }
 
 [data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar-track,
 .finance-accounts .finance-accounts__grid::-webkit-scrollbar-track {
   border-radius: 999px;
+  background: rgba(23, 99, 60, 0.08);
 }
 
 [data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar-thumb,
 .finance-accounts .finance-accounts__grid::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(23, 99, 60, 0.36);
+  background: rgba(23, 99, 60, 0.48);
+  background-clip: padding-box;
 }
 
 [data-testid="finance-active-installments"] .finance-accounts__grid::-webkit-scrollbar-thumb:hover,
 .finance-accounts .finance-accounts__grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(23, 99, 60, 0.56);
+  background: rgba(23, 99, 60, 0.68);
+  background-clip: padding-box;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1280px) {
   [data-testid="finance-active-installments"] .finance-accounts__grid,
   .finance-accounts .finance-accounts__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: min(66dvh, 52rem);
   }
 }
 
@@ -74,7 +94,17 @@
   [data-testid="finance-active-installments"] .finance-accounts__grid,
   .finance-accounts .finance-accounts__grid {
     grid-template-columns: 1fr;
-    max-height: min(62dvh, 40rem);
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow-y: visible !important;
     padding-right: 0.15rem;
+  }
+
+  html:has([data-testid="finance-active-installments"]),
+  body:has([data-testid="finance-active-installments"]),
+  .bwl-shell:has([data-testid="finance-active-installments"]) .bwl-main,
+  .bwl-shell:has([data-testid="finance-active-installments"]) .bwl-content {
+    overflow-y: visible !important;
   }
 }
