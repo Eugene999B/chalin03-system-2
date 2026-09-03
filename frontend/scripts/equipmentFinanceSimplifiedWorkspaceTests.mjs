@@ -42,8 +42,9 @@ assert.match(documentCentre, /accountSearch/);
 assert.match(documentCentre, /Search Finance document accounts/);
 assert.match(documentCentre, /No agreement selected/);
 assert.match(documentCentre, /src="\/chalin03-logo\.png"/);
-assert.match(documentCentre, /setSelectedPaymentId\(""\)/);
-assert.doesNotMatch(documentCentre, /nextAccounts\[0\]/);
+assert.match(documentCentre, /const validPayments =/);
+assert.match(documentCentre, /setSelectedPaymentId\(\(current\) =>/);
+assert.match(documentCentre, /latest valid committed payment is selected automatically/i);
 assert.doesNotMatch(documentCentre, /payments\?\.at\(-1\)/);
 assert.doesNotMatch(documentCentre, />C03<\/div>/);
 
