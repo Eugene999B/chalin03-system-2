@@ -23,14 +23,24 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           path = Path("frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx")
           text = path.read_text(encoding="utf-8")
-          old = '''        {definition.formats.includes("thermal") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "thermal")}>\n            {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}\n          </button>\n        ) : null}\n        {!availability.available && recoveryHref ? ('''
-          new = '''        {definition.formats.includes("thermal") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "thermal")}>\n            {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}\n          </button>\n        ) : null}\n        {definition.formats.includes("print") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "print")}>\n            {working === `${definition.code}:print` ? "Preparing…" : "Print"}\n          </button>\n        ) : null}\n        {!availability.available && recoveryHref ? ('''
-          if old not in text:
-              raise SystemExit("Expected DocumentCard action block was not found; refusing to modify production.")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          print_block = '''        {definition.formats.includes("print") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "print")}>\n            {working === `${definition.code}:print` ? "Preparing…" : "Print"}\n          </button>\n        ) : null}\n'''
+
+          if 'onIssue(definition.code, "print")' not in text:
+              pattern = r'(        \{definition\.formats\.includes\("thermal"\) \? \([\s\S]*?        \) : null\}\n)'
+              match = re.search(pattern, text)
+              if not match:
+                  raise SystemExit("Could not locate the thermal document action block; refusing to modify production.")
+              text = text[:match.end()] + print_block + text[match.end():]
+          else:
+              print("Print action already present; no duplicate inserted.")
+
+          if text.count('onIssue(definition.code, "print")') != 1:
+              raise SystemExit("Print action count is not exactly one; refusing to commit.")
+          path.write_text(text, encoding="utf-8")
       - name: Verify patch landed exactly once
         run: |
           test "$(grep -c 'definition.formats.includes(\"print\")' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx)" -eq 1
