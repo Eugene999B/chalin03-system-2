@@ -8,7 +8,19 @@ const BATCH_SIZE = 100;
 const FINANCE_WORKSPACES = new Set(["equipment_installment_finance"]);
 const FINANCE_CATALOGUE_ACTIONS = new Set([
   "equipment_catalogue_asset_created",
-  "equipment_catalogue_asset_updated",
+]);
+const IMPORTANT_FINANCE_ACTIONS = new Set([
+  "EQUIPMENT_CREDIT_APPLICATION_ADMIN_APPROVED",
+  "EQUIPMENT_FINANCE_CUSTOMER_CREATED",
+  "EQUIPMENT_FINANCE_MACHINE_REGISTERED",
+  "EQUIPMENT_FINANCE_COLLECTION_RECORDED",
+  "EQUIPMENT_FINANCE_DEPOSIT_RECORDED",
+  "EQUIPMENT_FINANCE_AGREEMENT_ACTIVATED",
+]);
+const NOISY_FINANCE_ACTIONS = new Set([
+  "EQUIPMENT_FINANCE_MACHINE_UPDATED",
+  "EQUIPMENT_FINANCE_MANAGEMENT_EXPORT_GENERATED",
+  "EQUIPMENT_FINANCE_INSTALLMENT_STARTED",
 ]);
 
 function clean(value, max = 240) {
@@ -39,29 +51,33 @@ function hasAmountSignal(metadata = {}, details = "") {
 }
 
 function isFinanceActivity(row) {
-  const action = clean(row?.action, 200).toLowerCase();
+  const action = clean(row?.action, 200);
+  const actionLower = action.toLowerCase();
   const actionType = clean(row?.action_type, 200).toLowerCase();
   const entityType = clean(row?.entity_type, 120).toLowerCase();
   const workspace = clean(row?.workspace_code, 100).toLowerCase();
   const details = clean(row?.details, 1000);
+  const metadata = parseMetadata(row?.metadata_json);
 
-  if (FINANCE_CATALOGUE_ACTIONS.has(action)) return true;
-  if (workspace === "equipment_installment_finance" && /(finance|installment|customer|payment|deposit|agreement|machine|equipment)/i.test(`${action} ${actionType} ${entityType} ${details}`)) return true;
-  if (/equipment_finance|equipment\.finance|installment/.test(`${action} ${actionType} ${entityType}`)) return true;
-  if (workspace !== "equipment_installment_finance") return false;
-  if (entityType.includes("equipment") || entityType === "fleet_asset" || entityType === "equipment_sale_payment" || entityType === "equipment_sale_agreement") {
-    return /create|created|register|registered|update|updated|edit|edited|payment|deposit|agreement|reserve|reservation/i.test(`${action} ${actionType}`);
+  if (NOISY_FINANCE_ACTIONS.has(action)) return false;
+  if (IMPORTANT_FINANCE_ACTIONS.has(action)) return true;
+  if (FINANCE_CATALOGUE_ACTIONS.has(actionLower)) return true;
+  if (workspace === "equipment_installment_finance") {
+    const kind = eventKind(row, metadata);
+    if (["machine_created", "customer_created", "deposit", "payment", "agreement"].includes(kind)) return true;
+    if (kind === "edited") return hasAmountSignal(metadata, details);
   }
-  if (/customer/.test(`${action} ${actionType} ${entityType}`)) return true;
+  if (/equipment_finance|equipment\.finance|installment/.test(`${actionLower} ${actionType} ${entityType}`)) return false;
   return false;
 }
 
 function eventKind(row, metadata) {
   const text = `${clean(row?.action, 220)} ${clean(row?.action_type, 220)} ${clean(row?.entity_type, 140)} ${clean(row?.details, 1000)}`.toLowerCase();
+  if (/admin.*approv|credit.*application.*approv/.test(text)) return "application_approved";
   if (/machine.*(register|creat)|equipment.*(register|creat)|equipment_catalogue_asset_created|_machine_registered|machine\.register/.test(text)) return "machine_created";
   if (/customer.*(creat|register)|customer\.creat/.test(text)) return "customer_created";
   if (/opening.*deposit|deposit.*reservation|deposit/.test(text)) return "deposit";
-  if (/payment/.test(text) || String(row?.entity_type || "").toLowerCase() === "equipment_sale_payment") return "payment";
+  if (/payment|collection/.test(text) || String(row?.entity_type || "").toLowerCase() === "equipment_sale_payment") return "payment";
   if (/agreement.*(activat|creat)|agreement\.activat/.test(text)) return "agreement";
   if (/update|updated|edit|edited|change|changed|setting/.test(text) || hasAmountSignal(metadata, row?.details)) return "edited";
   return "finance_activity";
@@ -95,6 +111,8 @@ function buildActivityMessage(row) {
   const amountText = amount === null ? "" : money(amount) ? `Amount: ${money(amount)}.` : `Amount: ${clean(amount, 60)}.`;
 
   switch (kind) {
+    case "application_approved":
+      return ["CHALIN 03 — Installment Finance Alert", `Credit application approved: ${agreement || subject}.`, customer ? `Customer: ${customer}.` : null, asset ? `Equipment: ${asset}.` : null, actor || null].filter(Boolean).join(" ");
     case "machine_created":
       return ["CHALIN 03 — Installment Finance Alert", `New excavator/equipment registered: ${subject}.${customer ? ` Customer: ${customer}.` : ""}${amountText}`, details || null, actor || null].filter(Boolean).join(" ");
     case "customer_created":
@@ -106,7 +124,7 @@ function buildActivityMessage(row) {
     case "agreement":
       return ["CHALIN 03 — Installment Finance Alert", `Installment agreement activated: ${subject}.${customer ? ` Customer: ${customer}.` : ""}`, asset ? `Equipment: ${asset}.` : null, amountText || null, actor || null].filter(Boolean).join(" ");
     case "edited":
-      return ["CHALIN 03 — Installment Finance Alert", `Finance record edited: ${subject}.`, fieldText ? `Changed: ${fieldText}.` : null, hasAmountSignal(metadata, details) ? "Amount/financial field was involved." : null, details && !fieldText ? details : null, actor || null].filter(Boolean).join(" ");
+      return ["CHALIN 03 — Installment Finance Alert", `Finance record updated: ${subject}.`, fieldText ? `Changed: ${fieldText}.` : null, hasAmountSignal(metadata, details) ? "Amount/financial field was involved." : null, details && !fieldText ? details : null, actor || null].filter(Boolean).join(" ");
     default:
       return ["CHALIN 03 — Installment Finance Alert", details || `Finance activity recorded for ${subject}.`, actor || null].filter(Boolean).join(" ");
   }
@@ -135,11 +153,12 @@ async function deliverFinanceActivityBossAlert(row) {
     console.warn(`Finance boss alert skipped for activity ${row.id}: enabled=${settings.enabled} phone_configured=${Boolean(settings.phone)}.`);
     return;
   }
+  const message = buildActivityMessage(row);
   const result = await sendSmsAlertToPhone({
     branchId: Number(row.branch_id || 1),
     phone: settings.phone,
-    message: buildActivityMessage(row),
-    logMessage: `Boss alert: ${clean(row.action || row.entity_type || "Finance activity", 360)}.`,
+    message,
+    logMessage: message,
     smsType: "equipment_finance_boss_alert",
     sentBy: row.user_id || null,
     sourceReference,
@@ -210,11 +229,12 @@ async function deliverEquipmentCreatedBossAlert(request) {
   const assetCode = clean(body.asset_code, 50).toUpperCase();
   const assetName = clean(body.asset_name, 150);
   const identity = [assetCode, assetName].filter(Boolean).join(" — ") || "New equipment";
+  const message = `CHALIN 03 — Installment Finance Alert New excavator/equipment registered: ${identity}.`;
   await sendSmsAlertToPhone({
     branchId: Number(request?.user?.branch_id || 1),
     phone: settings.phone,
-    message: `CHALIN 03 — Installment Finance Alert New excavator/equipment registered: ${identity}.`,
-    logMessage: `Boss alert: new equipment ${identity}.`,
+    message,
+    logMessage: message,
     smsType: "equipment_finance_boss_alert",
     sentBy: request?.user?.id || null,
     sourceReference: `equipment-created:${assetCode || assetName || Date.now()}`,
