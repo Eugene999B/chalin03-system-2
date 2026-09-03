@@ -3,7 +3,7 @@ const pool = require("../config/db");
 const SORT_COLUMNS = Object.freeze({
   payment_date: "payment.payment_date",
   amount: "payment.amount",
-  customer_name: "customer.name_for_sort",
+  customer_name: "agreement.customer_name_snapshot",
   agreement_number: "agreement.agreement_number",
   receipt_number: "payment.receipt_number",
 });
@@ -45,44 +45,27 @@ function normalizeOptions(input = {}) {
   if (!VALID_STATUSES.has(status)) {
     throw new EquipmentFinancePaymentHistoryError(400, "Payment status must be active, voided or all.", "INVALID_PAYMENT_HISTORY_STATUS");
   }
-
   const paymentMethod = text(input.paymentMethod, 20).toLowerCase();
   if (paymentMethod && !VALID_METHODS.has(paymentMethod)) {
     throw new EquipmentFinancePaymentHistoryError(400, "Payment method is not supported.", "INVALID_PAYMENT_HISTORY_METHOD");
   }
-
   const paymentCategory = text(input.paymentCategory, 30).toLowerCase();
   if (paymentCategory && !VALID_CATEGORIES.has(paymentCategory)) {
     throw new EquipmentFinancePaymentHistoryError(400, "Payment category is not supported.", "INVALID_PAYMENT_HISTORY_CATEGORY");
   }
-
   const sortBy = text(input.sortBy, 30).toLowerCase() || "payment_date";
   if (!Object.prototype.hasOwnProperty.call(SORT_COLUMNS, sortBy)) {
     throw new EquipmentFinancePaymentHistoryError(400, "Payment history sort field is not supported.", "INVALID_PAYMENT_HISTORY_SORT");
   }
-
   const sortDir = text(input.sortDir, 4).toLowerCase() === "asc" ? "ASC" : "DESC";
   const page = Math.min(100000, positiveInteger(input.page, 1));
   const pageSize = Math.min(100, Math.max(10, positiveInteger(input.pageSize, 25)));
-
   const dateFrom = date(input.dateFrom, "date_from");
   const dateTo = date(input.dateTo, "date_to");
   if (dateFrom && dateTo && dateFrom > dateTo) {
     throw new EquipmentFinancePaymentHistoryError(400, "From date cannot be after To date.", "INVALID_PAYMENT_HISTORY_DATE_RANGE");
   }
-
-  return {
-    search: text(input.search),
-    dateFrom,
-    dateTo,
-    paymentMethod,
-    paymentCategory,
-    status,
-    sortBy,
-    sortDir,
-    page,
-    pageSize,
-  };
+  return { search: text(input.search), dateFrom, dateTo, paymentMethod, paymentCategory, status, sortBy, sortDir, page, pageSize };
 }
 
 function paymentHistoryWhere(options) {
@@ -115,15 +98,13 @@ function paymentHistoryWhere(options) {
       payment.receipt_number LIKE ? OR
       payment.payment_number LIKE ? OR
       agreement.agreement_number LIKE ? OR
-      COALESCE(customer.full_name, customer.name, '') LIKE ? OR
-      COALESCE(customer.phone, customer.phone_number, '') LIKE ? OR
       COALESCE(agreement.customer_name_snapshot, '') LIKE ? OR
       COALESCE(agreement.customer_phone_snapshot, '') LIKE ? OR
       COALESCE(agreement.asset_code_snapshot, '') LIKE ? OR
       COALESCE(agreement.asset_name_snapshot, '') LIKE ? OR
       COALESCE(payment.reference_number, '') LIKE ?
     )`);
-    params.push(like, like, like, like, like, like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like);
   }
   return { clauses, params };
 }
@@ -145,10 +126,10 @@ function mapPayment(row) {
     voided_at: row.voided_at || null,
     received_by_name: row.received_by_name || "",
     agreement_number: row.agreement_number || "",
-    customer_name: row.customer_name || row.customer_name_snapshot || "",
-    customer_phone: row.customer_phone || row.customer_phone_snapshot || "",
-    asset_code: row.asset_code || row.asset_code_snapshot || "",
-    asset_name: row.asset_name || row.asset_name_snapshot || "",
+    customer_name: row.customer_name_snapshot || "",
+    customer_phone: row.customer_phone_snapshot || "",
+    asset_code: row.asset_code_snapshot || "",
+    asset_name: row.asset_name_snapshot || "",
   };
 }
 
@@ -165,13 +146,10 @@ async function listPaymentHistory(input = {}, connection = pool) {
     SELECT COUNT(*) AS total
     FROM equipment_sale_payments payment
     INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
-    LEFT JOIN hire_customers customer ON customer.id = payment.customer_id
     WHERE ${where}
   `;
-
   const summarySql = `
-    SELECT
-      COUNT(*) AS total_count,
+    SELECT COUNT(*) AS total_count,
       SUM(CASE WHEN COALESCE(payment.is_voided, 0) = 0 THEN 1 ELSE 0 END) AS active_count,
       SUM(CASE WHEN COALESCE(payment.is_voided, 0) = 1 THEN 1 ELSE 0 END) AS voided_count,
       COALESCE(SUM(CASE WHEN COALESCE(payment.is_voided, 0) = 0 THEN payment.amount ELSE 0 END), 0) AS active_total,
@@ -179,41 +157,20 @@ async function listPaymentHistory(input = {}, connection = pool) {
       MAX(payment.payment_date) AS latest_payment_date
     FROM equipment_sale_payments payment
     INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
-    LEFT JOIN hire_customers customer ON customer.id = payment.customer_id
     WHERE ${where}
   `;
-
   const dataSql = `
-    SELECT
-      payment.id,
-      payment.agreement_id,
-      payment.customer_id,
-      payment.receipt_number,
-      payment.payment_number,
-      payment.payment_date,
-      payment.amount,
-      payment.payment_method,
-      payment.payment_category,
-      payment.reference_number,
-      payment.notes,
-      payment.is_voided,
-      payment.voided_at,
+    SELECT payment.id, payment.agreement_id, payment.customer_id,
+      payment.receipt_number, payment.payment_number, payment.payment_date,
+      payment.amount, payment.payment_method, payment.payment_category,
+      payment.reference_number, payment.notes, payment.is_voided, payment.voided_at,
       receiver.full_name AS received_by_name,
-      agreement.agreement_number,
-      agreement.customer_name_snapshot,
-      agreement.customer_phone_snapshot,
-      agreement.asset_code_snapshot,
-      agreement.asset_name_snapshot,
-      customer.full_name AS customer_name,
-      customer.phone AS customer_phone,
-      asset.asset_code,
-      asset.asset_name,
-      customer.full_name AS name_for_sort
+      agreement.agreement_number, agreement.customer_name_snapshot,
+      agreement.customer_phone_snapshot, agreement.asset_code_snapshot,
+      agreement.asset_name_snapshot
     FROM equipment_sale_payments payment
     INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
-    LEFT JOIN hire_customers customer ON customer.id = payment.customer_id
     LEFT JOIN users receiver ON receiver.id = payment.received_by
-    LEFT JOIN fleet_assets asset ON asset.id = agreement.asset_id
     WHERE ${where}
     ORDER BY ${order}
     LIMIT ? OFFSET ?
@@ -229,7 +186,6 @@ async function listPaymentHistory(input = {}, connection = pool) {
     const summaryRow = summaryRows?.[0]?.[0] || {};
     const totalPages = Math.max(1, Math.ceil(rawTotal / options.pageSize));
     const currentPage = rawTotal === 0 ? 1 : Math.min(options.page, totalPages);
-
     return {
       payments: (rows?.[0] || []).map(mapPayment),
       pagination: {
@@ -268,7 +224,4 @@ async function listPaymentHistory(input = {}, connection = pool) {
   }
 }
 
-module.exports = {
-  EquipmentFinancePaymentHistoryError,
-  listPaymentHistory,
-};
+module.exports = { EquipmentFinancePaymentHistoryError, listPaymentHistory };
