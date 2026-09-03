@@ -6,9 +6,7 @@ const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceBossAlertDeliveryInsta
 const POLL_MS = Math.max(1000, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
 const BATCH_SIZE = 100;
 const FINANCE_WORKSPACES = new Set(["equipment_installment_finance"]);
-const FINANCE_CATALOGUE_ACTIONS = new Set([
-  "equipment_catalogue_asset_created",
-]);
+const FINANCE_CATALOGUE_ACTIONS = new Set(["equipment_catalogue_asset_created"]);
 const IMPORTANT_FINANCE_ACTIONS = new Set([
   "EQUIPMENT_CREDIT_APPLICATION_ADMIN_APPROVED",
   "EQUIPMENT_FINANCE_CUSTOMER_CREATED",
@@ -64,7 +62,7 @@ function isFinanceActivity(row) {
   if (FINANCE_CATALOGUE_ACTIONS.has(actionLower)) return true;
   if (workspace === "equipment_installment_finance") {
     const kind = eventKind(row, metadata);
-    if (["machine_created", "customer_created", "deposit", "payment", "agreement"].includes(kind)) return true;
+    if (["machine_created", "customer_created", "deposit", "payment", "agreement", "application_approved"].includes(kind)) return true;
     if (kind === "edited") return hasAmountSignal(metadata, details);
   }
   if (/equipment_finance|equipment\.finance|installment/.test(`${actionLower} ${actionType} ${entityType}`)) return false;
@@ -142,6 +140,34 @@ async function sourceAlreadyLogged(sourceReference) {
   } catch (error) {
     console.warn("Boss SMS duplicate check skipped:", error.message);
     return false;
+  }
+}
+
+async function repairLegacyBossAlertMessages() {
+  try {
+    const [rows] = await pool.query(
+      `SELECT sms.id, activity.id AS activity_id, activity.branch_id, activity.user_id,
+              activity.action, activity.details, activity.workspace_code,
+              activity.entity_type, activity.entity_id, activity.action_type,
+              activity.outcome, activity.severity, activity.metadata_json
+         FROM sms_log sms
+         INNER JOIN activity_log activity
+           ON activity.id = CAST(SUBSTRING_INDEX(sms.source_reference, ':', -1) AS UNSIGNED)
+        WHERE sms.sms_type = 'equipment_finance_boss_alert'
+          AND sms.source_reference LIKE 'equipment-finance-boss-activity:%'
+          AND sms.message LIKE 'Boss alert:%'
+        ORDER BY sms.id ASC
+        LIMIT 5000`
+    );
+    for (const row of rows) {
+      const message = buildActivityMessage(row);
+      await pool.query("UPDATE sms_log SET message = ? WHERE id = ? LIMIT 1", [message, row.id]);
+    }
+    if (rows.length) console.log(`Finance boss SMS history repaired: ${rows.length} record(s).`);
+  } catch (error) {
+    if (!/unknown table|doesn't exist|unknown column/i.test(String(error.message || ""))) {
+      console.warn("Finance boss SMS history repair skipped:", error.message);
+    }
   }
 }
 
@@ -243,7 +269,9 @@ async function deliverEquipmentCreatedBossAlert(request) {
 
 function installEquipmentFinanceBossAlertDelivery() {
   if (globalThis[INSTALL_FLAG]) return false;
-  void initialiseActivityCursor().then(() => void pollFinanceActivity());
+  void repairLegacyBossAlertMessages().finally(() => {
+    void initialiseActivityCursor().then(() => void pollFinanceActivity());
+  });
   const timer = setInterval(() => void pollFinanceActivity(), POLL_MS);
   timer.unref?.();
   Object.defineProperty(globalThis, INSTALL_FLAG, { value: true, configurable: false, enumerable: false, writable: false });
