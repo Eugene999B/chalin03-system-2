@@ -175,6 +175,11 @@ function DocumentCard({
             {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}
           </button>
         ) : null}
+        {definition.formats.includes("print") ? (
+          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "print")}>
+            {working === `${definition.code}:print` ? "Preparing…" : "Print"}
+          </button>
+        ) : null}
         {!availability.available && recoveryHref ? (
           <Link className="finance-docs__recovery-link" to={recoveryHref}>Open Amendments</Link>
         ) : null}
