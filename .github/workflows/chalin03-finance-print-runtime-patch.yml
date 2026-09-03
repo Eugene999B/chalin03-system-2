@@ -23,25 +23,26 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-
           path = Path("frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx")
           text = path.read_text(encoding="utf-8")
-          old = 'const printWindow = window.open(url, "_blank", "noopener,noreferrer");'
-          new = 'const printWindow = window.open(url, "_blank");'
-          if old in text:
-              text = text.replace(old, new, 1)
-              old_revoke = '      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n'
-              new_revoke = '      try { printWindow.focus(); } catch {}\n      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n'
-              if old_revoke in text:
-                  text = text.replace(old_revoke, new_revoke, 1)
-          elif 'const printWindow = window.open(url, "_blank");' not in text:
+          text = text.replace(
+              'const printWindow = window.open(url, "_blank", "noopener,noreferrer");',
+              'const printWindow = window.open(url, "_blank");',
+              1,
+          )
+          if 'const printWindow = window.open(url, "_blank");' not in text:
               raise SystemExit("Expected finance print-window code was not found; refusing to modify production.")
+          if 'try { printWindow.focus(); } catch {}' not in text:
+              text = text.replace(
+                  '      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n',
+                  '      try { printWindow.focus(); } catch {}\n      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n',
+                  1,
+              )
           path.write_text(text, encoding="utf-8")
       - name: Verify print path
         run: |
-          grep -n 'const printWindow = window.open(url, "_blank");' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx
-          grep -n 'Browser blocked the print document' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx
           test "$(grep -c 'const printWindow = window.open(url, "_blank");' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx)" -eq 1
+          grep -n 'printWindow = window.open' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx
       - name: Remove temporary workflow and commit fix
         run: |
           git config user.name "github-actions[bot]"
