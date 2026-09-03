@@ -19,6 +19,7 @@ const EquipmentFinanceExcavatorsPage = lazy(() => import("./EquipmentFinanceExca
 const EquipmentFinanceFinalLifecyclePage = lazy(() => import("./EquipmentFinanceFinalLifecyclePage"));
 const EquipmentFinanceGuidePage = lazy(() => import("./EquipmentFinanceGuidePage"));
 const EquipmentFinanceOperationalPolishPage = lazy(() => import("./EquipmentFinanceOperationalPolishPage"));
+const EquipmentFinancePaymentHistoryPage = lazy(() => import("./EquipmentFinancePaymentHistoryPage"));
 const EquipmentFinancePaymentsCentrePage = lazy(() => import("./EquipmentFinancePaymentsCentrePage"));
 const EquipmentFinanceProfessionalPage = lazy(() => import("./EquipmentFinanceProfessionalPage"));
 const EquipmentFinanceRecoveryGovernancePage = lazy(() => import("./EquipmentFinanceRecoveryGovernancePage"));
@@ -54,6 +55,7 @@ function stagePage(stage) {
   if (stage === "deposit") return <EquipmentFinanceDepositReservationPage />;
   if (stage === "accounts") return <EquipmentFinanceActiveInstallmentsPage />;
   if (stage === "collections-core") return <EquipmentFinanceCollectionsMinimalPage />;
+  if (stage === "payment-history") return <EquipmentFinancePaymentHistoryPage />;
   if (stage === "collections") return <EquipmentFinancePaymentsCentrePage />;
   if (FINAL_LIFECYCLE_STAGES.has(stage)) return <EquipmentFinanceFinalLifecyclePage />;
   return <EquipmentFinanceApplicationsCompletionPage />;
