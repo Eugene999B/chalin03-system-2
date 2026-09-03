@@ -23,7 +23,6 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           path = Path("frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx")
           text = path.read_text(encoding="utf-8")
@@ -31,11 +30,10 @@ jobs:
           new = 'const printWindow = window.open(url, "_blank");'
           if old in text:
               text = text.replace(old, new, 1)
-              text = text.replace(
-                  '      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n',
-                  '      try { printWindow.focus(); } catch {}\n      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n',
-                  1,
-              )
+              old_revoke = '      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n'
+              new_revoke = '      try { printWindow.focus(); } catch {}\n      window.setTimeout(() => URL.revokeObjectURL(url), 60000);\n      return;\n'
+              if old_revoke in text:
+                  text = text.replace(old_revoke, new_revoke, 1)
           elif 'const printWindow = window.open(url, "_blank");' not in text:
               raise SystemExit("Expected finance print-window code was not found; refusing to modify production.")
           path.write_text(text, encoding="utf-8")
