@@ -343,11 +343,12 @@ export default function EquipmentFinanceDocumentCentrePage() {
     const fileName = safeFileNameFromDisposition(response.headers?.["content-disposition"], fallbackName);
     const url = URL.createObjectURL(response.data);
     if (format === "print") {
-      const printWindow = window.open(url, "_blank", "noopener,noreferrer");
+      const printWindow = window.open(url, "_blank");
       if (!printWindow) {
         URL.revokeObjectURL(url);
         throw new Error("The browser blocked the print document. Allow pop-ups and try again.");
       }
+      try { printWindow.focus(); } catch {}
       window.setTimeout(() => URL.revokeObjectURL(url), 60000);
       return;
     }
