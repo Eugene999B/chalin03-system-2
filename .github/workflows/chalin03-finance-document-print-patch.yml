@@ -1,0 +1,48 @@
+name: Apply Chalin 03 Finance Document Print Fix
+
+on:
+  push:
+    branches:
+      - production
+
+permissions:
+  contents: write
+
+jobs:
+  patch-production:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout production
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: production
+
+      - name: Patch document issue actions
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx")
+          text = path.read_text(encoding="utf-8")
+          old = '''        {definition.formats.includes("thermal") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "thermal")}>\n            {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}\n          </button>\n        ) : null}\n        {!availability.available && recoveryHref ? ('''
+          new = '''        {definition.formats.includes("thermal") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "thermal")}>\n            {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}\n          </button>\n        ) : null}\n        {definition.formats.includes("print") ? (\n          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "print")}>\n            {working === `${definition.code}:print` ? "Preparing…" : "Print"}\n          </button>\n        ) : null}\n        {!availability.available && recoveryHref ? ('''
+          if old not in text:
+              raise SystemExit("Expected DocumentCard action block was not found; refusing to modify production.")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+      - name: Verify patch landed exactly once
+        run: |
+          test "$(grep -c 'definition.formats.includes(\"print\")' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx)" -eq 1
+          test "$(grep -c 'onIssue(definition.code, \"print\")' frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx)" -eq 1
+
+      - name: Remove temporary workflow and commit fix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/chalin03-finance-document-print-patch.yml
+          git add frontend/src/pages/EquipmentFinanceDocumentCentrePage.jsx .github/workflows/chalin03-finance-document-print-patch.yml
+          git commit -m "fix: restore printable Chalin 03 finance documents"
+          git push origin HEAD:production
