@@ -7,6 +7,7 @@ import EquipmentFinanceStartInstallmentPage from "./EquipmentFinanceStartInstall
 const EquipmentFinanceActiveInstallmentsPage = lazy(() => import("./EquipmentFinanceActiveInstallmentsPage"));
 const EquipmentFinanceAgreementActivationPage = lazy(() => import("./EquipmentFinanceAgreementActivationPage"));
 const EquipmentFinanceArrearsPage = lazy(() => import("./EquipmentFinanceArrearsPage"));
+const EquipmentFinanceArrearsControlPage = lazy(() => import("./EquipmentFinanceArrearsControlPage"));
 const EquipmentFinanceCaseOperationsPage = lazy(() => import("./EquipmentFinanceCaseOperationsPage"));
 const EquipmentFinanceCaseWorkspacePage = lazy(() => import("./EquipmentFinanceCaseWorkspacePage"));
 const EquipmentFinanceCollectionsMinimalPage = lazy(() => import("./EquipmentFinanceCollectionsMinimalPage"));
@@ -48,7 +49,7 @@ function stagePage(stage) {
   if (stage === "generated-documents") return <EquipmentFinanceDocumentCentrePage />;
   if (stage === "generated-documents-core") return <EquipmentFinanceProfessionalPage mode="documents" />;
   if (PROFESSIONAL_STAGES.has(stage)) return <EquipmentFinanceProfessionalPage mode={stage} />;
-  if (stage === "arrears") return <EquipmentFinanceArrearsPage />;
+  if (stage === "arrears") return <EquipmentFinanceArrearsControlPage />;
   if (stage === "governance") return <EquipmentFinanceRecoveryGovernancePage />;
   if (stage === "corrections") return <EquipmentFinanceCorrectionsPage />;
   if (stage === "activation") return <EquipmentFinanceAgreementActivationPage />;
