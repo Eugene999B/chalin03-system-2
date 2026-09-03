@@ -1,4 +1,4 @@
-const pool = require("../config/db");
+const { pool } = require("../config/db");
 
 const SORT_COLUMNS = Object.freeze({
   payment_date: "payment.payment_date",
