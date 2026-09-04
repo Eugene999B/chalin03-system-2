@@ -40,37 +40,37 @@ function parseBoolean(value) {
   return null;
 }
 
-async function ensureNotificationPolicySchema(connection = pool) {
-  if (connection !== pool) {
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS ${TABLE} (
-        id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-        equipment_created TINYINT(1) NOT NULL DEFAULT 1,
-        customer_created TINYINT(1) NOT NULL DEFAULT 1,
-        application_approved TINYINT(1) NOT NULL DEFAULT 1,
-        agreement TINYINT(1) NOT NULL DEFAULT 1,
-        deposit TINYINT(1) NOT NULL DEFAULT 1,
-        payment TINYINT(1) NOT NULL DEFAULT 1,
-        reminders TINYINT(1) NOT NULL DEFAULT 1,
-        settlement_ownership TINYINT(1) NOT NULL DEFAULT 1,
-        document_share TINYINT(1) NOT NULL DEFAULT 1,
-        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        CONSTRAINT chk_equipment_finance_notification_singleton CHECK (id = 1)
-      )
-    `);
-    await connection.query(`INSERT INTO ${TABLE} (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id`);
-    return;
-  }
+async function ensureNotificationPolicySchema() {
   if (!ensurePromise) {
-    ensurePromise = ensureNotificationPolicySchema(Object.assign(Object.create(Object.getPrototypeOf(connection)), connection))
-      .catch((error) => { ensurePromise = null; throw error; });
+    ensurePromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ${TABLE} (
+          id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+          equipment_created TINYINT(1) NOT NULL DEFAULT 1,
+          customer_created TINYINT(1) NOT NULL DEFAULT 1,
+          application_approved TINYINT(1) NOT NULL DEFAULT 1,
+          agreement TINYINT(1) NOT NULL DEFAULT 1,
+          deposit TINYINT(1) NOT NULL DEFAULT 1,
+          payment TINYINT(1) NOT NULL DEFAULT 1,
+          reminders TINYINT(1) NOT NULL DEFAULT 1,
+          settlement_ownership TINYINT(1) NOT NULL DEFAULT 1,
+          document_share TINYINT(1) NOT NULL DEFAULT 1,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          CONSTRAINT chk_equipment_finance_notification_singleton CHECK (id = 1)
+        )
+      `);
+      await pool.query(`INSERT INTO ${TABLE} (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id`);
+    })().catch((error) => {
+      ensurePromise = null;
+      throw error;
+    });
   }
   await ensurePromise;
 }
 
 async function getNotificationPolicy(connection = pool) {
-  await ensureNotificationPolicySchema(connection);
+  await ensureNotificationPolicySchema();
   const [rows] = await connection.query(`SELECT * FROM ${TABLE} WHERE id = 1 LIMIT 1`);
   const row = rows[0];
   const controls = {};
@@ -79,7 +79,7 @@ async function getNotificationPolicy(connection = pool) {
 }
 
 async function updateNotificationPolicy(input = {}, connection = pool) {
-  await ensureNotificationPolicySchema(connection);
+  await ensureNotificationPolicySchema();
   const current = await getNotificationPolicy(connection);
   const next = { ...current };
   const changed = [];
@@ -97,7 +97,10 @@ async function updateNotificationPolicy(input = {}, connection = pool) {
   }
   if (!changed.length) return { changed: false, changed_categories: [], controls: current };
   const assignments = CATEGORIES.map((category) => `\`${category}\` = ?`).join(", ");
-  await connection.query(`UPDATE ${TABLE} SET ${assignments}, updated_at = NOW() WHERE id = 1`, CATEGORIES.map((category) => (next[category] ? 1 : 0)));
+  await connection.query(
+    `UPDATE ${TABLE} SET ${assignments}, updated_at = NOW() WHERE id = 1`,
+    CATEGORIES.map((category) => (next[category] ? 1 : 0))
+  );
   return { changed: true, changed_categories: changed, controls: next };
 }
 
