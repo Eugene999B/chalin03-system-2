@@ -16,40 +16,50 @@ const migrationPath = path.join(
   "../../database/migrations/20260904_object_storage_foundation.sql"
 );
 
+const ENV_NAMES = [
+  "CHALIN03_OBJECT_STORAGE_ENABLED",
+  "CHALIN03_OBJECT_STORAGE_ENDPOINT",
+  "CHALIN03_OBJECT_STORAGE_BUCKET",
+  "CHALIN03_OBJECT_STORAGE_ACCESS_KEY",
+  "CHALIN03_OBJECT_STORAGE_SECRET_KEY",
+];
+
 test("object storage stays inactive unless explicitly enabled", () => {
-  const previous = {
-    enabled: process.env.CHALIN03_OBJECT_STORAGE_ENABLED,
-    endpoint: process.env.CHALIN03_OBJECT_STORAGE_ENDPOINT,
-    bucket: process.env.CHALIN03_OBJECT_STORAGE_BUCKET,
-    accessKey: process.env.CHALIN03_OBJECT_STORAGE_ACCESS_KEY,
-    secretKey: process.env.CHALIN03_OBJECT_STORAGE_SECRET_KEY,
-  };
-
-  for (const name of Object.keys(previous)) delete process.env[name];
-
-  assert.equal(config().enabled, false);
-  assert.equal(status().enabled, false);
-  assert.equal(status().configured, false);
-  assert.throws(
-    () => uploadObject({ key: "test.txt", buffer: Buffer.from("test"), contentType: "text/plain" }),
-    (error) =>
-      error instanceof ObjectStorageError &&
-      error.code === "OBJECT_STORAGE_NOT_CONFIGURED" &&
-      error.statusCode === 503
-  );
-  assert.throws(
-    () => deleteObject("test.txt"),
-    (error) =>
-      error instanceof ObjectStorageError &&
-      error.code === "OBJECT_STORAGE_NOT_CONFIGURED" &&
-      error.statusCode === 503
+  const previous = Object.fromEntries(
+    ENV_NAMES.map((name) => [name, process.env[name]])
   );
 
-  if (previous.enabled !== undefined) process.env.CHALIN03_OBJECT_STORAGE_ENABLED = previous.enabled;
-  if (previous.endpoint !== undefined) process.env.CHALIN03_OBJECT_STORAGE_ENDPOINT = previous.endpoint;
-  if (previous.bucket !== undefined) process.env.CHALIN03_OBJECT_STORAGE_BUCKET = previous.bucket;
-  if (previous.accessKey !== undefined) process.env.CHALIN03_OBJECT_STORAGE_ACCESS_KEY = previous.accessKey;
-  if (previous.secretKey !== undefined) process.env.CHALIN03_OBJECT_STORAGE_SECRET_KEY = previous.secretKey;
+  for (const name of ENV_NAMES) delete process.env[name];
+
+  try {
+    assert.equal(config().enabled, false);
+    assert.equal(status().enabled, false);
+    assert.equal(status().configured, false);
+    assert.throws(
+      () =>
+        uploadObject({
+          key: "test.txt",
+          buffer: Buffer.from("test"),
+          contentType: "text/plain",
+        }),
+      (error) =>
+        error instanceof ObjectStorageError &&
+        error.code === "OBJECT_STORAGE_NOT_CONFIGURED" &&
+        error.statusCode === 503
+    );
+    assert.throws(
+      () => deleteObject("test.txt"),
+      (error) =>
+        error instanceof ObjectStorageError &&
+        error.code === "OBJECT_STORAGE_NOT_CONFIGURED" &&
+        error.statusCode === 503
+    );
+  } finally {
+    for (const name of ENV_NAMES) delete process.env[name];
+    for (const [name, value] of Object.entries(previous)) {
+      if (value !== undefined) process.env[name] = value;
+    }
+  }
 });
 
 test("object storage migration is additive and preserves legacy payloads", () => {
