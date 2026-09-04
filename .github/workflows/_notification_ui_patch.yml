@@ -1,0 +1,66 @@
+name: Final installment notification wiring patch
+on:
+  push:
+    paths: [.chalin-notification-ui-patch]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/installment-notification-controls-final
+          fetch-depth: 0
+      - name: Patch exact notification wiring
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path}: expected 1 exact match, found {text.count(old)}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'backend/services/equipmentFinanceProfessionalService.js',
+              'updateNotificationPolicy(notificationInput)',
+              'updateNotificationPolicy(notificationInput, connection)',
+          )
+
+          replace_once(
+              'backend/services/equipmentFinanceBossAlertDeliveryBootstrap.js',
+              'if (/agreement.*(activat|creat)|agreement\\.activat/.test(text)) return "agreement";\n  return "finance_activity";',
+              'if (/agreement.*(activat|creat)|agreement\\.activat/.test(text)) return "agreement";\n  if (/settlement|ownership.*(ready|transfer)|ownership_ready/.test(text)) return "settlement_ownership";\n  return "finance_activity";',
+          )
+
+          replace_once(
+              'backend/services/equipmentFinanceBossAlertDeliveryBootstrap.js',
+              'agreement: "agreement", deposit: "deposit" }[kind]',
+              'agreement: "agreement", deposit: "deposit", settlement_ownership: "settlement_ownership" }[kind]',
+          )
+
+          replace_once(
+              'frontend/src/pages/EquipmentFinanceProfessionalPage.jsx',
+              '  ["settlement_ownership", "Settlement & ownership readiness", "Settlement and ownership notifications."],\n',
+              '',
+          )
+
+          Path('.github/workflows/_notification_ui_patch.yml').unlink()
+          Path('.chalin-notification-ui-patch').unlink()
+      - name: Validate
+        working-directory: backend
+        run: |
+          node --check services/equipmentFinanceProfessionalService.js
+          node --check services/equipmentFinanceBossAlertDeliveryBootstrap.js
+          node --check services/equipmentFinanceNotificationPolicyService.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend frontend
+          git rm .github/workflows/_notification_ui_patch.yml .chalin-notification-ui-patch || true
+          git commit -m "fix: finish installment notification category wiring"
+          git push origin HEAD:feat/installment-notification-controls-final
