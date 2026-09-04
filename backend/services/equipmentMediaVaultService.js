@@ -167,6 +167,16 @@ async function ensureStored(parsed) {
   return url;
 }
 
+function containsImageReference(value, fieldName = "", depth = 0) {
+  if (depth > MAX_DEPTH || value == null) return false;
+  if (typeof value === "string") {
+    return isImageField(fieldName) && (isBucketReference(value) || /^data:image\/(?:jpeg|jpg|png|webp);base64,/i.test(value));
+  }
+  if (Array.isArray(value)) return value.some((item) => containsImageReference(item, fieldName, depth + 1));
+  if (typeof value !== "object") return false;
+  return Object.entries(value).some(([key, child]) => containsImageReference(child, key, depth + 1));
+}
+
 async function transformValue(value, fieldName, state, depth = 0) {
   if (depth > MAX_DEPTH || state.count >= MAX_MEDIA_VALUES_PER_RESPONSE) return value;
 
@@ -201,7 +211,7 @@ async function transformValue(value, fieldName, state, depth = 0) {
 }
 
 async function transformResponseBody(body) {
-  if (!body || typeof body !== "object") return body;
+  if (!body || typeof body !== "object" || !containsImageReference(body)) return body;
   try {
     return await transformValue(body, "", { count: 0 }, 0);
   } catch {
@@ -217,7 +227,7 @@ function installResponseMediaVault() {
   const originalJson = responsePrototype.json;
   responsePrototype.json = function patchedJson(body) {
     const response = this;
-    if (response.__chalin03MediaVaultBypass || !body || typeof body !== "object") {
+    if (response.__chalin03MediaVaultBypass || !containsImageReference(body)) {
       return originalJson.call(response, body);
     }
 
