@@ -1,0 +1,67 @@
+name: Final installment notification patch
+on:
+  push:
+    paths: [.chalin-installment-notification-final-patch]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/installment-notification-controls-final
+          fetch-depth: 0
+      - name: Patch source
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          def one(path, pattern, replacement):
+            p=Path(path); t=p.read_text(); nt,n=re.subn(pattern,replacement,t,count=1,flags=re.S)
+            if n!=1: raise SystemExit(f'{path}: expected 1 match, found {n}')
+            p.write_text(nt)
+          s='backend/services/equipmentFinanceProfessionalService.js'
+          one(s,r'(const \{ sendSmsAlertToPhone \} = require\("\.\/smsAlertService"\);\n)',r'\1const { DEFAULTS: NOTIFICATION_DEFAULTS, getNotificationPolicy, isNotificationEnabled, updateNotificationPolicy } = require("./equipmentFinanceNotificationPolicyService");\n')
+          one(s,r'(async function getProfessionalSettings\(connection = pool, \{ includeSignature = false \} = \{\}\) \{[\s\S]*?)  return includeSignature \? row : publicSettings\(row\);',r'\1  const output = includeSignature ? row : publicSettings(row);\n  try { output.notification_controls = await getNotificationPolicy(connection); } catch (error) { console.warn("Installment notification controls unavailable; keeping defaults:", error.message); output.notification_controls = NOTIFICATION_DEFAULTS; }\n  return output;')
+          one(s,r'(async function updateProfessionalSettings\(\{ body, reason, userId, req \}\) \{\n  const cleanReason = cleanText\(reason, 500\);\n)',r'\1  const notificationInput = body?.notification_controls;\n')
+          one(s,r'(    const updates = normalizeSettingsPayload\(body \|\| \{\}, current\);\n)',r'\1    let notificationControls = NOTIFICATION_DEFAULTS;\n    if (notificationInput !== undefined) notificationControls = (await updateNotificationPolicy(notificationInput)).controls;\n    else { try { notificationControls = await getNotificationPolicy(); } catch (_) {} }\n')
+          one(s,r'    return \{ changed: true, settings: publicSettings\(next\) \};',r'    return { changed: true, settings: { ...publicSettings(next), notification_controls: notificationControls } };')
+          one(s,r'(    const enabled = Boolean\(Number\(settings\.boss_payment_alert_enabled\)\);\n)',r'\1    const paymentCategoryEnabled = await isNotificationEnabled("payment");\n')
+          one(s,r'    if \(!enabled \|\| !phone\) \{','    if (!enabled || !paymentCategoryEnabled || !phone) {')
+
+          w='backend/services/equipmentFinanceBossAlertDeliveryBootstrap.js'
+          one(w,r'(const \{ pool \} = require\("\.\.\/config\/db"\);\n)',r'\1const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");\n')
+          one(w,r'(function isFinanceActivity\(row\) \{)','''async function notificationCategoryEnabled(category) {\n  if (!category) return true;\n  return isNotificationEnabled(category);\n}\nfunction notificationCategoryForEventKind(kind) {\n  return { machine_created: "equipment_created", customer_created: "customer_created", application_approved: "application_approved", agreement: "agreement", deposit: "deposit" }[kind] || null;\n}\n\1''')
+          one(w,r'(  const kind = eventKind\(enriched, parseMetadata\(enriched\.metadata_json\)\);\n)(  if \(kind === "noise" \|\| kind === "payment"\) return;)',r'\1  if (!(await notificationCategoryEnabled(notificationCategoryForEventKind(kind)))) return;\n\2')
+          if 'async function deliverEquipmentCreatedBossAlert(request)' in Path(w).read_text(): one(w,r'(async function deliverEquipmentCreatedBossAlert\(request\) \{\n)',r'\1  if (!(await notificationCategoryEnabled("equipment_created"))) return;\n')
+
+          r='backend/services/equipmentFinanceProfessionalReminderService.js'
+          one(r,r'(const \{ pool \} = require\("\.\.\/config\/db"\);\n)',r'\1const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");\n')
+          one(r,r'(  const automatic = source === "scheduler";\n)',r'\1  if (!(await isNotificationEnabled("reminders"))) return { sent: 0, failed: 0, skipped: reminders.length, reason: "notification_category_disabled" };\n')
+
+          f='frontend/src/pages/EquipmentFinanceProfessionalPage.jsx'
+          groups='''const FINANCE_NOTIFICATION_GROUPS = [\n  ["equipment_created", "Equipment & machine created", "Registration and machine-created alerts."],\n  ["customer_created", "Customer & finance account created", "New installment customer/account alerts."],\n  ["application_approved", "Credit applications approved", "Approval notifications for finance applications."],\n  ["agreement", "Agreements activated", "Agreement activation messages."],\n  ["deposit", "Deposits & reservations", "Deposit and reservation activity."],\n  ["payment", "Payments & collections", "Boss notifications for committed installment payments."],\n  ["reminders", "Due, overdue & arrears reminders", "Automatic reminder traffic."],\n  ["settlement_ownership", "Settlement & ownership readiness", "Settlement and ownership notifications."],\n  ["document_share", "Document shares", "Controlled finance document-share notifications."],\n];\n\n'''
+          one(f,r'(function errorMessage\(error, fallback\) \{)',groups+r'\1')
+          cards='''\n          <div className="finance-pro__notification-grid">\n            {FINANCE_NOTIFICATION_GROUPS.map(([key, title, description]) => {\n              const enabled = settings.notification_controls?.[key] !== false;\n              return <article key={key} className={`finance-pro__notification-card ${enabled ? "is-on" : "is-off"}`}><div><strong>{title}</strong><small>{description}</small></div><label className="finance-pro__switch"><input type="checkbox" checked={enabled} onChange={(event) => setSettings((current) => ({ ...current, notification_controls: { ...(current.notification_controls || {}), [key]: event.target.checked } }))} /><span>{enabled ? "ON" : "OFF"}</span></label></article>;\n            })}\n          </div>\n          <p className="finance-pro__notification-note">OFF blocks that category from sending. Existing Finance/SMS master switches still apply.</p>\n'''
+          one(f,r'(<section><div className="finance-pro__section-title"><div><p>Notifications</p><h2>Boss payment alerts and customer reminders</h2></div></div>)',r'\1'+cards.replace('\\','\\\\'))
+
+          css='frontend/src/styles/equipmentFinanceProfessional.css'; c=Path(css).read_text()
+          if '.finance-pro__notification-grid' not in c: Path(css).write_text(c+'\n.finance-pro__notification-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}.finance-pro__notification-card{border:1px solid #dbe4ef;border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff}.finance-pro__notification-card.is-off{opacity:.72;background:#f8fafc}.finance-pro__notification-card strong{display:block}.finance-pro__notification-card small{display:block;margin-top:4px;color:#667085;line-height:1.4}.finance-pro__switch{display:inline-flex;align-items:center;gap:8px;min-width:68px;justify-content:flex-end;font-weight:700}.finance-pro__switch input{width:18px;height:18px}.finance-pro__switch span{min-width:30px}.finance-pro__notification-note{margin:0 0 8px;color:#667085;font-size:.9rem}@media(max-width:760px){.finance-pro__notification-grid{grid-template-columns:1fr}.finance-pro__notification-card{align-items:flex-start}}\n')
+          Path('backend/tests/equipmentFinanceNotificationControlsContract.test.js').write_text('''const test=require("node:test");const assert=require("node:assert/strict");const fs=require("node:fs");test("installment notification groups and sender gates",()=>{const p=fs.readFileSync("services/equipmentFinanceNotificationPolicyService.js","utf8");const w=fs.readFileSync("services/equipmentFinanceBossAlertDeliveryBootstrap.js","utf8");const s=fs.readFileSync("services/equipmentFinanceProfessionalService.js","utf8");const r=fs.readFileSync("services/equipmentFinanceProfessionalReminderService.js","utf8");for(const k of ["equipment_created","customer_created","application_approved","agreement","deposit","payment","reminders","settlement_ownership","document_share"])assert.match(p,new RegExp(k));assert.match(w,/notificationCategoryForEventKind/);assert.match(s,/notification_controls/);assert.match(r,/notification_category_disabled/)});\n''')
+          Path('.github/workflows/_installment_notification_final_patch.yml').unlink(); Path('.chalin-installment-notification-final-patch').unlink()
+      - name: Fast syntax and contract checks
+        working-directory: backend
+        run: |
+          node --check services/equipmentFinanceNotificationPolicyService.js
+          node --check services/equipmentFinanceProfessionalService.js
+          node --check services/equipmentFinanceBossAlertDeliveryBootstrap.js
+          node --check services/equipmentFinanceProfessionalReminderService.js
+          node --test tests/equipmentFinanceNotificationControlsContract.test.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend frontend .github/workflows/_installment_notification_final_patch.yml .chalin-installment-notification-final-patch
+          git commit -m "feat: group installment finance notifications"
+          git push origin HEAD:feat/installment-notification-controls-final
