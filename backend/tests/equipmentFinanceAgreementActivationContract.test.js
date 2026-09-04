@@ -1,3 +1,4 @@
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -10,46 +11,124 @@ const read = (relativePath) =>
 const route = read(
   "backend/routes/equipmentFinanceAgreementActivationRoutes.js"
 );
+const independentRouter = read(
+  "backend/routes/equipmentFinanceIndependentRoutes.js"
+);
 const schemaService = read("backend/services/equipmentSalesSchemaService.js");
+const scheduleService = read(
+  "backend/services/equipmentFinanceScheduleService.js"
+);
 const migration = read(
-  "database/migrations/20260729_equipment_finance_agreement_activation.sql"
+  "database/migrations/20260803_equipment_finance_phase3_agreement_creation.sql"
 );
 const verification = read(
-  "database/migrations/20260729_equipment_finance_agreement_activation_verify.sql"
+  "database/migrations/20260803_equipment_finance_phase3_agreement_creation_verify.sql"
 );
+const startup = read(
+  "backend/scripts/runEquipmentFinanceAgreementCreationStartup.js"
+);
+const operationalStartup = read(
+  "backend/scripts/runEquipmentFinanceOperationalPolishStartup.js"
+);
+const packageJson = read("backend/package.json");
+const systemRoutes = read("backend/routes/systemRoutes.js");
+const productionSmoke = read(
+  ".github/workflows/version-3-production-smoke.yml"
+);
+const {
+  splitSqlScript: splitAgreementSql,
+} = require("../scripts/runEquipmentFinanceAgreementCreationStartup");
 
-const combinedRuntime = `${route}\n${schemaService}`;
+const combinedRuntime = `${route}\n${independentRouter}\n${schemaService}`;
 
-test("Finance activation is mounted only below the protected Equipment Sales router", () => {
+test("company-wide agreement activation owns the route before legacy handlers", () => {
   assert.match(
-    schemaService,
-    /require\("\.\.\/routes\/equipmentFinanceAgreementActivationRoutes"\)/
+    independentRouter,
+    /require\("\.\/equipmentFinanceAgreementActivationRoutes"\)/
   );
-  assert.match(schemaService, /"\/agreement-activations"/);
   assert.match(
-    schemaService,
-    /__chalin03FinanceAgreementActivationMounted/
+    independentRouter,
+    /router\.use\("\/agreement-activations", equipmentFinanceAgreementActivationRoutes\)/
   );
-  assert.doesNotMatch(route, /server\.js|app\.use\(|requireAuth/);
+  assert.ok(
+    independentRouter.indexOf(
+      'router.use("/agreement-activations", equipmentFinanceAgreementActivationRoutes)'
+    ) <
+      independentRouter.indexOf("router.use(equipmentFinancePhaseOneRoutes)"),
+    "the authoritative agreement route must execute before the legacy lifecycle router"
+  );
+  assert.doesNotMatch(route, /locationId\(req\)|hireLocationScope/);
+  assert.doesNotMatch(route, /application\.hire_location_id\s*=\s*\?/);
+  assert.match(route, /hire_location_id: null/);
+  assert.match(route, /workspaceCode: "equipment_installment_finance"/);
+  assert.match(route, /hireLocationId: null/);
 });
 
-test("only an approved Finance application can create an installment agreement", () => {
+test("explicit approval is authoritative while KYC and affordability stay advisory", () => {
   assert.match(route, /application\.application_status !== "approved"/);
-  assert.match(route, /application\.kyc_status !== "verified"/);
-  assert.match(route, /\["eligible", "manual_review"\]/);
+  assert.doesNotMatch(route, /application\.kyc_status !== "verified"/);
+  assert.doesNotMatch(
+    route,
+    /\["eligible", "manual_review"\]\.includes\(application\.affordability_status\)/
+  );
+  assert.match(route, /LEFT JOIN equipment_credit_application_kyc/);
+  assert.match(route, /optional_advisory_fields/);
   assert.match(route, /ACTIVATION_ROLES/);
-  assert.match(route, /finance_manager/);
-  assert.match(route, /finance_accountant/);
+  for (const role of [
+    "finance_manager",
+    "finance_accountant",
+    "equipment_business_manager",
+    "equipment_business_accountant",
+    "system_admin",
+  ]) {
+    assert.match(route, new RegExp(role));
+  }
   assert.match(route, /isOriginalSystemAdministrator/);
   assert.match(route, /terms_accepted/);
-  assert.match(route, /credit_application_id: application\.id/);
-  assert.match(route, /agreement_status: "approved"/);
-  assert.match(route, /approval_status: "approved"/);
-  assert.match(route, /INSERT INTO equipment_installment_schedule/);
-  assert.match(route, /agreement_id = \?/);
 });
 
-test("activation does not perform Hire work, collect money, reserve a machine or send SMS", () => {
+test("agreement creation preserves the canonical approved schedule snapshot", () => {
+  assert.match(
+    route,
+    /require\("\.\.\/services\/equipmentFinanceScheduleService"\)/
+  );
+  assert.match(route, /buildFinanceSchedule\(/);
+  assert.match(route, /proposed_interval_days/);
+  assert.match(route, /proposed_non_working_day_rule/);
+  assert.match(route, /payment_interval_days: scheduleDefinition\.custom_interval_days/);
+  assert.match(route, /non_working_day_rule: scheduleDefinition\.non_working_day_rule/);
+  assert.match(route, /first_due_date: scheduleDefinition\.first_due_date/);
+  assert.match(route, /final_due_date: scheduleDefinition\.final_due_date/);
+  assert.match(route, /scheduled_total: financedAmount/);
+  assert.match(route, /EQUIPMENT_FINANCE_APPROVED_TERMS_MISMATCH/);
+  assert.doesNotMatch(route, /req\.body\.first_due_date/);
+  assert.doesNotMatch(route, /function addSchedulePeriod|function buildSchedule/);
+  assert.match(scheduleService, /rounding: "final_schedule_line_only"/);
+  assert.match(scheduleService, /monthly_anchor_day_preserved: true/);
+});
+
+test("creation is atomic, idempotent and serializes duplicate machine activation", () => {
+  assert.match(route, /beginTransaction\(\)/);
+  assert.match(route, /commit\(\)/);
+  assert.match(route, /rollback\(\)/);
+  assert.match(
+    route,
+    /SELECT id, agreement_id FROM equipment_credit_applications[\s\S]*FOR UPDATE/
+  );
+  assert.match(
+    route,
+    /SELECT id, is_active, operational_purpose, sale_status[\s\S]*FOR UPDATE/
+  );
+  assert.match(route, /credit_application_id = \?/);
+  assert.match(route, /quotation_id = \?/);
+  assert.match(route, /agreement_status NOT IN \('completed','cancelled','defaulted'\)/);
+  assert.match(route, /loadAgreementAndSchedule/);
+  assert.match(route, /already_activated: true/);
+  assert.match(route, /ER_DUP_ENTRY/);
+  assert.match(verification, /uq_equipment_sale_agreement_credit_application/);
+});
+
+test("agreement creation performs no payment, reservation, Hire work or SMS side effect", () => {
   for (const forbidden of [
     /INSERT INTO hire_contracts/i,
     /INSERT INTO hire_contract_assets/i,
@@ -70,9 +149,10 @@ test("activation does not perform Hire work, collect money, reserve a machine or
   assert.match(route, /hire_contract_created: false/);
   assert.match(route, /payment_recorded: false/);
   assert.match(route, /sms_sent: false/);
+  assert.match(route, /code: "collect_deposit"/);
 });
 
-test("database gate blocks new quotation-only installment agreements but preserves legacy updates", () => {
+test("forward migration replaces stale optional and Hire gates with approval-only company-wide gates", () => {
   assert.match(
     migration,
     /trg_equipment_installment_credit_gate_before_insert/
@@ -81,40 +161,27 @@ test("database gate blocks new quotation-only installment agreements but preserv
     migration,
     /trg_equipment_installment_credit_gate_before_update/
   );
-  assert.match(
-    migration,
-    /Installment agreements require an approved Finance credit application/
-  );
   assert.match(migration, /application_status = 'approved'/);
-  assert.match(migration, /kyc_status = 'verified'/);
-  assert.match(
+  assert.match(migration, /NEW\.hire_location_id IS NOT NULL/);
+  assert.doesNotMatch(migration, /kyc_status = 'verified'/);
+  assert.doesNotMatch(
     migration,
     /affordability_status IN \('eligible','manual_review'\)/
   );
+  assert.doesNotMatch(migration, /application\.hire_location_id = NEW\.hire_location_id/);
   assert.match(migration, /OLD\.activation_source = 'legacy'/);
   assert.match(migration, /equipment_commitment_status = 'not_reserved'/);
-  assert.doesNotMatch(migration, /INSERT INTO hire_/i);
-  assert.doesNotMatch(migration, /UPDATE hire_/i);
-});
-
-test("activation migration is additive, idempotent and read-only verification is complete", () => {
-  assert.match(migration, /ADD COLUMN/);
-  assert.match(migration, /ADD CONSTRAINT/);
   assert.match(migration, /schema_migrations/);
   assert.match(migration, /ON DUPLICATE KEY UPDATE/);
   assert.match(migration, /BACKUP REQUIRED/);
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE TABLE|DELETE FROM/i);
 
   for (const expected of [
-    "missing_activation_columns",
-    "missing_activation_indexes",
-    "missing_activation_foreign_keys",
-    "missing_activation_triggers",
-    "duplicate_credit_application_agreement_links",
-    "invalid_activated_credit_applications",
-    "invalid_linked_finance_agreements",
-    "forbidden_hire_link_columns",
-    "activation_migration_record_missing",
+    "phase3_agreement_migration_record_missing",
+    "missing_phase3_agreement_triggers",
+    "legacy_optional_activation_gate_fragments",
+    "missing_company_wide_approval_gate_fragments",
+    "missing_unique_credit_application_agreement_index",
   ]) {
     assert.match(verification, new RegExp(expected));
   }
@@ -124,12 +191,59 @@ test("activation migration is additive, idempotent and read-only verification is
   );
 });
 
-test("runtime readiness is read-only and fails closed before activation", () => {
-  assert.match(route, /information_schema\.COLUMNS/);
-  assert.match(route, /information_schema\.TRIGGERS/);
+test("Phase 3 SQL splitter accepts reviewed headers before DELIMITER blocks", () => {
+  const migrationSql = read(
+    "database/migrations/20260803_equipment_finance_phase3_agreement_creation.sql"
+  );
+  const verifierSql = read(
+    "database/migrations/20260803_equipment_finance_phase3_agreement_creation_verify.sql"
+  );
+  const migrationStatements = splitAgreementSql(migrationSql);
+  const verifierStatements = splitAgreementSql(verifierSql);
+
+  assert.ok(migrationStatements.length >= 5);
+  assert.equal(verifierStatements.length, 5);
+  assert.match(
+    migrationStatements.join("\n"),
+    /CREATE TRIGGER trg_equipment_installment_credit_gate_before_insert/
+  );
+  assert.match(
+    migrationStatements.join("\n"),
+    /20260803_equipment_finance_phase3_agreement_creation/
+  );
+});
+
+test("production smoke proves the live Railway commit instead of accepting an old healthy deployment", () => {
+  assert.match(systemRoutes, /RAILWAY_GIT_COMMIT_SHA/);
+  assert.match(systemRoutes, /deployment: deploymentStatus\(\)/);
+  assert.match(productionSmoke, /deployment\.provider == "railway"/);
+  assert.match(
+    productionSmoke,
+    /deployment\.commit_sha == env\.GITHUB_SHA/
+  );
+});
+
+test("Railway startup applies and verifies the exact Phase 3 migration before API boot", () => {
+  assert.match(
+    operationalStartup,
+    /require\("\.\/runEquipmentFinanceAgreementCreationStartup"\)/
+  );
+  assert.match(
+    operationalStartup,
+    /await runEquipmentFinanceAgreementCreationStartup\(\)/
+  );
+  assert.match(
+    packageJson,
+    /migrate:equipment-finance:phase3-agreement:production/
+  );
+  assert.match(startup, /CHALIN03_SIGNED_BACKUP_CONFIRMED/);
+  assert.match(startup, /verifyDatabaseIdentity/);
+  assert.match(startup, /SELECT GET_LOCK/);
+  assert.match(startup, /migrationRecordExists/);
+  assert.match(startup, /runVerifier/);
+  assert.match(startup, /validateVerifierResults/);
+  assert.match(route, /REQUIRED_MIGRATIONS/);
   assert.match(route, /EQUIPMENT_FINANCE_ACTIVATION_FOUNDATION_REQUIRED/);
   assert.match(route, /router\.get\(\s*"\/readiness"/);
-  assert.match(route, /router\.get\(\s*"\/candidates"/);
-  assert.match(route, /router\.post\(\s*"\/:applicationId"/);
   assert.doesNotMatch(combinedRuntime, /CREATE TABLE|ALTER TABLE|DROP TABLE/i);
 });

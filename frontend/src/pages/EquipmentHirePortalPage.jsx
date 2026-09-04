@@ -1,15 +1,13 @@
-import BusinessPortalShell from "../components/BusinessPortalShell";
+import { Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
-import { getBusinessWorkspace } from "../data/businessWorkspaces";
 import EquipmentDivisionGatewayPage from "./EquipmentDivisionGatewayPage";
 
 export default function EquipmentHirePortalPage() {
   const { isLoggedIn, workspaceCode } = useAuth();
-  const workspace = getBusinessWorkspace("equipment_hire");
 
-  if (isLoggedIn && workspaceCode === "equipment_hire") {
-    return <EquipmentDivisionGatewayPage />;
+  if (!isLoggedIn || workspaceCode !== "equipment_hire") {
+    return <Navigate to="/login?workspace=equipment_hire" replace />;
   }
 
-  return <BusinessPortalShell workspace={workspace} />;
+  return <EquipmentDivisionGatewayPage />;
 }

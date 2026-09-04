@@ -34,7 +34,9 @@ jobs:
               if jq -e '
                 .status == "success" and
                 .service == "Chalin 03 Group Operations Platform" and
-                .version == "3.0.0"
+                .version == "3.0.0" and
+                .deployment.provider == "railway" and
+                .deployment.commit_sha == env.GITHUB_SHA
               ' smoke-output/api-health.json >/dev/null; then
                 echo "Production API is ready after attempt ${attempt}."
                 exit 0
@@ -63,6 +65,8 @@ jobs:
             .status == "success" and
             .ready == true and
             .version == "3.0.0" and
+            .deployment.provider == "railway" and
+            .deployment.commit_sha == env.GITHUB_SHA and
             .checks.database == "ready" and
             .checks.schema == "ready" and
             .checks.configuration == "ready"

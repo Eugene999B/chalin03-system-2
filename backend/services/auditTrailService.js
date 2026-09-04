@@ -86,28 +86,39 @@ function getRequestAuditContext(req) {
   };
 }
 
-async function writeAuditEvent({
-  connection = pool,
-  req = null,
-  userId = null,
-  branchId = null,
-  action,
-  details,
-  workspaceCode = null,
-  businessUnitId = null,
-  miningSiteId = null,
-  hireLocationId = null,
-  entityType = null,
-  entityId = null,
-  actionType = null,
-  outcome = "success",
-  severity = "info",
-  metadata = null,
-}) {
+async function writeAuditEvent(options = {}, legacyOptions = null) {
+  // The established API accepts one options object. A few older Finance routes
+  // still call writeAuditEvent(connection, options) from inside transactions.
+  // Preserve that call shape so their audit write uses the SAME transaction
+  // connection rather than silently falling back to the global pool.
+  const normalizedOptions =
+    legacyOptions && typeof legacyOptions === "object"
+      ? { ...legacyOptions, connection: options }
+      : options || {};
+
+  const {
+    connection = pool,
+    req = null,
+    userId = null,
+    branchId = null,
+    action,
+    details,
+    workspaceCode = null,
+    businessUnitId = null,
+    miningSiteId = null,
+    hireLocationId = null,
+    entityType = null,
+    entityId = null,
+    actionType = null,
+    outcome = "success",
+    severity = "info",
+    metadata = null,
+  } = normalizedOptions;
+
   const columns = await getTableColumns(connection, "activity_log");
 
   if (columns.size === 0) {
-    return;
+    return null;
   }
 
   const requestContext = getRequestAuditContext(req);
@@ -136,18 +147,19 @@ async function writeAuditEvent({
   );
 
   if (availableEntries.length === 0) {
-    return;
+    return null;
   }
 
   const columnNames = availableEntries.map(([column]) => `\`${column}\``);
   const placeholders = availableEntries.map(() => "?");
   const params = availableEntries.map(([, value]) => value);
 
-  await connection.query(
+  const [result] = await connection.query(
     `INSERT INTO activity_log (${columnNames.join(", ")})
      VALUES (${placeholders.join(", ")})`,
     params
   );
+  return Number(result?.insertId || 0) || null;
 }
 
 module.exports = {

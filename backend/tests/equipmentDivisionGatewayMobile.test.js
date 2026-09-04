@@ -6,26 +6,34 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..", "..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
-test("equipment division gateway uses a compact no-scroll mobile chooser", () => {
+test("equipment business opening uses a compact protected mobile flow", () => {
+  const portal = read(
+    "frontend",
+    "src",
+    "pages",
+    "EquipmentHirePortalPage.jsx"
+  );
   const gateway = read(
     "frontend",
     "src",
     "pages",
     "EquipmentDivisionGatewayPage.jsx"
   );
-  const mobileCss = read(
+  const css = read(
     "frontend",
     "src",
     "styles",
-    "equipmentDivisionGateway.mobile.css"
+    "equipmentBusinessExperience.css"
   );
 
-  assert.match(gateway, /equipmentDivisionGateway\.mobile\.css/);
-  assert.match(mobileCss, /@media \(max-width: 620px\)/);
-  assert.match(mobileCss, /height: 100dvh/);
-  assert.match(mobileCss, /grid-template-rows: auto auto minmax\(0, 1fr\)/);
-  assert.match(mobileCss, /grid-template-rows: repeat\(2, minmax\(0, 1fr\)\)/);
-  assert.match(mobileCss, /\.equipment-gateway__division-card ul[\s\S]*display: none/);
-  assert.match(mobileCss, /\.equipment-gateway__shared-strip,[\s\S]*\.equipment-gateway__footer[\s\S]*display: none/);
-  assert.match(mobileCss, /@media \(max-width: 620px\) and \(max-height: 680px\)/);
+  assert.match(portal, /Navigate to="\/login\?workspace=equipment_hire" replace/);
+  assert.doesNotMatch(portal, /EquipmentBusinessLandingPage/);
+  assert.match(gateway, /Back to Login/);
+  assert.match(gateway, /Back to Equipment Login/);
+  assert.doesNotMatch(gateway, /\/company\//);
+  assert.match(css, /@media \(max-width: 680px\)/);
+  assert.match(css, /\.equipment-business-public__division-grid,[\s\S]*\.equipment-command__grid[\s\S]*grid-template-columns: 1fr/);
+  assert.match(css, /\.equipment-command__identity[\s\S]*display: none/);
+  assert.match(css, /\.equipment-command__footer-actions[\s\S]*flex-direction: column/);
+  assert.doesNotMatch(css, /min-width:\s*[7-9]\d\dpx/);
 });

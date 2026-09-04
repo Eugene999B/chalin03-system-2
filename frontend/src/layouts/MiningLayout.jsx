@@ -116,6 +116,13 @@ const navigationSections = [
         permissions: ["workers.view"],
       },
       {
+        title: "Payroll Processing",
+        description: "Validate, approve, pay and reconcile protected salary cycles",
+        path: "/mining/payroll",
+        icon: "💵",
+        permissions: ["payroll.view"],
+      },
+      {
         title: "Employment & HR Documents",
         description: "Prepare new-hire letters before worker registration",
         path: "/mining/employment-documents",

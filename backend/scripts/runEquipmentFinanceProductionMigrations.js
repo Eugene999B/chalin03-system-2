@@ -3,9 +3,9 @@ const path = require("node:path");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
-const RELEASE_CONFIRMATION = "20260729_EQUIPMENT_FINANCE_COMPLETE";
+const RELEASE_CONFIRMATION = "20260825_EQUIPMENT_FINANCE_POLICY_HARDENING";
 const MIGRATION_LOCK_NAME =
-  "chalin03:production-migrations:20260729-equipment-finance";
+  "chalin03:production-migrations:20260825-equipment-finance-policy-hardening";
 
 const PRODUCTION_MIGRATION_PLAN = Object.freeze([
   {
@@ -71,6 +71,17 @@ const PRODUCTION_MIGRATION_PLAN = Object.freeze([
       "uncontrolled_finance_delivery_statuses",
       "uncontrolled_finance_ownership_statuses",
       "controlled_finance_assets_active_on_hire",
+    ],
+  },
+  {
+    name: "20260825_equipment_finance_policy_hardening",
+    migration: "20260825_equipment_finance_policy_hardening.sql",
+    verifier: "20260825_equipment_finance_policy_hardening_verify.sql",
+    migrationRecord: "20260825_equipment_finance_policy_hardening",
+    expectedProblems: [
+      "missing_policy_columns",
+      "missing_policy_indexes",
+      "missing_policy_triggers",
     ],
   },
 ]);

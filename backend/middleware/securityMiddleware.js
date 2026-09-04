@@ -8,6 +8,9 @@ const OFFICIAL_FRONTEND_ORIGINS = new Set([
   "https://chalin03.com",
   "https://www.chalin03.com",
 ]);
+const TRUSTED_BROWSER_METHODS = "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS";
+const INTERNAL_APPROVAL_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
+const INTERNAL_APPROVAL_REQUEST_ID_PATTERN = /^\d+$/;
 
 function isProductionEnvironment() {
   return String(process.env.NODE_ENV || "").toLowerCase() === "production";
@@ -78,6 +81,37 @@ function isTrustedFrontendOrigin(
   return Boolean(normalized && trustedOrigins.has(normalized));
 }
 
+function isInternalOperationalApprovalExecution(req) {
+  const host = normalizeHost(req?.headers?.host);
+  if (!["127.0.0.1", "localhost", "::1"].includes(host)) return false;
+
+  const requestId = String(
+    typeof req?.get === "function"
+      ? req.get("x-chalin-approval-request-id") || ""
+      : req?.headers?.["x-chalin-approval-request-id"] || ""
+  ).trim();
+  const executionToken = String(
+    typeof req?.get === "function"
+      ? req.get("x-chalin-approval-execution") || ""
+      : req?.headers?.["x-chalin-approval-execution"] || ""
+  ).trim();
+
+  if (
+    !INTERNAL_APPROVAL_REQUEST_ID_PATTERN.test(requestId) ||
+    !INTERNAL_APPROVAL_TOKEN_PATTERN.test(executionToken)
+  ) {
+    return false;
+  }
+
+  const method = String(req?.method || "").toUpperCase();
+  const path = String(req?.path || "").replace(/\/$/, "");
+
+  if (method === "POST" && path === "/api/returns") return true;
+  if (method === "PUT" && /^\/api\/sales\/\d+$/.test(path)) return true;
+  if (method === "PATCH" && /^\/api\/sales\/\d+\/void$/.test(path)) return true;
+  return false;
+}
+
 function shouldSkipOriginProtection(req) {
   return req.method === "OPTIONS" || HEALTH_PATHS.has(req.path);
 }
@@ -89,6 +123,34 @@ function safeSecretEquals(expectedValue, suppliedValue) {
     return false;
   }
   return crypto.timingSafeEqual(expected, supplied);
+}
+
+function trustedBrowserCorsBoundary(req, res, next) {
+  const suppliedOrigin = req.get("origin");
+  if (!suppliedOrigin || !isTrustedFrontendOrigin(suppliedOrigin)) {
+    return next();
+  }
+
+  const normalizedOrigin = normalizeOrigin(suppliedOrigin);
+  res.setHeader("Access-Control-Allow-Origin", normalizedOrigin);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  if (typeof res.vary === "function") {
+    res.vary("Origin");
+  } else {
+    res.setHeader("Vary", "Origin");
+  }
+
+  if (req.method !== "OPTIONS") {
+    return next();
+  }
+
+  const requestedHeaders = req.get("access-control-request-headers");
+  res.setHeader("Access-Control-Allow-Methods", TRUSTED_BROWSER_METHODS);
+  if (requestedHeaders) {
+    res.setHeader("Access-Control-Allow-Headers", requestedHeaders);
+  }
+  res.setHeader("Access-Control-Max-Age", "86400");
+  return res.status(204).end();
 }
 
 function trustedFrontendOriginMiddleware(req, res, next) {
@@ -111,7 +173,10 @@ function trustedHostMiddleware(req, res, next) {
     return next();
   }
   const requestHost = req.headers.host;
-  if (isTrustedApiHost(requestHost)) {
+  if (
+    isTrustedApiHost(requestHost) ||
+    isInternalOperationalApprovalExecution(req)
+  ) {
     return next();
   }
   return res.status(421).json({
@@ -122,7 +187,11 @@ function trustedHostMiddleware(req, res, next) {
 }
 
 function cloudflareOriginSecretMiddleware(req, res, next) {
-  if (!isProductionEnvironment() || shouldSkipOriginProtection(req)) {
+  if (
+    !isProductionEnvironment() ||
+    shouldSkipOriginProtection(req) ||
+    isInternalOperationalApprovalExecution(req)
+  ) {
     return next();
   }
 
@@ -169,6 +238,7 @@ function buildSecurityMiddleware() {
   const production = isProductionEnvironment();
 
   return [
+    trustedBrowserCorsBoundary,
     helmet({
       contentSecurityPolicy: {
         directives: {
@@ -233,12 +303,14 @@ const sensitiveAdminLimiter = buildRateLimiter({
 module.exports = {
   OFFICIAL_FRONTEND_ORIGINS,
   ORIGIN_SECRET_HEADER,
+  TRUSTED_BROWSER_METHODS,
   additionalSecurityHeaders,
   buildSecurityMiddleware,
   buildRateLimiter,
   cloudflareOriginSecretMiddleware,
   getTrustedApiHosts,
   getTrustedFrontendOrigins,
+  isInternalOperationalApprovalExecution,
   isTrustedApiHost,
   isTrustedFrontendOrigin,
   loginLimiter,
@@ -246,6 +318,7 @@ module.exports = {
   normalizeOrigin,
   safeSecretEquals,
   sensitiveAdminLimiter,
+  trustedBrowserCorsBoundary,
   trustedFrontendOriginMiddleware,
   trustedHostMiddleware,
 };

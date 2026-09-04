@@ -21,7 +21,7 @@ import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
-import UsersSettingsPage from "./pages/UsersSettingsPage";
+import SparePartsUsersSettingsWithDebtRemindersPage from "./pages/SparePartsUsersSettingsWithDebtRemindersPage";
 import UserPermissionManagerPage from "./pages/UserPermissionManagerPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
@@ -65,6 +65,9 @@ const EquipmentSalesWorkspacePage = lazy(() =>
 const EquipmentSalesReportsPage = lazy(() =>
   import("./pages/EquipmentSalesReportsPage")
 );
+const EquipmentBusinessWorkforcePage = lazy(() =>
+  import("./pages/EquipmentBusinessWorkforcePage")
+);
 const HireCommercialControlPage = lazy(() =>
   import("./pages/HireCommercialControlPage")
 );
@@ -87,6 +90,9 @@ const WorkspaceAdministrationPage = lazy(() =>
 const EmploymentDocumentsPage = lazy(() => import("./pages/EmploymentDocumentsPage"));
 const DocumentSignatureSettingsPage = lazy(() =>
   import("./pages/DocumentSignatureSettingsPage")
+);
+const PayrollProcessingCentrePage = lazy(() =>
+  import("./pages/PayrollProcessingCentrePage")
 );
 
 const businessWorkRoles = ["admin", "manager", "cashier"];
@@ -305,7 +311,7 @@ export default function App() {
 
             <Route
               path="users-settings"
-              element={rolePage(adminOnlyRoles, <UsersSettingsPage />)}
+              element={rolePage(adminOnlyRoles, <SparePartsUsersSettingsWithDebtRemindersPage />)}
             />
             <Route
               path="user-permissions"
@@ -341,6 +347,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -466,6 +479,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -611,10 +631,24 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -711,10 +745,24 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
