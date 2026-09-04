@@ -9,7 +9,6 @@ const CATEGORIES = Object.freeze([
   "deposit",
   "payment",
   "reminders",
-  "settlement_ownership",
   "document_share",
 ]);
 const LABELS = Object.freeze({
@@ -20,7 +19,6 @@ const LABELS = Object.freeze({
   deposit: "Deposits & reservations",
   payment: "Payments & collections",
   reminders: "Due, overdue & arrears reminders",
-  settlement_ownership: "Settlement & ownership readiness",
   document_share: "Document shares",
 });
 const DEFAULTS = Object.freeze(Object.fromEntries(CATEGORIES.map((key) => [key, true])));
