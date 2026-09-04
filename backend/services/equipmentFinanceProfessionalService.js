@@ -7,6 +7,7 @@ const {
 } = require("./equipmentFinanceReconciliationService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
+const { DEFAULTS: NOTIFICATION_DEFAULTS, getNotificationPolicy, isNotificationEnabled, updateNotificationPolicy } = require("./equipmentFinanceNotificationPolicyService");
 
 const REQUIRED_TABLES = Object.freeze([
   "equipment_finance_settings",
@@ -332,7 +333,9 @@ async function getProfessionalSettings(connection = pool, { includeSignature = f
       "EQUIPMENT_FINANCE_SETTINGS_MISSING"
     );
   }
-  return includeSignature ? row : publicSettings(row);
+  const output = includeSignature ? row : publicSettings(row);
+  try { output.notification_controls = await getNotificationPolicy(connection); } catch (error) { console.warn("Installment notification controls unavailable; keeping defaults:", error.message); output.notification_controls = NOTIFICATION_DEFAULTS; }
+  return output;
 }
 
 function normalizeSettingsPayload(body, current) {
@@ -485,6 +488,7 @@ function normalizeSettingsPayload(body, current) {
 
 async function updateProfessionalSettings({ body, reason, userId, req }) {
   const cleanReason = cleanText(reason, 500);
+  const notificationInput = body?.notification_controls;
   if (cleanReason.length < 5) {
     throw new ProfessionalFinanceError(400, "Enter a clear settings change reason of at least 5 characters.");
   }
@@ -499,6 +503,9 @@ async function updateProfessionalSettings({ body, reason, userId, req }) {
     const current = rows[0];
     if (!current) throw new ProfessionalFinanceError(503, "Finance settings are missing.");
     const updates = normalizeSettingsPayload(body || {}, current);
+    let notificationControls = NOTIFICATION_DEFAULTS;
+    if (notificationInput !== undefined) notificationControls = (await updateNotificationPolicy(notificationInput)).controls;
+    else { try { notificationControls = await getNotificationPolicy(); } catch (_) {} }
     const keys = Object.keys(updates);
     if (!keys.length) {
       await connection.commit();
@@ -532,7 +539,7 @@ async function updateProfessionalSettings({ body, reason, userId, req }) {
       ]
     );
     await connection.commit();
-    return { changed: true, settings: publicSettings(next) };
+    return { changed: true, settings: { ...publicSettings(next), notification_controls: notificationControls } };
   } catch (error) {
     try {
       await connection.rollback();
@@ -1448,8 +1455,9 @@ async function sendBossPaymentAlert({ paymentId, agreementId, userId = null }) {
     };
     const message = replaceTemplate(settings.payment_alert_template, values).slice(0, 480);
     const enabled = Boolean(Number(settings.boss_payment_alert_enabled));
+    const paymentCategoryEnabled = await isNotificationEnabled("payment");
     const phone = cleanText(settings.boss_payment_alert_phone, 40);
-    if (!enabled || !phone) {
+    if (!enabled || !paymentCategoryEnabled || !phone) {
       await pool.query(
         `INSERT INTO equipment_finance_payment_alerts (
            payment_id, agreement_id, boss_phone, alert_message, alert_status,

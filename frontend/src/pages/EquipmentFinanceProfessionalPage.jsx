@@ -10,6 +10,18 @@ const SETTINGS_API = `${API}/professional/settings`;
 const DOCUMENT_API = `${API}/professional/documents`;
 const LIFECYCLE_API = `${API}/finance-lifecycle`;
 
+const FINANCE_NOTIFICATION_GROUPS = [
+  ["equipment_created", "Equipment & machine created", "Registration and machine-created alerts."],
+  ["customer_created", "Customer & finance account created", "New installment customer/account alerts."],
+  ["application_approved", "Credit applications approved", "Approval notifications for finance applications."],
+  ["agreement", "Agreements activated", "Agreement activation messages."],
+  ["deposit", "Deposits & reservations", "Deposit and reservation activity."],
+  ["payment", "Payments & collections", "Boss notifications for committed installment payments."],
+  ["reminders", "Due, overdue & arrears reminders", "Automatic reminder traffic."],
+  ["settlement_ownership", "Settlement & ownership readiness", "Settlement and ownership notifications."],
+  ["document_share", "Document shares", "Controlled finance document-share notifications."],
+];
+
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
@@ -462,7 +474,15 @@ function SettingsWorkspace() {
             <Field label="Complimentary services"><input type="number" min="0" value={settings.complimentary_service_count ?? 1} onChange={(event) => setValue("complimentary_service_count", event.target.value)} /></Field>
           </div><div className="finance-pro__toggles"><label><input type="checkbox" checked={Boolean(settings.allow_partial_payments)} onChange={(event) => setValue("allow_partial_payments", event.target.checked)} />Allow partial payments</label><label><input type="checkbox" checked={Boolean(settings.advance_excess_to_future)} onChange={(event) => setValue("advance_excess_to_future", event.target.checked)} />Advance payment above the period into future schedule lines</label></div></section>
 
-          <section><div className="finance-pro__section-title"><div><p>Notifications</p><h2>Boss payment alerts and customer reminders</h2></div></div><div className="finance-pro__form-grid">
+          <section><div className="finance-pro__section-title"><div><p>Notifications</p><h2>Boss payment alerts and customer reminders</h2></div></div>
+          <div className="finance-pro__notification-grid">
+            {FINANCE_NOTIFICATION_GROUPS.map(([key, title, description]) => {
+              const enabled = settings.notification_controls?.[key] !== false;
+              return <article key={key} className={`finance-pro__notification-card ${enabled ? "is-on" : "is-off"}`}><div><strong>{title}</strong><small>{description}</small></div><label className="finance-pro__switch"><input type="checkbox" checked={enabled} onChange={(event) => setSettings((current) => ({ ...current, notification_controls: { ...(current.notification_controls || {}), [key]: event.target.checked } }))} /><span>{enabled ? "ON" : "OFF"}</span></label></article>;
+            })}
+          </div>
+          <p className="finance-pro__notification-note">OFF blocks that category from sending. Existing Finance/SMS master switches still apply.</p>
+<div className="finance-pro__form-grid">
             <Field label="Boss payment-alert phone"><input value={settings.boss_payment_alert_phone || ""} onChange={(event) => setValue("boss_payment_alert_phone", event.target.value)} placeholder="024... or +233..." /></Field>
             <Field label="Reminder time"><input type="time" value={String(settings.reminder_time || "09:00").slice(0, 5)} onChange={(event) => setValue("reminder_time", event.target.value)} /></Field>
             <Field label="Due-soon days"><input value={settings.due_soon_days || "7,3,1"} onChange={(event) => setValue("due_soon_days", event.target.value)} /></Field>

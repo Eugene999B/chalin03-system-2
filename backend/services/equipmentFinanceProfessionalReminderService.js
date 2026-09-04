@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 const {
   assertProfessionalSchema,
@@ -218,6 +219,7 @@ async function runProfessionalReminderSync({
 } = {}) {
   const { settings, reminders } = await reminderCandidates({ today });
   const automatic = source === "scheduler";
+  if (!(await isNotificationEnabled("reminders"))) return { sent: 0, failed: 0, skipped: reminders.length, reason: "notification_category_disabled" };
   if (automatic && !settings.automatic_reminders_enabled) {
     return { sent: 0, failed: 0, skipped: reminders.length, reason: "automatic_disabled" };
   }

@@ -1,6 +1,7 @@
 const { getProfessionalSettings } = require("./equipmentFinanceProfessionalService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 const { pool } = require("../config/db");
+const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");
 
 const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceBossAlertDeliveryInstalled");
 const POLL_MS = Math.max(1000, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
@@ -65,6 +66,13 @@ function eventKind(row, metadata) {
   if (/payment|collection/.test(text) || String(row?.entity_type || "").toLowerCase() === "equipment_sale_payment") return "payment";
   if (/agreement.*(activat|creat)|agreement\.activat/.test(text)) return "agreement";
   return "finance_activity";
+}
+async function notificationCategoryEnabled(category) {
+  if (!category) return true;
+  return isNotificationEnabled(category);
+}
+function notificationCategoryForEventKind(kind) {
+  return { machine_created: "equipment_created", customer_created: "customer_created", application_approved: "application_approved", agreement: "agreement", deposit: "deposit" }[kind] || null;
 }
 function isFinanceActivity(row) {
   const action = clean(row?.action, 200).toUpperCase();
@@ -197,6 +205,7 @@ async function deliverFinanceActivityBossAlert(row) {
   if (!settings.enabled || !settings.phone) return;
   const enriched = await enrichActivityRow(row);
   const kind = eventKind(enriched, parseMetadata(enriched.metadata_json));
+  if (!(await notificationCategoryEnabled(notificationCategoryForEventKind(kind)))) return;
   if (kind === "noise" || kind === "payment") return;
   const message = buildActivityMessage(enriched);
   const result = await sendSmsAlertToPhone({ branchId: Number(row.branch_id || 1), phone: settings.phone, message, logMessage: message, smsType: "equipment_finance_boss_alert", sentBy: row.user_id || null, sourceReference });
