@@ -50,7 +50,7 @@ CALL chalin03_object_storage_add_column(
 CALL chalin03_object_storage_add_column(
     'equipment_media',
     'storage_status',
-    "VARCHAR(20) NULL AFTER storage_bucket"
+    'VARCHAR(20) NULL AFTER storage_bucket'
 );
 
 CALL chalin03_object_storage_add_column(
