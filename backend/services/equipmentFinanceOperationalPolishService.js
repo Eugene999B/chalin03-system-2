@@ -4,6 +4,7 @@ const { pool } = require("../config/db");
 const { writeAuditEvent } = require("./auditTrailService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
+const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");
 const {
   getIssuedDocument,
   getProfessionalSettings,
@@ -2665,6 +2666,7 @@ async function issuePaymentReceipt({ paymentId, userId }) {
 }
 
 async function shareMessage({ channel, recipient, message, userId, sourceReference }) {
+  if (!(await isNotificationEnabled("document_share"))) return { status: "skipped", skipped: true, reason: "notification_category_disabled" };
   if (channel === "sms") {
     if (!normalizePhone(recipient)) {
       return { status: "failed", error: "A valid Ghana phone number is required." };
