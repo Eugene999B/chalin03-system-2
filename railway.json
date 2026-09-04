@@ -1,11 +1,10 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "RAILPACK",
-    "buildCommand": "npm ci"
+    "builder": "RAILPACK"
   },
   "deploy": {
-    "preDeployCommand": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runSparePartsUserSettingsAccessControlMigration.js && node scripts/runCustomerFeatureControlsProductionMigration.js && node scripts/runEquipmentFinanceScheduleCatchupRepairV5.js && node scripts/runEquipmentFinanceScheduleTruthRepairV4.js && node scripts/runEquipmentFinanceDateEvidenceRepairV3.js && node scripts/runEquipmentFinanceRuntimeContractRepairV2.js && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js && node scripts/finalizeEquipmentFinanceCommitmentTrigger.js && node scripts/runEquipmentFinanceSmsAlertMigration.js && node scripts/runEquipmentFinanceLateFeePolicyMigration.js && node scripts/verifyEquipmentFinanceDepositReadiness.js",
-    "startCommand": "node scripts/runSparePartsUserSettingsAccessControlMigration.js && node -r ./services/equipmentFinancePortfolioResilience.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js server.js"
+    "preDeployCommand": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runSparePartsUserSettingsAccessControlMigration.js && node scripts/runCustomerFeatureControlsProductionMigration.js && node scripts/runEquipmentFinanceScheduleCatchupRepairV5.js && node scripts/runEquipmentFinanceScheduleTruthRepairV4.js && node scripts/runEquipmentFinanceDateEvidenceRepairV3.js && node scripts/runEquipmentFinanceRuntimeContractRepairV2.js && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js && node scripts/finalizeEquipmentFinanceCommitmentTrigger.js && node scripts/runEquipmentFinanceSmsAlertMigration.js && node scripts/runEquipmentFinanceLateFeePolicyMigration.js && node scripts/verifyEquipmentFinanceDepositReadiness.js && node scripts/runEquipmentFinanceNotificationPolicyMigration.js",
+    "startCommand": "node scripts/runSparePartsUserSettingsAccessControlMigration.js && node scripts/runEquipmentFinanceSmsAlertMigration.js && node scripts/runEquipmentFinanceNotificationPolicyMigration.js && node scripts/runEquipmentFinanceLateFeePolicyMigration.js && node -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js server.js"
   }
 }
