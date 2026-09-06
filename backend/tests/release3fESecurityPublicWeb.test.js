@@ -217,3 +217,9 @@ test("production CORS retains both official frontend domains", () => {
   assert.match(server, /https:\/\/chalin03\.com/);
   assert.match(server, /https:\/\/www\.chalin03\.com/);
 });
+
+test("server classifies rejected CORS origins as a controlled 403", () => {
+  const server = read("backend/server.js");
+  assert.match(server, /statusCode = 403/);
+  assert.match(server, /CHALIN03_CORS_ORIGIN_NOT_ALLOWED/);
+});
