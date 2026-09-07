@@ -1,9 +1,13 @@
 const MINIMUMS = Object.freeze({
   // Safe floors for non-critical background work; critical user actions stay synchronous.
-  EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS: 5 * 60 * 1000,
-  EQUIPMENT_FINANCE_PAYMENT_MESSAGE_INTERVAL_MS: 15 * 60 * 1000,
-  NOTIFICATION_SYNC_INTERVAL_MINUTES: 60,
-  SMS_DELIVERY_POLL_INTERVAL_MS: 10 * 60 * 1000,
+  EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS: 4 * 60 * 60 * 1000,
+  EQUIPMENT_FINANCE_PAYMENT_MESSAGE_INTERVAL_MS: 30 * 60 * 1000,
+  NOTIFICATION_SYNC_INTERVAL_MINUTES: 6 * 60,
+  SMS_DELIVERY_POLL_INTERVAL_MS: 30 * 60 * 1000,
+  DEBT_REMINDER_INTERVAL_MINUTES: 6 * 60,
+  EQUIPMENT_FINANCE_REMINDER_INTERVAL_MS: 6 * 60 * 60 * 1000,
+  INSTALLMENT_REMINDER_INTERVAL_MINUTES: 6 * 60,
+  EQUIPMENT_SALES_REMINDER_INTERVAL_MINUTES: 6 * 60,
 });
 
 function isProduction(env = process.env) {
@@ -36,7 +40,11 @@ if (runtimeCostState.applied) {
     `Runtime cost controls: boss=${Math.round(runtimeCostState.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS / 60000)}m, ` +
     `payment=${Math.round(runtimeCostState.EQUIPMENT_FINANCE_PAYMENT_MESSAGE_INTERVAL_MS / 60000)}m, ` +
     `notifications=${Math.round(runtimeCostState.NOTIFICATION_SYNC_INTERVAL_MINUTES)}m, ` +
-    `sms_delivery=${Math.round(runtimeCostState.SMS_DELIVERY_POLL_INTERVAL_MS / 60000)}m.`
+    `sms_delivery=${Math.round(runtimeCostState.SMS_DELIVERY_POLL_INTERVAL_MS / 60000)}m, ` +
+    `debt=${Math.round(runtimeCostState.DEBT_REMINDER_INTERVAL_MINUTES / 60)}h, ` +
+    `finance_reminders=${Math.round(runtimeCostState.EQUIPMENT_FINANCE_REMINDER_INTERVAL_MS / 3600000)}h, ` +
+    `installments=${Math.round(runtimeCostState.INSTALLMENT_REMINDER_INTERVAL_MINUTES / 60)}h, ` +
+    `sales_reminders=${Math.round(runtimeCostState.EQUIPMENT_SALES_REMINDER_INTERVAL_MINUTES / 60)}h.`
   );
 }
 
