@@ -4,7 +4,10 @@ const { pool } = require("../config/db");
 const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");
 
 const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceBossAlertDeliveryInstalled");
-const POLL_MS = Math.max(1000, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
+// Boss activity alerts remain automatic, but a two-second database poll is unnecessarily expensive.
+// Keep a bounded lower floor here so an aggressive environment value cannot reintroduce it.
+const MIN_POLL_MS = 30_000;
+const POLL_MS = Math.max(MIN_POLL_MS, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
 const BATCH_SIZE = 100;
 const IMPORTANT_FINANCE_ACTIONS = new Set([
   "EQUIPMENT_CREDIT_APPLICATION_ADMIN_APPROVED",
@@ -149,20 +152,20 @@ function buildActivityMessage(row) {
   const count = findValue(metadata, ["proposed_installment_count", "installment_count", "number_of_installments"]);
   const details = clean(row?.details, 220);
   const who = staff ? `Handled by ${staff}.` : "Handled by Chalin 03 Finance.";
-  const amountText = amount !== null && amount !== "" ? `Value ${money(amount) || clean(amount, 50)}.` : "";
-  const balanceText = balance !== null && balance !== "" ? `Outstanding balance ${money(balance) || clean(balance, 50)}.` : "";
+  const amountText = amount !== null && amount !== "" ? `Value ${money(amount)}.` : "";
+  const balanceText = balance !== null && balance !== "" ? `Outstanding balance ${money(balance)}.` : "";
   const plan = [installment !== null && installment !== "" ? `${money(installment) || clean(installment, 50)} per instalment` : "", frequency ? `every ${frequency}` : "", count ? `${count} instalments` : "", nextDue ? `next due ${dateLabel(nextDue)}` : ""].filter(Boolean).join(", ");
   switch (kind) {
     case "application_approved":
       return `CHALIN 03 FINANCE: Credit application ${application || ""} has been approved for ${customer || "the customer"}. ${asset ? `Equipment: ${asset}. ` : ""}${agreement ? `Agreement: ${agreement}. ` : ""}${amountText ? `Approved value ${amountText.replace(/^Value /, "")}` : ""}${plan ? ` Plan: ${plan}.` : ""} ${who}`.replace(/\s+/g, " ").trim();
     case "machine_created":
-      return `CHALIN 03 FINANCE: Equipment ${asset || "record"} has been registered for installment finance${customer ? ` for ${customer}` : ""}. ${amount !== null && amount !== "" ? `Selling price ${money(amount) || clean(amount, 50)}. ` : ""}${details ? `${details}. ` : ""}${who}`.replace(/\s+/g, " ").trim();
+      return `CHALIN 03 FINANCE: Equipment ${asset || "record"} has been registered for installment finance${customer ? ` for ${customer}` : ""}. ${amount !== null && amount !== "" ? `Selling price ${money(amount)}. ` : ""}${details ? `${details}. ` : ""}${who}`.replace(/\s+/g, " ").trim();
     case "customer_created":
       return `CHALIN 03 FINANCE: New customer ${customer || "Finance customer"} has been added to the installment portfolio.${application ? ` Application ${application}.` : ""}${asset ? ` Equipment ${asset}.` : ""} ${who}`.replace(/\s+/g, " ").trim();
     case "deposit":
-      return `CHALIN 03 FINANCE: Opening deposit received for ${customer || "customer"}.${agreement ? ` Agreement ${agreement}.` : ""}${asset ? ` Equipment ${asset}.` : ""} ${amountText ? ` ${amountText}` : ""}${method ? ` Method ${method}.` : ""}${receipt ? ` Receipt ${receipt}.` : ""} ${who}`.replace(/\s+/g, " ").trim();
+      return `CHALIN 03 FINANCE: Opening deposit received for ${customer || "customer"}.${agreement ? ` Agreement ${agreement}.` : ""}${asset ? ` Equipment ${asset}.` : ""}${amountText ? ` ${amountText}` : ""}${method ? ` Method ${method}.` : ""}${receipt ? ` Receipt ${receipt}.` : ""} ${who}`.replace(/\s+/g, " ").trim();
     case "agreement":
-      return `CHALIN 03 FINANCE: Installment agreement ${agreement || ""} is now ACTIVE for ${customer || "the customer"}.${asset ? ` Equipment: ${asset}.` : ""}${amount !== null && amount !== "" ? ` Contract value ${money(amount) || clean(amount, 50)}.` : ""}${plan ? ` Payment plan: ${plan}.` : ""}${balanceText ? ` ${balanceText}` : ""} ${who}`.replace(/\s+/g, " ").trim();
+      return `CHALIN 03 FINANCE: Installment agreement ${agreement || ""} is now ACTIVE for ${customer || "the customer"}.${asset ? ` Equipment: ${asset}.` : ""}${amount !== null && amount !== "" ? ` Contract value ${money(amount)}.` : ""}${plan ? ` Payment plan: ${plan}.` : ""}${balanceText ? ` ${balanceText}` : ""} ${who}`.replace(/\s+/g, " ").trim();
     case "payment":
       return `CHALIN 03 FINANCE: Payment received from ${customer || "customer"}.${agreement ? ` Agreement ${agreement}.` : ""}${asset ? ` Equipment: ${asset}.` : ""}${amountText ? ` ${amountText}` : ""}${method ? ` Method ${method}.` : ""}${receipt ? ` Receipt ${receipt}.` : ""}${balanceText ? ` ${balanceText}` : ""} ${who}`.replace(/\s+/g, " ").trim();
     default:
