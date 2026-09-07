@@ -1,4 +1,5 @@
 const MINIMUMS = Object.freeze({
+  // Safe floors for non-critical background work; critical user actions stay synchronous.
   EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS: 5 * 60 * 1000,
   EQUIPMENT_FINANCE_PAYMENT_MESSAGE_INTERVAL_MS: 15 * 60 * 1000,
   NOTIFICATION_SYNC_INTERVAL_MINUTES: 60,
