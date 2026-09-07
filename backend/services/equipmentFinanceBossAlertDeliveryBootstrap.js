@@ -4,7 +4,10 @@ const { pool } = require("../config/db");
 const { isNotificationEnabled } = require("./equipmentFinanceNotificationPolicyService");
 
 const INSTALL_FLAG = Symbol.for("chalin03.equipmentFinanceBossAlertDeliveryInstalled");
-const POLL_MS = Math.max(1000, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
+// Boss activity alerts remain automatic, but a two-second database poll is unnecessarily expensive.
+// Keep a bounded lower floor here so an aggressive environment value cannot reintroduce it.
+const MIN_POLL_MS = 30_000;
+const POLL_MS = Math.max(MIN_POLL_MS, Number(process.env.EQUIPMENT_FINANCE_BOSS_ALERT_POLL_MS) || 2000);
 const BATCH_SIZE = 100;
 const IMPORTANT_FINANCE_ACTIONS = new Set([
   "EQUIPMENT_CREDIT_APPLICATION_ADMIN_APPROVED",
