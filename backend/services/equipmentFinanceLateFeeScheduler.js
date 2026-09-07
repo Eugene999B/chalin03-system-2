@@ -31,11 +31,11 @@ function startEquipmentFinanceLateFeeScheduler() {
   if (String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production") return false;
 
   // Late-fee management decisions are not customer-facing real-time events.
-  // Bound the scheduler to an hourly minimum to avoid needless database wakeups.
-  const MIN_INTERVAL_MINUTES = 60;
+  // Bound the scheduler to a 48-hour minimum to avoid needless database wakeups.
+  const MIN_INTERVAL_MINUTES = 48 * 60;
   const intervalMinutes = Math.max(
     MIN_INTERVAL_MINUTES,
-    Number(process.env.EQUIPMENT_FINANCE_LATE_FEE_INTERVAL_MINUTES || 15)
+    Number(process.env.EQUIPMENT_FINANCE_LATE_FEE_INTERVAL_MINUTES || MIN_INTERVAL_MINUTES)
   );
 
   scheduler = setInterval(() => {
