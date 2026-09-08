@@ -43,22 +43,6 @@ html.${DATA_MASK_CLASS} .bwl-content textarea[readonly] {
 html.${DATA_MASK_CLASS} .bwl-content select option:not(:first-child) {
   color: transparent !important;
 }
-
-html.${DATA_MASK_CLASS} .bwl-content ul > li,
-html.${DATA_MASK_CLASS} .bwl-content ol > li,
-html.${DATA_MASK_CLASS} .bwl-content [role="list"] > [role="listitem"] {
-  color: transparent !important;
-  text-shadow: none !important;
-}
-
-html.${DATA_MASK_CLASS} .bwl-content ul > li button,
-html.${DATA_MASK_CLASS} .bwl-content ol > li button,
-html.${DATA_MASK_CLASS} .bwl-content [role="list"] > [role="listitem"] button,
-html.${DATA_MASK_CLASS} .bwl-content ul > li input,
-html.${DATA_MASK_CLASS} .bwl-content ol > li input,
-html.${DATA_MASK_CLASS} .bwl-content [role="list"] > [role="listitem"] input {
-  color: inherit !important;
-}
 `;
 
 const ACTIONS = {
