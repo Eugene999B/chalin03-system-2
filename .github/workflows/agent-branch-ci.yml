@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - 'agent/**'
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'database/**'
+      - '.github/workflows/**'
+      - 'railway.json'
 
 permissions:
   contents: read
