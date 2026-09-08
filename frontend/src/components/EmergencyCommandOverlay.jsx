@@ -3,9 +3,6 @@ import { getBusinessWorkspace } from "../data/businessWorkspaces";
 import "../styles/commandGate.css";
 
 const FLAG_KEY = "chalin03_emergency_command";
-// UI-only switch. It never changes API responses, database records, or permissions.
-// Set to false to restore normal visibility.
-const DATA_VISIBILITY_PAUSE = true;
 
 const ACTIONS = {
   spare_parts: [
@@ -71,52 +68,13 @@ export default function EmergencyCommandOverlay() {
     }
   }, [command]);
 
-  const hasSession = Boolean(user && localStorage.getItem("chalin03_token"));
-
-  useEffect(() => {
-    if (!hasSession || !DATA_VISIBILITY_PAUSE) return undefined;
-
-    const previousUserSelect = document.body.style.userSelect;
-    const previousPointerEvents = document.body.style.pointerEvents;
-    document.body.style.userSelect = "none";
-    document.body.style.pointerEvents = "none";
-
-    return () => {
-      document.body.style.userSelect = previousUserSelect;
-      document.body.style.pointerEvents = previousPointerEvents;
-    };
-  }, [hasSession]);
-
-  if (!hasSession) {
+  if (!command || !localStorage.getItem("chalin03_token") || !user) {
     return null;
   }
 
-  if (DATA_VISIBILITY_PAUSE) {
-    return (
-      <div
-        className="command-modal command-emergency-overlay chalin03-data-visibility-blank"
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 2147483000,
-          width: "100vw",
-          height: "100vh",
-          background: "#ffffff",
-          pointerEvents: "auto",
-          cursor: "default",
-        }}
-      />
-    );
-  }
-
-  if (!command || !user) {
-    return null;
-  }
-
-  const commandWorkspaceCode = command.workspaceCode || "spare_parts";
-  const workspace = getBusinessWorkspace(commandWorkspaceCode);
-  const actions = ACTIONS[commandWorkspaceCode] || ACTIONS.spare_parts;
+  const workspaceCode = command.workspaceCode || user.workspace_code || "spare_parts";
+  const workspace = getBusinessWorkspace(workspaceCode);
+  const actions = ACTIONS[workspaceCode] || ACTIONS.spare_parts;
 
   function close() {
     sessionStorage.removeItem(FLAG_KEY);
