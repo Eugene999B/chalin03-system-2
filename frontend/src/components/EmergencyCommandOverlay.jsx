@@ -7,43 +7,6 @@ const FLAG_KEY = "chalin03_emergency_command";
 // Set to false to restore normal visibility.
 const DATA_VISIBILITY_PAUSE = true;
 const HIDDEN_WORKSPACES = new Set(["spare_parts", "equipment_installment_finance", "installment_finance"]);
-const DATA_MASK_CLASS = "chalin03-data-visibility-mask";
-const DATA_MASK_STYLE_ID = "chalin03-data-visibility-mask-style";
-
-const DATA_MASK_CSS = `
-html.${DATA_MASK_CLASS} .bwl-content table tbody tr > td {
-  color: transparent !important;
-  text-shadow: none !important;
-}
-
-html.${DATA_MASK_CLASS} .bwl-content table tbody tr img,
-html.${DATA_MASK_CLASS} .bwl-content table tbody tr svg {
-  visibility: hidden !important;
-}
-
-html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record],
-html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record-row] {
-  color: transparent !important;
-  text-shadow: none !important;
-}
-
-html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record] img,
-html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record] svg,
-html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record-row] img,
-html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record-row] svg {
-  visibility: hidden !important;
-}
-
-html.${DATA_MASK_CLASS} .bwl-content input[readonly],
-html.${DATA_MASK_CLASS} .bwl-content textarea[readonly] {
-  color: transparent !important;
-  text-shadow: none !important;
-}
-
-html.${DATA_MASK_CLASS} .bwl-content select option:not(:first-child) {
-  color: transparent !important;
-}
-`;
 
 const ACTIONS = {
   spare_parts: [
@@ -109,46 +72,55 @@ export default function EmergencyCommandOverlay() {
     }
   }, [command]);
 
-  const hasToken = Boolean(localStorage.getItem("chalin03_token"));
+  const hasSession = Boolean(user && localStorage.getItem("chalin03_token"));
   const workspaceCode = String(
     user?.workspace_code || user?.active_workspace?.code || command?.workspaceCode || "spare_parts"
   ).toLowerCase();
-  const hiddenModeActive = Boolean(
-    user &&
-      hasToken &&
-      DATA_VISIBILITY_PAUSE &&
-      HIDDEN_WORKSPACES.has(workspaceCode)
-  );
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const existingStyle = document.getElementById(DATA_MASK_STYLE_ID);
-
-    if (existingStyle) existingStyle.remove();
-
-    if (!hiddenModeActive) {
-      root.classList.remove(DATA_MASK_CLASS);
-      return undefined;
-    }
-
-    root.classList.add(DATA_MASK_CLASS);
-    const style = document.createElement("style");
-    style.id = DATA_MASK_STYLE_ID;
-    style.textContent = DATA_MASK_CSS;
-    document.head.appendChild(style);
-
-    return () => {
-      root.classList.remove(DATA_MASK_CLASS);
-      style.remove();
-    };
-  }, [hiddenModeActive]);
+  const hiddenModeActive = hasSession && DATA_VISIBILITY_PAUSE && HIDDEN_WORKSPACES.has(workspaceCode);
 
   function close() {
     sessionStorage.removeItem(FLAG_KEY);
     setCommand(null);
   }
 
-  if (!user || !hasToken || hiddenModeActive || !command) {
+  useEffect(() => {
+    if (!hiddenModeActive) return undefined;
+
+    const previousUserSelect = document.body.style.userSelect;
+    const previousPointerEvents = document.body.style.pointerEvents;
+    document.body.style.userSelect = "none";
+    document.body.style.pointerEvents = "none";
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+      document.body.style.pointerEvents = previousPointerEvents;
+    };
+  }, [hiddenModeActive]);
+
+  if (!hasSession) {
+    return null;
+  }
+
+  if (hiddenModeActive) {
+    return (
+      <div
+        className="command-modal command-emergency-overlay chalin03-data-visibility-blank"
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483000,
+          width: "100vw",
+          height: "100vh",
+          background: "#ffffff",
+          pointerEvents: "auto",
+          cursor: "default",
+        }}
+      />
+    );
+  }
+
+  if (!command || !user) {
     return null;
   }
 
