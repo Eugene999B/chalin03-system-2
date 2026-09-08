@@ -5,6 +5,12 @@ on:
   push:
     branches:
       - production
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "database/**"
+      - "railway.json"
+      - ".github/workflows/version-3-production-smoke.yml"
 
 permissions:
   contents: read
@@ -126,4 +132,4 @@ jobs:
           name: version-3-live-production-smoke
           path: smoke-output
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
