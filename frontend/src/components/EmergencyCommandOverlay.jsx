@@ -8,6 +8,43 @@ const FLAG_KEY = "chalin03_emergency_command";
 const DATA_VISIBILITY_PAUSE = true;
 const HIDDEN_WORKSPACES = new Set(["spare_parts", "equipment_installment_finance", "installment_finance"]);
 const DATA_MASK_CLASS = "chalin03-data-visibility-mask";
+const DATA_MASK_STYLE_ID = "chalin03-data-visibility-mask-style";
+
+const DATA_MASK_CSS = `
+html.${DATA_MASK_CLASS} .bwl-content table tbody tr > td,
+html.${DATA_MASK_CLASS} .bwl-content table tbody tr > th {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content table tbody tr img,
+html.${DATA_MASK_CLASS} .bwl-content table tbody tr svg {
+  visibility: hidden !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record],
+html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record-row] {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record] img,
+html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record] svg,
+html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record-row] img,
+html.${DATA_MASK_CLASS} .bwl-content [data-chalin03-db-record-row] svg {
+  visibility: hidden !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content input[readonly],
+html.${DATA_MASK_CLASS} .bwl-content textarea[readonly] {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content option:not(:first-child) {
+  color: transparent !important;
+}
+`;
 
 const ACTIONS = {
   spare_parts: [
@@ -73,24 +110,38 @@ export default function EmergencyCommandOverlay() {
     }
   }, [command]);
 
-  if (!user || !localStorage.getItem("chalin03_token")) {
-    return null;
-  }
-
+  const hasToken = Boolean(localStorage.getItem("chalin03_token"));
   const workspaceCode = String(
-    user.workspace_code || user.active_workspace?.code || command?.workspaceCode || "spare_parts"
+    user?.workspace_code || user?.active_workspace?.code || command?.workspaceCode || "spare_parts"
   ).toLowerCase();
-  const hiddenModeActive = DATA_VISIBILITY_PAUSE && HIDDEN_WORKSPACES.has(workspaceCode);
+  const hiddenModeActive = Boolean(
+    user &&
+      hasToken &&
+      DATA_VISIBILITY_PAUSE &&
+      HIDDEN_WORKSPACES.has(workspaceCode)
+  );
 
   useEffect(() => {
     const root = document.documentElement;
+    const existingStyle = document.getElementById(DATA_MASK_STYLE_ID);
+
+    if (existingStyle) existingStyle.remove();
+
     if (!hiddenModeActive) {
       root.classList.remove(DATA_MASK_CLASS);
       return undefined;
     }
 
     root.classList.add(DATA_MASK_CLASS);
-    return () => root.classList.remove(DATA_MASK_CLASS);
+    const style = document.createElement("style");
+    style.id = DATA_MASK_STYLE_ID;
+    style.textContent = DATA_MASK_CSS;
+    document.head.appendChild(style);
+
+    return () => {
+      root.classList.remove(DATA_MASK_CLASS);
+      style.remove();
+    };
   }, [hiddenModeActive]);
 
   function close() {
@@ -98,11 +149,7 @@ export default function EmergencyCommandOverlay() {
     setCommand(null);
   }
 
-  if (hiddenModeActive) {
-    return null;
-  }
-
-  if (!command || !user) {
+  if (!user || !hasToken || hiddenModeActive) {
     return null;
   }
 
@@ -113,6 +160,10 @@ export default function EmergencyCommandOverlay() {
   function open(path) {
     close();
     window.location.assign(path);
+  }
+
+  if (!command) {
+    return null;
   }
 
   return (
