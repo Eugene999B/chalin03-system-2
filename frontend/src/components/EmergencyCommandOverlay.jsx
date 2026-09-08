@@ -11,8 +11,7 @@ const DATA_MASK_CLASS = "chalin03-data-visibility-mask";
 const DATA_MASK_STYLE_ID = "chalin03-data-visibility-mask-style";
 
 const DATA_MASK_CSS = `
-html.${DATA_MASK_CLASS} .bwl-content table tbody tr > td,
-html.${DATA_MASK_CLASS} .bwl-content table tbody tr > th {
+html.${DATA_MASK_CLASS} .bwl-content table tbody tr > td {
   color: transparent !important;
   text-shadow: none !important;
 }
@@ -41,8 +40,24 @@ html.${DATA_MASK_CLASS} .bwl-content textarea[readonly] {
   text-shadow: none !important;
 }
 
-html.${DATA_MASK_CLASS} .bwl-content option:not(:first-child) {
+html.${DATA_MASK_CLASS} .bwl-content select option:not(:first-child) {
   color: transparent !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content ul > li,
+html.${DATA_MASK_CLASS} .bwl-content ol > li,
+html.${DATA_MASK_CLASS} .bwl-content [role="list"] > [role="listitem"] {
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+html.${DATA_MASK_CLASS} .bwl-content ul > li button,
+html.${DATA_MASK_CLASS} .bwl-content ol > li button,
+html.${DATA_MASK_CLASS} .bwl-content [role="list"] > [role="listitem"] button,
+html.${DATA_MASK_CLASS} .bwl-content ul > li input,
+html.${DATA_MASK_CLASS} .bwl-content ol > li input,
+html.${DATA_MASK_CLASS} .bwl-content [role="list"] > [role="listitem"] input {
+  color: inherit !important;
 }
 `;
 
@@ -149,7 +164,7 @@ export default function EmergencyCommandOverlay() {
     setCommand(null);
   }
 
-  if (!user || !hasToken || hiddenModeActive) {
+  if (!user || !hasToken || hiddenModeActive || !command) {
     return null;
   }
 
@@ -160,10 +175,6 @@ export default function EmergencyCommandOverlay() {
   function open(path) {
     close();
     window.location.assign(path);
-  }
-
-  if (!command) {
-    return null;
   }
 
   return (
