@@ -7,6 +7,7 @@ const FLAG_KEY = "chalin03_emergency_command";
 // Set to false to restore normal visibility.
 const DATA_VISIBILITY_PAUSE = true;
 const HIDDEN_WORKSPACES = new Set(["spare_parts", "equipment_installment_finance", "installment_finance"]);
+const DATA_MASK_CLASS = "chalin03-data-visibility-mask";
 
 const ACTIONS = {
   spare_parts: [
@@ -81,27 +82,24 @@ export default function EmergencyCommandOverlay() {
   ).toLowerCase();
   const hiddenModeActive = DATA_VISIBILITY_PAUSE && HIDDEN_WORKSPACES.has(workspaceCode);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!hiddenModeActive) {
+      root.classList.remove(DATA_MASK_CLASS);
+      return undefined;
+    }
+
+    root.classList.add(DATA_MASK_CLASS);
+    return () => root.classList.remove(DATA_MASK_CLASS);
+  }, [hiddenModeActive]);
+
   function close() {
     sessionStorage.removeItem(FLAG_KEY);
     setCommand(null);
   }
 
   if (hiddenModeActive) {
-    return (
-      <div
-        className="command-modal command-emergency-overlay chalin03-data-visibility-blank"
-        aria-hidden="true"
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 2147483000,
-          width: "100vw",
-          height: "100vh",
-          background: "#ffffff",
-          pointerEvents: "none",
-        }}
-      />
-    );
+    return null;
   }
 
   if (!command || !user) {
