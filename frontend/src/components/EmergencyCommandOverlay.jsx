@@ -6,7 +6,6 @@ const FLAG_KEY = "chalin03_emergency_command";
 // UI-only switch. It never changes API responses, database records, or permissions.
 // Set to false to restore normal visibility.
 const DATA_VISIBILITY_PAUSE = true;
-const HIDDEN_WORKSPACES = new Set(["spare_parts", "equipment_installment_finance", "installment_finance"]);
 
 const ACTIONS = {
   spare_parts: [
@@ -73,18 +72,9 @@ export default function EmergencyCommandOverlay() {
   }, [command]);
 
   const hasSession = Boolean(user && localStorage.getItem("chalin03_token"));
-  const workspaceCode = String(
-    user?.workspace_code || user?.active_workspace?.code || command?.workspaceCode || "spare_parts"
-  ).toLowerCase();
-  const hiddenModeActive = hasSession && DATA_VISIBILITY_PAUSE && HIDDEN_WORKSPACES.has(workspaceCode);
-
-  function close() {
-    sessionStorage.removeItem(FLAG_KEY);
-    setCommand(null);
-  }
 
   useEffect(() => {
-    if (!hiddenModeActive) return undefined;
+    if (!hasSession || !DATA_VISIBILITY_PAUSE) return undefined;
 
     const previousUserSelect = document.body.style.userSelect;
     const previousPointerEvents = document.body.style.pointerEvents;
@@ -95,13 +85,13 @@ export default function EmergencyCommandOverlay() {
       document.body.style.userSelect = previousUserSelect;
       document.body.style.pointerEvents = previousPointerEvents;
     };
-  }, [hiddenModeActive]);
+  }, [hasSession]);
 
   if (!hasSession) {
     return null;
   }
 
-  if (hiddenModeActive) {
+  if (DATA_VISIBILITY_PAUSE) {
     return (
       <div
         className="command-modal command-emergency-overlay chalin03-data-visibility-blank"
@@ -124,9 +114,14 @@ export default function EmergencyCommandOverlay() {
     return null;
   }
 
-  const commandWorkspaceCode = command.workspaceCode || workspaceCode;
+  const commandWorkspaceCode = command.workspaceCode || "spare_parts";
   const workspace = getBusinessWorkspace(commandWorkspaceCode);
   const actions = ACTIONS[commandWorkspaceCode] || ACTIONS.spare_parts;
+
+  function close() {
+    sessionStorage.removeItem(FLAG_KEY);
+    setCommand(null);
+  }
 
   function open(path) {
     close();
