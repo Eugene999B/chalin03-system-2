@@ -183,32 +183,44 @@ function weekendBlocked(settings, now = new Date()) {
   return Boolean(settings.skip_weekends) && ["Sat", "Sun"].includes(weekday);
 }
 
-async function automaticLimitReason(reminder, settings) {
+async function automaticLimitReasons(reminders, settings) {
+  const agreementIds = [...new Set(
+    reminders
+      .map((reminder) => Number(reminder.agreement_id))
+      .filter((agreementId) => Number.isInteger(agreementId) && agreementId > 0)
+  )];
+  if (!agreementIds.length) return new Map();
+
+  const placeholders = agreementIds.map(() => "?").join(",");
   const [rows] = await pool.query(
-    `SELECT
+    `SELECT agreement_id,
        SUM(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS count_7_days,
        SUM(CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS count_30_days,
        MAX(sent_at) AS last_sent_at
      FROM equipment_sales_reminder_log
-     WHERE agreement_id = ?
+     WHERE agreement_id IN (${placeholders})
        AND reminder_type IN ('due_soon','due_today','overdue')
-       AND delivery_status IN ('accepted','delivered','delivery_unknown')`,
-    [reminder.agreement_id]
+       AND delivery_status IN ('accepted','delivered','delivery_unknown')
+     GROUP BY agreement_id`,
+    agreementIds
   );
-  const row = rows[0] || {};
-  if (Number(row.count_7_days || 0) >= Number(settings.max_sms_7_days || 3)) {
-    return "maximum_7_day_limit";
-  }
-  if (Number(row.count_30_days || 0) >= Number(settings.max_sms_30_days || 8)) {
-    return "maximum_30_day_limit";
-  }
-  if (row.last_sent_at) {
-    const hours = (Date.now() - new Date(row.last_sent_at).getTime()) / 3600000;
-    if (hours < Number(settings.minimum_hours_between_sms || 24)) {
-      return "minimum_hours_not_reached";
+
+  const reasonByAgreement = new Map();
+  for (const row of rows) {
+    let reason = null;
+    if (Number(row.count_7_days || 0) >= Number(settings.max_sms_7_days || 3)) {
+      reason = "maximum_7_day_limit";
+    } else if (Number(row.count_30_days || 0) >= Number(settings.max_sms_30_days || 8)) {
+      reason = "maximum_30_day_limit";
+    } else if (row.last_sent_at) {
+      const hours = (Date.now() - new Date(row.last_sent_at).getTime()) / 3600000;
+      if (hours < Number(settings.minimum_hours_between_sms || 24)) {
+        reason = "minimum_hours_not_reached";
+      }
     }
+    reasonByAgreement.set(Number(row.agreement_id), reason);
   }
-  return null;
+  return reasonByAgreement;
 }
 
 async function runProfessionalReminderSync({
@@ -231,13 +243,14 @@ async function runProfessionalReminderSync({
   }
 
   const result = { sent: 0, failed: 0, skipped: 0, details: [] };
+  const limitedByAgreement = await automaticLimitReasons(reminders.slice(0, 100), settings);
   for (const reminder of reminders.slice(0, 100)) {
     if (!cleanText(reminder.customer_phone, 40)) {
       result.skipped += 1;
       result.details.push({ agreement_id: reminder.agreement_id, status: "skipped", reason: "missing_phone" });
       continue;
     }
-    const limitReason = await automaticLimitReason(reminder, settings);
+    const limitReason = limitedByAgreement.get(Number(reminder.agreement_id)) || null;
     if (limitReason) {
       result.skipped += 1;
       result.details.push({ agreement_id: reminder.agreement_id, status: "skipped", reason: limitReason });
