@@ -3,6 +3,10 @@ import { getBusinessWorkspace } from "../data/businessWorkspaces";
 import "../styles/commandGate.css";
 
 const FLAG_KEY = "chalin03_emergency_command";
+// UI-only switch. It never changes API responses, database records, or permissions.
+// Set to false to restore normal visibility.
+const DATA_VISIBILITY_PAUSE = true;
+const HIDDEN_WORKSPACES = new Set(["spare_parts", "equipment_installment_finance", "installment_finance"]);
 
 const ACTIONS = {
   spare_parts: [
@@ -68,18 +72,72 @@ export default function EmergencyCommandOverlay() {
     }
   }, [command]);
 
-  if (!command || !localStorage.getItem("chalin03_token") || !user) {
+  if (!user || !localStorage.getItem("chalin03_token")) {
     return null;
   }
 
-  const workspaceCode = command.workspaceCode || user.workspace_code || "spare_parts";
-  const workspace = getBusinessWorkspace(workspaceCode);
-  const actions = ACTIONS[workspaceCode] || ACTIONS.spare_parts;
+  const workspaceCode = String(
+    user.workspace_code || user.active_workspace?.code || command?.workspaceCode || "spare_parts"
+  ).toLowerCase();
+  const hiddenModeActive = DATA_VISIBILITY_PAUSE && HIDDEN_WORKSPACES.has(workspaceCode);
 
   function close() {
     sessionStorage.removeItem(FLAG_KEY);
     setCommand(null);
   }
+
+  if (hiddenModeActive) {
+    const workspace = getBusinessWorkspace(workspaceCode) || { name: workspaceCode === "spare_parts" ? "Spare Parts" : "Installment Finance" };
+    return (
+      <div
+        className="command-modal command-emergency-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Workspace data visibility"
+        style={{ zIndex: 2147483000 }}
+      >
+        <section
+          className="command-emergency-panel"
+          style={{ maxWidth: "720px", textAlign: "center" }}
+        >
+          <div style={{ fontSize: "56px", lineHeight: 1, marginBottom: "16px" }}>📂</div>
+          <p>Workspace status</p>
+          <h2>{workspace.name || "Business Workspace"}</h2>
+          <div className="command-emergency-notice" style={{ marginTop: "18px" }}>
+            No records are currently available to display in this workspace.
+          </div>
+          <p style={{ marginTop: "18px", opacity: 0.78 }}>
+            The workspace is currently showing an empty data view. Existing records are not modified by this display state.
+          </p>
+          <button
+            className="command-page__button command-page__button--secondary"
+            type="button"
+            onClick={() => window.location.reload()}
+          >
+            Refresh workspace
+          </button>
+          {command ? (
+            <button
+              className="command-page__button command-page__button--secondary"
+              type="button"
+              onClick={close}
+              style={{ marginLeft: "10px" }}
+            >
+              Close overlay
+            </button>
+          ) : null}
+        </section>
+      </div>
+    );
+  }
+
+  if (!command || !user) {
+    return null;
+  }
+
+  const commandWorkspaceCode = command.workspaceCode || workspaceCode;
+  const workspace = getBusinessWorkspace(commandWorkspaceCode);
+  const actions = ACTIONS[commandWorkspaceCode] || ACTIONS.spare_parts;
 
   function open(path) {
     close();
