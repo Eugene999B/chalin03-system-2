@@ -87,47 +87,20 @@ export default function EmergencyCommandOverlay() {
   }
 
   if (hiddenModeActive) {
-    const workspace = getBusinessWorkspace(workspaceCode) || { name: workspaceCode === "spare_parts" ? "Spare Parts" : "Installment Finance" };
     return (
       <div
-        className="command-modal command-emergency-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Workspace data visibility"
-        style={{ zIndex: 2147483000 }}
-      >
-        <section
-          className="command-emergency-panel"
-          style={{ maxWidth: "720px", textAlign: "center" }}
-        >
-          <div style={{ fontSize: "56px", lineHeight: 1, marginBottom: "16px" }}>📂</div>
-          <p>Workspace status</p>
-          <h2>{workspace.name || "Business Workspace"}</h2>
-          <div className="command-emergency-notice" style={{ marginTop: "18px" }}>
-            No records are currently available to display in this workspace.
-          </div>
-          <p style={{ marginTop: "18px", opacity: 0.78 }}>
-            The workspace is currently showing an empty data view. Existing records are not modified by this display state.
-          </p>
-          <button
-            className="command-page__button command-page__button--secondary"
-            type="button"
-            onClick={() => window.location.reload()}
-          >
-            Refresh workspace
-          </button>
-          {command ? (
-            <button
-              className="command-page__button command-page__button--secondary"
-              type="button"
-              onClick={close}
-              style={{ marginLeft: "10px" }}
-            >
-              Close overlay
-            </button>
-          ) : null}
-        </section>
-      </div>
+        className="command-modal command-emergency-overlay chalin03-data-visibility-blank"
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2147483000,
+          width: "100vw",
+          height: "100vh",
+          background: "#ffffff",
+          pointerEvents: "none",
+        }}
+      />
     );
   }
 
