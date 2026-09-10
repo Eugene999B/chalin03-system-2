@@ -174,6 +174,10 @@ const DB_QUEUE_LIMIT = Math.max(
   0,
   Math.min(Number(process.env.DB_QUEUE_LIMIT || 50), 50)
 );
+const DB_IDLE_TIMEOUT_MS = Math.max(
+  60000,
+  Math.min(Number(process.env.DB_IDLE_TIMEOUT_MS || 60000), 300000)
+);
 
 const pool = mysql.createPool({
   host: getEnvValue("DB_HOST", "MYSQLHOST"),
@@ -185,7 +189,10 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: DB_CONNECTION_LIMIT,
   queueLimit: DB_QUEUE_LIMIT,
+  idleTimeout: DB_IDLE_TIMEOUT_MS,
 
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
   timezone: "Z",
   ssl: getSslConfig(),
 });
@@ -236,6 +243,9 @@ async function testDatabaseConnection() {
 }
 
 module.exports = {
+  DB_CONNECTION_LIMIT,
+  DB_IDLE_TIMEOUT_MS,
+  DB_QUEUE_LIMIT,
   RUNTIME_DDL_PATTERN,
   getSslConfig,
   isProduction,
