@@ -1,0 +1,351 @@
+name: Chalin One Production Conflict Resolution
+
+on:
+  push:
+    branches:
+      - integration/chalin-one-production-sync-20260914
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: integration/chalin-one-production-sync-20260914
+
+      - name: Reconcile production standards with Chalin One future work
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "chalin03-sync-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin production
+
+          python3 <<'PY'
+          import json
+          import pathlib
+          import re
+          import subprocess
+
+          root = pathlib.Path('.')
+
+          def read(path):
+              return (root / path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              p = root / path
+              p.write_text(text, encoding='utf-8')
+
+          def prod(path):
+              return subprocess.check_output(
+                  ['git', 'show', f'origin/production:{path}'], text=True
+              )
+
+          # 1. Secret-scanner allowlist: production is a strict superset and
+          # already includes Chalin One false-positive fingerprints.
+          write('.gitleaksignore', prod('.gitleaksignore'))
+
+          # 2. Backend package: preserve every future Chalin One command and
+          # dependency, but inherit production runtime/start standards and any
+          # production script that Chalin One does not already define.
+          backend_path = 'backend/package.json'
+          current = json.loads(read(backend_path))
+          production = json.loads(prod(backend_path))
+          current_scripts = current.setdefault('scripts', {})
+          production_scripts = production.get('scripts', {})
+          for key, value in production_scripts.items():
+              current_scripts.setdefault(key, value)
+          if 'start' in production_scripts:
+              current_scripts['start'] = production_scripts['start']
+          write(backend_path, json.dumps(current, indent=2, ensure_ascii=False) + '\n')
+
+          # 3. Chalin One's backup routes and backup-safety implementation are
+          # newer supersets of production. Keep them. They already include the
+          # production schema-metadata, restore-column mapping, session revocation,
+          # row-count verification and additive-schema controls, plus stricter
+          # staging-only recovery gates and source-package immutability.
+
+          # 4. Export bootstrap: add the production Finance route mount and
+          # production notification/late-fee bootstraps without removing the
+          # Chalin One staging seed, recovery and health diagnostics.
+          path = 'backend/services/exportWorkbookSafetyBootstrap.js'
+          text = read(path)
+          if 'ROUTE_MOUNT_FLAG' not in text:
+              block = '''const express = require("express");
+          const { requireAuth } = require("../middleware/authMiddleware");
+          const { requireWorkspaceCategory } = require("./categoryIsolationService");
+          const equipmentFinanceProfessionalRoutes = require("../routes/equipmentFinanceProfessionalRoutes");
+
+          const ROUTE_MOUNT_FLAG = Symbol.for("chalin03.equipmentFinanceProfessionalRoutesMounted");
+          const originalExpressUse = express.application.use;
+          if (!express.application[ROUTE_MOUNT_FLAG]) {
+            express.application.use = function chalin03FinanceAwareUse(...args) {
+              const result = originalExpressUse.apply(this, args);
+              const mountPath = args[0];
+              if (mountPath === "/api/equipment-catalogue" && !this[ROUTE_MOUNT_FLAG]) {
+                const hireBoundary = requireWorkspaceCategory("equipment_hire");
+                originalExpressUse.call(
+                  this,
+                  "/api/equipment-catalogue/sales",
+                  requireAuth,
+                  hireBoundary,
+                  equipmentFinanceProfessionalRoutes
+                );
+                Object.defineProperty(this, ROUTE_MOUNT_FLAG, {
+                  value: true,
+                  configurable: false,
+                  enumerable: false,
+                  writable: false,
+                });
+                console.log("Equipment Finance Professional routes mounted at /api/equipment-catalogue/sales/professional.");
+              }
+              return result;
+            };
+            Object.defineProperty(express.application, ROUTE_MOUNT_FLAG, {
+              value: true,
+              configurable: false,
+              enumerable: false,
+              writable: false,
+            });
+          }
+
+          '''
+              text = block + text
+          anchor = 'require("./stockLedgerSummaryBootstrap");\n'
+          extras = (
+              'require("./executivePackNotificationDeliveryBootstrap");\n'
+              'require("./equipmentFinanceBossAlertDeliveryBootstrap");\n'
+              'require("./equipmentFinanceLateFeeScheduler").startEquipmentFinanceLateFeeScheduler();\n'
+          )
+          if 'executivePackNotificationDeliveryBootstrap' not in text:
+              text = text.replace(anchor, anchor + extras, 1)
+          write(path, text)
+
+          # 5. Frontend package: keep the full future test suite and add the
+          # production regression gates that were missing from Chalin One.
+          frontend_path = 'frontend/package.json'
+          frontend = json.loads(read(frontend_path))
+          command = frontend.get('scripts', {}).get('test', '')
+          required_tests = [
+              'node scripts/featureIntegrityRegressionTests.mjs',
+              'node scripts/equipmentFinanceTaskInboxLayoutTests.mjs',
+              'node scripts/chalin03ThemeTests.mjs',
+          ]
+          for test_cmd in required_tests:
+              if test_cmd not in command:
+                  command += ' && ' + test_cmd
+          frontend['scripts']['test'] = command
+          write(frontend_path, json.dumps(frontend, indent=2, ensure_ascii=False) + '\n')
+
+          # 6. API routing: preserve the isolated Chalin One staging API, while
+          # matching production's direct official API route for live hosts.
+          path = 'frontend/src/api/apiBaseUrl.js'
+          text = read(path)
+          old = '''  // Production browser traffic intentionally stays on the same origin. Cloudflare
+          // Pages Functions then proxies /api/* server-side to api.chalin03.com. This
+          // removes browser CORS/preflight as a production dependency while keeping the
+          // Railway API, authentication and origin-protection controls authoritative.
+          if (OFFICIAL_FRONTEND_HOSTS.has(normalizedHostname)) {
+            return "/api";
+          }
+          '''
+          new = '''  // Production uses the official Chalin 03 API hostname directly. This avoids
+          // the Cloudflare same-origin Pages proxy becoming a second failure point while
+          // keeping Railway's API host/origin protections authoritative.
+          if (OFFICIAL_FRONTEND_HOSTS.has(normalizedHostname)) {
+            return "https://api.chalin03.com/api";
+          }
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'return "/api";' in text:
+              text = text.replace('return "/api";', 'return "https://api.chalin03.com/api";', 1)
+          write(path, text)
+
+          # 7. Sidebar accessibility/robustness from production.
+          path = 'frontend/src/components/CompactSidebarNavigation.jsx'
+          text = read(path)
+          old = '''                {section.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === "/"}
+                    className={({ isActive: linkActive }) =>
+                      `premium-nav-link ${linkActive ? "active" : ""}`
+                    }
+                    onClick={onNavigate}
+                    title={item.description}
+                  >
+                    <span className="premium-nav-icon">{item.icon}</span>
+                    <span className="premium-nav-text">{item.title}</span>
+                  </NavLink>
+                ))}
+          '''
+          new = '''                {section.items.map((item) => {
+                  const icon = String(item.icon || "•").trim() || "•";
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      end={item.path === "/"}
+                      className={({ isActive: linkActive }) =>
+                        `premium-nav-link ${linkActive ? "active" : ""}`
+                      }
+                      onClick={onNavigate}
+                      title={item.description}
+                    >
+                      <span className="premium-nav-icon" aria-hidden="true">{icon}</span>
+                      <span className="premium-nav-text">{item.title}</span>
+                    </NavLink>
+                  );
+                })}
+          '''
+          if old in text:
+              text = text.replace(old, new, 1)
+          write(path, text)
+
+          # 8. Finance workspace: add production's missing policy/workspace
+          # enhancement layers and Payment History entry while preserving the
+          # future Chalin One navigation structure.
+          path = 'frontend/src/layouts/InstallmentFinanceLayout.jsx'
+          text = read(path)
+          if 'InstallmentFinanceWorkspaceEnhancements' not in text:
+              text = text.replace(
+                  'import InstallmentMobileEnhancements from "../components/InstallmentMobileEnhancements";\n',
+                  'import InstallmentMobileEnhancements from "../components/InstallmentMobileEnhancements";\n'
+                  'import InstallmentFinanceWorkspaceEnhancements from "../components/InstallmentFinanceWorkspaceEnhancements";\n'
+                  'import InstallmentFinancePolicyAndLateFee from "../components/InstallmentFinancePolicyAndLateFee";\n',
+                  1,
+              )
+          if 'financeUiRealFix.css' not in text:
+              text = text.replace(
+                  'import "../styles/installmentMobileProfessional.css";\n',
+                  'import "../styles/installmentMobileProfessional.css";\n'
+                  'import "../styles/financeUiRealFix.css";\n'
+                  'import "../styles/installmentFinanceDesktopPalette.css";\n'
+                  'import "../utils/installmentFinanceNextDue.js";\n',
+                  1,
+              )
+          if 'Payment History & Receipts' not in text:
+              marker = '''      {
+                title: "Customer Installment Profiles",
+          '''
+              item = '''      {
+                title: "Payment History & Receipts",
+                description: "Search every recorded payment by date, receipt, customer, agreement, method or reference and issue the exact receipt",
+                path: "/equipment-installment-finance/applications?stage=payment-history",
+                icon: "🧾",
+                matchSearch: true,
+                permissions: ["fleet.assets.view"],
+              },
+          '''
+              text = text.replace(marker, item + marker, 1)
+          if '<InstallmentFinanceWorkspaceEnhancements />' not in text:
+              text = text.replace(
+                  '        navigationSections={navigationSections}\n      />\n    </>',
+                  '        navigationSections={navigationSections}\n      />\n'
+                  '      <InstallmentFinanceWorkspaceEnhancements />\n'
+                  '      <InstallmentFinancePolicyAndLateFee />\n'
+                  '    </>',
+                  1,
+              )
+          write(path, text)
+
+          # 9. Backup UI: keep Chalin One's staging schema-preparation flow and
+          # add production's longer streaming window and safer Blob lifecycle.
+          path = 'frontend/src/pages/BackupPage.jsx'
+          text = read(path)
+          text = text.replace(
+              'const BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;',
+              'const BACKUP_DOWNLOAD_TIMEOUT_MS = 900000;',
+              1,
+          )
+          start = '''    setDownloading(true);
+              setError("");
+              setMessage("");
+              try {
+          '''
+          replacement = '''    setDownloading(true);
+              setError("");
+              setMessage("Preparing the signed full-system backup. Keep this page open while the database snapshot is streamed securely.");
+              try {
+          '''
+          if start in text:
+              text = text.replace(start, replacement, 1)
+          text = text.replace(
+              'window.URL.revokeObjectURL(fileUrl);',
+              'window.setTimeout(() => window.URL.revokeObjectURL(fileUrl), 1000);',
+              1,
+          )
+          catch_marker = '''    } catch (requestError) {
+              setError((await readErrorBlob(requestError)) || "Backup download failed.");
+          '''
+          catch_replacement = '''    } catch (requestError) {
+              setMessage("");
+              setError((await readErrorBlob(requestError)) || "Backup download failed.");
+          '''
+          if catch_marker in text:
+              text = text.replace(catch_marker, catch_replacement, 1)
+          write(path, text)
+
+          # 10. Public/future HTML keeps CHALIN ONE identity and noindex staging
+          # safety; inherit only the harmless production color-scheme hint.
+          path = 'frontend/index.html'
+          text = read(path)
+          if 'name="color-scheme"' not in text:
+              text = text.replace(
+                  '<meta name="theme-color" content="#05080d" />',
+                  '<meta name="theme-color" content="#05080d" />\n    <meta name="color-scheme" content="light dark" />',
+                  1,
+              )
+          write(path, text)
+
+          # 11. Login artwork: use production's final visual fixes, then retain
+          # Chalin One's newer dark-mode credential readability override.
+          path = 'frontend/src/styles/groupOperationsLogin.css'
+          future_css = read(path)
+          production_css = prod(path)
+          match = re.search(
+              r'/\* The Command Gate intentionally keeps its credential panel light.*?(?=\n@media \(max-width: 980px\))',
+              future_css,
+              re.S,
+          )
+          dark_override = match.group(0).rstrip() if match else ''
+          merged_css = production_css.rstrip() + '\n'
+          if dark_override and dark_override not in merged_css:
+              merged_css += '\n' + dark_override + '\n'
+          write(path, merged_css)
+
+          # Record intentional supersets so future maintainers know why the
+          # production side was not copied verbatim for these conflicts.
+          notes = '''# Chalin One / Production conflict resolution — 2026-09-14
+
+          Production was merged as a parent commit. The following conflict files intentionally keep the Chalin One implementation because it is a tested superset of the production behavior rather than an older divergent implementation:
+
+          - backend/routes/backupRoutes.js
+          - backend/routes/delegatedBackupRoutes.js
+          - backend/services/backupSafetyService.js
+          - backend/services/backupSafetyService/index.js
+          - backend/tests/crossEnvironmentBackupRecovery.test.js
+          - frontend/src/main.jsx (future multi-surface loader and explicit no-auto-refresh policy)
+          - frontend/scripts/browserCacheHotfixTests.mjs (matches the future no-auto-refresh shell)
+          - backend/tests/equipmentFinanceOuterWorkspaceDeliveryContract.test.js (matches the future shell release contract)
+          - backend/tests/operationalApprovalCentreContract.test.js (matches the future shell release contract)
+
+          The remaining conflict files were reconciled to add the missing production security, runtime, API-routing, Finance, backup-UX, accessibility, regression-test and login-artwork standards while retaining future Chalin One behavior.
+          '''
+          write('SYNC_RESOLUTION_NOTES_20260914.md', notes)
+          PY
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No reconciliation changes were needed."
+            exit 0
+          fi
+          git commit -m "chore(chalin-one): reconcile production standards with future features"
+          git push origin HEAD:integration/chalin-one-production-sync-20260914
