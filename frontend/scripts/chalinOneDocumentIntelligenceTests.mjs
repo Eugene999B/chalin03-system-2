@@ -73,26 +73,19 @@ assert.match(api, /listAiKnowledgeDocumentChunks/);
 assert.match(api, /getAiKnowledgeChunk/);
 assert.match(api, /versions\/\$\{encodeURIComponent\(versionId\)\}\/documents/);
 
-// Natural chat now uses the already-governed Document Studio output instead of
-// making the user find a separate export control. Incomplete requests are left
-// to the server clarification turn; only a completed answer is exported.
+// Document Studio keeps the governed generation/download client available, but
+// normal chat must not invoke it automatically. Automatic invocation was retired
+// deliberately so one user request cannot trigger duplicate browser downloads.
 assert.match(documentClient, /AI_DOCUMENT_FORMATS = Object\.freeze\(\["pdf", "xlsx", "csv", "docx"\]\)/);
 assert.match(documentClient, /requestedAiDocumentFormat/);
 assert.match(documentClient, /generateAndDownloadAiDocument/);
-assert.match(api, /requestedAiDocumentFormat\(message\)/);
-assert.match(api, /generateAndDownloadAiDocument\(\{/);
-assert.match(api, /result\?\.reasoning\?\.intent !== "clarification"/);
-assert.match(api, /result\?\.provider\?\.finish_reason !== "clarification"/);
-assert.match(api, /status:\s*"downloaded"/);
-assert.match(api, /status:\s*"failed"/);
-assert.ok(
-  api.indexOf("const result = unwrap(response) || null;") <
-    api.indexOf("await generateAndDownloadAiDocument({"),
-  "document generation must use the saved assistant answer, never run before the chat result exists"
-);
+assert.doesNotMatch(api, /requestedAiDocumentFormat\(message\)/);
+assert.doesNotMatch(api, /generateAndDownloadAiDocument\(\{/);
+assert.match(api, /const result = unwrap\(response\) \|\| null;/);
+assert.match(api, /return result;/);
 
 assert.match(css, /@media \(max-width: 620px\)/);
 assert.match(css, /@media \(max-width: 420px\)/);
 assert.match(css, /prefers-reduced-motion/);
 
-console.log("CHALIN ONE Document Intelligence + natural chat export source contract passed.");
+console.log("CHALIN ONE Document Intelligence + duplicate-download prevention source contract passed.");
