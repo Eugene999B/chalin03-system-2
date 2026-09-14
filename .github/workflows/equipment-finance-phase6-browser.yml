@@ -3,8 +3,6 @@ name: Equipment Finance Phase 6 Browser
 on:
   pull_request:
     branches: [main, production]
-  push:
-    branches: [main, production]
   workflow_dispatch:
 
 permissions:

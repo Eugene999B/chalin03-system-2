@@ -38,6 +38,12 @@ function userId(req) {
 
 function sendError(res, error, fallback) {
   const statusCode = Number(error.statusCode || 500);
+  console.error("Equipment Finance Phase 6 endpoint error:", {
+    statusCode,
+    code: error.code || "EQUIPMENT_FINANCE_PHASE6_ERROR",
+    message: error.message || fallback,
+    stack: error.stack,
+  });
   return res.status(statusCode).json({
     status: "error",
     code: error.code || "EQUIPMENT_FINANCE_PHASE6_ERROR",
@@ -261,10 +267,7 @@ router.get(
     try {
       const receipt = await renderThermalReceiptPdf(req.params.paymentId);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${receipt.filename}-thermal.pdf"`
-      );
+      res.setHeader("Content-Disposition", `inline; filename="${receipt.filename}-thermal.pdf"`);
       res.setHeader("Cache-Control", "private, no-store");
       return res.send(receipt.buffer);
     } catch (error) {
@@ -373,6 +376,31 @@ router.get(
     }
   }
 );
+
+if (process.env.CHALIN03_PHASE6_PORTFOLIO_SELF_TEST === "1") {
+  setTimeout(async () => {
+    try {
+      const dashboard = await getPortfolioDashboard({
+        dateFrom: "2026-01-01",
+        dateTo: "2026-09-01",
+      });
+      console.info("CHALIN03 Phase 6 portfolio self-test passed:", {
+        agreement_count: dashboard?.summary?.agreement_count,
+        reconciliation_attention_count: dashboard?.summary?.reconciliation_attention_count,
+      });
+    } catch (error) {
+      console.error("CHALIN03 Phase 6 portfolio self-test FAILED:", {
+        name: error?.name,
+        code: error?.code,
+        errno: error?.errno,
+        sqlState: error?.sqlState,
+        sqlMessage: error?.sqlMessage,
+        message: error?.message,
+        stack: error?.stack,
+      });
+    }
+  }, 1500);
+}
 
 module.exports = router;
 module.exports.REMINDER_CONFIRMATION = REMINDER_CONFIRMATION;

@@ -448,6 +448,10 @@
   backdrop-filter: blur(8px);
 }
 
+.finance-simple__dialog .finance-simple__sticky-actions {
+  position: static;
+}
+
 .finance-simple__sticky-actions > div {
   display: flex;
   flex-wrap: wrap;

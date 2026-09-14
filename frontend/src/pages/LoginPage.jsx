@@ -2,6 +2,14 @@ import { useEffect, useState } from "react";
 import { openEmergencyCommand } from "../components/EmergencyCommandOverlay";
 import { useAuth } from "../context/AuthContext";
 import LoginPageGroupOperations from "./LoginPageGroupOperations.jsx";
+import "../styles/chalin03LoginBespoke.css";
+import "../styles/loginBusinessSelectionSync.css";
+import "../styles/loginArtworkScale.css";
+import "../styles/loginBusinessSelectionOriginalScale.css";
+import "../styles/loginEmojiRestore.css";
+import "../styles/loginMobileDesktopMatch.css";
+import "../styles/loginMobileOriginalDesign.css";
+import "../styles/loginMobileCompactFinal.css";
 
 const TOKEN_KEY = "chalin03_token";
 const USER_KEY = "chalin03_user";
@@ -30,9 +38,6 @@ export default function LoginPage() {
   useEffect(() => {
     if (!clearingPreviousSession) return undefined;
 
-    // Existing layout buttons start the server logout request and navigate here.
-    // Clear the browser session immediately so Login cannot see stale auth state
-    // and redirect the user back into a workspace before logout finishes.
     void logout();
     clearStoredSession();
     window.location.replace(
@@ -46,12 +51,31 @@ export default function LoginPage() {
     function unlockPasswordOnFirstTap(event) {
       const input = event.target.closest?.('input[data-lpignore="true"]');
       if (!input) return;
-
-      // Some mobile browsers do not open the keyboard when a read-only input is
-      // unlocked only during focus. Remove the DOM flag on pointer-down; the
-      // controlled component's focus handler then records the same state.
       input.readOnly = false;
       window.queueMicrotask(() => input.focus({ preventScroll: true }));
+    }
+
+    function syncGroupBusinessSelection(event) {
+      const node = event.target.closest?.(".group-operations-map__node");
+      if (!node) return;
+
+      const targetIndex = node.classList.contains("is-parts")
+        ? 0
+        : node.classList.contains("is-mining")
+          ? 1
+          : node.classList.contains("is-hire")
+            ? 2
+            : -1;
+
+      if (targetIndex < 0) return;
+
+      const tabs = document.querySelectorAll(
+        ".gate4__workspace-tabs button"
+      );
+      const target = tabs[targetIndex];
+      if (!target) return;
+
+      target.click();
     }
 
     let lastEmergencyArrival = "";
@@ -71,10 +95,12 @@ export default function LoginPage() {
     }
 
     document.addEventListener("pointerdown", unlockPasswordOnFirstTap, true);
+    document.addEventListener("click", syncGroupBusinessSelection, true);
     const emergencyTimer = window.setInterval(restoreEmergencyMode, 100);
 
     return () => {
       document.removeEventListener("pointerdown", unlockPasswordOnFirstTap, true);
+      document.removeEventListener("click", syncGroupBusinessSelection, true);
       window.clearInterval(emergencyTimer);
     };
   }, []);

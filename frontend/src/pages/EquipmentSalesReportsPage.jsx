@@ -639,7 +639,7 @@ export default function EquipmentSalesReportsPage() {
             <div className="finance-simple__table-wrap">
               <table className="finance-simple__table">
                 <thead>
-                  <tr><th>Created</th><th>Type</th><th>Agreement / Receipt</th><th>Recipient</th><th>Status</th><th>Evidence</th></tr>
+                  <tr><th>Created</th><th>Type</th><th>Agreement / Receipt</th><th>Recipient</th><th>Status</th><th>Message</th><th>Delivery note</th></tr>
                 </thead>
                 <tbody>
                   {messageRows.map((row) => (
@@ -649,10 +649,11 @@ export default function EquipmentSalesReportsPage() {
                       <td>{row.agreement_number}<br />{row.receipt_number || row.customer_name}</td>
                       <td>{label(row.recipient_type)} · {row.recipient_phone || "No phone"}</td>
                       <td><StatusPill value={row.delivery_status} /></td>
-                      <td>{row.last_error || row.message_preview}</td>
+                      <td>{row.message_preview || "Message not available"}</td>
+                      <td>{row.last_error || "—"}</td>
                     </tr>
                   ))}
-                  {!messageRows.length ? <tr><td colSpan="6">No Finance SMS evidence yet.</td></tr> : null}
+                  {!messageRows.length ? <tr><td colSpan="7">No Finance SMS evidence yet.</td></tr> : null}
                 </tbody>
               </table>
             </div>

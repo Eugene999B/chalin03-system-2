@@ -68,6 +68,7 @@ const activityRoutes = require("./routes/activityRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
 const stagingBackupRecoveryRoutes = require("./routes/stagingBackupRecoveryRoutes");
 const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
+const backupOwnerStreamingRoutes = require("./routes/backupOwnerStreamingRoutes");
 const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
@@ -171,7 +172,10 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`Not allowed by CORS: ${origin}`));
+      const corsError = new Error("The request origin is not authorised for this API.");
+      corsError.statusCode = 403;
+      corsError.code = "CHALIN03_CORS_ORIGIN_NOT_ALLOWED";
+      return callback(corsError);
     },
     credentials: true,
   })
@@ -369,6 +373,7 @@ app.use(
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
 app.use("/api/backups", stagingBackupRecoveryRoutes);
 app.use("/api/backups", delegatedBackupRoutes);
+app.use("/api/backups", backupOwnerStreamingRoutes);
 app.use("/api/backups", backupRoutes);
 app.use(
   "/api/daily-closing",

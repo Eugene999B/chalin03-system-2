@@ -1,6 +1,7 @@
 const sharp = require("sharp");
 
 const { pool } = require("../config/db");
+const objectStorageService = require("./objectStorageService");
 
 const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 12 * 1024 * 1024;
@@ -27,6 +28,13 @@ function positiveId(value) {
   return Number.isSafeInteger(number) && number > 0 ? number : null;
 }
 
+function bucketKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^bucket:\/\//i, "")
+    .replace(/^\/+/, "");
+}
+
 function bufferFromStoredValue(value) {
   if (Buffer.isBuffer(value)) return Buffer.from(value);
   if (value?.type === "Buffer" && Array.isArray(value.data)) {
@@ -34,7 +42,7 @@ function bufferFromStoredValue(value) {
   }
 
   const text = String(value || "").trim();
-  if (!text) return null;
+  if (!text || /^bucket:\/\//i.test(text)) return null;
 
   const dataUrl = text.match(
     /^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,([A-Za-z0-9+/=\s]+)$/i
@@ -50,6 +58,26 @@ function bufferFromStoredValue(value) {
   }
 
   return null;
+}
+
+async function bufferFromStoredValueAsync(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!/^bucket:\/\//i.test(text)) return bufferFromStoredValue(value);
+
+  const key = bucketKey(text);
+  if (!key) return null;
+
+  try {
+    const stored = await objectStorageService.getObject(key);
+    return stored?.buffer || null;
+  } catch (error) {
+    if (error?.statusCode === 404) return null;
+    throw new FinanceProtectedImageError(
+      502,
+      "The protected excavator image could not be read from object storage.",
+      "FINANCE_PROTECTED_IMAGE_STORAGE_READ_FAILED"
+    );
+  }
 }
 
 function assertSafeBuffer(buffer) {
@@ -70,7 +98,7 @@ function assertSafeBuffer(buffer) {
 }
 
 async function normalizeStoredImage(value) {
-  const buffer = bufferFromStoredValue(value);
+  const buffer = await bufferFromStoredValueAsync(value);
   if (!buffer) {
     throw new FinanceProtectedImageError(
       404,

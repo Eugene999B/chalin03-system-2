@@ -40,6 +40,7 @@ const equipmentFinanceDocumentReviewRoutes = require("./equipmentFinanceDocument
 const equipmentFinanceDeliveryAuthorizationRoutes = require("./equipmentFinanceDeliveryAuthorizationRoutes");
 const equipmentFinanceDeliveryConfirmationRoutes = require("./equipmentFinanceDeliveryConfirmationRoutes");
 const equipmentFinancePhaseSixRoutes = require("./equipmentFinancePhaseSixRoutes");
+const equipmentFinancePaymentHistoryRoutes = require("./equipmentFinancePaymentHistoryRoutes");
 const installmentCompletionPhaseFourRoutes = require("./installmentCompletionPhaseFourRoutes");
 const {
   router: equipmentFinanceExportPeriodRoutes,
@@ -160,6 +161,7 @@ router.use(equipmentFinanceProfessionalRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 router.use(equipmentFinanceExportPeriodRoutes);
 router.use(equipmentFinancePhaseSixRoutes);
+router.use(equipmentFinancePaymentHistoryRoutes);
 router.use(installmentCompletionPhaseFourRoutes);
 
 router.use("/finance-lifecycle", equipmentFinanceDeliveryConfirmationRoutes);
