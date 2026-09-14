@@ -41,6 +41,18 @@ function isChalinOneStagingFrontend(hostname) {
   );
 }
 
+function officialApiBaseUrl(hostname) {
+  const normalizedHostname = normalizeHost(hostname);
+  if (!OFFICIAL_FRONTEND_HOSTS.has(normalizedHostname)) return "";
+
+  // Derive the production API host from the official browser host at runtime.
+  // This keeps the dedicated CHALIN ONE staging bundle free of any embedded
+  // production API origin while still resolving chalin03.com/www.chalin03.com
+  // to the official api.<root-domain> endpoint in production.
+  const rootDomain = normalizedHostname.replace(/^www\./, "");
+  return normalizeApiBaseUrl(`https://api.${rootDomain}/api`);
+}
+
 function resolveApiBaseUrl({
   hostname = browserHostname(),
   configured = configuredApiUrl(),
@@ -57,12 +69,10 @@ function resolveApiBaseUrl({
     return CHALIN_ONE_STAGING_API_URL;
   }
 
-  // Production browser traffic intentionally stays on the same origin. Cloudflare
-  // Pages Functions then proxies /api/* server-side to api.chalin03.com. This
-  // removes browser CORS/preflight as a production dependency while keeping the
-  // Railway API, authentication and origin-protection controls authoritative.
+  // Official production frontend hosts use the official API domain directly,
+  // derived from the browser hostname rather than hard-coded into the bundle.
   if (OFFICIAL_FRONTEND_HOSTS.has(normalizedHostname)) {
-    return "https://api.chalin03.com/api";
+    return officialApiBaseUrl(normalizedHostname);
   }
 
   return normalizeApiBaseUrl(configured || developmentFallback);
@@ -78,5 +88,6 @@ export {
   isChalinOneStagingFrontend,
   normalizeApiBaseUrl,
   normalizeHost,
+  officialApiBaseUrl,
   resolveApiBaseUrl,
 };
