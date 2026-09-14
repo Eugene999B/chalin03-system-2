@@ -1,4 +1,2 @@
 User-agent: *
-Allow: /
-
-Sitemap: https://chalin03.com/sitemap.xml
+Disallow: /
