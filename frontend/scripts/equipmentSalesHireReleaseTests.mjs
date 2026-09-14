@@ -73,7 +73,7 @@ assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 for (const pageName of [
-  "EquipmentFinancePhaseThreeStartRedirectPage",
+  "EquipmentFinanceStartInstallmentPage",
   "EquipmentFinanceOperationalPolishPage",
   "EquipmentFinanceCustomerCentrePage",
   "EquipmentFinanceExcavatorsPage",
@@ -87,6 +87,9 @@ for (const pageName of [
 ]) {
   assert.match(workspace, new RegExp(pageName));
 }
+// Keep the legacy redirect flow tested as a compatibility surface, but the
+// current production-standard stage=start route opens the dedicated installment
+// page directly (production change 53a07fb630f2f0db8f90d3bb115271907ab0ed08).
 assert.match(phaseThreeStart, /EquipmentFinanceOperationalStartImmediatePage/);
 assert.match(phaseThreeStart, /axiosClient\.interceptors\.response\.use/);
 assert.match(phaseThreeStart, /START_INSTALLMENT_PATH/);
@@ -168,24 +171,28 @@ assert.match(phaseOneStyles, /bottom:\s*0/);
 assert.match(reports, /Documents &amp; Reports/);
 assert.match(reports, /\/reports\/management/);
 assert.match(reports, /\/reports\/export\.csv/);
-assert.match(reports, /documents\/agreement\.pdf/);
-assert.match(reports, /documents\/statement\.pdf/);
-assert.match(reports, /documents\/delivery\.pdf/);
-assert.match(reports, /documents\/ownership\.pdf/);
-assert.match(reports, /\/receipt\.pdf/);
-assert.match(secureUpload, /async function optimizeEquipmentPhoto/);
-assert.match(secureUpload, /MAX_SOURCE_BYTES = 15 \* 1024 \* 1024/);
-assert.match(secureUpload, /canvas\.toBlob/);
-assert.match(secureUploadStyles, /display: none !important/);
-assert.match(retirementBridge, /Spare Parts installment sales have moved/);
+assert.match(reports, /\/reports\/document-ledger/);
+assert.match(reports, /Download Finance records/);
+
+assert.match(secureUpload, /secureUploadWithCameraFallback/);
+assert.match(secureUpload, /navigator\.mediaDevices\.getUserMedia/);
+assert.match(secureUpload, /facingMode/);
+assert.match(secureUpload, /playsInline/);
+assert.match(secureUpload, /videoWidth/);
+assert.match(secureUpload, /videoHeight/);
+assert.match(secureUploadStyles, /\.secure-camera-modal/);
+assert.match(secureUploadStyles, /@media \(max-width: 720px\)/);
+
 assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
+assert.match(retirementBridge, /equipment-installment-finance/);
+assert.match(retirementBridge, /replace: true/);
 
-assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
-assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
-assert.match(divisionAccess, /canAccessEquipmentDivision/);
-assert.match(axiosClient, /X-Chalin03-Division/);
-assert.match(axiosClient, /installment_finance/);
-assert.match(workspaceContext, /Company-wide Finance portfolio/);
-assert.match(workspaceContext, /isManagedWorkspace: false/);
+assert.match(divisionAccess, /EQUIPMENT_DIVISIONS/);
+assert.match(divisionAccess, /equipment_hire/);
+assert.match(divisionAccess, /equipment_installment_finance/);
+assert.match(divisionAccess, /resolveEquipmentDivision/);
+assert.match(divisionAccess, /hasEquipmentDivisionAccess/);
+assert.match(axiosClient, /x-workspace-code/);
+assert.match(workspaceContext, /workspaceCode/);
 
-console.log("Equipment Hire separation and simplified Installment Finance contracts passed.");
+console.log("Equipment Sales/Hire + Finance release tests passed.");
