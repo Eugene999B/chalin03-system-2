@@ -1,5 +1,7 @@
 -- CHALIN 03 OBJECT STORAGE FOUNDATION
--- Additive only. Existing file payloads remain usable until an explicit migration is run.
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: verify a fresh signed Chalin 03 full-system backup and SQL/database backup before production execution.
+-- Existing file payloads remain usable until an explicit migration is run.
 -- Do not delete legacy payload columns during this foundation release.
 
 DELIMITER $$
