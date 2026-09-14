@@ -114,7 +114,8 @@ assert.match(
 );
 
 assert.match(wizard, /Start New Installment/);
-assert.match(wizard, /create a draft/i);
+assert.match(wizard, /Review and create the draft/);
+assert.match(wizard, /Create Draft Installment/);
 assert.match(minimalWorkflow, /automatic Installment Offer/);
 assert.match(minimalWorkflow, /Complete these nine actions/);
 assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
