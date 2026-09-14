@@ -1,0 +1,62 @@
+.debt-payment-history > article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.debt-payment-history__copy {
+  min-width: 0;
+}
+
+.debt-payment-history__copy strong,
+.debt-payment-history__copy span,
+.debt-payment-history__copy small {
+  display: block;
+}
+
+.debt-payment-history__copy span,
+.debt-payment-history__copy small {
+  overflow-wrap: anywhere;
+}
+
+.debt-payment-history__print {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #b8c8df;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #10213b;
+  font-size: 0.74rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.debt-payment-history__print:hover {
+  border-color: #246bfe;
+  background: #eef5ff;
+  color: #1852c7;
+}
+
+@media (max-width: 700px) {
+  .debt-payment-history > article {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .debt-payment-history__print {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 420px) {
+  .debt-payment-history > article {
+    gap: 10px;
+  }
+
+  .debt-payment-history__print {
+    font-size: 0.78rem;
+  }
+}

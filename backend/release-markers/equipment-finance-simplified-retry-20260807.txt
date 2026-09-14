@@ -1,0 +1,3 @@
+Chalin 03 Equipment Installment Finance simplified workspace release retry.
+
+The first Railway deployment for production commit 5e3362a5913a310a8594f1fc3c9933bb3aa26209 failed after the exact frontend branch had already built successfully on Cloudflare. This non-executable release marker triggers a clean Railway rebuild of the same reviewed application code without changing runtime behaviour, Finance data, routes, schemas or controls.

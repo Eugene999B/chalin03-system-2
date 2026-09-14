@@ -227,12 +227,129 @@ function getReportTitle(baseName) {
     .join(" ");
 }
 
-function getDateRangeLabel(from, to) {
-  if (from && to) return `${from} to ${to}`;
-  if (from) return `From ${from}`;
-  if (to) return `Up to ${to}`;
+function parseReportDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
 
-  return "All available records";
+  const text = cleanText(value);
+  if (!text) return null;
+
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (isoMatch) {
+    const date = new Date(
+      Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]), 12)
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatReportDate(value) {
+  const date = parseReportDate(value);
+  if (!date) return "";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "Africa/Accra",
+  })
+    .format(date)
+    .toUpperCase();
+}
+
+function formatReportDateKey(value) {
+  const date = parseReportDate(value);
+  if (!date) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Africa/Accra",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function isLikelyReportDateHeader(value) {
+  return /(^|[\s_-])(date|created|updated|sale|sold|paid|payment|purchase|return|closing|adjustment|transfer|issued|received|recorded)([\s_-]|$)/i.test(
+    String(value || "")
+  );
+}
+
+function deriveWorkbookDateBounds(analysis) {
+  let earliest = null;
+  let latest = null;
+
+  analysis.forEach((sheet) => {
+    const dateIndexes = sheet.headers
+      .map((header, index) => (isLikelyReportDateHeader(header) ? index : -1))
+      .filter((index) => index >= 0);
+
+    sheet.rows.forEach((row) => {
+      dateIndexes.forEach((index) => {
+        const date = parseReportDate(row[index]);
+        if (!date) return;
+        if (!earliest || date < earliest) earliest = date;
+        if (!latest || date > latest) latest = date;
+      });
+    });
+  });
+
+  return { earliest, latest };
+}
+
+function getDateRangeMeta(from, to, analysis) {
+  const bounds = deriveWorkbookDateBounds(analysis);
+  const fromDate = parseReportDate(from) || bounds.earliest;
+  const toDate = parseReportDate(to) || bounds.latest;
+  const fromLabel = formatReportDate(fromDate);
+  const toLabel = formatReportDate(toDate);
+  const fromKey = formatReportDateKey(fromDate);
+  const toKey = formatReportDateKey(toDate);
+
+  if (fromLabel && toLabel) {
+    return {
+      fromLabel,
+      toLabel,
+      periodLabel: `${fromLabel} TO ${toLabel}`,
+      periodBanner: `REPORTING PERIOD: FROM ${fromLabel} TO ${toLabel}`,
+      filenamePart: `${fromKey}-to-${toKey}`,
+    };
+  }
+
+  if (fromLabel) {
+    return {
+      fromLabel,
+      toLabel: "LATEST AVAILABLE RECORD",
+      periodLabel: `FROM ${fromLabel} TO LATEST AVAILABLE RECORD`,
+      periodBanner: `REPORTING PERIOD: FROM ${fromLabel} TO LATEST AVAILABLE RECORD`,
+      filenamePart: `from-${fromKey}`,
+    };
+  }
+
+  if (toLabel) {
+    return {
+      fromLabel: "EARLIEST AVAILABLE RECORD",
+      toLabel,
+      periodLabel: `FROM EARLIEST AVAILABLE RECORD TO ${toLabel}`,
+      periodBanner: `REPORTING PERIOD: FROM EARLIEST AVAILABLE RECORD TO ${toLabel}`,
+      filenamePart: `to-${toKey}`,
+    };
+  }
+
+  return {
+    fromLabel: "NOT AVAILABLE",
+    toLabel: "NOT AVAILABLE",
+    periodLabel: "NO DATED RECORDS AVAILABLE",
+    periodBanner: "REPORTING PERIOD: NO DATED RECORDS AVAILABLE",
+    filenamePart: "no-dated-records",
+  };
 }
 
 async function getBranchDetails(branchId) {
@@ -494,21 +611,23 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
   let headerRowIndex = analysis.headerRowIndex;
 
   if (simpleHeader && baseName !== "daily-closings") {
-    worksheet.insertRows(1, [[], [], [], [], []]);
-    headerRowIndex = 6;
+    worksheet.insertRows(1, [[], [], [], [], [], []]);
+    headerRowIndex = 7;
 
     const lastColumn = Math.max(analysis.columnCount, 1);
     worksheet.mergeCells(1, 1, 1, lastColumn);
     worksheet.mergeCells(2, 1, 2, lastColumn);
     worksheet.mergeCells(3, 1, 3, lastColumn);
     worksheet.mergeCells(4, 1, 4, lastColumn);
+    worksheet.mergeCells(5, 1, 5, lastColumn);
 
     worksheet.getCell(1, 1).value = "CHALIN 03 COMPANY LIMITED";
     worksheet.getCell(2, 1).value = meta.reportTitle;
     worksheet.getCell(3, 1).value = `${meta.branch.code} - ${meta.branch.name}${
       meta.branch.location ? ` | ${meta.branch.location}` : ""
     }`;
-    worksheet.getCell(4, 1).value = `Period: ${meta.periodLabel} | Generated: ${meta.generatedLabel} | By: ${meta.generatedBy}`;
+    worksheet.getCell(4, 1).value = meta.periodBanner;
+    worksheet.getCell(5, 1).value = `Generated: ${meta.generatedLabel} | By: ${meta.generatedBy}`;
 
     worksheet.getCell(1, 1).font = {
       bold: true,
@@ -534,14 +653,40 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
     worksheet.getCell(2, 1).alignment = { horizontal: "center" };
     worksheet.getRow(2).height = 25;
 
-    [3, 4].forEach((rowNumber) => {
-      worksheet.getCell(rowNumber, 1).font = {
-        bold: rowNumber === 3,
-        size: 10,
-        color: { argb: "FF334155" },
-      };
-      worksheet.getCell(rowNumber, 1).alignment = { horizontal: "center" };
-    });
+    worksheet.getCell(3, 1).font = {
+      bold: true,
+      size: 10,
+      color: { argb: "FF334155" },
+    };
+    worksheet.getCell(3, 1).alignment = { horizontal: "center" };
+
+    worksheet.getCell(4, 1).font = {
+      bold: true,
+      size: 13,
+      color: { argb: "FF071529" },
+    };
+    worksheet.getCell(4, 1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE6B91E" },
+    };
+    worksheet.getCell(4, 1).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
+    };
+    worksheet.getCell(4, 1).border = {
+      top: { style: "medium", color: { argb: "FF071529" } },
+      bottom: { style: "medium", color: { argb: "FF071529" } },
+    };
+    worksheet.getRow(4).height = 28;
+
+    worksheet.getCell(5, 1).font = {
+      size: 9,
+      color: { argb: "FF475569" },
+    };
+    worksheet.getCell(5, 1).alignment = { horizontal: "center" };
+    worksheet.getRow(6).height = 8;
   }
 
   const headerRow = worksheet.getRow(headerRowIndex);
@@ -637,9 +782,10 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
       header: 0.2,
       footer: 0.2,
     },
-    printTitlesRow: simpleHeader && baseName !== "daily-closings" ? "1:6" : `${headerRowIndex}:${headerRowIndex}`,
+    printTitlesRow: simpleHeader && baseName !== "daily-closings" ? "1:7" : `${headerRowIndex}:${headerRowIndex}`,
   };
 
+  worksheet.headerFooter.oddHeader = `&C&B${meta.periodBanner}`;
   worksheet.headerFooter.oddFooter =
     `&LChalin 03 - ${meta.branch.code}&C${meta.reportTitle}&RPage &P of &N`;
 }
@@ -683,6 +829,25 @@ function addExecutiveSummarySheet(workbook, meta, analysis) {
   };
   summary.getCell("A2").alignment = { horizontal: "center" };
 
+  summary.mergeCells("A3:C3");
+  summary.getCell("A3").value = meta.periodBanner;
+  summary.getCell("A3").font = {
+    bold: true,
+    size: 13,
+    color: { argb: "FF071529" },
+  };
+  summary.getCell("A3").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE6B91E" },
+  };
+  summary.getCell("A3").alignment = {
+    horizontal: "center",
+    vertical: "middle",
+    wrapText: true,
+  };
+  summary.getRow(3).height = 28;
+
   const information = [
     ["Selected Store", `${meta.branch.code} - ${meta.branch.name}`, meta.branch.location],
     ["Report Period", meta.periodLabel, "Date filters apply according to the selected report."],
@@ -695,7 +860,7 @@ function addExecutiveSummarySheet(workbook, meta, analysis) {
     ],
   ];
 
-  let rowNumber = 4;
+  let rowNumber = 5;
   information.forEach(([label, value, notes]) => {
     summary.getCell(rowNumber, 1).value = label;
     summary.getCell(rowNumber, 2).value = value;
@@ -760,7 +925,7 @@ function addExecutiveSummarySheet(workbook, meta, analysis) {
     }
   });
 
-  summary.views = [{ state: "frozen", ySplit: 2 }];
+  summary.views = [{ state: "frozen", ySplit: 3 }];
   summary.pageSetup = {
     orientation: "landscape",
     paperSize: 9,
@@ -868,14 +1033,27 @@ function drawPdfDocumentHeader(doc, meta, sectionTitle, subtitle = "") {
   doc.y = 96;
   doc.fillColor("#173b68").font("Helvetica-Bold").fontSize(15);
   doc.text(pdfSafeText(sectionTitle), { align: "center" });
+  doc.moveDown(0.35);
+
+  const periodY = doc.y;
+  doc.save();
+  doc.roundedRect(left, periodY, width, 30, 4).fill("#e6b91e");
+  doc.fillColor("#071529").font("Helvetica-Bold").fontSize(10);
+  doc.text(pdfSafeText(meta.periodBanner), left + 8, periodY + 9, {
+    width: width - 16,
+    align: "center",
+    lineBreak: false,
+  });
+  doc.restore();
+  doc.y = periodY + 36;
 
   if (subtitle) {
-    doc.moveDown(0.25);
     doc.fillColor("#475569").font("Helvetica").fontSize(8);
     doc.text(pdfSafeText(subtitle), { align: "center" });
+    doc.moveDown(0.25);
   }
 
-  doc.moveDown(0.6);
+  doc.moveDown(0.35);
 }
 
 function drawPdfTable(doc, sheet, columnIndexes) {
@@ -968,7 +1146,7 @@ function sendProfessionalPdf(res, analysis, meta, filename) {
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   doc.pipe(res);
 
-  drawPdfDocumentHeader(doc, meta, meta.reportTitle, `Period: ${meta.periodLabel}`);
+  drawPdfDocumentHeader(doc, meta, meta.reportTitle, "Controlled auditor export");
 
   doc.fillColor("#172033").font("Helvetica").fontSize(10);
   doc.text(
@@ -1016,7 +1194,7 @@ function sendProfessionalPdf(res, analysis, meta, filename) {
         doc,
         meta,
         `${sheet.name}${bandLabel}`,
-        `${sheet.recordCount} detail row(s) | Period: ${meta.periodLabel}`
+        `${sheet.recordCount} detail row(s)`
       );
       drawPdfTable(doc, sheet, columnIndexes);
     });
@@ -1084,8 +1262,9 @@ function sendProfessionalWord(res, analysis, meta, filename) {
         <section class="report-section page-break">
           <div class="brand">CHALIN 03 COMPANY LIMITED</div>
           <h2>${escapeHtml(sheet.name + bandLabel)}</h2>
+          <div class="period-banner">${escapeHtml(meta.periodBanner)}</div>
           <p class="section-meta">${escapeHtml(
-            `${meta.branch.code} - ${meta.branch.name} | ${sheet.recordCount} detail row(s) | ${meta.periodLabel}`
+            `${meta.branch.code} - ${meta.branch.name} | ${sheet.recordCount} detail row(s)`
           )}</p>
           ${buildWordTable(sheet, columnIndexes)}
         </section>
@@ -1117,6 +1296,7 @@ function sendProfessionalWord(res, analysis, meta, filename) {
   h1 { color: #173b68; font-size: 21pt; margin: 24px 0 8px; }
   h2 { color: #173b68; font-size: 15pt; text-align: center; margin: 12px 0 4px; }
   .subtitle, .section-meta { color: #475569; text-align: center; }
+  .period-banner { margin: 12px auto; padding: 10px 12px; background: #e6b91e; color: #071529; border: 2px solid #071529; font-size: 12pt; font-weight: 700; text-align: center; }
   .meta { width: 78%; margin: 25px auto; border-collapse: collapse; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; }
   th { background: #173b68; color: #fff; font-weight: 700; padding: 5px; border: 1px solid #9fb0c3; font-size: 8pt; }
@@ -1132,6 +1312,7 @@ function sendProfessionalWord(res, analysis, meta, filename) {
   <section class="cover">
     <div class="brand">CHALIN 03 COMPANY LIMITED</div>
     <h1>${escapeHtml(meta.reportTitle)}</h1>
+    <div class="period-banner">${escapeHtml(meta.periodBanner)}</div>
     <p class="subtitle">Professional Microsoft Word Export</p>
     <table class="meta">
       <tr><td>Selected Store</td><td>${escapeHtml(`${meta.branch.code} - ${meta.branch.name}`)}</td></tr>
@@ -1181,22 +1362,30 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
   const analysis = analyseWorkbook(workbook);
   const generatedBy =
     req.user?.full_name || req.user?.name || req.user?.username || "Authorized user";
+  const period = getDateRangeMeta(
+    cleanText(req.query.from),
+    cleanText(req.query.to),
+    analysis
+  );
   const meta = {
     branch,
     reportTitle,
-    periodLabel: getDateRangeLabel(cleanText(req.query.from), cleanText(req.query.to)),
-    generatedLabel: new Date().toLocaleString("en-GB"),
+    ...period,
+    generatedLabel: new Date().toLocaleString("en-GB", {
+      timeZone: "Africa/Accra",
+    }),
     generatedBy,
   };
   const safeBranch = safeFilenamePart(branch.code || branch.name);
   const safeBase = safeFilenamePart(baseName);
+  const periodFilename = meta.filenamePart ? `-${meta.filenamePart}` : "";
 
   if (format === "pdf") {
     return sendProfessionalPdf(
       res,
       analysis,
       meta,
-      `chalin03-${safeBranch}-${safeBase}.pdf`
+      `chalin03-${safeBranch}-${safeBase}${periodFilename}.pdf`
     );
   }
 
@@ -1205,7 +1394,7 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
       res,
       analysis,
       meta,
-      `chalin03-${safeBranch}-${safeBase}.doc`
+      `chalin03-${safeBranch}-${safeBase}${periodFilename}.doc`
     );
   }
 
@@ -1214,7 +1403,7 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
   return sendWorkbook(
     res,
     workbook,
-    `chalin03-${safeBranch}-${safeBase}.xlsx`
+    `chalin03-${safeBranch}-${safeBase}${periodFilename}.xlsx`
   );
 }
 

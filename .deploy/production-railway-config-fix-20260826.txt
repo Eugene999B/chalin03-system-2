@@ -1,0 +1,1 @@
+Production Railway config correction: Build and Start commands are explicitly root-relative (npm ci / npm start) so the service does not prepend an invalid `cd backend` when the configured Railway root is already backend.

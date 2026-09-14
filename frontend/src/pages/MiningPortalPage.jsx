@@ -1,8 +1,5 @@
-import BusinessPortalShell from "../components/BusinessPortalShell";
-import { getBusinessWorkspace } from "../data/businessWorkspaces";
+import { Navigate } from "react-router";
 
 export default function MiningPortalPage() {
-  const workspace = getBusinessWorkspace("mining");
-
-  return <BusinessPortalShell workspace={workspace} />;
+  return <Navigate to="/login?workspace=mining" replace />;
 }

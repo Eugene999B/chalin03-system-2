@@ -49,7 +49,12 @@ test("debt and merge searches expose identifying information", () => {
   assert.match(source, /customer\.customer_phone/);
   assert.match(source, /customer\.customer_location/);
   assert.match(source, /Receipt, item, staff, payment method or amount/);
-  assert.match(serviceWorker, /chalin03-installment-runtime-stability-v18/);
+  assert.match(
+    serviceWorker,
+    /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+  );
+  assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+  assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
   assert.doesNotMatch(serviceWorker, /debt-responsive-hotfix\.css/);
   assert.doesNotMatch(serviceWorker, /debt-mobile-contrast-hotfix\.css/);
 });

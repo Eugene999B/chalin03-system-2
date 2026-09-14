@@ -138,6 +138,18 @@ function toLocalIsoDate(date) {
   return local.toISOString().slice(0, 10);
 }
 
+function extractFilename(headers, fallback) {
+  const disposition = headers?.["content-disposition"] || "";
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1].replace(/["']/g, ""));
+  }
+
+  const normalMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return normalMatch?.[1] || fallback;
+}
+
 export default function ExportsPage() {
   const { user, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
@@ -202,13 +214,17 @@ export default function ExportsPage() {
   function buildStoreFileName(reportKey, format) {
     const option = FORMAT_OPTIONS.find((item) => item.key === format);
     const extension = option?.extension || "xlsx";
+    const periodPart =
+      from || to
+        ? `-${from || "earliest"}-to-${to || "latest"}`
+        : "";
 
-    return `chalin03-${makeSafeFileName(currentStoreCode)}-${reportKey}.${extension}`;
+    return `chalin03-${makeSafeFileName(
+      currentStoreCode
+    )}-${reportKey}${periodPart}.${extension}`;
   }
 
-  function validateDates(report) {
-    if (!report.dateFilter) return true;
-
+  function validateDates() {
     if (from && to && from > to) {
       setError("The From Date cannot be later than the To Date.");
       return false;
@@ -217,8 +233,8 @@ export default function ExportsPage() {
     return true;
   }
 
-  async function readExportError(error) {
-    const data = error?.response?.data;
+  async function readExportError(errorValue) {
+    const data = errorValue?.response?.data;
 
     try {
       if (data instanceof Blob) {
@@ -227,14 +243,14 @@ export default function ExportsPage() {
         return parsed?.message || text;
       }
 
-      return data?.message || error?.message || "Export failed.";
+      return data?.message || errorValue?.message || "Export failed.";
     } catch {
-      return error?.message || "Export failed.";
+      return errorValue?.message || "Export failed.";
     }
   }
 
   async function downloadReport(report, format) {
-    if (!validateDates(report)) return;
+    if (!validateDates()) return;
 
     const requestKey = `${report.key}-${format}`;
     setBusyKey(requestKey);
@@ -245,15 +261,18 @@ export default function ExportsPage() {
       const response = await axiosClient.get(report.endpoint, {
         params: {
           format,
-          ...(report.dateFilter ? { from, to } : {}),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
         },
         responseType: "blob",
       });
 
+      const fallbackFilename = buildStoreFileName(report.key, format);
+      const filename = extractFilename(response.headers, fallbackFilename);
       const fileUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = fileUrl;
-      link.setAttribute("download", buildStoreFileName(report.key, format));
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -261,7 +280,15 @@ export default function ExportsPage() {
 
       const formatLabel =
         FORMAT_OPTIONS.find((option) => option.key === format)?.label || format;
-      setNotice(`${report.title} ${formatLabel} export downloaded successfully.`);
+      const selectedPeriod =
+        from || to
+          ? ` for ${from || "the earliest available date"} to ${
+              to || "the latest available date"
+            }`
+          : "";
+      setNotice(
+        `${report.title} ${formatLabel} export${selectedPeriod} downloaded successfully.`
+      );
     } catch (downloadError) {
       const message = await readExportError(downloadError);
       setError(
@@ -303,7 +330,7 @@ export default function ExportsPage() {
     setTo("");
   }
 
-  if (!['admin', 'manager', 'auditor'].includes(role)) {
+  if (!["admin", "manager", "auditor"].includes(role)) {
     return (
       <div className="export-center-v3">
         <div className="page-header">
@@ -363,8 +390,10 @@ export default function ExportsPage() {
             <h2>Choose the reporting dates</h2>
           </div>
           <p>
-            Date-sensitive reports use this period. Products, low stock and open
-            debts always export their current store records.
+            Every download prints the exact selected From and To dates.
+            Date-sensitive reports also filter their rows; products, low stock
+            and open debts remain current snapshots prepared for that selected
+            reporting period.
           </p>
         </div>
 
@@ -446,7 +475,11 @@ export default function ExportsPage() {
             <p>{report.description}</p>
 
             <div className="ec-report-meta">
-              <span>{report.dateFilter ? "Uses selected dates" : "Current records"}</span>
+              <span>
+                {report.dateFilter
+                  ? "Filters rows by selected dates"
+                  : "Current snapshot • selected period shown"}
+              </span>
               <span>{currentStoreCode}</span>
             </div>
 

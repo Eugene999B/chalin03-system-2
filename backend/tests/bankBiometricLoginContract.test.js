@@ -77,12 +77,22 @@ test("mobile administration layouts override route-level desktop widths", () => 
   assert.match(mobileAdminStyles, /grid-template-columns:\s*repeat\(2/);
 });
 
-test("service worker ignores external and API traffic and rotates release caches", () => {
-  assert.match(serviceWorker, /const CACHE_NAME = "chalin03-[^"]+"/);
+test("service worker ignores external and API traffic and rotates deployment-specific caches", () => {
+  assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+  assert.match(
+    serviceWorker,
+    /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+  );
+  assert.match(
+    serviceWorker,
+    /const CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
+  );
   assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
   assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
-  assert.match(serviceWorker, /cacheName !== CACHE_NAME/);
-  assert.match(serviceWorker, /caches\.delete\(cacheName\)/);
+  assert.match(serviceWorker, /name\.startsWith\(CACHE_PREFIX\) && name !== CACHE_NAME/);
+  assert.match(serviceWorker, /caches\.delete\(name\)/);
+  assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+  assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
   assert.match(headers, /connect-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
   assert.match(headers, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/);
 });

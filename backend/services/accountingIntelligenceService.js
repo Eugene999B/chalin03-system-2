@@ -1615,18 +1615,22 @@ async function buildLedger({ sales, expenses, debts, purchases, returns, stockAd
   };
 }
 
-function buildProfitAndLoss({ sales, expenses, purchases }) {
+function buildProfitAndLoss({ sales, expenses, purchases, returns }) {
   const grossSales = money(sales.total_sales);
   const discounts = money(sales.total_discount);
-  const netSales = money(grossSales - discounts);
+  const returnsAndRefunds = money(returns.total_return_amount || 0);
+  const netSales = money(grossSales - discounts - returnsAndRefunds);
   const operatingExpenses = money(expenses.total_expenses);
   const purchasesAsCostSignal = money(purchases.total_purchases);
   const estimatedNetBeforeStockCost = money(netSales - operatingExpenses);
-  const conservativeCashPosition = money(sales.total_paid - operatingExpenses - purchases.amount_paid);
+  const conservativeCashPosition = money(
+    sales.total_paid - returnsAndRefunds - operatingExpenses - purchases.amount_paid
+  );
 
   return {
     gross_sales: grossSales,
     discounts,
+    returns_and_refunds: returnsAndRefunds,
     net_sales: netSales,
     operating_expenses: operatingExpenses,
     purchases_cost_signal: purchasesAsCostSignal,
@@ -2115,7 +2119,7 @@ async function buildAccountingIntelligence(req) {
     stockTransfers,
   });
 
-  const profitAndLoss = buildProfitAndLoss({ sales, expenses, purchases });
+  const profitAndLoss = buildProfitAndLoss({ sales, expenses, purchases, returns });
 
   const audit = await buildAuditFlags({
     branchId,
@@ -2174,6 +2178,8 @@ async function buildAccountingIntelligence(req) {
       total_sales: sales.total_sales,
       total_paid: sales.total_paid,
       total_balance: sales.total_balance,
+      total_refunds: returns.total_return_amount,
+      net_sales_after_returns: profitAndLoss.net_sales,
       total_expenses: expenses.total_expenses,
       estimated_net_before_stock_cost: profitAndLoss.estimated_net_before_stock_cost,
       active_debt_count: debts.active_debt_count,

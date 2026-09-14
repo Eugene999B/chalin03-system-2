@@ -34,7 +34,13 @@ assert.doesNotMatch(equipmentLayout, /fleet\?view=installments/);
 assert.match(financeLayout, /path: "\/equipment-installment-finance"/);
 assert.match(financeLayout, /path: "\/equipment-installment-finance\/applications"/);
 assert.match(financeLayout, /path: "\/equipment-installment-finance\/reports"/);
-assert.match(financeLayout, /path: "\/equipment-installment-finance\/catalogue"/);
+for (const stage of ["start", "customers", "machines", "collections", "arrears", "settings", "guide"]) {
+  assert.match(
+    financeLayout,
+    new RegExp(`path: "\\/equipment-installment-finance\\/applications\\?stage=${stage}"[\\s\\S]*?matchSearch: true`)
+  );
+}
+assert.doesNotMatch(financeLayout, /path: "\/equipment-installment-finance\/catalogue"/);
 assert.doesNotMatch(financeLayout, /path: "\/equipment-hire-operations/);
 assert.match(app, /path="\/equipment-installment-finance"/);
 
@@ -44,4 +50,4 @@ assert.match(fleetPage, /return <SharedFleetAssetsPage \/>/);
 assert.match(fleetPage, /Navigate to="\/equipment-hire"/);
 assert.match(fleetPage, /Navigate to="\/equipment-installment-finance/);
 
-console.log("Equipment Hire and Installment Finance navigation contracts passed.");
+console.log("Equipment Hire and simplified Installment Finance navigation contracts passed.");

@@ -12,7 +12,22 @@ const readProject = (...parts) =>
   fs.readFileSync(path.join(projectRoot, ...parts), "utf8");
 
 const page = readFrontend("src", "pages", "EquipmentInstallmentCommandPage.jsx");
-const css = readFrontend("src", "styles", "equipmentInstallmentCommand.css");
+const minimalWorkflow = readFrontend(
+  "src",
+  "pages",
+  "EquipmentFinanceMinimalWorkflowPage.jsx"
+);
+const advancedPage = readFrontend(
+  "src",
+  "pages",
+  "EquipmentInstallmentCommandAdvancedPage.jsx"
+);
+const collections = readFrontend(
+  "src",
+  "pages",
+  "EquipmentFinanceCollectionsMinimalPage.jsx"
+);
+const css = readFrontend("src", "styles", "equipmentFinancePhaseOne.css");
 const app = readFrontend("src", "App.jsx");
 const fleetPage = readFrontend("src", "pages", "FleetAssetsPage.jsx");
 const hireLayout = readFrontend("src", "layouts", "EquipmentHireLayout.jsx");
@@ -42,30 +57,35 @@ const readModel = readProject(
   "equipmentInstallmentReadModelService.js"
 );
 
-for (const text of [
-  "Installment Command Centre",
-  "Portfolio Aging",
-  "Expected Collections",
-  "Collections Work Queue",
-  "Reminder Control &amp; Evidence",
-  "Customer Protection &amp; SMS Cost Control",
-  "Record Follow-Up",
-  "Send SMS Reminder",
-  "WhatsApp Reminder",
-  "approved Meta Business API",
-]) {
-  assert.match(page, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-}
+assert.match(page, /EquipmentFinanceMinimalWorkflowPage/);
+assert.match(page, /EquipmentInstallmentCommandAdvancedPage/);
+assert.match(page, /view.*advanced/);
 
-assert.match(page, /portfolio_at_risk_rate/);
-assert.match(page, /risk_score/);
-assert.match(page, /promise_date/);
-assert.match(page, /RUN INSTALLMENT REMINDERS/);
-assert.match(page, /en-GB/);
-assert.match(page, /GHS/);
-assert.match(page, /manual_whatsapp_enabled/);
-assert.match(page, /maximum_hours_between_sms|minimum_hours_between_sms/);
-assert.match(page, /max_messages_per_run/);
+for (const text of [
+  "Equipment Installment Workflow",
+  "Complete these nine actions",
+  "Equipment list",
+  "Add equipment",
+  "Customer selection",
+  "Create installment agreement",
+  "Configure terms",
+  "Preview schedule",
+  "Activate agreement",
+  "Record payment",
+  "Balance and payment history",
+  "backend",
+]) {
+  assert.match(minimalWorkflow, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+}
+assert.match(minimalWorkflow, /Promise\.allSettled/);
+assert.match(minimalWorkflow, /outstanding_balance/);
+assert.match(minimalWorkflow, /official-outstanding-balance/);
+assert.match(minimalWorkflow, /GHS/);
+assert.doesNotMatch(minimalWorkflow, /useWorkspaceContext|selectedContextId/);
+assert.match(advancedPage, /Installment Command Centre|What do you need to do today/i);
+assert.match(collections, /Collections &amp; Payment History/);
+assert.match(collections, /account-detail-official-balance/);
+assert.match(collections, /payment-history/);
 
 assert.match(app, /InstallmentFinanceLayout/);
 assert.match(app, /path="\/equipment-installment-finance"/);
@@ -76,18 +96,22 @@ assert.match(app, /allowedWorkspaces=\{EQUIPMENT_HIRE_WORKSPACE\}/);
 assert.doesNotMatch(app, /const INSTALLMENT_WORKSPACE/);
 
 assert.match(financeLayout, /Equipment Installment Finance/);
-assert.match(financeLayout, /Independent Finance staff division/);
+assert.match(financeLayout, /independenceLabel=""/);
+assert.match(financeLayout, /description=""/);
+assert.doesNotMatch(financeLayout, /Independent Finance staff division/);
+assert.doesNotMatch(financeLayout, /A complete excavator installment lifecycle/);
 assert.match(financeLayout, /No access to Hire jobs or contracts/);
-assert.match(financeLayout, /Finance Command Centre/);
-assert.match(financeLayout, /Credit Applications & Approval/);
-assert.match(financeLayout, /Installment Documents & Reports/);
+assert.match(financeLayout, /Finance Home/);
+assert.match(financeLayout, /Start New Installment/);
+assert.match(financeLayout, /Applications & Approvals/);
+assert.match(financeLayout, /Documents & Reports/);
+assert.match(financeLayout, /Staff & Workforce/);
 assert.match(financeLayout, /Back to Equipment Divisions/);
 assert.match(financeLayout, /workspaceCode="equipment_installment_finance"/);
-assert.match(financeLayout, /Finance staff do not select Hire locations/);
+assert.match(financeLayout, /no Hire-location selection/i);
 assert.doesNotMatch(financeLayout, /workspaceCode="equipment_hire"/);
 assert.doesNotMatch(financeLayout, /Open Equipment Hire Operations/);
-assert.doesNotMatch(financeLayout, /title: "Finance Customers"/);
-assert.doesNotMatch(financeLayout, /title: "Finance Workforce"/);
+assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 
 assert.match(hireLayout, /Equipment Hire Operations/);
 assert.match(hireLayout, /Independent Hire staff division/);
@@ -112,20 +136,29 @@ assert.match(fleetPage, /to="\/equipment-installment-finance\/reports"/);
 assert.doesNotMatch(fleetPage, /<EquipmentInstallmentCommandPage/);
 
 assert.match(workspaceLayout, /independenceLabel = "Independent workspace"/);
+assert.match(workspaceLayout, /const showIndependentNote = Boolean\(independenceLabel \|\| description\)/);
 assert.match(workspaceLayout, /contextHeading = "Active operating context"/);
 assert.match(workspaceLayout, /separationBadge = "Separated from Spare Parts"/);
 assert.match(workspaceContext, /Company-wide Finance portfolio/);
 assert.match(workspaceContext, /isManagedWorkspace: false/);
 assert.match(axiosClient, /X-Chalin03-Division/);
 assert.match(axiosClient, /installment_finance/);
-assert.match(css, /@media \(max-width: 620px\)/);
-assert.match(css, /installment-command__account-grid/);
-assert.match(css, /installment-command__backdrop/);
-assert.match(serviceWorker, /chalin03-equipment-division-isolation-v21/);
+assert.match(css, /@media \(max-width: 720px\)/);
+assert.match(css, /finance-simple__machine-grid/);
+assert.match(css, /finance-simple__dialog-backdrop/);
+assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
+assert.match(
+  serviceWorker,
+  /new URL\(self\.location\.href\)\.searchParams\.get\("release"\)/
+);
 assert.match(serviceWorker, /cacheCoreAssets/);
 assert.match(serviceWorker, /networkNavigation/);
-assert.doesNotMatch(serviceWorker, /status:\s*503/);
+assert.match(serviceWorker, /isBuildAssetRequest\(request, url\)/);
+assert.match(serviceWorker, /networkBuildAsset\(request\)/);
+assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 
+// The resilient command backend remains available for advanced lifecycle/reminder work even
+// though the default home now presents the nine-step Phase 3 path.
 assert.match(route, /\/portfolio/);
 assert.match(route, /\/collections/);
 assert.match(route, /equipmentInstallmentReadModelService/);
@@ -141,4 +174,4 @@ assert.match(service, /automatic_sms_enabled: false/);
 assert.match(service, /GET_LOCK/);
 assert.doesNotMatch(service, /CREATE TABLE|ALTER TABLE|DROP TABLE|TRUNCATE TABLE/i);
 
-console.log("Equipment Installment Finance runtime stability contract passed.");
+console.log("Equipment Installment Finance nine-step workflow contract passed.");

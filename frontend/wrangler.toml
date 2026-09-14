@@ -1,0 +1,4 @@
+name = "chalin03-system-2"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-08-07"
+compatibility_flags = ["global_fetch_strictly_public"]

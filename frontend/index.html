@@ -2,109 +2,40 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <meta name="theme-color" content="#07182c" />
-    <meta
-      name="description"
-      content="Chalin 03 Group Operations Platform - local staff portal for Spare Parts, Mining Operations and Equipment Hire."
-    />
-
-    <!--
-      Public React routes must be indexable in the initial HTML response because
-      Google may stop processing when it sees an early noindex directive. Private
-      staff routes remain protected by Cloudflare X-Robots-Tag headers and the
-      route metadata controller.
-    -->
-    <meta
-      name="robots"
-      content="index, follow, max-image-preview:large"
-    />
-    <meta name="application-name" content="Chalin 03 Group Operations Platform" />
-    <meta name="msapplication-TileColor" content="#07182c" />
-    <meta name="msapplication-TileImage" content="/favicon-192x192.png" />
-
-    <meta property="og:site_name" content="Chalin 03 Company Limited" />
-    <meta property="og:title" content="Chalin 03 Group Operations Platform" />
-    <meta
-      property="og:description"
-      content="Local staff portal for Spare Parts, Mining Operations and Equipment Hire."
-    />
-    <meta property="og:type" content="website" />
-
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Chalin 03 Group Operations Platform" />
-    <meta
-      name="twitter:description"
-      content="Local staff portal for Spare Parts, Mining Operations and Equipment Hire."
-    />
-
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="Chalin 03" />
-    <meta
-      name="apple-mobile-web-app-status-bar-style"
-      content="black-translucent"
-    />
-
-    <!-- Stable square favicon assets for browsers, devices and Google Search. -->
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="192x192"
-      href="/favicon-192x192.png"
-    />
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="512x512"
-      href="/favicon-512x512.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="192x192"
-      href="/favicon-192x192.png"
-    />
-    <link rel="shortcut icon" href="/favicon.ico" />
-
-    <!-- PWA manifest -->
-    <link rel="manifest" href="/site.webmanifest" />
-
-    <!-- Organization logo information for search engines -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Organization",
-        "name": "Chalin 03 Company Limited",
-        "description": "Chalin 03 Group Operations Platform",
-        "telephone": "+233249469080",
-        "logo": "/favicon-512x512.png",
-        "address": {
-          "@type": "PostalAddress",
-          "addressLocality": "Dunkwa Police Barrier",
-          "addressCountry": "GH"
+    <meta name="theme-color" content="#0b1118" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="/src/styles/equipmentCatalogueViewportModalFix.css" />
+    <link rel="stylesheet" href="/src/styles/equipmentCatalogueModalPolish.css" />
+    <link rel="stylesheet" href="/financeDialogViewportContractV2.css" />
+    <link rel="stylesheet" href="/financeModalAndAccountsFinalFix.css" />
+    <link rel="stylesheet" href="/financeActiveInstallmentsLayoutFix.css?v=20260902-2" />
+    <script>
+      (() => {
+        try {
+          const stored = window.localStorage.getItem("chalin03-theme");
+          const mode = stored === "dark" || stored === "light" || stored === "system" ? stored : "system";
+          const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches === true;
+          const resolved = mode === "system" ? (systemDark ? "dark" : "light") : mode;
+          document.documentElement.dataset.chalinTheme = resolved;
+          document.documentElement.dataset.chalinThemeMode = mode;
+          document.documentElement.style.colorScheme = resolved;
+        } catch {
+          document.documentElement.dataset.chalinTheme = "light";
+          document.documentElement.dataset.chalinThemeMode = "system";
+          document.documentElement.style.colorScheme = "light";
         }
-      }
+      })();
     </script>
-
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Chalin 03 Group Operations Platform"
-      }
-    </script>
-
-    <title>Chalin 03 Group Operations Platform</title>
+    <title>Chalin 03 Secure Staff Login</title>
   </head>
 
   <body>
-    <noscript>You need JavaScript enabled to run Chalin 03 Group Operations Platform.</noscript>
-
+    <noscript>You need JavaScript enabled to open the secure Chalin 03 staff login.</noscript>
     <div id="root"></div>
-
+    <script src="/browser-cache-recovery.js"></script>
+    <script src="/equipmentFinanceMachineRegisterEnhancements.js"></script>
+    <script src="/equipmentCatalogueAvailabilityFilter.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

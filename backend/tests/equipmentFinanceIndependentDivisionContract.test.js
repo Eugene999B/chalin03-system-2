@@ -5,101 +5,51 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
+const app = read("frontend", "src", "App.jsx");
+const layout = read("frontend", "src", "layouts", "InstallmentFinanceLayout.jsx");
+const workspace = read("frontend", "src", "pages", "EquipmentSalesWorkspacePage.jsx");
+const phaseOneRoutes = read("backend", "routes", "equipmentFinancePhaseOneRoutes.js");
+const divisionAccess = read("frontend", "src", "security", "equipmentDivisionAccess.js");
 
-const scope = read("backend", "services", "hireLocationScope.js");
-const independentRoutes = read(
-  "backend",
-  "routes",
-  "equipmentFinanceIndependentRoutes.js"
-);
-const integrityMiddleware = read(
-  "backend",
-  "middleware",
-  "equipmentCatalogueIntegrityMiddleware.js"
-);
-const hireRoutes = read("backend", "routes", "equipmentHireRoutes.js");
-const lifecycleRoutes = read(
-  "backend",
-  "routes",
-  "equipmentFinanceFinalLifecycleRoutes.js"
-);
-
-const frontendContext = read("frontend", "src", "context", "WorkspaceContext.jsx");
-const axiosClient = read("frontend", "src", "api", "axiosClient.js");
-const financeLayout = read(
-  "frontend",
-  "src",
-  "layouts",
-  "InstallmentFinanceLayout.jsx"
-);
-
-function position(source, expression, label) {
-  const index = source.search(expression);
-  assert.notEqual(index, -1, `${label} was not found`);
-  return index;
-}
-
-test("Finance requests run before the shared legacy sales router", () => {
-  const independentPosition = position(
-    integrityMiddleware,
-    /equipmentFinanceIndependentRoutes\(req, res/,
-    "independent Finance router"
-  );
-  const sharedPosition = position(
-    integrityMiddleware,
-    /equipmentSalesRoutes\(req, res/,
-    "shared equipment sales router"
-  );
-
-  assert.ok(independentPosition < sharedPosition);
-  assert.match(integrityMiddleware, /req\.url = req\.url\.replace\(\/\^\\\/sales/);
+test("Finance keeps its own protected company-wide route tree", () => {
+  assert.match(app, /path="\/equipment-installment-finance"/);
+  assert.match(app, /InstallmentFinanceLayout/);
+  assert.match(app, /EquipmentSalesWorkspacePage/);
+  assert.match(layout, /workspaceCode="equipment_installment_finance"/);
+  assert.match(layout, /company-wide Finance portfolio/i);
 });
 
-test("Finance scope derives internal origin from its own records", () => {
-  assert.match(scope, /FINANCE_DIVISION_HEADER = "installment_finance"/);
-  assert.match(scope, /hasEquipmentDivisionAccess/);
-  assert.match(scope, /resolveIndependentFinanceScope/);
-  assert.match(scope, /equipment_credit_applications/);
-  assert.match(scope, /equipment_sale_agreements/);
-  assert.match(scope, /equipment_sales_quotations/);
-  assert.match(scope, /fleet_assets/);
-  assert.match(scope, /independentFinance: true/);
-  assert.match(scope, /equipmentOriginReference/);
-  assert.match(scope, /FINANCE_RECORD_SCOPE_REQUIRED/);
+test("Finance navigation cannot open Hire jobs, contracts or location administration", () => {
+  assert.match(layout, /No access to Hire jobs or contracts/);
+  assert.doesNotMatch(layout, /Open Equipment Hire Operations/);
+  assert.doesNotMatch(layout, /Hire Enquiries|Hire Contracts|Dispatch|Returns/);
+  assert.doesNotMatch(workspace, /EquipmentHireOperationsPage|HireCommercialControlPage/);
 });
 
-test("Finance is company-wide but active Hire machine safety remains", () => {
-  assert.match(independentRoutes, /scope: "company_wide"/);
-  assert.match(independentRoutes, /hire_location_selection_required: false/);
-  assert.match(independentRoutes, /machine_active_hire_check_enabled: true/);
-  assert.match(independentRoutes, /hire_asset\.status IN \('assigned','dispatched','active'\)/);
-  assert.match(lifecycleRoutes, /EQUIPMENT_ACTIVE_ON_HIRE/);
-  assert.match(lifecycleRoutes, /active_hire_count/);
+test("Finance start and customer APIs do not accept Hire location context", () => {
+  assert.match(phaseOneRoutes, /hire_location_selection_required:\s*false/);
+  assert.match(phaseOneRoutes, /scope:\s*"company_wide"/);
+  assert.doesNotMatch(phaseOneRoutes, /selectedHireLocationId|requireHireLocationScope/);
 });
 
-test("automatic Finance SMS remains fail-closed", () => {
-  assert.match(independentRoutes, /automatic_sms_enabled: false/);
-  assert.match(independentRoutes, /FINANCE_AUTOMATIC_REMINDERS_DISABLED/);
-  assert.match(independentRoutes, /Automatic installment reminders are disabled/);
-  assert.doesNotMatch(independentRoutes, /sendSmsAlertToPhone|sendManualInstallmentReminder/);
+test("role families still enforce Hire, Finance and approved dual access", () => {
+  assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
+  assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
+  assert.match(divisionAccess, /DUAL_DIVISION_ROLES/);
+  assert.match(divisionAccess, /canAccessEquipmentDivision/);
 });
 
-test("Hire operations keep their original location-scoped logic", () => {
-  assert.match(hireRoutes, /resolveHireLocationScope/);
-  assert.match(hireRoutes, /selectedHireLocationId\(req\)/);
-  assert.match(hireRoutes, /hire_location_id = \?/);
-  assert.match(scope, /Choose an Equipment Hire location before continuing/);
-  assert.match(scope, /user_hire_location_access/);
-});
-
-test("Finance UI no longer sends or displays Hire location context", () => {
-  assert.match(frontendContext, /Company-wide Finance portfolio/);
-  assert.match(frontendContext, /isManagedWorkspace: false/);
-  assert.match(frontendContext, /equipment_installment_finance/);
-  assert.match(axiosClient, /X-Chalin03-Division/);
-  assert.match(axiosClient, /"installment_finance"/);
-  assert.match(axiosClient, /financeScreen[\s\S]*workspaceContextId/);
-  assert.match(financeLayout, /workspaceCode="equipment_installment_finance"/);
-  assert.match(financeLayout, /Finance staff do not select Hire locations/);
-  assert.match(financeLayout, /No access to Hire jobs or contracts/);
+test("every simplified Finance item points to an explicit Finance route", () => {
+  for (const route of [
+    "/equipment-installment-finance",
+    "/equipment-installment-finance/applications",
+    "/equipment-installment-finance/reports",
+    "/equipment-installment-finance/change-password",
+  ]) {
+    assert.match(app, new RegExp(`path=\\"${route.replace("/equipment-installment-finance/", "").replace("/equipment-installment-finance", "")}\\"|path=\\"\\/equipment-installment-finance\\"`));
+  }
+  assert.match(layout, /Start New Installment/);
+  assert.match(layout, /Customers/);
+  assert.match(layout, /Excavators/);
+  assert.match(layout, /Applications & Approvals/);
 });

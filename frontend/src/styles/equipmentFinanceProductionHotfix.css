@@ -1,0 +1,136 @@
+/* Production repairs for administrator approval, clear notices, case readability and protected images. */
+
+.installment-completion__case-grid {
+  grid-template-columns: minmax(18rem, 22rem) minmax(0, 1fr);
+  align-items: start;
+}
+
+.installment-completion__case-grid > .installment-completion__panel,
+.installment-completion__case-summary {
+  min-width: 0;
+}
+
+.installment-completion__case-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  justify-content: stretch;
+  gap: 0.18rem;
+  min-height: 0;
+  white-space: normal;
+  text-align: left;
+}
+
+.installment-completion__case-list button strong,
+.installment-completion__case-list button span,
+.installment-completion__case-list button small {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.installment-completion__case-list button span {
+  color: #244d35;
+  font-weight: 750;
+}
+
+.installment-completion__case-list button small + small {
+  margin-top: 0.28rem;
+  font-weight: 800;
+}
+
+.installment-completion__case-summary {
+  overflow: hidden;
+}
+
+.installment-completion__machine {
+  margin-bottom: 1rem;
+  border: 1px solid rgba(33, 53, 39, 0.12);
+  border-radius: 1rem;
+  padding: 0.9rem;
+  background: #f8faf8;
+}
+
+.installment-completion__machine-image {
+  min-height: 0;
+  aspect-ratio: 16 / 10;
+}
+
+.installment-completion__machine-image img {
+  min-height: 0;
+}
+
+.finance-simple__card > .finance-simple__machine-image {
+  min-height: 10rem;
+  aspect-ratio: 16 / 9;
+}
+
+.finance-simple__machine-image[data-completion-image-state="loading"]::after {
+  content: "Loading excavator picture…";
+  padding: 1rem;
+  color: #5d6d62;
+  font-size: 0.86rem;
+  font-weight: 750;
+  text-align: center;
+}
+
+.finance-simple__machine-image[data-completion-image-state="failed"] {
+  border-bottom: 1px solid #ead8ad;
+  background: #fff9ea;
+  color: #745512;
+}
+
+.finance-simple__machine-image[data-completion-image-state="failed"] span {
+  padding: 1rem;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.finance-simple__card-actions [data-admin-approval-action="true"] {
+  border-color: #1f5b36;
+  background: #1f5b36;
+  color: #fff;
+}
+
+.finance-simple__admin-approval-note {
+  flex: 1 1 100%;
+  width: 100%;
+  border: 1px solid #badbc6;
+  border-radius: 0.75rem;
+  padding: 0.58rem 0.7rem;
+  background: #edf8f1;
+  color: #164b2b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.finance-simple__admin-dialog-note {
+  margin: 0 1.25rem 0.75rem;
+}
+
+@media (max-width: 1120px) {
+  .installment-completion__case-grid {
+    grid-template-columns: minmax(17rem, 20rem) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .installment-completion__case-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .finance-simple__card > .finance-simple__machine-image {
+    min-height: 0;
+    aspect-ratio: 4 / 3;
+  }
+
+  .finance-simple__admin-dialog-note {
+    margin-inline: 0.85rem;
+  }
+}

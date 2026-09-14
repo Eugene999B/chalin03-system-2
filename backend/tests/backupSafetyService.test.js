@@ -40,6 +40,43 @@ function makeBackup() {
   return backup;
 }
 
+function makeNewerSourceBackup(sourceSecret = "c".repeat(64)) {
+  const backup = makeBackup();
+  backup.included_tables = ["future_table", ...backup.included_tables];
+  backup.table_columns.future_table = ["id", "future_value"];
+  backup.table_counts.future_table = 0;
+  backup.tables.future_table = [];
+  backup.schema_migrations.push({
+    migration_name: "future_runtime",
+    description: "source-only migration",
+    applied_at: null,
+  });
+  backup.checksum_sha256 = checksumBackup(backup);
+  backup.signature_hmac_sha256 = signBackup(backup, sourceSecret);
+  return backup;
+}
+
+function withEnvironment(values, callback) {
+  const previous = Object.fromEntries(
+    Object.keys(values).map((key) => [key, process.env[key]])
+  );
+  try {
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined || value === null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = String(value);
+      }
+    }
+    return callback();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 const currentTableColumns = {
   products: ["id", "name"],
   users: ["id", "username", "token_version"],
@@ -79,7 +116,7 @@ test("accepts a complete signed backup with an exact schema contract", () => {
   assert.equal(report.totalRows, 2);
 });
 
-test("blocks a backup missing a current table", () => {
+test("blocks a backup missing a current table in strict mode", () => {
   const backup = makeBackup();
   delete backup.tables.products;
   backup.included_tables = ["users"];
@@ -132,7 +169,7 @@ test("blocks a valid checksum signed by the wrong server", () => {
   assert.match(report.errors.join(" "), /signature/i);
 });
 
-test("blocks schema and migration drift", () => {
+test("blocks schema and migration drift in strict mode", () => {
   const backup = makeBackup();
   const report = validateBackupContract({
     backup,
@@ -150,4 +187,164 @@ test("blocks schema and migration drift", () => {
   });
   assert.equal(report.valid, false);
   assert.match(report.errors.join(" "), /columns|migration history/i);
+});
+
+test("accepts an older signed backup across safe additive schema changes", () => {
+  const backup = makeBackup();
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: ["users", "products", "payroll_settings"],
+    currentTableColumns: {
+      users: ["id", "username", "token_version"],
+      products: ["id", "name", "barcode"],
+      payroll_settings: ["id", "branch_id"],
+    },
+    currentTableMetadata: {
+      users: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "username", nullable: false, hasDefault: false, extra: "" },
+        { name: "token_version", nullable: false, hasDefault: true, extra: "" },
+      ],
+      products: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "name", nullable: false, hasDefault: false, extra: "" },
+        { name: "barcode", nullable: true, hasDefault: false, extra: "" },
+      ],
+      payroll_settings: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "branch_id", nullable: false, hasDefault: false, extra: "" },
+      ],
+    },
+    currentSchemaMigrations: [
+      ...currentSchemaMigrations,
+      { migration_name: "payroll_foundation" },
+    ],
+    signingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, true, report.errors.join("\n"));
+  assert.deepEqual(report.currentOnlyTables, ["payroll_settings"]);
+  assert.equal(report.additiveSchemaCompatibilityApplied, true);
+  assert.match(report.warnings.join(" "), /preserved|predates|newer migrations/i);
+});
+
+test("blocks an older backup when a new current column cannot be safely omitted", () => {
+  const backup = makeBackup();
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: ["users", "products"],
+    currentTableColumns: {
+      ...currentTableColumns,
+      products: ["id", "name", "required_code"],
+    },
+    currentTableMetadata: {
+      products: [
+        { name: "id", nullable: false, hasDefault: false, extra: "auto_increment" },
+        { name: "name", nullable: false, hasDefault: false, extra: "" },
+        { name: "required_code", nullable: false, hasDefault: false, extra: "" },
+      ],
+    },
+    currentSchemaMigrations,
+    signingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, false);
+  assert.match(report.errors.join(" "), /cannot safely supply required columns/i);
+});
+
+test("blocks a backup migration unknown to the current runtime even in additive mode", () => {
+  const backup = makeBackup();
+  backup.schema_migrations.push({ migration_name: "future_runtime" });
+  backup.checksum_sha256 = checksumBackup(backup);
+  backup.signature_hmac_sha256 = signBackup(backup, signingSecret);
+
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: ["users", "products"],
+    currentTableColumns,
+    currentTableMetadata: {
+      users: currentTableColumns.users.map((name) => ({ name, nullable: true, hasDefault: false, extra: "" })),
+      products: currentTableColumns.products.map((name) => ({ name, nullable: true, hasDefault: false, extra: "" })),
+    },
+    currentSchemaMigrations,
+    signingSecret,
+    requireSignature: true,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  assert.equal(report.valid, false);
+  assert.match(report.errors.join(" "), /unknown backup migrations/i);
+});
+
+test("Railway staging accepts a signed-v2 production backup even when NODE_ENV is production", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "production",
+      RAILWAY_ENVIRONMENT_NAME: "staging",
+    },
+    () => {
+      const backup = makeNewerSourceBackup();
+      const report = validateBackupContract({
+        backup,
+        currentIncludedTables: ["users", "products"],
+        currentTableColumns,
+        currentTableMetadata: {
+          users: currentTableColumns.users.map((name) => ({
+            name,
+            nullable: true,
+            hasDefault: false,
+            extra: "",
+          })),
+          products: currentTableColumns.products.map((name) => ({
+            name,
+            nullable: true,
+            hasDefault: false,
+            extra: "",
+          })),
+        },
+        currentSchemaMigrations,
+        signingSecret: "b".repeat(64),
+        requireSignature: true,
+        allowAdditiveSchemaDrift: true,
+      });
+
+      assert.equal(report.valid, true, report.errors.join("\n"));
+      assert.equal(report.crossEnvironmentRecovery, true);
+      assert.equal(report.signatureVerified, false);
+      assert.deepEqual(report.sourceOnlyTables, ["future_table"]);
+      assert.match(report.warnings.join(" "), /signature|future_table|future_runtime/i);
+    }
+  );
+});
+
+test("Railway production never enables cross-environment recovery even if a caller disables signature enforcement", () => {
+  withEnvironment(
+    {
+      NODE_ENV: "staging",
+      RAILWAY_ENVIRONMENT_NAME: "production",
+    },
+    () => {
+      const backup = makeNewerSourceBackup();
+      const report = validateBackupContract({
+        backup,
+        currentIncludedTables: ["users", "products"],
+        currentTableColumns,
+        currentSchemaMigrations,
+        signingSecret: "b".repeat(64),
+        requireSignature: false,
+        allowAdditiveSchemaDrift: true,
+      });
+
+      assert.equal(report.valid, false);
+      assert.equal(Boolean(report.crossEnvironmentRecovery), false);
+      assert.match(
+        report.errors.join(" "),
+        /signature|unknown backup migrations|not supported by the current database/i
+      );
+    }
+  );
 });

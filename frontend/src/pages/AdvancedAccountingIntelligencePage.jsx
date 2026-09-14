@@ -210,6 +210,13 @@ export default function AdvancedAccountingIntelligencePage() {
       icon: "💰",
     },
     {
+      title: "Refunds",
+      value: formatMoney(summary.total_refunds),
+      note: "Executed returns/refunds reduce net sales",
+      icon: "↩️",
+      tone: Number(summary.total_refunds || 0) > 0 ? "warning" : "normal",
+    },
+    {
       title: "Balance",
       value: formatMoney(summary.total_balance),
       note: "Unpaid sales balance",
@@ -230,9 +237,9 @@ export default function AdvancedAccountingIntelligencePage() {
       tone: Number(summary.total_debt_balance || 0) > 0 ? "warning" : "normal",
     },
     {
-      title: "Net Before Stock Cost",
+      title: "Net After Refunds Before Stock Cost",
       value: formatMoney(summary.estimated_net_before_stock_cost),
-      note: "Management estimate only",
+      note: "Sales less discounts, refunds and operating expenses",
       icon: "🧮",
     },
   ];
