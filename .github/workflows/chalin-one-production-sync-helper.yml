@@ -1,0 +1,54 @@
+name: Chalin One Production Sync Helper
+
+on:
+  push:
+    branches:
+      - integration/chalin-one-production-sync-20260914
+
+permissions:
+  contents: write
+
+jobs:
+  merge-production:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: integration/chalin-one-production-sync-20260914
+
+      - name: Merge production and record conflicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "chalin03-sync-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch origin production
+
+          PRODUCTION_HEAD="$(git rev-parse origin/production)"
+          printf '%s\n' "$PRODUCTION_HEAD" > SYNC_PRODUCTION_HEAD_20260914.txt
+
+          set +e
+          git merge --no-commit --no-ff origin/production
+          MERGE_STATUS=$?
+          set -e
+
+          git diff --name-only --diff-filter=U | sort > SYNC_CONFLICTS_20260914.txt
+
+          if [ "$MERGE_STATUS" -ne 0 ]; then
+            if [ ! -s SYNC_CONFLICTS_20260914.txt ]; then
+              echo "Merge failed without identifiable unmerged paths." >&2
+              exit 1
+            fi
+            while IFS= read -r path; do
+              [ -z "$path" ] && continue
+              git checkout --ours -- "$path" 2>/dev/null || true
+              git add -- "$path" 2>/dev/null || true
+            done < SYNC_CONFLICTS_20260914.txt
+          fi
+
+          git add -A
+          git commit -m "chore(chalin-one): integrate production baseline for conflict audit"
+          git push origin HEAD:integration/chalin-one-production-sync-20260914
