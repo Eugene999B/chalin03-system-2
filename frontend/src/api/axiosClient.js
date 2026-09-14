@@ -22,6 +22,18 @@ const PUBLIC_SESSION_PATHS = new Set([
   "/branches/public",
 ]);
 
+// These are high-frequency background reads observed in production. A very short,
+// account/branch-scoped cache collapses duplicate timers without caching sales,
+// stock, debt balances, finance transactions or other business records.
+const POLLING_READ_TTLS_MS = new Map([
+  ["/audit-unlock-requests/operational", 30000],
+  ["/sms/status", 60000],
+  ["/sms/customers", 60000],
+  ["/sms/logs", 45000],
+]);
+const pollingReadCache = new Map();
+const pollingReadInFlight = new Map();
+
 const axiosClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
@@ -106,8 +118,82 @@ function buildCachedProfileResponse(error, cachedUser) {
   return { data: { status: "degraded", message: "The secure session is active. Fresh profile details will be retried automatically.", workspace: { id: cachedUser?.business_unit_id || cachedUser?.active_workspace?.id || null, code: workspaceCode, name: workspaceName }, user: cachedUser }, status: 200, statusText: "OK", headers: error.response?.headers || {}, config: error.config, request: error.request };
 }
 
+function pollingReadTtl(url) {
+  return POLLING_READ_TTLS_MS.get(cleanRequestPath(url)) || 0;
+}
+
+function stableParams(params) {
+  if (!params || typeof params !== "object") return "";
+  if (params instanceof URLSearchParams) return params.toString();
+  try {
+    return JSON.stringify(
+      Object.keys(params)
+        .sort()
+        .reduce((result, key) => {
+          result[key] = params[key];
+          return result;
+        }, {})
+    );
+  } catch {
+    return String(params);
+  }
+}
+
+function pollingReadKey(url, config = {}) {
+  const user = getStoredUser();
+  const { workspaceCode, branchId } = getStoredSessionInfo();
+  return [
+    user?.id || user?.user_id || "anonymous",
+    workspaceCode || "",
+    branchId || "",
+    cleanRequestPath(url),
+    stableParams(config.params),
+  ].join("|");
+}
+
+function clonePollingValue(value) {
+  if (value === undefined || value === null) return value;
+  try {
+    if (typeof structuredClone === "function") return structuredClone(value);
+  } catch {
+    // Fall back to JSON cloning below for ordinary API payloads.
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+function clearPollingReadCache(pathPrefix = "") {
+  if (!pathPrefix) {
+    pollingReadCache.clear();
+    pollingReadInFlight.clear();
+    return;
+  }
+
+  for (const key of pollingReadCache.keys()) {
+    if (key.includes(`|${pathPrefix}`)) pollingReadCache.delete(key);
+  }
+  for (const key of pollingReadInFlight.keys()) {
+    if (key.includes(`|${pathPrefix}`)) pollingReadInFlight.delete(key);
+  }
+}
+
+function invalidatePollingReadCacheForRequest(config) {
+  const method = String(config?.method || "get").toLowerCase();
+  if (["get", "head", "options"].includes(method)) return;
+
+  const path = cleanRequestPath(config?.url);
+  if (path.startsWith("/sms")) clearPollingReadCache("/sms/");
+  if (path.startsWith("/audit-unlock-requests")) {
+    clearPollingReadCache("/audit-unlock-requests/operational");
+  }
+}
+
 axiosClient.interceptors.request.use((config) => {
   assertSparePartsInstallmentRequestAllowed(config);
+  invalidatePollingReadCacheForRequest(config);
   const token = localStorage.getItem(TOKEN_KEY) || "";
   const publicSessionRequest = isPublicSessionRequest(config);
   const requestToken = publicSessionRequest ? "" : token;
@@ -161,10 +247,65 @@ axiosClient.interceptors.response.use(
     if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage && !isChangePasswordCredentialFailure) {
       if (errorCode === "SESSION_REPLACED") sessionStorage.setItem("chalin03_login_notice", errorMessage || "Your account was signed in on another device.");
       else if (errorCode.startsWith("SESSION_EXPIRED")) sessionStorage.setItem("chalin03_login_notice", errorMessage || "Your session ended after 8 hours or at 12:00 a.m. Ghana time. Please login again.");
-      if (!requestToken || requestToken === activeToken) { clearStoredSession(); if (window.location.pathname !== "/login") window.location.href = "/login"; }
+      if (!requestToken || requestToken === activeToken) { clearStoredSession(); clearPollingReadCache(); if (window.location.pathname !== "/login") window.location.href = "/login"; }
     }
     return Promise.reject(error);
   }
 );
+
+// Collapse repeated polling calls before they reach Railway. Mutations clear their
+// matching cache immediately, so user actions still refresh with fresh server data.
+const uncachedGet = axiosClient.get.bind(axiosClient);
+axiosClient.get = async function chalinCachedGet(url, config = {}) {
+  const ttl = pollingReadTtl(url);
+  if (!ttl || config.__skipChalinReadCache === true) {
+    return uncachedGet(url, config);
+  }
+
+  const key = pollingReadKey(url, config);
+  const cached = pollingReadCache.get(key);
+  const now = Date.now();
+
+  if (cached && cached.expiresAt > now) {
+    return {
+      ...cached.response,
+      data: clonePollingValue(cached.response.data),
+      config: { ...(cached.response.config || {}), ...config, url },
+      request: null,
+    };
+  }
+  if (cached) pollingReadCache.delete(key);
+
+  const existing = pollingReadInFlight.get(key);
+  if (existing) return existing;
+
+  const request = uncachedGet(url, config)
+    .then((response) => {
+      if (response.status >= 200 && response.status < 300) {
+        pollingReadCache.set(key, {
+          expiresAt: Date.now() + ttl,
+          response: {
+            data: clonePollingValue(response.data),
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+            config: response.config,
+          },
+        });
+      }
+      return response;
+    })
+    .finally(() => pollingReadInFlight.delete(key));
+
+  pollingReadInFlight.set(key, request);
+  return request;
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", () => clearPollingReadCache());
+  window.addEventListener("chalin03:approval-request-changed", () => {
+    clearPollingReadCache("/audit-unlock-requests/operational");
+  });
+}
 
 export default axiosClient;
