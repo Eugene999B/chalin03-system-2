@@ -1,3 +1,8 @@
+-- CHALIN 03 EQUIPMENT FINANCE NOTIFICATION CONTROLS
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: verify a fresh signed Chalin 03 full-system backup and SQL/database backup before production execution.
+-- Existing Finance, customer, payment and notification records are preserved.
+
 CREATE TABLE IF NOT EXISTS equipment_finance_notification_settings (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
     equipment_created TINYINT(1) NOT NULL DEFAULT 1,
@@ -17,3 +22,10 @@ CREATE TABLE IF NOT EXISTS equipment_finance_notification_settings (
 INSERT INTO equipment_finance_notification_settings (id)
 VALUES (1)
 ON DUPLICATE KEY UPDATE id = id;
+
+INSERT INTO schema_migrations (migration_name, description)
+VALUES (
+    '20260904_equipment_finance_notification_controls',
+    'Additive singleton controls for equipment Finance notification categories.'
+)
+ON DUPLICATE KEY UPDATE description = VALUES(description);
