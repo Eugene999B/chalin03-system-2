@@ -33,6 +33,7 @@ const POLLING_READ_TTLS_MS = new Map([
 ]);
 const pollingReadCache = new Map();
 const pollingReadInFlight = new Map();
+let pollingReadCacheGeneration = 0;
 
 const axiosClient = axios.create({
   baseURL: API_BASE_URL,
@@ -166,6 +167,10 @@ function clonePollingValue(value) {
 }
 
 function clearPollingReadCache(pathPrefix = "") {
+  // Incrementing the generation prevents an older in-flight GET from repopulating
+  // stale data after a write has already invalidated the cache.
+  pollingReadCacheGeneration += 1;
+
   if (!pathPrefix) {
     pollingReadCache.clear();
     pollingReadInFlight.clear();
@@ -279,9 +284,14 @@ axiosClient.get = async function chalinCachedGet(url, config = {}) {
   const existing = pollingReadInFlight.get(key);
   if (existing) return existing;
 
+  const requestGeneration = pollingReadCacheGeneration;
   const request = uncachedGet(url, config)
     .then((response) => {
-      if (response.status >= 200 && response.status < 300) {
+      if (
+        requestGeneration === pollingReadCacheGeneration &&
+        response.status >= 200 &&
+        response.status < 300
+      ) {
         pollingReadCache.set(key, {
           expiresAt: Date.now() + ttl,
           response: {
