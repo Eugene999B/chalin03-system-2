@@ -62,7 +62,7 @@ function resolveApiBaseUrl({
   // removes browser CORS/preflight as a production dependency while keeping the
   // Railway API, authentication and origin-protection controls authoritative.
   if (OFFICIAL_FRONTEND_HOSTS.has(normalizedHostname)) {
-    return "/api";
+    return "https://api.chalin03.com/api";
   }
 
   return normalizeApiBaseUrl(configured || developmentFallback);

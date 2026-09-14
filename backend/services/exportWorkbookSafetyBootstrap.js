@@ -1,6 +1,47 @@
+const express = require("express");
+const { requireAuth } = require("../middleware/authMiddleware");
+const { requireWorkspaceCategory } = require("./categoryIsolationService");
+const equipmentFinanceProfessionalRoutes = require("../routes/equipmentFinanceProfessionalRoutes");
+
+const ROUTE_MOUNT_FLAG = Symbol.for("chalin03.equipmentFinanceProfessionalRoutesMounted");
+const originalExpressUse = express.application.use;
+if (!express.application[ROUTE_MOUNT_FLAG]) {
+  express.application.use = function chalin03FinanceAwareUse(...args) {
+    const result = originalExpressUse.apply(this, args);
+    const mountPath = args[0];
+    if (mountPath === "/api/equipment-catalogue" && !this[ROUTE_MOUNT_FLAG]) {
+      const hireBoundary = requireWorkspaceCategory("equipment_hire");
+      originalExpressUse.call(
+        this,
+        "/api/equipment-catalogue/sales",
+        requireAuth,
+        hireBoundary,
+        equipmentFinanceProfessionalRoutes
+      );
+      Object.defineProperty(this, ROUTE_MOUNT_FLAG, {
+        value: true,
+        configurable: false,
+        enumerable: false,
+        writable: false,
+      });
+      console.log("Equipment Finance Professional routes mounted at /api/equipment-catalogue/sales/professional.");
+    }
+    return result;
+  };
+  Object.defineProperty(express.application, ROUTE_MOUNT_FLAG, {
+    value: true,
+    configurable: false,
+    enumerable: false,
+    writable: false,
+  });
+}
+
 require("./equipmentCreditOptionalApprovalBootstrap");
 require("./operationalApprovalBootstrap");
 require("./stockLedgerSummaryBootstrap");
+require("./executivePackNotificationDeliveryBootstrap");
+require("./equipmentFinanceBossAlertDeliveryBootstrap");
+require("./equipmentFinanceLateFeeScheduler").startEquipmentFinanceLateFeeScheduler();
 require("./backupSafetyRecoveryBootstrap");
 
 const { spawn, spawnSync } = require("node:child_process");

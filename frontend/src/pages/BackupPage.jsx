@@ -3,7 +3,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const BACKUP_DOWNLOAD_TIMEOUT_MS = 300000;
+const BACKUP_DOWNLOAD_TIMEOUT_MS = 900000;
 const BACKUP_VALIDATE_TIMEOUT_MS = 180000;
 const BACKUP_SCHEMA_PREPARE_TIMEOUT_MS = 180000;
 const BACKUP_RESTORE_TIMEOUT_MS = 600000;
@@ -156,7 +156,7 @@ export default function BackupPage() {
     }
     setDownloading(true);
     setError("");
-    setMessage("");
+    setMessage("Preparing the signed full-system backup. Keep this page open while the database snapshot is streamed securely.");
     try {
       const response = await axiosClient.get(backupRequestUrl("/download"), {
         responseType: "blob",
@@ -172,7 +172,7 @@ export default function BackupPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(fileUrl);
+      window.setTimeout(() => window.URL.revokeObjectURL(fileUrl), 1000);
       setMessage(
         "Full-system backup downloaded successfully. Keep it private; it contains sensitive business records and password hashes."
       );
