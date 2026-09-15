@@ -203,7 +203,10 @@ assert.match(divisionAccess, /canAccessEquipmentDivision/);
 assert.match(divisionAccess, /ensureFinanceUiCompatibilityPermissions/);
 assert.match(divisionAccess, /equipmentDivisionForUser/);
 assert.match(divisionAccess, /equipment-installment-finance\/catalogue/);
-assert.match(axiosClient, /x-workspace-code/);
+assert.match(axiosClient, /X-Chalin03-Workspace/);
+assert.match(axiosClient, /X-Chalin03-Division/);
+assert.match(axiosClient, /installment_finance/);
 assert.match(workspaceContext, /workspaceCode/);
+assert.match(workspaceContext, /FINANCE_VIRTUAL_CONTEXT/);
 
 console.log("Equipment Sales/Hire + Finance release tests passed.");
