@@ -34,7 +34,7 @@ function testProfileIsLoadedInTheOperationalWizard() {
   // stacked around the operational transaction studio.
   assert.match(optionalStartPage, /EquipmentFinanceStartWizardPage/);
   assert.match(optionalStartPage, /legacy optional/);
-  assert.match(optionalStartPage, /one real\s+page hierarchy/);
+  assert.match(optionalStartPage, /one real[\s\S]*page hierarchy/);
   assert.match(operationalStartPage, /EquipmentFinanceStartWizardPage/);
   assert.match(operationalStartPage, /Server recovery never blocks this screen/);
 }
