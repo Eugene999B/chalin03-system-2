@@ -194,11 +194,15 @@ assert.match(retirementBridge, /Equipment Installment Finance/);
 assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
 assert.match(retirementBridge, /payment_type/);
 
+// Hire and Finance are role-separated equipment divisions under the shared
+// equipment_hire workspace. Finance navigation itself uses the dedicated URL.
 assert.match(divisionAccess, /EQUIPMENT_DIVISIONS/);
 assert.match(divisionAccess, /equipment_hire/);
-assert.match(divisionAccess, /equipment_installment_finance/);
-assert.match(divisionAccess, /resolveEquipmentDivision/);
-assert.match(divisionAccess, /hasEquipmentDivisionAccess/);
+assert.match(divisionAccess, /FINANCE:\s*"finance"/);
+assert.match(divisionAccess, /canAccessEquipmentDivision/);
+assert.match(divisionAccess, /ensureFinanceUiCompatibilityPermissions/);
+assert.match(divisionAccess, /equipmentDivisionForUser/);
+assert.match(divisionAccess, /equipment-installment-finance\/catalogue/);
 assert.match(axiosClient, /x-workspace-code/);
 assert.match(workspaceContext, /workspaceCode/);
 
