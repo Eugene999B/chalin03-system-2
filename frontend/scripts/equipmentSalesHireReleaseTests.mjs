@@ -175,14 +175,19 @@ assert.match(reports, /\/reports\/export\.csv/);
 assert.match(reports, /accounting-export\.xlsx/);
 assert.match(reports, /Customer Statement, Documents &amp; Thermal Receipts/);
 
-assert.match(secureUpload, /secureUploadWithCameraFallback/);
-assert.match(secureUpload, /navigator\.mediaDevices\.getUserMedia/);
-assert.match(secureUpload, /facingMode/);
-assert.match(secureUpload, /playsInline/);
-assert.match(secureUpload, /videoWidth/);
-assert.match(secureUpload, /videoHeight/);
-assert.match(secureUploadStyles, /\.secure-camera-modal/);
-assert.match(secureUploadStyles, /@media \(max-width: 720px\)/);
+// The current production-standard media bridge uses the native file/camera picker,
+// compresses photos before storage, and hydrates protected Finance images through
+// authenticated blob requests. The retired custom getUserMedia modal is intentionally absent.
+assert.match(secureUpload, /optimizeEquipmentPhoto/);
+assert.match(secureUpload, /handleEquipmentPhotoSelection/);
+assert.match(secureUpload, /MAX_SOURCE_BYTES/);
+assert.match(secureUpload, /MAX_STORED_BYTES/);
+assert.match(secureUpload, /hydrateProtectedFinanceImage/);
+assert.match(secureUpload, /responseType:\s*"blob"/);
+assert.match(secureUpload, /AbortController/);
+assert.match(secureUpload, /FINANCE_IMAGE_PATHS/);
+assert.match(secureUploadStyles, /\.equipment-secure-upload__preview/);
+assert.match(secureUploadStyles, /@media \(max-width: 560px\)/);
 
 assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
 assert.match(retirementBridge, /equipment-installment-finance/);
