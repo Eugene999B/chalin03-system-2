@@ -4,7 +4,7 @@ import axiosClient from "../api/axiosClient";
 
 const USER_KEY = "chalin03_user";
 const TOKEN_KEY = "chalin03_token";
-const POLL_INTERVAL_MS = 12000;
+const POLL_INTERVAL_MS = 60000;
 const NEW_ARRIVAL_ANIMATION_MS = 5200;
 
 function parseStoredUser() {
@@ -125,7 +125,7 @@ export default function ApprovalCentreLiveAttention() {
     }
 
     async function refreshAttention({ announce = true } = {}) {
-      if (disposed || requestInFlight) return;
+      if (disposed || requestInFlight || document.hidden) return;
 
       if (!canWatchApprovals()) {
         currentCount = 0;

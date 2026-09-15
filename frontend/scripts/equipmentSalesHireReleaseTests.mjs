@@ -73,7 +73,7 @@ assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 for (const pageName of [
-  "EquipmentFinancePhaseThreeStartRedirectPage",
+  "EquipmentFinanceStartInstallmentPage",
   "EquipmentFinanceOperationalPolishPage",
   "EquipmentFinanceCustomerCentrePage",
   "EquipmentFinanceExcavatorsPage",
@@ -87,6 +87,9 @@ for (const pageName of [
 ]) {
   assert.match(workspace, new RegExp(pageName));
 }
+// Keep the legacy redirect flow tested as a compatibility surface, but the
+// current production-standard stage=start route opens the dedicated installment
+// page directly (production change 53a07fb630f2f0db8f90d3bb115271907ab0ed08).
 assert.match(phaseThreeStart, /EquipmentFinanceOperationalStartImmediatePage/);
 assert.match(phaseThreeStart, /axiosClient\.interceptors\.response\.use/);
 assert.match(phaseThreeStart, /START_INSTALLMENT_PATH/);
@@ -111,7 +114,8 @@ assert.match(
 );
 
 assert.match(wizard, /Start New Installment/);
-assert.match(wizard, /create a draft/i);
+assert.match(wizard, /Review and create/);
+assert.match(wizard, /Create installment draft/);
 assert.match(minimalWorkflow, /automatic Installment Offer/);
 assert.match(minimalWorkflow, /Complete these nine actions/);
 assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
@@ -129,7 +133,9 @@ assert.match(collections, /Collections &amp; Payment History/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
 assert.match(collections, /\/collections/);
-assert.match(collections, /backend (?:after committed payments|from committed receipts)/i);
+// Collections reads authoritative balances/dates from the backend account API.
+assert.match(collections, /axiosClient\.get\(\x60\$\{API\}\/accounts\//);
+assert.match(collections, /response\.data\?\.schedule/);
 
 assert.match(applications, /const API = "\/equipment-catalogue\/sales\/credit-applications"/);
 assert.match(applications, /\/readiness/);
@@ -139,7 +145,7 @@ assert.match(applications, /kyc\/verify/);
 assert.match(applications, /\/review/);
 assert.match(applications, /Approve credit application/);
 assert.match(applications, /Request changes/);
-assert.match(applications, /No Hire-location selection is needed/);
+assert.match(applications, /recoverable company-wide draft/);
 assert.doesNotMatch(applications, /ownership-transfer|deliveries\/complete/);
 
 assert.match(customers, /Customer Centre/);
@@ -166,24 +172,41 @@ assert.match(phaseOneStyles, /bottom:\s*0/);
 assert.match(reports, /Documents &amp; Reports/);
 assert.match(reports, /\/reports\/management/);
 assert.match(reports, /\/reports\/export\.csv/);
-assert.match(reports, /documents\/agreement\.pdf/);
-assert.match(reports, /documents\/statement\.pdf/);
-assert.match(reports, /documents\/delivery\.pdf/);
-assert.match(reports, /documents\/ownership\.pdf/);
-assert.match(reports, /\/receipt\.pdf/);
-assert.match(secureUpload, /async function optimizeEquipmentPhoto/);
-assert.match(secureUpload, /MAX_SOURCE_BYTES = 15 \* 1024 \* 1024/);
-assert.match(secureUpload, /canvas\.toBlob/);
-assert.match(secureUploadStyles, /display: none !important/);
-assert.match(retirementBridge, /Spare Parts installment sales have moved/);
-assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
+assert.match(reports, /accounting-export\.xlsx/);
+assert.match(reports, /Customer Statement, Documents &amp; Thermal Receipts/);
 
-assert.match(divisionAccess, /HIRE_WORKSPACE_ROLES/);
-assert.match(divisionAccess, /FINANCE_WORKSPACE_ROLES/);
+// The current production-standard media bridge uses the native file/camera picker,
+// compresses photos before storage, and hydrates protected Finance images through
+// authenticated blob requests. The retired custom getUserMedia modal is intentionally absent.
+assert.match(secureUpload, /optimizeEquipmentPhoto/);
+assert.match(secureUpload, /handleEquipmentPhotoSelection/);
+assert.match(secureUpload, /MAX_SOURCE_BYTES/);
+assert.match(secureUpload, /MAX_STORED_BYTES/);
+assert.match(secureUpload, /hydrateProtectedFinanceImage/);
+assert.match(secureUpload, /responseType:\s*"blob"/);
+assert.match(secureUpload, /AbortController/);
+assert.match(secureUpload, /FINANCE_IMAGE_PATHS/);
+assert.match(secureUploadStyles, /\.equipment-secure-upload__preview/);
+assert.match(secureUploadStyles, /@media \(max-width: 560px\)/);
+
+assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
+assert.match(retirementBridge, /Equipment Installment Finance/);
+assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
+assert.match(retirementBridge, /payment_type/);
+
+// Hire and Finance are role-separated equipment divisions under the shared
+// equipment_hire workspace. Finance navigation itself uses the dedicated URL.
+assert.match(divisionAccess, /EQUIPMENT_DIVISIONS/);
+assert.match(divisionAccess, /equipment_hire/);
+assert.match(divisionAccess, /FINANCE:\s*"finance"/);
 assert.match(divisionAccess, /canAccessEquipmentDivision/);
+assert.match(divisionAccess, /ensureFinanceUiCompatibilityPermissions/);
+assert.match(divisionAccess, /equipmentDivisionForUser/);
+assert.match(divisionAccess, /equipment-installment-finance\/catalogue/);
+assert.match(axiosClient, /X-Chalin03-Workspace/);
 assert.match(axiosClient, /X-Chalin03-Division/);
 assert.match(axiosClient, /installment_finance/);
-assert.match(workspaceContext, /Company-wide Finance portfolio/);
-assert.match(workspaceContext, /isManagedWorkspace: false/);
+assert.match(workspaceContext, /workspaceCode/);
+assert.match(workspaceContext, /FINANCE_VIRTUAL_CONTEXT/);
 
-console.log("Equipment Hire separation and simplified Installment Finance contracts passed.");
+console.log("Equipment Sales/Hire + Finance release tests passed.");

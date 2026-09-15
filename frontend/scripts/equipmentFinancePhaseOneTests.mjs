@@ -22,6 +22,8 @@ const reports = read("src", "pages", "EquipmentSalesReportsPage.jsx");
 const guide = read("src", "pages", "EquipmentFinanceGuidePage.jsx");
 const css = read("src", "styles", "equipmentFinancePhaseOne.css");
 const guideCss = read("src", "styles", "equipmentFinanceGuide.css");
+const modalFixCss = read("src", "styles", "financeUiRealFix.css");
+const modalContractCss = read("src", "styles", "installmentModalContract.css");
 
 for (const stage of ["start", "customers", "machines", "guide", "activation", "deposit", "collections"]) {
   assert.match(workspace, new RegExp(`stage === "${stage}"`));
@@ -68,11 +70,11 @@ assert.match(minimalWorkflow, /official-outstanding-balance/);
 
 for (const phrase of [
   "Start New Installment",
-  "Select the exact excavator",
-  "Set the exact payment interval",
-  "Customer assessment",
-  "Review and create the draft",
-  "Create Draft Installment",
+  "Choose the exact excavator",
+  "Build the payment plan",
+  "Add customer assessment",
+  "Review and create",
+  "Create installment draft",
 ]) {
   assert.match(wizard, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
@@ -95,9 +97,9 @@ assert.match(excavators, /finance-simple__machine-image/);
 assert.match(excavators, /finance-simple__photo-viewer/);
 assert.doesNotMatch(excavators, /useWorkspaceContext/);
 
-assert.match(applications, /Applications and approvals/i);
-assert.match(applications, /Installment Offer/);
-assert.match(applications, /No Hire-location selection/);
+assert.match(applications, /Applications &amp; approvals/i);
+assert.match(applications, /Credit Applications/);
+assert.match(applications, /recoverable company-wide draft/);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
 for (const page of [activation, deposit]) {
@@ -110,7 +112,9 @@ assert.doesNotMatch(reports, /selectedContextId|useWorkspaceContext/);
 assert.match(collections, /Collections &amp; Payment History/);
 assert.match(collections, /account-detail-official-balance/);
 assert.match(collections, /payment-history/);
-assert.match(collections, /Official balances are returned by the backend/i);
+// Authoritative collection balances are loaded from the backend account-detail API.
+assert.match(collections, /axiosClient\.get\(\x60\$\{API\}\/accounts\//);
+assert.match(collections, /response\.data\?\.schedule/);
 assert.doesNotMatch(collections, /selectedContextId|useWorkspaceContext/);
 
 assert.match(guide, /Complete lifecycle/);
@@ -132,5 +136,13 @@ assert.match(css, /overflow-wrap:\s*anywhere/);
 assert.match(css, /white-space:\s*normal/);
 assert.match(css, /position:\s*sticky/);
 assert.match(css, /min-height:\s*44px/);
+
+// Modal viewport regression: DevTools must not change whether the overlay starts beside
+// the sidebar or at the viewport edge. The backdrop is always viewport-owned.
+assert.match(modalFixCss, /\.finance-simple__dialog-backdrop[\s\S]*?inset:\s*0\s*!important/);
+assert.doesNotMatch(modalFixCss, /left:\s*300px\s*!important/);
+assert.doesNotMatch(modalFixCss, /@media \(min-width:\s*961px\)[\s\S]*?finance-simple__dialog-backdrop/);
+assert.match(modalContractCss, /\.finance-simple__dialog-backdrop[\s\S]*?inset:\s*0\s*!important/);
+assert.doesNotMatch(modalContractCss, /left:\s*300px\s*!important/);
 
 console.log("Equipment Finance Phase 3 usability contract passed.");

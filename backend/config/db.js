@@ -164,6 +164,21 @@ function protectConnection(connection) {
   return connection;
 }
 
+// Keep the steady-state connection footprint small. A bounded queue also prevents
+// an unusual request burst from accumulating unbounded waiting work in process memory.
+const DB_CONNECTION_LIMIT = Math.max(
+  1,
+  Math.min(Number(process.env.DB_CONNECTION_LIMIT || 5), 5)
+);
+const DB_QUEUE_LIMIT = Math.max(
+  0,
+  Math.min(Number(process.env.DB_QUEUE_LIMIT || 50), 50)
+);
+const DB_IDLE_TIMEOUT_MS = Math.max(
+  60000,
+  Math.min(Number(process.env.DB_IDLE_TIMEOUT_MS || 60000), 300000)
+);
+
 const pool = mysql.createPool({
   host: getEnvValue("DB_HOST", "MYSQLHOST"),
   port: Number(getEnvValue("DB_PORT", "MYSQLPORT", 3306)),
@@ -172,9 +187,12 @@ const pool = mysql.createPool({
   database: getEnvValue("DB_NAME", "MYSQLDATABASE"),
 
   waitForConnections: true,
-  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
-  queueLimit: 0,
+  connectionLimit: DB_CONNECTION_LIMIT,
+  queueLimit: DB_QUEUE_LIMIT,
+  idleTimeout: DB_IDLE_TIMEOUT_MS,
 
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
   timezone: "Z",
   ssl: getSslConfig(),
 });
@@ -225,6 +243,9 @@ async function testDatabaseConnection() {
 }
 
 module.exports = {
+  DB_CONNECTION_LIMIT,
+  DB_IDLE_TIMEOUT_MS,
+  DB_QUEUE_LIMIT,
   RUNTIME_DDL_PATTERN,
   getSslConfig,
   isProduction,

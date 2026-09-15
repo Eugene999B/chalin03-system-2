@@ -79,7 +79,10 @@ if (isCloudflarePagesBuild()) {
 const chalin03BuildId = resolveBuildId();
 
 export default defineConfig({
-  plugins: [restoreCompleteFinanceCustomerProfile(), react()],
+  plugins: [
+    restoreCompleteFinanceCustomerProfile(),
+    react(),
+  ],
   define: {
     "import.meta.env.VITE_CHALIN03_BUILD_ID": JSON.stringify(
       chalin03BuildId

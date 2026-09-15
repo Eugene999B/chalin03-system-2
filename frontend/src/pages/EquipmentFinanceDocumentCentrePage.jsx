@@ -175,6 +175,11 @@ function DocumentCard({
             {working === `${definition.code}:thermal` ? "Issuing…" : "Thermal Receipt"}
           </button>
         ) : null}
+        {definition.formats.includes("print") ? (
+          <button type="button" disabled={!canManage || !availability.available || Boolean(working)} onClick={() => onIssue(definition.code, "print")}>
+            {working === `${definition.code}:print` ? "Preparing…" : "Print"}
+          </button>
+        ) : null}
         {!availability.available && recoveryHref ? (
           <Link className="finance-docs__recovery-link" to={recoveryHref}>Open Amendments</Link>
         ) : null}
@@ -272,7 +277,13 @@ export default function EquipmentFinanceDocumentCentrePage() {
           ? errorMessage(amendmentResult.error, "Could not verify amendment availability.")
           : ""
       );
-      setSelectedPaymentId("");
+      const validPayments = (previewResponse.data?.snapshot?.payments || []).filter(
+        (payment) => !payment.is_voided && !payment.voided_at && Number(payment.amount || 0) > 0
+      );
+      setSelectedPaymentId((current) => {
+        if (current && validPayments.some((payment) => String(payment.id) === String(current))) return String(current);
+        return validPayments[0] ? String(validPayments[0].id) : "";
+      });
     } catch (error) {
       setProblem(errorMessage(error, "Could not open the selected agreement document file."));
       setSnapshot(null);
@@ -338,11 +349,12 @@ export default function EquipmentFinanceDocumentCentrePage() {
     const fileName = safeFileNameFromDisposition(response.headers?.["content-disposition"], fallbackName);
     const url = URL.createObjectURL(response.data);
     if (format === "print") {
-      const printWindow = window.open(url, "_blank", "noopener,noreferrer");
+      const printWindow = window.open(url, "_blank");
       if (!printWindow) {
         URL.revokeObjectURL(url);
         throw new Error("The browser blocked the print document. Allow pop-ups and try again.");
       }
+      try { printWindow.focus(); } catch {}
       window.setTimeout(() => URL.revokeObjectURL(url), 60000);
       return;
     }
@@ -491,8 +503,8 @@ export default function EquipmentFinanceDocumentCentrePage() {
           <section className="finance-docs__receipt-selector">
             <div>
               <p>Exact payment receipt</p>
-              <h2>Select a payment only when issuing its receipt</h2>
-              <span>No payment is selected automatically.</span>
+              <h2>Choose the payment to print or download</h2>
+              <span>The latest valid committed payment is selected automatically. You can choose any other valid receipt.</span>
             </div>
             <select value={selectedPaymentId} onChange={(event) => setSelectedPaymentId(event.target.value)}>
               <option value="">Choose exact payment receipt</option>

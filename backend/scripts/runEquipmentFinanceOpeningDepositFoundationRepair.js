@@ -3,6 +3,8 @@ const path = require("node:path");
 const mysql = require("mysql2/promise");
 require("dotenv").config();
 
+const { validateDepositReservationIntegrity } = require("./runEquipmentFinancePhaseFourStartup");
+
 const MIGRATION_LOCK =
   "chalin03:equipment-finance:opening-deposit-foundation-repair";
 const MIGRATION_RECORD =
@@ -11,6 +13,12 @@ const MIGRATION_FILE =
   "20260805_equipment_finance_opening_deposit_foundation_repair.sql";
 const VERIFIER_FILE =
   "20260805_equipment_finance_opening_deposit_foundation_repair_verify.sql";
+const PHASE4_MIGRATION_RECORD =
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity";
+const PHASE4_MIGRATION_FILE =
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity.sql";
+const PHASE4_VERIFIER_FILE =
+  "20260803_equipment_finance_phase4_deposit_reservation_integrity_verify.sql";
 
 function requiredEnv(primaryName, fallbackName) {
   const value = process.env[primaryName] || process.env[fallbackName];
@@ -206,13 +214,34 @@ async function runEquipmentFinanceOpeningDepositFoundationRepair() {
     );
     validateRepair(verifierResults);
 
+    // The migration record may already say Phase 4 was installed while an older
+    // deployment left one or more trigger definitions stale. Reapply the
+    // current approved Phase 4 trigger migration idempotently, then verify the
+    // actual live trigger definitions before declaring the foundation repaired.
+    await executeStatements(
+      connection,
+      splitSqlScript(readMigrationFile(PHASE4_MIGRATION_FILE)),
+      "Equipment Finance Phase 4 deposit-reservation trigger repair"
+    );
+
+    const phase4VerifierResults = await executeStatements(
+      connection,
+      splitSqlScript(readMigrationFile(PHASE4_VERIFIER_FILE)),
+      "Equipment Finance Phase 4 deposit-reservation trigger verifier"
+    );
+    validateDepositReservationIntegrity(
+      phase4VerifierResults,
+      PHASE4_MIGRATION_RECORD
+    );
+
     console.log(
-      `Verified ${MIGRATION_RECORD} on ${databaseName}.`
+      `Verified ${MIGRATION_RECORD} and refreshed ${PHASE4_MIGRATION_RECORD} on ${databaseName}.`
     );
     return {
       applied: true,
       database_name: databaseName,
       migration: MIGRATION_RECORD,
+      refreshed_migration: PHASE4_MIGRATION_RECORD,
     };
   } finally {
     if (lockAcquired) {
@@ -238,6 +267,9 @@ module.exports = {
   MIGRATION_FILE,
   MIGRATION_LOCK,
   MIGRATION_RECORD,
+  PHASE4_MIGRATION_FILE,
+  PHASE4_MIGRATION_RECORD,
+  PHASE4_VERIFIER_FILE,
   VERIFIER_FILE,
   executeStatements,
   hasExecutableSql,

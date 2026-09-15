@@ -8,6 +8,11 @@ const {
   normalizeEmployeePrefix,
   normalizeValidityMonths,
 } = require("../services/workerIdentityService");
+const {
+  branchIdForUser,
+  getUserSettingsSystemAdminOnly,
+  isOriginalSystemAdministrator,
+} = require("../services/sparePartsUserSettingsAccessService");
 
 const router = express.Router();
 
@@ -27,6 +32,10 @@ function cleanText(value) {
   }
 
   return String(value).trim();
+}
+
+function cleanBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
 }
 
 function nullableText(value) {
@@ -179,6 +188,91 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
     });
   }
 });
+
+// GET /api/settings/user-settings-access
+router.get(
+  "/user-settings-access",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const branchId = branchIdForUser(req.user);
+      const settings = await getSettingsForBranch(branchId);
+      const systemAdminOnly = await getUserSettingsSystemAdminOnly(branchId);
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        user_settings_system_admin_only: systemAdminOnly,
+        can_manage_access_control: isOriginalSystemAdministrator(req.user),
+        can_access_user_settings:
+          isOriginalSystemAdministrator(req.user) || !systemAdminOnly,
+        settings_id: Number(settings?.id || 0) || null,
+      });
+    } catch (error) {
+      console.error("Get User Settings access control error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "User Settings access control could not be loaded.",
+      });
+    }
+  }
+);
+
+// PATCH /api/settings/user-settings-access
+router.patch(
+  "/user-settings-access",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      if (!isOriginalSystemAdministrator(req.user)) {
+        return res.status(403).json({
+          status: "error",
+          code: "SPARE_PARTS_USER_SETTINGS_ACCESS_CONTROL_SYSTEM_ADMIN_ONLY",
+          message:
+            "Only the System Administrator can change this User Settings access control.",
+        });
+      }
+
+      const branchId = branchIdForUser(req.user);
+      const settings = await getSettingsForBranch(branchId);
+      const enabled = cleanBoolean(req.body?.user_settings_system_admin_only);
+
+      await pool.query(
+        `UPDATE settings
+            SET user_settings_system_admin_only = ?
+          WHERE id = ?
+            AND branch_id = ?`,
+        [enabled ? 1 : 0, Number(settings.id), branchId]
+      );
+
+      await logActivity(
+        req.user.id,
+        branchId,
+        "UPDATE_SPARE_PARTS_USER_SETTINGS_ACCESS_CONTROL",
+        enabled
+          ? "Restricted Spare Parts User Settings access to the System Administrator."
+          : "Restored Spare Parts User Settings access to other administrators."
+      );
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        user_settings_system_admin_only: enabled,
+        message: enabled
+          ? "User Settings are now restricted to the System Administrator."
+          : "User Settings are now available to other administrators.",
+      });
+    } catch (error) {
+      console.error("Update User Settings access control error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "User Settings access control could not be updated.",
+      });
+    }
+  }
+);
 
 // PUT /api/settings
 router.put("/", requireAuth, requireRole("admin"), async (req, res) => {

@@ -1,4 +1,5 @@
 const sharp = require("sharp");
+const objectStorageService = require("./objectStorageService");
 
 const MAX_PROTECTED_IMAGE_BYTES = 47 * 1024;
 const INSTALL_MARKER = Symbol.for(
@@ -23,8 +24,39 @@ function dataUrl(mimeType, buffer) {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 
-async function convertToProtectedJpeg(value) {
+function bucketKey(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^bucket:\/\//i, "")
+    .replace(/^\/+/, "");
+}
+
+async function parseStoredImage(value) {
   const parsed = parseDataImage(value);
+  if (parsed) return parsed;
+
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!/^bucket:\/\//i.test(text)) return null;
+
+  const key = bucketKey(text);
+  if (!key) return null;
+  try {
+    const stored = await objectStorageService.getObject(key);
+    if (!stored?.buffer?.length) return null;
+    return {
+      mime_type: String(stored.contentType || "image/jpeg")
+        .toLowerCase()
+        .replace("image/jpg", "image/jpeg"),
+      buffer: stored.buffer,
+    };
+  } catch (error) {
+    if (error?.statusCode === 404) return null;
+    throw new Error("A Finance image could not be read from object storage.");
+  }
+}
+
+async function convertToProtectedJpeg(value) {
+  const parsed = await parseStoredImage(value);
   if (!parsed) return value;
   if (
     ["image/jpeg", "image/png"].includes(parsed.mime_type) &&
