@@ -18,7 +18,9 @@ const operations = read("src", "pages", "EquipmentFinanceOperationalPolishPage.j
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const styles = read("src", "styles", "equipmentFinanceOperationalPolish.css");
 
-assert.match(workspace, /EquipmentFinancePhaseThreeStartRedirectPage/);
+// The live stage=start route now opens the dedicated installment page directly.
+// The older redirect component remains as a compatibility surface and is tested below.
+assert.match(workspace, /EquipmentFinanceStartInstallmentPage/);
 assert.match(workspace, /EquipmentFinanceOperationalPolishPage/);
 assert.match(workspace, /stage === "start"/);
 assert.match(workspace, /stage === "operations"/);
@@ -30,7 +32,9 @@ assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
 assert.match(startRedirect, /axiosClient\.interceptors\.response\.use/);
 assert.match(startRedirect, /START_INSTALLMENT_PATH/);
 assert.match(startRedirect, /successfulCreation\(response\)/);
-assert.match(startRedirect, /window\.location\.replace\(safeNextPath\(response\)\)/);
+assert.match(startRedirect, /replaceFinanceLocation\(safeNextPath\(response\)\)/);
+assert.match(startRedirect, /window\.history\.replaceState/);
+assert.match(startRedirect, /new PopStateEvent\("popstate"/);
 assert.match(startRedirect, /chalin03_finance_creation_notice/);
 assert.match(startRedirect, /clearCommittedDraft\(\)/);
 assert.match(startRedirect, /let redirecting = false/);
