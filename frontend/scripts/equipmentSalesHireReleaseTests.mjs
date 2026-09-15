@@ -172,8 +172,8 @@ assert.match(phaseOneStyles, /bottom:\s*0/);
 assert.match(reports, /Documents &amp; Reports/);
 assert.match(reports, /\/reports\/management/);
 assert.match(reports, /\/reports\/export\.csv/);
-assert.match(reports, /\/reports\/document-ledger/);
-assert.match(reports, /Download Finance records/);
+assert.match(reports, /accounting-export\.xlsx/);
+assert.match(reports, /Customer Statement, Documents &amp; Thermal Receipts/);
 
 assert.match(secureUpload, /secureUploadWithCameraFallback/);
 assert.match(secureUpload, /navigator\.mediaDevices\.getUserMedia/);
