@@ -190,8 +190,9 @@ assert.match(secureUploadStyles, /\.equipment-secure-upload__preview/);
 assert.match(secureUploadStyles, /@media \(max-width: 560px\)/);
 
 assert.match(retirementBridge, /SPARE_PARTS_INSTALLMENTS_RETIRED/);
-assert.match(retirementBridge, /equipment-installment-finance/);
-assert.match(retirementBridge, /replace: true/);
+assert.match(retirementBridge, /Equipment Installment Finance/);
+assert.match(retirementBridge, /window\.location\.replace\("\/new-sale"\)/);
+assert.match(retirementBridge, /payment_type/);
 
 assert.match(divisionAccess, /EQUIPMENT_DIVISIONS/);
 assert.match(divisionAccess, /equipment_hire/);
