@@ -136,7 +136,12 @@ function testDraftAutosaveCompatibility() {
   assert.doesNotMatch(operationalStartPage, /Preparing secure draft recovery/);
   assert.doesNotMatch(operationalStartPage, /window\.setInterval/);
 
-  assert.match(applicationsPage, /Changes autosave after 900 ms/);
+  // Application edits still use the production 900 ms debounce; the old helper
+  // sentence was removed from the UI, so assert the behavior instead of stale copy.
+  assert.match(
+    applicationsPage,
+    /window\.setTimeout\(\(\) => saveEdit\(\{ manual: false \}\), 900\)/
+  );
   assert.match(applicationsPage, /known_version/);
 
   // Preserve the compatibility source's v1/v2 migration contract even though it
