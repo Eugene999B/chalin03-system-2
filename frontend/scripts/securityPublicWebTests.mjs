@@ -14,6 +14,7 @@ const appIndex = read("index.html");
 const headers = read("public/_headers");
 const robots = read("public/robots.txt");
 const sitemap = read("public/sitemap.xml");
+const redirects = read("public/_redirects");
 const serviceWorker = read("public/sw.js");
 const companyPage = read("public/company/index.html");
 const publicHome = read("src/pages/PublicCompanyHomePage.jsx");
@@ -28,8 +29,8 @@ assert.match(headers, /Content-Security-Policy:/);
 assert.match(headers, /frame-ancestors 'none'/);
 assert.match(headers, /X-Frame-Options: DENY/);
 assert.match(headers, /X-Robots-Tag: noindex, nofollow, noarchive/);
-assert.match(headers, /\/\n  ! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
-assert.match(headers, /\/company[\s\S]*! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
+assert.match(headers, /https:\/\/chalin03\.com\/\n  ! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
+assert.match(headers, /https:\/\/chalin03\.com\/company[\s\S]*! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
 assert.match(headers, /\/login[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/company\/\*[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/mining-operations[\s\S]*Cache-Control: no-store/);
@@ -43,29 +44,22 @@ assert.match(
 );
 assert.doesNotMatch(appIndex, /content="noindex/i);
 assert.match(appIndex, /<title>Chalin 03 Company Limited \| Ghana<\/title>/);
-assert.match(appIndex, /<link rel="icon" href="\/favicon\.ico" sizes="any"/);
 assert.match(
   appIndex,
-  /<link\s+rel="icon"\s+type="image\/png"\s+sizes="192x192"\s+href="\/favicon-192x192\.png"/s
+  /<link rel="icon" type="image\/png" sizes="192x192" href="\/app-icon-192\.png"\/>/s
 );
 assert.match(
   appIndex,
-  /<link\s+rel="icon"\s+type="image\/png"\s+sizes="512x512"\s+href="\/favicon-512x512\.png"/s
+  /<link rel="shortcut icon" type="image\/png" href="\/app-icon-192\.png"\/>/s
 );
-assert.match(appIndex, /rel="apple-touch-icon"/);
-assert.match(appIndex, /rel="shortcut icon" href="\/favicon\.ico"/);
-assert.match(appIndex, /"logo": "\/favicon-512x512\.png"/);
+assert.match(
+  appIndex,
+  /<link rel="apple-touch-icon" sizes="192x192" href="\/app-icon-192\.png"\/>/s
+);
 assert.match(appIndex, /<link rel="manifest" href="\/site\.webmanifest"/);
 
-assert.equal(fs.existsSync(path.join(frontendRoot, "public/favicon.ico")), true);
-assert.equal(
-  fs.existsSync(path.join(frontendRoot, "public/favicon-192x192.png")),
-  true
-);
-assert.equal(
-  fs.existsSync(path.join(frontendRoot, "public/favicon-512x512.png")),
-  true
-);
+assert.equal(fs.existsSync(path.join(frontendRoot, "public/app-icon-192.png")), true);
+assert.equal(fs.existsSync(path.join(frontendRoot, "public/app-icon-512.png")), true);
 assert.equal(
   fs.existsSync(path.join(frontendRoot, "public/site.webmanifest")),
   true
@@ -74,6 +68,10 @@ assert.equal(
   fs.existsSync(path.join(frontendRoot, "public/manifest.webmanifest")),
   false
 );
+
+assert.match(redirects, /^\/company \/company\/index\.html 200$/m);
+assert.match(redirects, /^\/company\/ \/company\/index\.html 200$/m);
+assert.match(redirects, /^\/\* \/index\.html 200$/m);
 
 assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
 assert.match(
@@ -85,8 +83,8 @@ assert.match(
   /const CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
 );
 assert.match(serviceWorker, /\/site\.webmanifest/);
-assert.match(serviceWorker, /\/favicon-192x192\.png/);
-assert.match(serviceWorker, /\/favicon-512x512\.png/);
+assert.match(serviceWorker, /\/app-icon-192\.png/);
+assert.match(serviceWorker, /\/app-icon-512\.png/);
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
 assert.match(serviceWorker, /name\.startsWith\(CACHE_PREFIX\) && name !== CACHE_NAME/);
