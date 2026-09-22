@@ -16,6 +16,7 @@ const robots = read("public/robots.txt");
 const sitemap = read("public/sitemap.xml");
 const serviceWorker = read("public/sw.js");
 const companyPage = read("public/company/index.html");
+const publicHome = read("src/pages/PublicCompanyHomePage.jsx");
 const miningPortal = read("src/pages/MiningPortalPage.jsx");
 const equipmentPortal = read("src/pages/EquipmentHirePortalPage.jsx");
 const loginPage = read("src/pages/LoginPage.jsx");
@@ -26,6 +27,7 @@ assert.match(headers, /Content-Security-Policy:/);
 assert.match(headers, /frame-ancestors 'none'/);
 assert.match(headers, /X-Frame-Options: DENY/);
 assert.match(headers, /X-Robots-Tag: noindex, nofollow, noarchive/);
+assert.match(headers, /\/\n  ! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
 assert.match(headers, /\/company[\s\S]*! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
 assert.match(headers, /\/login[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/company\/\*[\s\S]*Cache-Control: no-store/);
@@ -128,3 +130,7 @@ assert.match(
 console.log(
   "Private login-first routing, logout recovery, service worker, favicon and Cloudflare security checks passed."
 );
+
+assert.match(publicHome, /PublicPageMeta/);
+assert.match(publicHome, /canonicalPath="\\\/"?/);
+assert.match(appIndex, /Chalin 03 Company Limited \\| Ghana/);
