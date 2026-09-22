@@ -125,6 +125,67 @@ jobs:
             (.icons | length) >= 2
           ' smoke-output/site.webmanifest
 
+      - name: Verify live public SEO and indexing surface
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/home.headers \
+            --output smoke-output/home.html \
+            https://chalin03.com/
+
+          grep -qi '^x-robots-tag:.*index' smoke-output/home.headers
+          grep -qi '^strict-transport-security:' smoke-output/home.headers
+          grep -qi '<title>Chalin 03 Company Limited | Ghana</title>' smoke-output/home.html
+          grep -qi 'name="robots" content="index, follow"' smoke-output/home.html
+          grep -qi 'rel="canonical" href="https://chalin03.com/"' smoke-output/home.html
+          grep -qi 'Chalin 03 Company Limited' smoke-output/home.html
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/company.headers \
+            --output smoke-output/company.html \
+            https://chalin03.com/company/
+
+          grep -qi '^x-robots-tag:.*index' smoke-output/company.headers
+          grep -qi 'name="robots" content="index, follow, max-image-preview:large"' smoke-output/company.html
+          grep -qi 'rel="canonical" href="https://chalin03.com/company/"' smoke-output/company.html
+          grep -qi 'Chalin 03 Company Limited' smoke-output/company.html
+
+          curl --fail --silent --show-error --location \
+            --output smoke-output/robots.txt \
+            https://chalin03.com/robots.txt
+          grep -q '^User-agent: \*        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-live-production-smoke
+          path: smoke-output
+          if-no-files-found: error
+          retention-days: 7
+ smoke-output/robots.txt
+          grep -q '^Allow: /        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-live-production-smoke
+          path: smoke-output
+          if-no-files-found: error
+          retention-days: 7
+ smoke-output/robots.txt
+          grep -q '^Sitemap: https://chalin03.com/sitemap.xml        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-3-live-production-smoke
+          path: smoke-output
+          if-no-files-found: error
+          retention-days: 7
+ smoke-output/robots.txt
+
+          curl --fail --silent --show-error --location \
+            --output smoke-output/sitemap.xml \
+            https://chalin03.com/sitemap.xml
+          grep -q 'https://chalin03.com/' smoke-output/sitemap.xml
+          grep -q 'https://chalin03.com/company/' smoke-output/sitemap.xml
+
       - name: Preserve live smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
