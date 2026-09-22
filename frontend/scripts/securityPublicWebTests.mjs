@@ -92,15 +92,15 @@ assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
 assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
-assert.equal(robots.trim(), "User-agent: *\nAllow: /\n\nSitemap: https://chalin03.com/sitemap.xml");
-assert.match(robots, /Allow: \/\/);
-assert.match(robots, /Sitemap: https:\/\/chalin03\\.com\/sitemap\\.xml/);
-assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/chalin03\\.com\/company\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
+assert.equal(robots.trim(), "User-agent: *\\nAllow: /\\n\\nSitemap: https://chalin03.com/sitemap.xml");
+assert.match(robots, /Allow: \\/\\n/);
+assert.match(robots, /Sitemap: https:\\/\\/chalin03\\.com\\/sitemap\\.xml/);
+assert.match(sitemap, /<urlset[^>]*>[\\s\\S]*<url>[\\s\\S]*https:\\/\\/chalin03\\.com\\/company\\/[\\s\\S]*<\\/url>[\\s\\S]*<\\/urlset>/);
 assert.doesNotMatch(sitemap, /mining-operations|equipment-hire/);
 
-assert.match(companyPage, /<meta\\s+name="robots"\\s+content="index, follow, max-image-preview:large"\\s*\\/>/s);
-assert.match(companyPage, /<link\\s+rel="canonical"\\s+href="https:\/\/chalin03\\.com\/company\/"\\s*\\/>/s);
-assert.doesNotMatch(companyPage, /window\\.location\\.replace\\("\/login"\)/);
+assert.match(companyPage, /name="robots" content="index, follow, max-image-preview:large"/);
+assert.match(companyPage, /rel="canonical" href="https:\\/\\/chalin03\\.com\\/company\\//);
+assert.doesNotMatch(companyPage, /window\\.location\\.replace\("\/login"\)/);
 assert.doesNotMatch(companyPage, /http-equiv="refresh" content="0; url=\/login"/);
 assert.match(companyPage, /Built to serve|Explore Our Divisions/);
 
