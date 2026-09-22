@@ -98,10 +98,11 @@ assert.match(robots, /Sitemap: https:\/\/chalin03\\.com\/sitemap\\.xml/);
 assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/chalin03\\.com\/company\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
 assert.doesNotMatch(sitemap, /mining-operations|equipment-hire/);
 
-assert.match(companyPage, /noindex, nofollow, noarchive/);
-assert.match(companyPage, /window\.location\.replace\("\/login"\)/);
-assert.match(companyPage, /http-equiv="refresh" content="0; url=\/login"/);
-assert.doesNotMatch(companyPage, /Built to serve|Business Divisions|Explore Our Divisions/);
+assert.match(companyPage, /<meta\\s+name="robots"\\s+content="index, follow, max-image-preview:large"\\s*\\/>/s);
+assert.match(companyPage, /<link\\s+rel="canonical"\\s+href="https:\/\/chalin03\\.com\/company\/"\\s*\\/>/s);
+assert.doesNotMatch(companyPage, /window\\.location\\.replace\\("\/login"\)/);
+assert.doesNotMatch(companyPage, /http-equiv="refresh" content="0; url=\/login"/);
+assert.match(companyPage, /Built to serve|Explore Our Divisions/);
 
 assert.match(miningPortal, /Navigate to="\/login\?workspace=mining" replace/);
 assert.doesNotMatch(miningPortal, /BusinessPortalShell/);
