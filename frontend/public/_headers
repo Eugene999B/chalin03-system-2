@@ -18,6 +18,10 @@
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
 
+/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
 /sw.js
   Cache-Control: no-store, max-age=0, must-revalidate
 
