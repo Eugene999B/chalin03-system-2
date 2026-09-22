@@ -1,3 +1,4 @@
+/* SEO public homepage is intentionally served at the canonical domain root. */
 import PublicPageMeta from "../components/PublicPageMeta";
 import "../styles/publicCompanyHome.css";
 
