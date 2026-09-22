@@ -26,7 +26,7 @@ assert.match(headers, /Content-Security-Policy:/);
 assert.match(headers, /frame-ancestors 'none'/);
 assert.match(headers, /X-Frame-Options: DENY/);
 assert.match(headers, /X-Robots-Tag: noindex, nofollow, noarchive/);
-assert.doesNotMatch(headers, /index, follow, max-image-preview:large/);
+assert.match(headers, /\/company[\s\S]*! X-Robots-Tag[\s\S]*X-Robots-Tag: index, follow, max-image-preview:large/);
 assert.match(headers, /\/login[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/company\/\*[\s\S]*Cache-Control: no-store/);
 assert.match(headers, /\/mining-operations[\s\S]*Cache-Control: no-store/);
@@ -92,12 +92,11 @@ assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
 assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
-assert.equal(robots.trim(), "User-agent: *\nDisallow: /");
-assert.doesNotMatch(robots, /Allow:/);
-assert.doesNotMatch(robots, /Sitemap:/);
-assert.match(sitemap, /<urlset[^>]*><\/urlset>/);
-assert.doesNotMatch(sitemap, /<url>/);
-assert.doesNotMatch(sitemap, /company|mining-operations|equipment-hire/);
+assert.equal(robots.trim(), "User-agent: *\nAllow: /\n\nSitemap: https://chalin03.com/sitemap.xml");
+assert.match(robots, /Allow: \/\/);
+assert.match(robots, /Sitemap: https:\/\/chalin03\\.com\/sitemap\\.xml/);
+assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/chalin03\\.com\/company\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
+assert.doesNotMatch(sitemap, /mining-operations|equipment-hire/);
 
 assert.match(companyPage, /noindex, nofollow, noarchive/);
 assert.match(companyPage, /window\.location\.replace\("\/login"\)/);
