@@ -155,30 +155,9 @@ jobs:
           curl --fail --silent --show-error --location \
             --output smoke-output/robots.txt \
             https://chalin03.com/robots.txt
-          grep -q '^User-agent: \*        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: version-3-live-production-smoke
-          path: smoke-output
-          if-no-files-found: error
-          retention-days: 7
- smoke-output/robots.txt
-          grep -q '^Allow: /        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: version-3-live-production-smoke
-          path: smoke-output
-          if-no-files-found: error
-          retention-days: 7
- smoke-output/robots.txt
-          grep -q '^Sitemap: https://chalin03.com/sitemap.xml        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: version-3-live-production-smoke
-          path: smoke-output
-          if-no-files-found: error
-          retention-days: 7
- smoke-output/robots.txt
+          grep -q '^User-agent: \*' smoke-output/robots.txt
+          grep -q '^Allow: /' smoke-output/robots.txt
+          grep -q '^Sitemap: https://chalin03.com/sitemap.xml' smoke-output/robots.txt
 
           curl --fail --silent --show-error --location \
             --output smoke-output/sitemap.xml \
