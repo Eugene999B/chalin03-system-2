@@ -17,6 +17,7 @@ const sitemap = read("public/sitemap.xml");
 const serviceWorker = read("public/sw.js");
 const companyPage = read("public/company/index.html");
 const publicHome = read("src/pages/PublicCompanyHomePage.jsx");
+const app = read("src/App.jsx");
 const miningPortal = read("src/pages/MiningPortalPage.jsx");
 const equipmentPortal = read("src/pages/EquipmentHirePortalPage.jsx");
 const loginPage = read("src/pages/LoginPage.jsx");
@@ -38,10 +39,10 @@ assert.doesNotMatch(headers, /pages\.dev/);
 
 assert.match(
   appIndex,
-  /<meta\s+name="robots"\s+content="noindex, nofollow, noarchive"\s*\/>/s
+  /<meta\s+name="robots"\s+content="index, follow"\s*\/>/s
 );
-assert.doesNotMatch(appIndex, /content="index, follow/i);
-assert.match(appIndex, /Chalin 03 Secure Staff Login/);
+assert.doesNotMatch(appIndex, /content="noindex/i);
+assert.match(appIndex, /<title>Chalin 03 Company Limited \| Ghana<\/title>/);
 assert.match(appIndex, /<link rel="icon" href="\/favicon\.ico" sizes="any"/);
 assert.match(
   appIndex,
