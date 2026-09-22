@@ -1,2 +1,4 @@
 /assets/* /404.html 404
+/company /company/index.html 200
+/company/ /company/index.html 200
 /* /index.html 200
