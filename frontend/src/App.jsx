@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { WorkspaceContextProvider } from "./context/WorkspaceContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,6 +14,7 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
+import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
 import NewSalePage from "./pages/NewSalePage";
@@ -177,6 +178,21 @@ function SparePartsHomePage() {
   return safe(<DashboardPage />);
 }
 
+function RootWorkspaceEntry() {
+  const location = useLocation();
+  const { isLoggedIn, loading } = useAuth();
+
+  if (!loading && !isLoggedIn && location.pathname === "/") {
+    return safe(<PublicCompanyHomePage />);
+  }
+
+  return (
+    <WorkspaceShell allowedWorkspaces={SPARE_PARTS_WORKSPACE}>
+      <SparePartsLayout />
+    </WorkspaceShell>
+  );
+}
+
 function LegacyWorkspaceRedirect({ target }) {
   const { workspaceCode } = useAuth();
 
@@ -205,11 +221,7 @@ export default function App() {
           {/* Spare Parts keeps the original two-store layout and navigation. */}
           <Route
             path="/"
-            element={
-              <WorkspaceShell allowedWorkspaces={SPARE_PARTS_WORKSPACE}>
-                <SparePartsLayout />
-              </WorkspaceShell>
-            }
+            element={<RootWorkspaceEntry />}
           >
             <Route index element={<SparePartsHomePage />} />
 
