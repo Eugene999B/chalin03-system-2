@@ -32,6 +32,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p smoke-output
+          backend_release_required=false
+          if git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -qE '^(backend/|database/|railway\.json$)'; then
+            backend_release_required=true
+          fi
+          echo "backend_release_required=$backend_release_required" | tee smoke-output/release-scope.txt
+
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --location \
               --dump-header smoke-output/api-health.headers \
@@ -41,11 +47,17 @@ jobs:
                 .status == "success" and
                 .service == "Chalin 03 Group Operations Platform" and
                 .version == "3.0.0" and
-                .deployment.provider == "railway" and
-                .deployment.commit_sha == env.GITHUB_SHA
+                .deployment.provider == "railway"
               ' smoke-output/api-health.json >/dev/null; then
-                echo "Production API is ready after attempt ${attempt}."
-                exit 0
+                if [ "$backend_release_required" = "true" ]; then
+                  if jq -e '.deployment.commit_sha == env.GITHUB_SHA' smoke-output/api-health.json >/dev/null; then
+                    echo "Production API is ready on the expected backend release after attempt ${attempt}."
+                    exit 0
+                  fi
+                else
+                  echo "Production API is ready; this release does not change backend/database/Railway code."
+                  exit 0
+                fi
               fi
             fi
             sleep 15
