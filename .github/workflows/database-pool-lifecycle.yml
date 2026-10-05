@@ -45,6 +45,7 @@ jobs:
       - name: Run the same suite with the unchanged production pool
         continue-on-error: true
         run: |
+          git fetch --no-tags --depth=1 origin f8c86d722d9b2ddb7776622ed7a7390b78d4916d
           git show f8c86d722d9b2ddb7776622ed7a7390b78d4916d:backend/config/db.js > config/db.js
           node --test --test-reporter=tap tests/*.test.js > /tmp/baseline.tap
       - name: Restore candidate and reject any new test failures
