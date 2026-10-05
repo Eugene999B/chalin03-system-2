@@ -382,6 +382,7 @@ export default function GroupExecutiveControlPage() {
 
   const group = summary?.group || {};
   const spare = summary?.spare_parts || {};
+  const finance = summary?.installment_finance || {};
   const mining = summary?.mining || {};
   const hire = summary?.hire || {};
   const fleet = summary?.fleet || {};
@@ -395,6 +396,17 @@ export default function GroupExecutiveControlPage() {
     (left, right) => severityRank(left.severity) - severityRank(right.severity)
   );
   const recommendations = summary?.recommendations || [];
+  const spareCollectionRate =
+    numberValue(spare.sales_total) > 0
+      ? (numberValue(spare.sales_received) / numberValue(spare.sales_total)) * 100
+      : 0;
+  const businessScopeLabel =
+    summary?.business_scope?.label || "All Chalin 03 businesses";
+  const sparePartsFilterLabel =
+    summary?.business_scope?.spare_parts_filter ||
+    (summary?.branch_scope?.mode === "all"
+      ? "All Spare Parts stores"
+      : selectedStoreLabel);
   const criticalAttention =
     numberValue(alertCounts.critical) +
     numberValue(cashControl.changed_after_close_count);
@@ -501,7 +513,9 @@ export default function GroupExecutiveControlPage() {
         status:
           numberValue(spare.low_stock_count) > 0 || numberValue(spare.debt_balance) > 0
             ? "Attention"
-            : "Stable",
+            : numberValue(spare.sales_total) > 0
+              ? "Active"
+              : "No activity",
         statusTone:
           numberValue(spare.low_stock_count) > 0 || numberValue(spare.debt_balance) > 0
             ? "warning"
@@ -509,11 +523,49 @@ export default function GroupExecutiveControlPage() {
         metrics: [
           { label: "Sales", value: money(spare.sales_total) },
           { label: "Received", value: money(spare.sales_received) },
-          { label: "Debt", value: money(spare.debt_balance) },
+          { label: "Collection rate", value: percent(spareCollectionRate) },
+          { label: "Current debt", value: money(spare.debt_balance) },
+          { label: "Expenses", value: money(spare.expenses_total) },
           { label: "Low stock", value: decimal(spare.low_stock_count) },
         ],
         path: "/reports",
         actionLabel: "Open Spare Parts reports",
+      },
+      {
+        icon: "💳",
+        eyebrow: "Finance portfolio",
+        title: "Equipment Installment Finance",
+        status:
+          numberValue(finance.critical_risk_accounts) > 0
+            ? "Critical"
+            : numberValue(finance.overdue_amount) > 0 ||
+                numberValue(finance.high_risk_accounts) > 0
+              ? "Attention"
+              : numberValue(finance.active_accounts) > 0
+                ? "Active"
+                : "No activity",
+        statusTone:
+          numberValue(finance.critical_risk_accounts) > 0
+            ? "critical"
+            : numberValue(finance.overdue_amount) > 0 ||
+                numberValue(finance.high_risk_accounts) > 0
+              ? "warning"
+              : "stable",
+        metrics: [
+          { label: "Active accounts", value: decimal(finance.active_accounts) },
+          { label: "Outstanding", value: money(finance.outstanding_amount) },
+          { label: "Overdue", value: money(finance.overdue_amount) },
+          { label: "Collection rate", value: percent(finance.collection_rate) },
+          { label: "Due next 7 days", value: money(finance.due_next_7_days) },
+          {
+            label: "High / critical risk",
+            value: `${decimal(finance.high_risk_accounts)} / ${decimal(
+              finance.critical_risk_accounts
+            )}`,
+          },
+        ],
+        path: "/equipment-installment-finance/collections",
+        actionLabel: "Open Installment Finance",
       },
       {
         icon: "⛏️",
@@ -525,7 +577,10 @@ export default function GroupExecutiveControlPage() {
             : numberValue(mining.open_incidents) > 0 ||
                 numberValue(mining.unapproved_daily_logs) > 0
               ? "Attention"
-              : "Stable",
+              : numberValue(mining.working_hours) > 0 ||
+                  numberValue(mining.operating_cost) > 0
+                ? "Active"
+                : "No activity",
         statusTone:
           numberValue(mining.serious_open_incidents) > 0
             ? "critical"
@@ -538,6 +593,11 @@ export default function GroupExecutiveControlPage() {
           { label: "Working hours", value: decimal(mining.working_hours, 1) },
           { label: "Operating cost", value: money(mining.operating_cost) },
           { label: "Open incidents", value: decimal(mining.open_incidents) },
+          { label: "Pending logs", value: decimal(mining.unapproved_daily_logs) },
+          {
+            label: "Serious incidents",
+            value: decimal(mining.serious_open_incidents),
+          },
         ],
         path: "/mining",
         actionLabel: "Open Mining Operations",
@@ -550,7 +610,10 @@ export default function GroupExecutiveControlPage() {
           numberValue(hire.overdue_balance) > 0 ||
           numberValue(hire.unapproved_work_logs) > 0
             ? "Attention"
-            : "Stable",
+            : numberValue(hire.invoiced_total) > 0 ||
+                numberValue(hire.active_contracts) > 0
+              ? "Active"
+              : "No activity",
         statusTone:
           numberValue(hire.overdue_balance) > 0 ||
           numberValue(hire.unapproved_work_logs) > 0
@@ -560,20 +623,27 @@ export default function GroupExecutiveControlPage() {
           { label: "Invoiced", value: money(hire.invoiced_total) },
           { label: "Payments", value: money(hire.payments_total) },
           { label: "Outstanding", value: money(hire.invoice_balance) },
+          { label: "Overdue", value: money(hire.overdue_balance) },
           { label: "Active contracts", value: decimal(hire.active_contracts) },
+          {
+            label: "Pending work logs",
+            value: decimal(hire.unapproved_work_logs),
+          },
         ],
         path: "/equipment-hire-operations",
         actionLabel: "Open Equipment Hire",
       },
       {
         icon: "🚜",
-        eyebrow: "Shared asset control",
+        eyebrow: "Shared support unit",
         title: "Fleet & Maintenance",
         status:
           numberValue(fleet.unavailable_assets) > 0 ||
           numberValue(fleet.service_due_count) > 0
             ? "Attention"
-            : "Stable",
+            : numberValue(fleet.total_assets) > 0
+              ? "Ready"
+              : "No assets",
         statusTone:
           numberValue(fleet.unavailable_assets) > 0 ||
           numberValue(fleet.service_due_count) > 0
@@ -597,14 +667,14 @@ export default function GroupExecutiveControlPage() {
           <span className="gec-eyebrow">Chalin 03 Company Limited</span>
           <h1>Executive Intelligence & Control</h1>
           <p>
-            A professional, read-only command view of financial performance,
-            business-unit operations, cash-control evidence and management risk.
+            A group-wide, read-only executive view across every Chalin 03
+            business. Each business is analysed separately so sales, Finance
+            exposure, Mining cost and Hire activity are not mixed into unclear totals.
           </p>
           <div className="gec-hero-meta">
             <span>📅 {shortDate(summary?.period?.from)} – {shortDate(summary?.period?.to)}</span>
-            <span>
-              🏬 {summary?.branch_scope?.mode === "all" ? "All Spare Parts stores" : selectedStoreLabel}
-            </span>
+            <span>🏢 {businessScopeLabel}</span>
+            <span>🧰 Spare Parts filter: {sparePartsFilterLabel}</span>
             <span>🔒 Executive oversight · no operational editing</span>
           </div>
         </div>
@@ -653,7 +723,7 @@ export default function GroupExecutiveControlPage() {
             />
           </label>
           <label>
-            <span>Spare Parts scope</span>
+            <span>Spare Parts store filter</span>
             <select
               value={filters.branch_scope}
               onChange={(event) =>
@@ -663,6 +733,10 @@ export default function GroupExecutiveControlPage() {
               <option value="selected">Selected store</option>
               {canAccessAllBranches ? <option value="all">All stores</option> : null}
             </select>
+            <small>
+              Applies only to Spare Parts. Installment Finance, Mining and
+              Equipment Hire remain group-wide.
+            </small>
           </label>
           <button
             className="gec-button-primary"
@@ -713,45 +787,70 @@ export default function GroupExecutiveControlPage() {
 
           <section className="gec-kpi-grid">
             <MetricCard
-              icon="◫"
-              label="Recorded revenue"
-              value={money(group.recorded_revenue)}
-              note="Spare Parts sales plus Hire invoices"
+              icon="🧰"
+              label="Spare Parts sales"
+              value={money(spare.sales_total)}
+              note={`${percent(spareCollectionRate)} collected · ${sparePartsFilterLabel}`}
               tone="gold"
             />
             <MetricCard
-              icon="✓"
-              label="Payments received"
-              value={money(group.cash_received)}
-              note={`${percent(group.collection_rate)} payment-to-revenue rate`}
+              icon="💳"
+              label="Installment collections"
+              value={money(finance.payments_amount_in_period)}
+              note={`${decimal(finance.payments_in_period)} payment record(s) in the selected period`}
               tone="green"
             />
             <MetricCard
-              icon="↓"
-              label="Operating cost"
-              value={money(group.operating_cost)}
-              note={`${percent(group.cost_ratio)} of recorded revenue`}
-              tone="red"
-            />
-            <MetricCard
               icon="◎"
-              label="Receivables"
-              value={money(group.outstanding_receivables)}
-              note="Spare Parts debt plus Hire invoice balance"
-              tone="amber"
-            />
-            <MetricCard
-              icon="↗"
-              label="Indicative result"
-              value={money(group.indicative_balance)}
-              note="Recorded revenue less captured operating cost"
-              tone={numberValue(group.indicative_balance) >= 0 ? "navy" : "red"}
+              label="Finance outstanding"
+              value={money(finance.outstanding_amount)}
+              note={`${decimal(finance.active_accounts)} active installment account(s)`}
+              tone="navy"
             />
             <MetricCard
               icon="!"
+              label="Finance overdue"
+              value={money(finance.overdue_amount)}
+              note={`${decimal(finance.overdue_accounts)} overdue account(s)`}
+              tone={numberValue(finance.overdue_amount) > 0 ? "red" : "green"}
+            />
+            <MetricCard
+              icon="🏗️"
+              label="Equipment Hire invoiced"
+              value={money(hire.invoiced_total)}
+              note={`${decimal(hire.active_contracts)} active contract(s)`}
+              tone="navy"
+            />
+            <MetricCard
+              icon="⛏️"
+              label="Mining operating cost"
+              value={money(mining.operating_cost)}
+              note={`${decimal(mining.working_hours, 1)} working hour(s)`}
+              tone="amber"
+            />
+            <MetricCard
+              icon="🧮"
+              label="Cash-control exceptions"
+              value={decimal(
+                numberValue(cashControl.variance_count) +
+                  numberValue(cashControl.changed_after_close_count)
+              )}
+              note={`${decimal(cashControl.variance_count)} variance(s) · ${decimal(
+                cashControl.changed_after_close_count
+              )} changed after close`}
+              tone={
+                numberValue(cashControl.changed_after_close_count) > 0
+                  ? "red"
+                  : "navy"
+              }
+            />
+            <MetricCard
+              icon="⚑"
               label="Management alerts"
               value={decimal(alertCounts.total)}
-              note={`${decimal(alertCounts.critical)} critical · ${decimal(alertCounts.high)} high`}
+              note={`${decimal(alertCounts.critical)} critical · ${decimal(
+                alertCounts.high
+              )} high`}
               tone={numberValue(alertCounts.critical) > 0 ? "red" : "navy"}
             />
           </section>
@@ -760,41 +859,64 @@ export default function GroupExecutiveControlPage() {
             <article className="gec-section-card gec-financial-health">
               <SectionHeader
                 eyebrow="Executive briefing"
-                title="Financial position"
-                description="A quick interpretation of what was recorded and what remains outstanding."
+                title="Business-by-business financial picture"
+                description="The figures below stay separate by business so management can see exactly where sales, collections, portfolio exposure and operating cost come from."
               />
               <div className="gec-financial-callout">
-                <span>Indicative operating position</span>
+                <span>Trading activity roll-up</span>
                 <strong>{money(group.indicative_balance)}</strong>
                 <small>
-                  This is a management indicator, not a final audited profit figure.
+                  Spare Parts sales + Equipment Hire invoices less Spare Parts
+                  expenses and Mining operating cost. Installment Finance
+                  outstanding is shown separately because it is portfolio
+                  exposure, not ordinary period revenue.
                 </small>
               </div>
               <div className="gec-progress-stack">
                 <ProgressLine
-                  label="Payment-to-revenue rate"
-                  value={group.collection_rate}
-                  displayValue={percent(group.collection_rate)}
+                  label="Spare Parts collection rate"
+                  value={spareCollectionRate}
+                  displayValue={percent(spareCollectionRate)}
                   tone="green"
                 />
                 <ProgressLine
-                  label="Operating cost ratio"
-                  value={group.cost_ratio}
-                  displayValue={percent(group.cost_ratio)}
-                  tone="red"
+                  label="Installment Finance collection rate"
+                  value={finance.collection_rate}
+                  displayValue={percent(finance.collection_rate)}
+                  tone="blue"
                 />
                 <ProgressLine
-                  label="Receivables versus revenue"
-                  value={group.receivable_ratio}
-                  displayValue={percent(group.receivable_ratio)}
-                  tone="amber"
+                  label="Finance portfolio currently overdue"
+                  value={finance.overdue_share_of_outstanding}
+                  displayValue={percent(finance.overdue_share_of_outstanding)}
+                  tone="red"
                 />
               </div>
               <div className="gec-brief-facts">
-                <div><span>Spare Parts sales</span><strong>{money(spare.sales_total)}</strong></div>
-                <div><span>Hire invoiced</span><strong>{money(hire.invoiced_total)}</strong></div>
-                <div><span>Store expenses</span><strong>{money(spare.expenses_total)}</strong></div>
-                <div><span>Mining cost</span><strong>{money(mining.operating_cost)}</strong></div>
+                <div>
+                  <span>Spare Parts sales</span>
+                  <strong>{money(spare.sales_total)}</strong>
+                </div>
+                <div>
+                  <span>Installment collections in period</span>
+                  <strong>{money(finance.payments_amount_in_period)}</strong>
+                </div>
+                <div>
+                  <span>Installment outstanding portfolio</span>
+                  <strong>{money(finance.outstanding_amount)}</strong>
+                </div>
+                <div>
+                  <span>Equipment Hire invoiced</span>
+                  <strong>{money(hire.invoiced_total)}</strong>
+                </div>
+                <div>
+                  <span>Mining operating cost</span>
+                  <strong>{money(mining.operating_cost)}</strong>
+                </div>
+                <div>
+                  <span>Spare Parts expenses</span>
+                  <strong>{money(spare.expenses_total)}</strong>
+                </div>
               </div>
             </article>
 
@@ -828,17 +950,17 @@ export default function GroupExecutiveControlPage() {
           <section className="gec-section-card">
             <SectionHeader
               eyebrow="Performance movement"
-              title="Daily financial trend"
-              description="Recorded revenue, payments received and captured operating cost across the selected period."
+              title="Daily trading-operations trend"
+              description="Daily Spare Parts sales, Equipment Hire invoices and captured operating cost. Installment Finance is shown separately as a portfolio so its outstanding balance is not mistaken for period revenue."
             />
             <TrendChart rows={trendRows} />
           </section>
 
           <section className="gec-section-card">
             <SectionHeader
-              eyebrow="Business portfolio"
+              eyebrow="All businesses"
               title="Performance by business unit"
-              description="Focused scorecards replace duplicated operational detail on the main executive screen."
+              description="Every major Chalin 03 business remains visible. Units with no activity stay on the dashboard as 'No activity' instead of disappearing or being mixed into another business."
             />
             <div className="gec-business-grid">
               {portfolioCards.map((card) => (
@@ -931,11 +1053,63 @@ export default function GroupExecutiveControlPage() {
             <summary>
               <div>
                 <span>Detailed operational review</span>
-                <strong>Mining sites, Hire customer balances and Fleet utilization</strong>
+                <strong>
+                  Installment Finance risk accounts, Mining sites, Hire balances
+                  and Fleet utilization
+                </strong>
               </div>
               <span>Open details</span>
             </summary>
             <div className="gec-detail-content">
+              <section className="gec-detail-wide">
+                <SectionHeader
+                  eyebrow="Equipment Installment Finance"
+                  title="Priority portfolio accounts"
+                  description="Highest-priority accounts from the Finance risk model. These are review signals, not findings of misconduct."
+                />
+                <div className="gec-table-wrap">
+                  <table className="gec-table">
+                    <thead>
+                      <tr>
+                        <th>Agreement / customer</th>
+                        <th>Machine</th>
+                        <th>Outstanding</th>
+                        <th>Overdue</th>
+                        <th>Days past due</th>
+                        <th>Risk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(finance.urgent_accounts || []).length ? (
+                        finance.urgent_accounts.map((row, index) => (
+                          <tr key={`${row.agreement}-${index}`}>
+                            <td data-label="Agreement / customer">
+                              <strong>{row.agreement}</strong>
+                              <span>{row.customer}</span>
+                            </td>
+                            <td data-label="Machine">{row.machine}</td>
+                            <td data-label="Outstanding">{money(row.outstanding)}</td>
+                            <td data-label="Overdue">{money(row.overdue)}</td>
+                            <td data-label="Days past due">
+                              {decimal(row.days_past_due)}
+                            </td>
+                            <td data-label="Risk">
+                              <strong>{row.risk_band || "Review"}</strong>
+                              <span>{row.recommended_action || ""}</span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <EmptyTableRow
+                          columns={6}
+                          text="No priority Installment Finance account is currently surfaced."
+                        />
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
               <section>
                 <SectionHeader eyebrow="Mining" title="Site performance" />
                 <div className="gec-table-wrap">
@@ -999,6 +1173,7 @@ export default function GroupExecutiveControlPage() {
           </details>
 
           <section className="gec-quick-links">
+            <Link to="/equipment-installment-finance/collections"><span>💳</span><div><strong>Installment Finance</strong><small>Portfolio, arrears and collections</small></div></Link>
             <Link to="/advanced-accounting-intelligence"><span>📈</span><div><strong>Accounting Intelligence</strong><small>Audit and financial review</small></div></Link>
             <Link to="/daily-closing"><span>🧮</span><div><strong>Daily Closing</strong><small>Counts, variance and verification</small></div></Link>
             <Link to="/activity-log"><span>🛡️</span><div><strong>Activity Log</strong><small>Accountability and evidence</small></div></Link>
