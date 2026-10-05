@@ -358,7 +358,7 @@ export default function GroupExecutiveControlPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      setNotice(`${filename} downloaded successfully.`);
+      setNotice(`Executive workbook downloaded successfully: ${filename}`);
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
@@ -678,7 +678,7 @@ export default function GroupExecutiveControlPage() {
             onClick={downloadWorkbook}
             disabled={downloading}
           >
-            {downloading ? "Preparing Excel…" : "Download Excel"}
+            {downloading ? "Preparing Executive Workbook…" : "Download Executive Workbook"}
           </button>
         </div>
       </section>
