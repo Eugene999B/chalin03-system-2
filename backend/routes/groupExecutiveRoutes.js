@@ -7,6 +7,9 @@ const { isOriginalSystemAdministrator } = require("../security/systemAdminIdenti
 const {
   loadGroupCommandCentreSummary,
 } = require("../services/groupCommandCentreService");
+const {
+  buildExecutiveIntelligence,
+} = require("../services/executiveIntelligenceService");
 const { writeSharedControlEvidence } = require("../services/sharedControlService");
 
 const router = express.Router();
@@ -1097,6 +1100,18 @@ async function loadGroupSummary(req) {
       can_access_all_branches: scope.canAccessAll,
       requested_all: scope.requestedAll,
     },
+    business_scope: {
+      label: "All Chalin 03 businesses",
+      businesses: [
+        "Spare Parts",
+        "Equipment Installment Finance",
+        "Mining Operations",
+        "Equipment Hire",
+      ],
+      support_units: ["Fleet & Maintenance"],
+      spare_parts_filter:
+        scope.all ? "All Spare Parts stores" : "Selected Spare Parts store",
+    },
     spare_parts: spareParts,
     mining,
     hire,
@@ -1161,6 +1176,82 @@ async function loadGroupSummary(req) {
         : 0,
   };
 
+  let financeIntelligence = null;
+  try {
+    const intelligence = await buildExecutiveIntelligence({ from, to });
+    financeIntelligence = intelligence?.installment_finance || null;
+  } catch (error) {
+    console.warn(
+      "Group executive Installment Finance intelligence unavailable:",
+      error.message
+    );
+  }
+
+  summary.installment_finance = financeIntelligence || {
+    active_accounts: 0,
+    financed_amount: 0,
+    collected_amount: 0,
+    outstanding_amount: 0,
+    overdue_amount: 0,
+    overdue_accounts: 0,
+    defaulted_accounts: 0,
+    critical_risk_accounts: 0,
+    high_risk_accounts: 0,
+    due_today_accounts: 0,
+    due_next_7_days: 0,
+    due_next_30_days: 0,
+    collection_rate: 0,
+    portfolio_at_risk_rate: 0,
+    overdue_share_of_outstanding: 0,
+    payments_in_period: 0,
+    payments_amount_in_period: 0,
+    reversals_in_period: 0,
+    reversed_amount_in_period: 0,
+    urgent_accounts: [],
+    signals: [],
+  };
+
+  summary.business_activity = {
+    spare_parts:
+      numeric(summary.spare_parts.sales_total) > 0 ||
+      numeric(summary.spare_parts.expenses_total) > 0 ||
+      numeric(summary.spare_parts.debt_balance) > 0,
+    installment_finance:
+      numeric(summary.installment_finance.active_accounts) > 0 ||
+      numeric(summary.installment_finance.payments_in_period) > 0 ||
+      numeric(summary.installment_finance.outstanding_amount) > 0,
+    mining:
+      numeric(summary.mining.working_hours) > 0 ||
+      numeric(summary.mining.operating_cost) > 0 ||
+      numeric(summary.mining.open_incidents) > 0,
+    equipment_hire:
+      numeric(summary.hire.invoiced_total) > 0 ||
+      numeric(summary.hire.payments_total) > 0 ||
+      numeric(summary.hire.active_contracts) > 0,
+  };
+
+  const financeAlerts = (summary.installment_finance.signals || []).map(
+    (signal) => ({
+      severity: signal.severity || "medium",
+      category: "Installment Finance",
+      title: signal.title || "Installment Finance review",
+      detail: signal.detail || "",
+      path: signal.path || "/equipment-installment-finance/collections",
+    })
+  );
+
+  if (financeAlerts.length > 0) {
+    summary.alerts = [...summary.alerts, ...financeAlerts].slice(0, 80);
+    summary.alert_counts = summary.alerts.reduce(
+      (counts, alert) => {
+        counts.total += 1;
+        counts[alert.severity] = (counts[alert.severity] || 0) + 1;
+        return counts;
+      },
+      { total: 0, critical: 0, high: 0, medium: 0, low: 0 }
+    );
+  }
+
   summary.command_centre =
     await loadGroupCommandCentreSummary({
       period: summary.period,
@@ -1205,10 +1296,22 @@ async function loadGroupSummary(req) {
     );
   }
 
+  const financeRecommendations = (
+    summary.installment_finance.signals || []
+  ).map((signal) => ({
+    priority: signal.severity || "medium",
+    area: "Installment Finance",
+    title: signal.title || "Review Installment Finance",
+    detail:
+      [signal.detail, signal.action].filter(Boolean).join(" Management action: "),
+    path: signal.path || "/equipment-installment-finance/collections",
+  }));
+
   summary.recommendations = [
+    ...financeRecommendations,
     ...(summary.command_centre?.recommendations || []),
     ...buildRecommendations(summary),
-  ].slice(0, 20);
+  ].slice(0, 24);
 
   return summary;
 }
@@ -1248,9 +1351,16 @@ function executiveBorder(color = EXECUTIVE_COLORS.border) {
 }
 
 function executiveScopeLabel(summary) {
-  return summary.branch_scope?.mode === "all"
-    ? "All authorised Spare Parts stores"
-    : "Selected Spare Parts store";
+  return summary.business_scope?.label || "All Chalin 03 businesses";
+}
+
+function sparePartsScopeLabel(summary) {
+  return (
+    summary.business_scope?.spare_parts_filter ||
+    (summary.branch_scope?.mode === "all"
+      ? "All Spare Parts stores"
+      : "Selected Spare Parts store")
+  );
 }
 
 function configureSheet(sheet, title, columns) {
@@ -1304,7 +1414,8 @@ function setSheetContext(sheet, summary, detail = "") {
   const contextCell = sheet.getCell(2, 1);
   const parts = [
     "Reporting period: " + summary.period.from + " to " + summary.period.to,
-    "Scope: " + executiveScopeLabel(summary),
+    "Group scope: " + executiveScopeLabel(summary),
+    "Spare Parts store filter: " + sparePartsScopeLabel(summary),
     detail,
   ].filter(Boolean);
   contextCell.value = parts.join("  •  ");
@@ -1400,6 +1511,8 @@ function createExecutiveDashboard(workbook, summary) {
     summary.period.to +
     "  •  " +
     executiveScopeLabel(summary) +
+    "  •  Spare Parts filter: " +
+    sparePartsScopeLabel(summary) +
     "  •  Generated " +
     String(summary.generated_at || "").replace("T", " ").replace("Z", " UTC");
   period.fill = executiveFill(EXECUTIVE_COLORS.goldLight);
@@ -1410,20 +1523,20 @@ function createExecutiveDashboard(workbook, summary) {
   sheet.mergeCells("A4:H4");
   const note = sheet.getCell("A4");
   note.value =
-    "Executive management workbook. Indicative result is a management indicator based on recorded revenue and captured operating cost; it is not a final audited profit figure.";
+    "Group-wide executive pack covering every Chalin 03 business. Each business is analysed separately so Installment Finance portfolio exposure is not incorrectly blended into ordinary sales revenue. Trading roll-ups are management indicators, not final audited profit figures.";
   note.font = { italic: true, size: 9, color: { argb: EXECUTIVE_COLORS.gray } };
   note.border = executiveBorder();
   note.alignment = { vertical: "middle", wrapText: true };
 
-  addExecutiveKpi(sheet, 1, 6, "RECORDED REVENUE", numeric(summary.group.recorded_revenue), "Spare Parts sales + Hire invoices", EXECUTIVE_COLORS.navy, true);
-  addExecutiveKpi(sheet, 3, 6, "PAYMENTS RECEIVED", numeric(summary.group.cash_received), numeric(summary.group.collection_rate).toFixed(1) + "% collection rate", EXECUTIVE_COLORS.green, true);
-  addExecutiveKpi(sheet, 5, 6, "OPERATING COST", numeric(summary.group.operating_cost), numeric(summary.group.cost_ratio).toFixed(1) + "% of recorded revenue", "9C0006", true);
-  addExecutiveKpi(sheet, 7, 6, "RECEIVABLES", numeric(summary.group.outstanding_receivables), numeric(summary.group.receivable_ratio).toFixed(1) + "% of recorded revenue", EXECUTIVE_COLORS.amber, true);
+  addExecutiveKpi(sheet, 1, 6, "SPARE PARTS SALES", numeric(summary.spare_parts.sales_total), "Selected period • " + sparePartsScopeLabel(summary), EXECUTIVE_COLORS.navy, true);
+  addExecutiveKpi(sheet, 3, 6, "INSTALLMENT COLLECTIONS", numeric(summary.installment_finance.payments_amount_in_period), numeric(summary.installment_finance.payments_in_period) + " payment record(s) in period", EXECUTIVE_COLORS.green, true);
+  addExecutiveKpi(sheet, 5, 6, "FINANCE OUTSTANDING", numeric(summary.installment_finance.outstanding_amount), numeric(summary.installment_finance.active_accounts) + " active agreement(s)", EXECUTIVE_COLORS.blue, true);
+  addExecutiveKpi(sheet, 7, 6, "FINANCE OVERDUE", numeric(summary.installment_finance.overdue_amount), numeric(summary.installment_finance.overdue_accounts) + " overdue agreement(s)", numeric(summary.installment_finance.overdue_amount) > 0 ? EXECUTIVE_COLORS.red : EXECUTIVE_COLORS.green, true);
 
-  addExecutiveKpi(sheet, 1, 10, "INDICATIVE RESULT", numeric(summary.group.indicative_balance), "Revenue less captured operating cost", numeric(summary.group.indicative_balance) >= 0 ? EXECUTIVE_COLORS.blue : EXECUTIVE_COLORS.red, true);
-  addExecutiveKpi(sheet, 3, 10, "CASH CONTROL EXCEPTIONS", numeric(summary.cash_control.variance_count) + numeric(summary.cash_control.changed_after_close_count), numeric(summary.cash_control.variance_count) + " variance(s) • " + numeric(summary.cash_control.changed_after_close_count) + " changed after close", numeric(summary.cash_control.changed_after_close_count) > 0 ? EXECUTIVE_COLORS.red : EXECUTIVE_COLORS.amber);
-  addExecutiveKpi(sheet, 5, 10, "MANAGEMENT ALERTS", numeric(summary.alert_counts.total), numeric(summary.alert_counts.critical) + " critical • " + numeric(summary.alert_counts.high) + " high", numeric(summary.alert_counts.critical) > 0 ? EXECUTIVE_COLORS.red : EXECUTIVE_COLORS.blue);
-  addExecutiveKpi(sheet, 7, 10, "LOW STOCK EXPOSURE", numeric(summary.spare_parts.low_stock_count), "Spare Parts products at/below restock level", numeric(summary.spare_parts.low_stock_count) > 0 ? EXECUTIVE_COLORS.amber : EXECUTIVE_COLORS.green);
+  addExecutiveKpi(sheet, 1, 10, "EQUIPMENT HIRE INVOICED", numeric(summary.hire.invoiced_total), numeric(summary.hire.active_contracts) + " active contract(s)", EXECUTIVE_COLORS.blue, true);
+  addExecutiveKpi(sheet, 3, 10, "MINING OPERATING COST", numeric(summary.mining.operating_cost), numeric(summary.mining.working_hours).toFixed(1) + " working hour(s)", "7F6000", true);
+  addExecutiveKpi(sheet, 5, 10, "CASH CONTROL EXCEPTIONS", numeric(summary.cash_control.variance_count) + numeric(summary.cash_control.changed_after_close_count), numeric(summary.cash_control.variance_count) + " variance(s) • " + numeric(summary.cash_control.changed_after_close_count) + " changed after close", numeric(summary.cash_control.changed_after_close_count) > 0 ? EXECUTIVE_COLORS.red : EXECUTIVE_COLORS.amber);
+  addExecutiveKpi(sheet, 7, 10, "MANAGEMENT ALERTS", numeric(summary.alert_counts.total), numeric(summary.alert_counts.critical) + " critical • " + numeric(summary.alert_counts.high) + " high", numeric(summary.alert_counts.critical) > 0 ? EXECUTIVE_COLORS.red : EXECUTIVE_COLORS.blue);
 
   sheet.mergeCells("A14:H14");
   const businessTitle = sheet.getCell("A14");
@@ -1450,11 +1563,11 @@ function createExecutiveDashboard(workbook, summary) {
       ["Outstanding", numeric(summary.hire.invoice_balance), '"GHS" #,##0.00'],
       ["Active contracts", numeric(summary.hire.active_contracts), "#,##0"],
     ]],
-    ["G", "H", "FLEET & MAINTENANCE", [
-      ["Total assets", numeric(summary.fleet.total_assets), "#,##0"],
-      ["Available", numeric(summary.fleet.available_assets), "#,##0"],
-      ["Unavailable", numeric(summary.fleet.unavailable_assets), "#,##0"],
-      ["Service due", numeric(summary.fleet.service_due_count), "#,##0"],
+    ["G", "H", "INSTALLMENT FINANCE", [
+      ["Active accounts", numeric(summary.installment_finance.active_accounts), "#,##0"],
+      ["Outstanding", numeric(summary.installment_finance.outstanding_amount), '"GHS" #,##0.00'],
+      ["Overdue", numeric(summary.installment_finance.overdue_amount), '"GHS" #,##0.00'],
+      ["Collection rate", numeric(summary.installment_finance.collection_rate), '0.0"%"'],
     ]],
   ];
 
@@ -1566,7 +1679,7 @@ async function logWorkbookDownload(req, summary) {
         currentBranchId(req),
         req.user?.id || null,
         "DOWNLOAD_GROUP_EXECUTIVE_WORKBOOK",
-        `Downloaded Group Executive workbook for ${summary.period.from} to ${summary.period.to} (${summary.branch_scope.mode} branch scope)`,
+        `Downloaded Group Executive workbook for ${summary.period.from} to ${summary.period.to} (all businesses; Spare Parts filter: ${sparePartsScopeLabel(summary)})`,
       ]
     );
   } catch (error) {
@@ -1581,7 +1694,11 @@ async function logWorkbookDownload(req, summary) {
     documentNumber: `${summary.period.from}-to-${summary.period.to}`,
     exportFormat: "xlsx",
     description: `Downloaded Group Executive workbook for ${summary.period.from} to ${summary.period.to}.`,
-    metadata: { branch_scope: summary.branch_scope?.mode || "authorized" },
+    metadata: {
+      group_scope: executiveScopeLabel(summary),
+      spare_parts_filter: sparePartsScopeLabel(summary),
+      branch_scope: summary.branch_scope?.mode || "authorized",
+    },
     workspaceCode: "group",
   });
 }
@@ -1658,6 +1775,17 @@ router.get("/workbook.xlsx", async (req, res) => {
       ["Spare Parts", "Expenses", summary.spare_parts.expenses_total],
       ["Spare Parts", "Current debt", summary.spare_parts.debt_balance],
       ["Spare Parts", "Cost stock value", summary.spare_parts.stock_value_cost],
+      ["Installment Finance", "Active accounts", summary.installment_finance.active_accounts],
+      ["Installment Finance", "Financed amount", summary.installment_finance.financed_amount],
+      ["Installment Finance", "Collected amount", summary.installment_finance.collected_amount],
+      ["Installment Finance", "Collections in selected period", summary.installment_finance.payments_amount_in_period],
+      ["Installment Finance", "Outstanding portfolio", summary.installment_finance.outstanding_amount],
+      ["Installment Finance", "Overdue amount", summary.installment_finance.overdue_amount],
+      ["Installment Finance", "Overdue accounts", summary.installment_finance.overdue_accounts],
+      ["Installment Finance", "High-risk accounts", summary.installment_finance.high_risk_accounts],
+      ["Installment Finance", "Critical-risk accounts", summary.installment_finance.critical_risk_accounts],
+      ["Installment Finance", "Collection rate (%)", summary.installment_finance.collection_rate],
+      ["Installment Finance", "Portfolio at risk (%)", summary.installment_finance.portfolio_at_risk_rate],
       ["Mining", "Operating cost", summary.mining.operating_cost],
       ["Mining", "Working hours", summary.mining.working_hours],
       ["Mining", "Open incidents", summary.mining.open_incidents],
@@ -1735,6 +1863,49 @@ router.get("/workbook.xlsx", async (req, res) => {
     ]);
     summary.mining_sites.forEach((row) => sites.addRow(row));
     styleRows(sites, ["expenses_total"]);
+
+    const financePortfolio = workbook.addWorksheet("Installment Finance");
+    configureSheet(financePortfolio, "Equipment Installment Finance Portfolio", [
+      { header: "Metric", key: "metric", width: 34 },
+      { header: "Value", key: "value", width: 24 },
+      { header: "Executive Meaning", key: "meaning", width: 68 },
+    ]);
+    [
+      ["Active agreements", summary.installment_finance.active_accounts, "Current live installment agreements in the Finance portfolio."],
+      ["Financed amount", summary.installment_finance.financed_amount, "Total financed principal represented by the current portfolio."],
+      ["Collected amount", summary.installment_finance.collected_amount, "Collections recorded against the current portfolio."],
+      ["Collections in selected period", summary.installment_finance.payments_amount_in_period, "Cash received through Finance payment records inside the selected report period."],
+      ["Outstanding portfolio", summary.installment_finance.outstanding_amount, "Amount still outstanding across active Finance agreements."],
+      ["Overdue amount", summary.installment_finance.overdue_amount, "Outstanding amount already past due."],
+      ["Overdue agreements", summary.installment_finance.overdue_accounts, "Number of Finance agreements with overdue exposure."],
+      ["High-risk agreements", summary.installment_finance.high_risk_accounts, "Accounts currently classified in the high-risk band."],
+      ["Critical-risk agreements", summary.installment_finance.critical_risk_accounts, "Accounts currently classified in the critical-risk band."],
+      ["Due next 7 days", summary.installment_finance.due_next_7_days, "Scheduled Finance collections falling due within seven days."],
+      ["Due next 30 days", summary.installment_finance.due_next_30_days, "Scheduled Finance collections falling due within thirty days."],
+      ["Collection rate (%)", summary.installment_finance.collection_rate, "Portfolio collection performance indicator."],
+      ["Portfolio at risk (%)", summary.installment_finance.portfolio_at_risk_rate, "Share of the Finance portfolio currently exposed to arrears risk."],
+    ].forEach(([metric, value, meaning]) =>
+      financePortfolio.addRow({ metric, value, meaning })
+    );
+    styleRows(financePortfolio);
+    financePortfolio.getColumn("value").numFmt = '#,##0.00';
+
+    const financeRisk = workbook.addWorksheet("Finance Risk Accounts");
+    configureSheet(financeRisk, "Installment Finance Priority Accounts", [
+      { header: "Agreement", key: "agreement", width: 22 },
+      { header: "Customer", key: "customer", width: 30 },
+      { header: "Machine", key: "machine", width: 28 },
+      { header: "Outstanding", key: "outstanding", width: 18 },
+      { header: "Overdue", key: "overdue", width: 18 },
+      { header: "Days Past Due", key: "days_past_due", width: 16 },
+      { header: "Risk Band", key: "risk_band", width: 16 },
+      { header: "Risk Score", key: "risk_score", width: 14 },
+      { header: "Recommended Action", key: "recommended_action", width: 60 },
+    ]);
+    (summary.installment_finance.urgent_accounts || []).forEach((row) =>
+      financeRisk.addRow(row)
+    );
+    styleRows(financeRisk, ["outstanding", "overdue"]);
 
     const customers = workbook.addWorksheet("Hire Customers");
     configureSheet(customers, "Equipment Hire Customer Accounts", [
