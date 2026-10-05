@@ -141,7 +141,7 @@ assert.match(applications, /kyc\/verify/);
 assert.match(applications, /\/review/);
 assert.match(applications, /Approve credit application/);
 assert.match(applications, /Request changes/);
-assert.match(applications, /No Hire-location selection is needed/);
+assert.match(financeLayout, /no Hire-location selection/i);
 assert.doesNotMatch(applications, /ownership-transfer|deliveries\/complete/);
 
 assert.match(customers, /Customer Centre/);

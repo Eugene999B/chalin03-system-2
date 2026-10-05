@@ -136,5 +136,5 @@ console.log(
 );
 
 assert.match(publicHome, /PublicPageMeta/);
-assert.match(publicHome, /canonicalPath="\\/"?/);
+assert.ok(publicHome.includes('canonicalPath="/"'));
 assert.match(appIndex, /Chalin 03 Company Limited \| Ghana/);

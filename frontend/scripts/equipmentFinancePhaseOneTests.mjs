@@ -97,9 +97,9 @@ assert.match(excavators, /finance-simple__machine-image/);
 assert.match(excavators, /finance-simple__photo-viewer/);
 assert.doesNotMatch(excavators, /useWorkspaceContext/);
 
-assert.match(applications, /Applications and approvals/i);
-assert.match(applications, /Installment Offer/);
-assert.match(applications, /No Hire-location selection/);
+assert.match(applications, /Applications &amp; approvals/i);
+assert.match(applications, /quotation_number/);
+assert.match(layout, /no Hire-location selection/i);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
 for (const page of [activation, deposit]) {

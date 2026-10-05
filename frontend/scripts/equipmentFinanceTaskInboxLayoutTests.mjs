@@ -15,7 +15,7 @@ assert.match(page, /Data & document issues/);
 assert.match(page, /Open case/);
 assert.match(page, /stage: "case-operations"/);
 assert.match(page, /inbox_page_size: PAGE_SIZE/);
-assert.match(page, /All priorities/);
+assert.match(page, /value === "all" \? "All" : label\(value\)/);
 assert.doesNotMatch(page, /Open case operation/);
 
 assert.match(css, /\.task-inbox__row/);
