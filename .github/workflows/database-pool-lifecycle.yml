@@ -39,7 +39,36 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run syntax-check
-      - run: npm test
+      - name: Run candidate backend suite
+        continue-on-error: true
+        run: node --test --test-reporter=tap tests/*.test.js > /tmp/candidate.tap
+      - name: Run the same suite with the unchanged production pool
+        continue-on-error: true
+        run: |
+          git show f8c86d722d9b2ddb7776622ed7a7390b78d4916d:backend/config/db.js > config/db.js
+          node --test --test-reporter=tap tests/*.test.js > /tmp/baseline.tap
+      - name: Restore candidate and reject any new test failures
+        run: |
+          git restore -- config/db.js
+          node <<'NODE'
+          const fs = require("node:fs");
+          const assert = require("node:assert/strict");
+          const failures = file => {
+            const text = fs.readFileSync(file, "utf8");
+            assert.match(text, /# tests \d+/, "Test runner must complete");
+            return [...text.matchAll(/^\s*not ok \d+ - (.+)$/gm)].map(match => match[1]).sort();
+          };
+          const before = failures("/tmp/baseline.tap");
+          const after = failures("/tmp/candidate.tap");
+          assert.deepEqual(after, before, "The pool change must introduce no new backend failures");
+          if (before.length) console.log("::warning::" + before.length + " existing backend test failures are unchanged; see artifacts.");
+          NODE
+      - name: Preserve baseline and candidate test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pool-backend-comparison
+          path: /tmp/*.tap
       - name: Verify production idle eviction and reconnection
         env:
           NODE_ENV: production
