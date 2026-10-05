@@ -1,0 +1,55 @@
+name: Verify database pool lifecycle
+on:
+  push:
+    branches: [production, codex/railway-runtime-costs]
+    paths:
+      - backend/config/db.js
+      - backend/tests/database-idle-pool.test.js
+      - .github/workflows/database-pool-lifecycle.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:9.7.1
+        env:
+          MYSQL_ROOT_PASSWORD: ci-pool-only
+          MYSQL_DATABASE: pool_test
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-pool-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run syntax-check
+      - run: npm test
+      - name: Verify production idle eviction and reconnection
+        env:
+          NODE_ENV: production
+          RUN_POOL_COST_TEST: "1"
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_USER: root
+          DB_PASSWORD: ci-pool-only
+          DB_NAME: pool_test
+          DB_CONNECTION_LIMIT: "5"
+          DB_IDLE_TIMEOUT_MS: "60000"
+          DB_SSL: "false"
+        run: node --test tests/database-idle-pool.test.js

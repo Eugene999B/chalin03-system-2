@@ -188,6 +188,9 @@ const pool = mysql.createPool({
 
   waitForConnections: true,
   connectionLimit: DB_CONNECTION_LIMIT,
+  // mysql2 only enables idle eviction when maxIdle is below connectionLimit.
+  // Keep burst capacity, but release unused production connections after a minute.
+  maxIdle: isProduction() ? Math.min(1, DB_CONNECTION_LIMIT - 1) : DB_CONNECTION_LIMIT,
   queueLimit: DB_QUEUE_LIMIT,
   idleTimeout: DB_IDLE_TIMEOUT_MS,
 
