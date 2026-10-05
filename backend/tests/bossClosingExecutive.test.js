@@ -42,7 +42,7 @@ test("cash denomination counting is optional on both client and server", () => {
 test("Group Executive Control provides professional read-only intelligence", () => {
   assert.match(executivePage, /Executive Intelligence & Control/);
   assert.match(executivePage, /Risk command centre/);
-  assert.match(executivePage, /Daily financial trend/);
+  assert.match(executivePage, /Daily trading-operations trend/);
   assert.match(executivePage, /Daily Closing control status/);
   assert.match(executivePage, /Management action queue/);
   assert.match(executivePage, /no operational editing/i);
@@ -64,4 +64,11 @@ test("Group Executive API exposes cash-control and trend evidence", () => {
   assert.match(executiveRoute, /Command Centre/);
   assert.match(executiveRoute, /Reporting period:/);
   assert.match(executivePage, /Download Executive Workbook/);
+  assert.match(executivePage, /All Chalin 03 businesses/);
+  assert.match(executivePage, /Equipment Installment Finance/);
+  assert.match(executivePage, /Spare Parts store filter/);
+  assert.match(executiveRoute, /buildExecutiveIntelligence/);
+  assert.match(executiveRoute, /Installment Finance Portfolio/);
+  assert.match(executiveRoute, /Finance Risk Accounts/);
+  assert.match(executiveRoute, /All Chalin 03 businesses/);
 });
