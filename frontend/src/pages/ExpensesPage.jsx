@@ -501,7 +501,7 @@ export default function ExpensesPage() {
         {expenses.length === 0 ? (
           <p>No expenses recorded yet for {currentStoreCode}.</p>
         ) : (
-          <div className="expense-table-wrap">
+          <div className="expense-table-wrap expense-desktop-history">
             <table className="expense-funding-table">
               <thead>
                 <tr>
@@ -578,6 +578,93 @@ export default function ExpensesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div
+            className="expense-mobile-history"
+            aria-label={`Expense history for ${currentStoreCode}`}
+          >
+            {expenses.map((expense) => {
+              const storeCode =
+                expense.branch_code ||
+                expense.store_code ||
+                currentStoreCode;
+              const fundingSource = String(expense.funding_source || "other")
+                .replaceAll("_", " ")
+                .replace(/\b\w/g, (letter) => letter.toUpperCase());
+              const affectsDailyClosing =
+                Number(expense.affects_daily_closing) === 1;
+
+              return (
+                <article
+                  className="expense-mobile-card"
+                  key={`mobile-expense-${expense.id}`}
+                >
+                  <div className="expense-mobile-card__topline">
+                    <span>{new Date(expense.expense_date).toLocaleDateString()}</span>
+                    <span className="expense-mobile-card__store">{storeCode}</span>
+                  </div>
+
+                  <div className="expense-mobile-card__headline">
+                    <div className="expense-mobile-card__title">
+                      <span>Category</span>
+                      <strong>{expense.category || "Other"}</strong>
+                    </div>
+                    <strong className="expense-mobile-card__amount">
+                      {formatMoney(expense.amount)}
+                    </strong>
+                  </div>
+
+                  <div className="expense-mobile-card__description">
+                    <span>Description</span>
+                    <p>{expense.description || "No description provided."}</p>
+                    {expense.closing_treatment_note ? (
+                      <small>{expense.closing_treatment_note}</small>
+                    ) : null}
+                  </div>
+
+                  <div className="expense-mobile-card__details">
+                    <div className="expense-mobile-card__detail">
+                      <span>Payment</span>
+                      <strong>
+                        {String(expense.payment_method || "cash").toUpperCase()}
+                      </strong>
+                    </div>
+
+                    <div className="expense-mobile-card__detail">
+                      <span>Recorded by</span>
+                      <strong>{expense.recorded_by_name || "-"}</strong>
+                    </div>
+
+                    <div className="expense-mobile-card__detail is-wide">
+                      <span>Funding source</span>
+                      <strong>{fundingSource}</strong>
+                    </div>
+
+                    <div className="expense-mobile-card__detail is-wide">
+                      <span>Daily closing</span>
+                      <span
+                        className={`expense-closing-badge ${
+                          affectsDailyClosing
+                            ? "is-deducted"
+                            : "is-accounting-only"
+                        }`}
+                      >
+                        {affectsDailyClosing ? "Deduct" : "Accounting only"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="small-danger expense-mobile-card__void"
+                    onClick={() => openVoidExpense(expense)}
+                  >
+                    Void Expense
+                  </button>
+                </article>
+              );
+            })}
           </div>
         )}
       </div>
