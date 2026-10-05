@@ -35,9 +35,9 @@ assert.match(workspaceLayout, /Light mode/);
 
 assert.match(darkV4Css, /finance-simple__card/);
 assert.match(darkV4Css, /finance-simple__facts div/);
-assert.match(darkV4Css, /\[class\*="card"\] h1/);
-assert.match(darkV4Css, /\[class\*="card"\] strong/);
-assert.match(darkV4Css, /\[class\*="card"\] p/);
+assert.match(darkCompatCss, /\[class\*="card"\] h1/);
+assert.match(darkCompatCss, /\[class\*="card"\] strong/);
+assert.match(darkCompatCss, /\[class\*="card"\] p/);
 assert.match(darkV4Css, /\.bwl-content \.finance-simple__card/);
 assert.match(darkV4Css, /filter: none !important/);
 

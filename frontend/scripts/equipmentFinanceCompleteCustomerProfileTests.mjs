@@ -55,6 +55,7 @@ const optionalApplicationsPage = fs.readFileSync(
   ),
   "utf8"
 );
+const wizard = fs.readFileSync(path.join(__dirname, "..", "src/pages/EquipmentFinanceStartWizardPage.jsx"), "utf8");
 const config = fs.readFileSync(
   path.join(__dirname, "..", "vite.config.js"),
   "utf8"
@@ -72,7 +73,7 @@ function testProfileIsLoadedInTheOperationalWizard() {
   assert.match(config, /EquipmentFinanceStartWizardOptionalPage\.jsx/);
   assert.match(config, /EquipmentSalesWorkspacePage\.jsx/);
   assert.match(config, /EquipmentFinanceApplicationsOptionalPage\.jsx/);
-  assert.match(optionalStartPage, /EquipmentFinanceStartWizardEnhancedPage/);
+  assert.match(optionalStartPage, /return <EquipmentFinanceStartWizardPage \/>/);
   assert.match(operationalStartPage, /EquipmentFinanceStartWizardPage/);
   assert.match(operationalStartPage, /Server recovery never blocks this screen/);
 }
@@ -127,16 +128,10 @@ function testFullCustomerAndKycFieldsRemainVisible() {
 }
 
 function testOptionalDetailsNeverBlockWorkflow() {
-  assert.match(
-    optionalStartPage,
-    /Leaving any other field blank does not block draft creation, submission, review or approval/
-  );
-  assert.match(
-    optionalStartPage,
-    /Missing KYC, affordability, guarantor, consent or supporting-document details never prevent submission or approval/
-  );
-  assert.match(optionalStartPage, /optional sections recorded/);
-  assert.doesNotMatch(optionalStartPage, /must be completed and independently verified/);
+  assert.match(wizard, /These fields can be completed now or later/);
+  assert.match(wizard, /Optional assessment/);
+  assert.match(wizard, /customer_consent_confirmed/);
+  assert.match(wizard, /credit_assessment_consent_confirmed/);
 
   assert.match(optionalApplicationsPage, /Optional-information rule/);
   assert.match(
@@ -155,7 +150,7 @@ function testOptionalDetailsNeverBlockWorkflow() {
 function testSensitiveDocumentsUsePrivateVault() {
   assert.match(enhancedPage, /private case-document vault/);
   assert.match(enhancedPage, /not in a\s+public file link/);
-  assert.match(optionalStartPage, /private vault when available/);
+  assert.match(enhancedPage, /private case-document vault/);
   assert.doesNotMatch(enhancedPage, /Identity document URL/);
   assert.doesNotMatch(enhancedPage, /Bank statement URL/);
 }
@@ -170,7 +165,7 @@ function testDraftAutosaveCompatibility() {
   assert.match(operationalStartPage, /SAVE_TIMEOUT_MS = 12000/);
   assert.doesNotMatch(operationalStartPage, /Preparing secure draft recovery/);
   assert.doesNotMatch(operationalStartPage, /window\.setInterval/);
-  assert.match(applicationsPage, /Changes autosave after 900 ms/);
+  assert.match(applicationsPage, /window\.setTimeout\(\(\) => saveEdit\(\{ manual: false \}\), 900\)/);
   assert.match(applicationsPage, /known_version/);
   assert.match(enhancedPage, /customerMode: existing\.customerMode \|\| "new"/);
   assert.match(enhancedPage, /GhanaPost GPS:/);

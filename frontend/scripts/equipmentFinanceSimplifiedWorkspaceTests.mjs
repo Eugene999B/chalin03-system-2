@@ -60,10 +60,10 @@ assert.match(activation, /Create Agreement/);
 assert.match(activation, /finance-simplified__compact-register/);
 assert.match(activation, /Selected application/);
 
-assert.match(accounts, /Search active installment accounts/);
-assert.match(accounts, /finance-simplified__compact-register/);
-assert.match(accounts, /Selected account/);
-assert.doesNotMatch(accounts, /finance-accounts__grid/);
+assert.match(accounts, /Agreement, customer, phone or excavator/);
+assert.match(accounts, /finance-accounts__grid/);
+assert.match(accounts, /aria-label="Installment account file"/);
+assert.match(accounts, /role="dialog" aria-modal="true"/);
 
 for (const contract of [
   ".finance-simplified__selection-panel",

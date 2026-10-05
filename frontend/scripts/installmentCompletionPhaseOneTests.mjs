@@ -44,8 +44,8 @@ assert.match(
   /if \(!stage \|\| stage === "applications" \|\| stage === "start"\)/
 );
 
-assert.match(inbox, /Action queue only/);
-assert.match(inbox, /This page contains work requiring action/);
+assert.match(inbox, /What needs attention now/);
+assert.match(inbox, /Each row points to the exact customer application or agreement/);
 assert.doesNotMatch(inbox, /Schedule Simulator/);
 assert.doesNotMatch(inbox, /Secure document upload/);
 

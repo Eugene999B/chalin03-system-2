@@ -66,6 +66,8 @@ export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
   const page = stagePage(stage);
-  if (!stage || stage === "applications" || stage === "start") return page;
+  if (!stage || stage === "applications" || stage === "start") {
+    return page;
+  }
   return <Suspense fallback={<FinanceStageFallback />}>{page}</Suspense>;
 }

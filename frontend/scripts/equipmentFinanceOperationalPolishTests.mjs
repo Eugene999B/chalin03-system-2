@@ -18,7 +18,7 @@ const operations = read("src", "pages", "EquipmentFinanceOperationalPolishPage.j
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const styles = read("src", "styles", "equipmentFinanceOperationalPolish.css");
 
-assert.match(workspace, /EquipmentFinancePhaseThreeStartRedirectPage/);
+assert.match(workspace, /EquipmentFinanceStartInstallmentPage/);
 assert.match(workspace, /EquipmentFinanceOperationalPolishPage/);
 assert.match(workspace, /stage === "start"/);
 assert.match(workspace, /stage === "operations"/);

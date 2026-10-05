@@ -135,7 +135,7 @@ export default function EquipmentFinancePaymentHistoryPage() {
       if (format === "print") {
         const printWindow = window.open(url, "_blank");
         if (!printWindow) throw new Error("The browser blocked the print document. Allow pop-ups and try again.");
-        try { printWindow.focus(); } catch {}
+        try { printWindow.focus(); } catch { /* Some browsers deny focus; the print window remains available. */ }
         window.setTimeout(() => URL.revokeObjectURL(url), 60000);
       } else {
         const anchor = document.createElement("a");

@@ -12,7 +12,7 @@ const attention = read("src/components/ApprovalCentreLiveAttention.jsx");
 const main = read("src/main.jsx");
 const packageJson = read("package.json");
 
-assert.match(attention, /const POLL_INTERVAL_MS = 12000/);
+assert.match(attention, /const POLL_INTERVAL_MS = 60000/);
 assert.match(attention, /\/audit-unlock-requests\/operational/);
 assert.match(attention, /payload\?\.summary\?\.pending/);
 assert.match(attention, /payload\?\.summary\?\.failed/);

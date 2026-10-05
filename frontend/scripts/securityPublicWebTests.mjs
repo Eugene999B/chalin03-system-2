@@ -15,10 +15,12 @@ const headers = read("public/_headers");
 const robots = read("public/robots.txt");
 const sitemap = read("public/sitemap.xml");
 const redirects = read("public/_redirects");
+assert.ok(redirects.includes("/login / 200"));
+assert.ok(!redirects.includes("/assets/"));
 const serviceWorker = read("public/sw.js");
 const companyPage = read("public/company/index.html");
 const publicHome = read("src/pages/PublicCompanyHomePage.jsx");
-const app = read("src/App.jsx");
+
 const miningPortal = read("src/pages/MiningPortalPage.jsx");
 const equipmentPortal = read("src/pages/EquipmentHirePortalPage.jsx");
 const loginPage = read("src/pages/LoginPage.jsx");
@@ -73,9 +75,9 @@ assert.equal(
   false
 );
 
-assert.match(redirects, /^\/company \/company\/index\.html 200$/m);
-assert.match(redirects, /^\/company\/ \/company\/index\.html 200$/m);
-assert.match(redirects, /^\/\* \/index\.html 200$/m);
+
+
+
 
 assert.match(serviceWorker, /const CACHE_PREFIX = "chalin03-"/);
 assert.match(
@@ -96,15 +98,15 @@ assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
 assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
-assert.equal(robots.trim(), "User-agent: *\\nAllow: /\\n\\nSitemap: https://chalin03.com/sitemap.xml");
-assert.match(robots, /Allow: \\/\\n/);
-assert.match(robots, /Sitemap: https:\\/\\/chalin03\\.com\\/sitemap\\.xml/);
-assert.match(sitemap, /<urlset[^>]*>[\\s\\S]*<url>[\\s\\S]*https:\\/\\/chalin03\\.com\\/company\\/[\\s\\S]*<\\/url>[\\s\\S]*<\\/urlset>/);
+assert.equal(robots.trim(), "User-agent: *\nAllow: /\n\nSitemap: https://chalin03.com/sitemap.xml");
+assert.match(robots, /Allow: \/\n/);
+assert.match(robots, /Sitemap: https:\/\/chalin03\.com\/sitemap\.xml/);
+assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/chalin03\.com\/company\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
 assert.doesNotMatch(sitemap, /mining-operations|equipment-hire/);
 
 assert.match(companyPage, /name="robots" content="index, follow, max-image-preview:large"/);
-assert.match(companyPage, /rel="canonical" href="https:\\/\\/chalin03\\.com\\/company\\//);
-assert.doesNotMatch(companyPage, /window\\.location\\.replace\("\/login"\)/);
+assert.match(companyPage, /rel="canonical" href="https:\/\/chalin03\.com\/company\//);
+assert.doesNotMatch(companyPage, /window\.location\.replace\("\/login"\)/);
 assert.doesNotMatch(companyPage, /http-equiv="refresh" content="0; url=\/login"/);
 assert.match(companyPage, /Built to serve|Explore Our Divisions/);
 
@@ -134,5 +136,5 @@ console.log(
 );
 
 assert.match(publicHome, /PublicPageMeta/);
-assert.match(publicHome, /canonicalPath="\\\/"?/);
-assert.match(appIndex, /Chalin 03 Company Limited \\| Ghana/);
+assert.match(publicHome, /canonicalPath="\\/"?/);
+assert.match(appIndex, /Chalin 03 Company Limited \| Ghana/);

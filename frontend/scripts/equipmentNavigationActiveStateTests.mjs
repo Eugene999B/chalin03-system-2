@@ -17,7 +17,7 @@ const app = read("src/App.jsx");
 assert.match(layout, /useLocation/);
 assert.match(layout, /function isNavigationItemActive/);
 assert.match(layout, /if \(!item\.matchSearch\) return true/);
-assert.match(layout, /currentSearch === target\.search/);
+assert.match(layout, /new URLSearchParams\(location\.search\)\.toString\(\) === target\.search/);
 assert.match(layout, /aria-current=\{active \? "page" : undefined\}/);
 
 assert.match(

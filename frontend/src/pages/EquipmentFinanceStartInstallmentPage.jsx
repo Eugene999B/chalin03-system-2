@@ -73,7 +73,7 @@ function writePhotoState(key, value) {
   try {
     if (value) window.sessionStorage.setItem(key, JSON.stringify(value));
     else window.sessionStorage.removeItem(key);
-  } catch {}
+  } catch { /* Storage may be unavailable; keep the current in-memory form usable. */ }
 }
 
 function Field({ label, hint, wide = false, children }) {

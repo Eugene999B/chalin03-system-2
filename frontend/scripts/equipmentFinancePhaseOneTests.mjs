@@ -71,10 +71,10 @@ assert.match(minimalWorkflow, /official-outstanding-balance/);
 for (const phrase of [
   "Start New Installment",
   "Select the exact excavator",
-  "Set the exact payment interval",
-  "Customer assessment",
-  "Review and create the draft",
-  "Create Draft Installment",
+  "Build the commercial terms",
+  "Add customer assessment details",
+  "Everything is ready to create the draft",
+  "start-installment",
 ]) {
   assert.match(wizard, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }

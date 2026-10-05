@@ -73,7 +73,7 @@ assert.doesNotMatch(financeLayout, /Finance Equipment Reference/);
 assert.doesNotMatch(financeLayout, /Credit Applications & Approval/);
 
 for (const pageName of [
-  "EquipmentFinancePhaseThreeStartRedirectPage",
+  "EquipmentFinanceStartInstallmentPage",
   "EquipmentFinanceOperationalPolishPage",
   "EquipmentFinanceCustomerCentrePage",
   "EquipmentFinanceExcavatorsPage",
@@ -111,7 +111,7 @@ assert.match(
 );
 
 assert.match(wizard, /Start New Installment/);
-assert.match(wizard, /create a draft/i);
+assert.match(wizard, /create the draft/i);
 assert.match(minimalWorkflow, /automatic Installment Offer/);
 assert.match(minimalWorkflow, /Complete these nine actions/);
 assert.match(wizard, /const API = "\/equipment-catalogue\/sales\/phase-one"/);
