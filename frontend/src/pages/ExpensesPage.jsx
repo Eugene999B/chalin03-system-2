@@ -501,7 +501,8 @@ export default function ExpensesPage() {
         {expenses.length === 0 ? (
           <p>No expenses recorded yet for {currentStoreCode}.</p>
         ) : (
-          <div className="expense-table-wrap expense-desktop-history">
+          <>
+            <div className="expense-table-wrap expense-desktop-history">
             <table className="expense-funding-table">
               <thead>
                 <tr>
@@ -666,6 +667,7 @@ export default function ExpensesPage() {
               );
             })}
           </div>
+          </>
         )}
       </div>
     </div>
