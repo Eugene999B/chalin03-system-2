@@ -58,4 +58,10 @@ test("Group Executive API exposes cash-control and trend evidence", () => {
   assert.match(executiveRoute, /awaiting_verification_count/);
   assert.match(executiveRoute, /Financial Trend/);
   assert.match(executiveRoute, /Cash Control/);
+  assert.match(executiveRoute, /Executive Dashboard/);
+  assert.match(executiveRoute, /GROUP EXECUTIVE INTELLIGENCE/);
+  assert.match(executiveRoute, /MANAGEMENT ACTION QUEUE/);
+  assert.match(executiveRoute, /Command Centre/);
+  assert.match(executiveRoute, /Reporting period:/);
+  assert.match(executivePage, /Download Executive Workbook/);
 });
