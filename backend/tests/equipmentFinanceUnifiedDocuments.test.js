@@ -168,7 +168,7 @@ test("controlled maintenance runs unification after review schema and before del
   assert.ok(review >= 0 && unified > review && authorization > unified);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.equal(
     packageJson.scripts[

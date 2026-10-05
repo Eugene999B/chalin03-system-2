@@ -24,7 +24,7 @@ const ENV_NAMES = [
   "CHALIN03_OBJECT_STORAGE_SECRET_KEY",
 ];
 
-test("object storage stays inactive unless explicitly enabled", () => {
+test("object storage stays inactive unless explicitly enabled", async () => {
   const previous = Object.fromEntries(
     ENV_NAMES.map((name) => [name, process.env[name]])
   );
@@ -35,7 +35,7 @@ test("object storage stays inactive unless explicitly enabled", () => {
     assert.equal(config().enabled, false);
     assert.equal(status().enabled, false);
     assert.equal(status().configured, false);
-    assert.throws(
+    await assert.rejects(
       () =>
         uploadObject({
           key: "test.txt",
@@ -47,7 +47,7 @@ test("object storage stays inactive unless explicitly enabled", () => {
         error.code === "OBJECT_STORAGE_NOT_CONFIGURED" &&
         error.statusCode === 503
     );
-    assert.throws(
+    await assert.rejects(
       () => deleteObject("test.txt"),
       (error) =>
         error instanceof ObjectStorageError &&
@@ -64,9 +64,11 @@ test("object storage stays inactive unless explicitly enabled", () => {
 
 test("object storage migration is additive and preserves legacy payloads", () => {
   const sql = fs.readFileSync(migrationPath, "utf8");
-  assert.match(sql, /ADD COLUMN storage_provider/i);
-  assert.match(sql, /ADD COLUMN storage_key/i);
-  assert.match(sql, /ADD COLUMN storage_status/i);
+  for (const column of ["storage_provider", "storage_key", "storage_status"]) {
+    assert.match(sql, new RegExp("'" + column + "'"));
+  }
+  assert.match(sql, /p_column_name, '\x60 ', p_column_definition/);
+  assert.match(sql, /AND NOT EXISTS/);
   assert.doesNotMatch(sql, /DROP TABLE\s+equipment_(?:media|finance_private_documents)/i);
   assert.doesNotMatch(sql, /DROP COLUMN\s+encrypted_payload/i);
   assert.doesNotMatch(sql, /TRUNCATE\s+TABLE/i);

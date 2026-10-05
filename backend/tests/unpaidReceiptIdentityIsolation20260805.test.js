@@ -159,7 +159,7 @@ test("controlled maintenance runs isolation after the exact Mickey repair", () =
   assert.ok(exactIndex >= 0 && isolationIndex > exactIndex);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.equal(REPAIR_RECORD, "20260805_unpaid_receipt_identity_isolation");
   assert.equal(REQUIRED_EXACT_REPAIR, "20260805_master_mickey_july31_exact_debt_repair");

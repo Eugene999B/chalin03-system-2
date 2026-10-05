@@ -93,8 +93,10 @@ const redirectRules = redirects
   .map((line) => line.trim())
   .filter(Boolean);
 
-assert.equal(redirectRules[0], "/assets/* /404.html 404");
-assert.equal(redirectRules.at(-1), "/* /index.html 200");
+assert.ok(redirectRules.includes("/login /index.html 200"));
+assert.ok(redirectRules.includes("/equipment-installment-finance/* /index.html 200"));
+assert.ok(redirectRules.every(rule => !rule.startsWith("/assets/") && !rule.startsWith("/* ")));
+assert.ok(redirectRules.every(rule => / 200$/.test(rule)), "Pages rewrites use supported status 200");
 
 assert.match(
   headers,

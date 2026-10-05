@@ -89,7 +89,7 @@ test("Finance keeps applications and installment start eager while secondary sta
   );
   assert.doesNotMatch(
     workspace,
-    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy\(\(\) =>/
+    /const EquipmentFinanceStartInstallmentPage = lazy\(\(\) =>/
   );
   assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
   assert.match(startRedirect, /axiosClient\.interceptors\.response\.use/);

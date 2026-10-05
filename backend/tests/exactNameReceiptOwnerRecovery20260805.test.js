@@ -99,7 +99,7 @@ test("controlled maintenance runs exact receipt recovery after rollback and neve
   assert.equal(maintenance.includes("runPostRollbackDebtAccountReconciliation20260805.js"), false);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.equal(
     packageJson.scripts["repair:exact-name-receipt-owners:20260805:production"],

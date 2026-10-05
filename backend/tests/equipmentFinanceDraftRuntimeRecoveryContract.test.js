@@ -93,7 +93,7 @@ test("critical start stage is eager and outside Suspense", () => {
   );
   assert.doesNotMatch(
     workspace,
-    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy/
+    /const EquipmentFinanceStartInstallmentPage = lazy/
   );
   assert.match(
     workspace,

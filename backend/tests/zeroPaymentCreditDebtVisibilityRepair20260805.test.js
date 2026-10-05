@@ -122,7 +122,7 @@ test("the one-time visibility repair runs after backfill in controlled maintenan
   assert.ok(repairIndex > backfillIndex);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.match(source, /schema_migrations/);
   assert.match(source, /GET_LOCK/);

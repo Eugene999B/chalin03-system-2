@@ -25,7 +25,7 @@ BEGIN
           AND COLUMN_NAME = p_column_name
     ) THEN
         SET @object_storage_sql = CONCAT(
-            'ALTER TABLE `', p_table_name, '` ADD COLUMN ', p_column_definition
+            'ALTER TABLE `', p_table_name, '` ADD COLUMN `', p_column_name, '` ', p_column_definition
         );
         PREPARE object_storage_statement FROM @object_storage_sql;
         EXECUTE object_storage_statement;

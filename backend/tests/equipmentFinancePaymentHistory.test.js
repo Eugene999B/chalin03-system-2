@@ -8,7 +8,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "u
 
 test("Finance payment history is isolated, filtered and exact-payment safe", () => {
   const service = read("services/equipmentFinancePaymentHistoryService.js");
-  const routes = read("routes/equipmentFinancePhaseSixRoutes.js");
+  const routes = read("routes/equipmentFinancePaymentHistoryRoutes.js");
 
   for (const contract of [
     "equipment_sale_payments",
@@ -32,6 +32,7 @@ test("Finance payment history is isolated, filtered and exact-payment safe", () 
   }
 
   assert.doesNotMatch(service, /ORDER BY\s+\$\{[^}]*sort/i);
+  assert.match(read("routes/equipmentFinanceIndependentRoutes.js"), /router\.use\(equipmentFinancePaymentHistoryRoutes\)/);
   assert.match(routes, /listPaymentHistory/);
   assert.match(routes, /\/phase6\/payment-history/);
   assert.match(routes, /fleet\.assets\.view/);

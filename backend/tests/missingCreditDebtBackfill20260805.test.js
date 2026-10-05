@@ -43,7 +43,7 @@ test("backfill identity, ordering and one-time production controls are fixed", (
   assert.ok(backfill > exactName);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.equal(
     packageJson.scripts["repair:missing-credit-debts:20260805:production"],

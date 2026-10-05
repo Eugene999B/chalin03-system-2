@@ -77,7 +77,7 @@ test("Applications and Start New Installment load eagerly outside the Finance Su
   );
   assert.doesNotMatch(
     financeWorkspace,
-    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy/
+    /const EquipmentFinanceStartInstallmentPage = lazy/
   );
   assert.match(
     financeWorkspace,

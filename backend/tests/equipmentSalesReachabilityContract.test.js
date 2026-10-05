@@ -33,7 +33,7 @@ test("all simplified Finance routes resolve through the protected Finance layout
 
 test("workspace query stages resolve to explicit Finance pages", () => {
   for (const pageName of [
-    "EquipmentFinancePhaseThreeStartRedirectPage",
+    "EquipmentFinanceStartInstallmentPage",
     "EquipmentFinanceOperationalPolishPage",
     "EquipmentFinanceCustomerCentrePage",
     "EquipmentFinanceExcavatorsPage",

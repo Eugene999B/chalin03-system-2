@@ -225,71 +225,68 @@ async function sendCustomerPaymentReceipt({ paymentId, sentBy = null, retry = fa
     };
   }
 
+  // The unique key claims delivery before any external request. A crash or an
+  // uncertain provider response must never cause an automatic duplicate send.
   if (!cleanText(payment.customer_phone, 40)) {
-    await pool.query(
-      `INSERT INTO equipment_finance_phase6_message_log (
-         message_key, message_type, payment_id, agreement_id, recipient_type,
-         recipient_phone, message_preview, delivery_status, attempt_count,
-         last_error, sent_by
-       ) VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', NULL, ?, 'skipped', 0, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         delivery_status = 'skipped', last_error = VALUES(last_error), updated_at = NOW()`,
-      [messageKey, payment.id, payment.agreement_id, message, "Customer phone is missing.", sentBy]
+    return { ok: false, skipped: true, status: "skipped",
+      reason: "customer_phone_missing", payment_id: payment.id };
+  }
+  const [claim] = await pool.query(
+    `INSERT IGNORE INTO equipment_finance_phase6_message_log
+      (message_key, message_type, payment_id, agreement_id, recipient_type,
+       recipient_phone, message_preview, delivery_status, attempt_count, sent_by)
+     VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', ?, ?, 'pending', 1, ?)`,
+    [messageKey, payment.id, payment.agreement_id, payment.customer_phone, message, sentBy]
+  );
+  let claimed = claim.affectedRows === 1;
+  if (!claimed && retry) {
+    const [reclaim] = await pool.query(
+      `UPDATE equipment_finance_phase6_message_log
+          SET delivery_status = 'pending', claimed_at = NOW(), last_error = NULL,
+              recipient_phone = ?, message_preview = ?, sent_by = ?,
+              attempt_count = attempt_count + 1
+        WHERE message_key = ? AND delivery_status IN ('failed', 'skipped')`,
+      [payment.customer_phone, message, sentBy, messageKey]
     );
-    return {
-      ok: false,
-      skipped: true,
-      status: "skipped",
-      reason: "customer_phone_missing",
-      payment_id: payment.id,
-    };
+    claimed = reclaim.affectedRows === 1;
+  }
+  if (!claimed) {
+    return { ok: false, skipped: true, status: "skipped",
+      reason: "receipt_already_claimed", payment_id: payment.id };
   }
 
-  if (retry) {
+  let result;
+  try {
+    result = await sendSmsAlertToPhone({
+      phone: payment.customer_phone, message, sourceReference: messageKey,
+      smsType: "equipment_finance_payment_alert", sentBy,
+    });
+  } catch (error) {
+    // The provider may have accepted a request before the connection failed.
     await pool.query(
-      `INSERT INTO equipment_finance_phase6_message_log (message_key, message_type, payment_id, agreement_id,
-         recipient_type, recipient_phone, message_preview, delivery_status, attempt_count, last_error, sent_by)
-       VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', ?, ?, 'queued', 0, NULL, ?)
-       ON DUPLICATE KEY UPDATE
-         recipient_phone = VALUES(recipient_phone), message_preview = VALUES(message_preview),
-         delivery_status = 'queued', last_error = NULL, sent_by = VALUES(sent_by), updated_at = NOW()`,
-      [messageKey, payment.id, payment.agreement_id, payment.customer_phone, message, sentBy]
+      `UPDATE equipment_finance_phase6_message_log
+          SET delivery_status = 'delivery_unknown', last_error = ?
+        WHERE message_key = ? AND delivery_status = 'pending'`,
+      [cleanText(error.message), messageKey]
     );
+    throw error;
   }
-  const result = await sendSmsAlertToPhone({
-    phone: payment.customer_phone,
-    message,
-    sourceReference: messageKey,
-    smsType: "equipment_finance_payment_alert",
-  });
-
+  const deliveryStatus = result.status === "delivery_unknown"
+    ? "delivery_unknown" : result.ok ? "submitted" : "failed";
   await pool.query(
-    `INSERT INTO equipment_finance_phase6_message_log (
-       message_key, message_type, payment_id, agreement_id, recipient_type,
-       recipient_phone, message_preview, delivery_status, attempt_count,
-       sent_at, last_error, sent_by
-     ) VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', ?, ?, ?, 1, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       recipient_phone = VALUES(recipient_phone), message_preview = VALUES(message_preview),
-       delivery_status = VALUES(delivery_status), attempt_count = attempt_count + 1,
-       sent_at = VALUES(sent_at), last_error = VALUES(last_error), sent_by = VALUES(sent_by), updated_at = NOW()`,
-    [
-      messageKey,
-      payment.id,
-      payment.agreement_id,
-      payment.customer_phone,
-      message,
-      result.ok ? "submitted" : "failed",
-      result.ok ? new Date() : null,
-      result.ok ? null : result.reason || "SMS provider rejected the request.",
-      sentBy,
-    ]
+    `UPDATE equipment_finance_phase6_message_log
+        SET delivery_status = ?, sent_at = ?, last_error = ?, sms_log_id = ?,
+            updated_at = NOW()
+      WHERE message_key = ? AND delivery_status = 'pending'`,
+    [deliveryStatus, result.ok ? new Date() : null,
+      result.ok ? null : result.reason || result.error || "SMS provider rejected the request.",
+      result.log_id || null, messageKey]
   );
 
   return {
     ok: Boolean(result.ok),
     skipped: false,
-    status: result.ok ? "submitted" : "failed",
+    status: deliveryStatus,
     reason: result.reason || null,
     provider: result.provider || null,
     payment_id: payment.id,
@@ -303,12 +300,15 @@ async function syncCustomerPaymentReceipts({ sentBy = null, limit = 100 } = {}) 
     `SELECT payment.id
        FROM equipment_sale_payments payment
        INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+       INNER JOIN equipment_finance_phase6_runtime_state state
+         ON state.state_key = 'customer_receipt_cutover_at'
        LEFT JOIN equipment_finance_phase6_message_log message
          ON message.message_key = CONCAT('finance-payment-receipt:', payment.id)
       WHERE payment.is_voided = FALSE
         AND agreement.sale_type = 'installment'
         AND agreement.activation_source = 'approved_credit_application'
         AND payment.payment_stage = 'installment'
+        AND payment.payment_date >= CAST(state.state_value AS DATETIME)
         AND (message.id IS NULL OR message.delivery_status IN ('failed','skipped'))
       ORDER BY payment.payment_date DESC, payment.id DESC
       LIMIT ?`,
