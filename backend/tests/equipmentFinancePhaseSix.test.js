@@ -34,7 +34,7 @@ test("Phase 6 is isolated to Equipment Finance and exposes the complete producti
   assert.match(service, /equipment_finance_payment_alerts/);
   assert.match(service, /equipment_finance_phase6_message_log/);
   assert.match(service, /equipment_sale_payment_allocations/);
-  assert.match(service, /oldest/i);
+  assert.match(service, /ORDER BY schedule\.due_date, agreement\.agreement_number, schedule\.sequence_number/);
   assert.match(independentRoutes, /equipmentFinancePhaseSixRoutes/);
   assert.doesNotMatch(routes, /\/api\/debts|spare_parts|sale_items/);
   assert.doesNotMatch(service, /\bdebts\b|spare_parts|sale_items/);

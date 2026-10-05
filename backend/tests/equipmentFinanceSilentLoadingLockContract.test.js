@@ -69,7 +69,7 @@ test("Applications and Start New Installment load eagerly outside the Finance Su
   );
   assert.match(
     financeWorkspace,
-    /import EquipmentFinancePhaseThreeStartRedirectPage from "\.\/EquipmentFinancePhaseThreeStartRedirectPage";/
+    /import EquipmentFinanceStartInstallmentPage from "\.\/EquipmentFinanceStartInstallmentPage";/
   );
   assert.doesNotMatch(
     financeWorkspace,

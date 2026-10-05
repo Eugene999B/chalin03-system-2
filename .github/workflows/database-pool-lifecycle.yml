@@ -55,3 +55,28 @@ jobs:
           DB_IDLE_TIMEOUT_MS: "60000"
           DB_SSL: "false"
         run: node --test tests/database-idle-pool.test.js
+      - name: Exercise additive storage migration twice on isolated fixtures
+        env:
+          RUN_STORAGE_MIGRATION_TEST: "1"
+        run: node --test tests/object-storage-migration-integration.test.js
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-verified-build
+          path: frontend/dist

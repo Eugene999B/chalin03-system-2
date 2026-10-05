@@ -6,8 +6,9 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "../..");
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
-test("Finance runtime contract repair is part of Railway pre-deploy", () => {
-  const railway = read("railway.json");
+test("Finance runtime contract repair remains explicit maintenance", () => {
+  const railway = JSON.parse(read("backend", "package.json")).scripts["maintenance:legacy-predeploy-repairs"];
+  assert.deepEqual(JSON.parse(read("railway.json")).deploy.preDeployCommand, []);
   assert.match(railway, /node scripts\/runEquipmentFinanceRuntimeContractRepairV2\.js/);
   assert.match(railway, /runEquipmentFinanceProductionPredeployRepair\.js/);
   assert.match(railway, /finalizeEquipmentFinanceOpeningDepositReservationTrigger\.js/);

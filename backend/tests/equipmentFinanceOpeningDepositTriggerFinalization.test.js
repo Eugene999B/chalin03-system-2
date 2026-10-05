@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const railway = fs.readFileSync(path.resolve(process.cwd(), "../railway.json"), "utf8");
+const railway = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")).scripts["maintenance:legacy-predeploy-repairs"];
 const resetService = fs.readFileSync(path.resolve(process.cwd(), "services/installmentFinanceResetProductionService.js"), "utf8");
 const finalizer = fs.readFileSync(path.resolve(process.cwd(), "scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js"), "utf8");
 const commitmentFinalizer = fs.readFileSync(path.resolve(process.cwd(), "scripts/finalizeEquipmentFinanceCommitmentTrigger.js"), "utf8");
 
-test("Railway finalizes all Finance triggers before readiness verification", () => {
+test("Controlled maintenance finalizes all Finance triggers before readiness verification", () => {
   const repairIndex = railway.indexOf("node scripts/runEquipmentFinanceProductionPredeployRepair.js");
   const reservationIndex = railway.indexOf("node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js");
   const commitmentIndex = railway.indexOf("node scripts/finalizeEquipmentFinanceCommitmentTrigger.js");

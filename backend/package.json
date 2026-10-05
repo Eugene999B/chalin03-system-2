@@ -41,7 +41,8 @@
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
     "test": "node --test tests/*.test.js",
-    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js"
+    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js",
+    "maintenance:legacy-predeploy-repairs": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runSparePartsUserSettingsAccessControlMigration.js && node scripts/runCustomerFeatureControlsProductionMigration.js && node scripts/runEquipmentFinanceScheduleCatchupRepairV5.js && node scripts/runEquipmentFinanceScheduleTruthRepairV4.js && node scripts/runEquipmentFinanceDateEvidenceRepairV3.js && node scripts/runEquipmentFinanceRuntimeContractRepairV2.js && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js && node scripts/finalizeEquipmentFinanceCommitmentTrigger.js && node scripts/runEquipmentFinanceSmsAlertMigration.js && node scripts/runEquipmentFinanceLateFeePolicyMigration.js && node scripts/verifyEquipmentFinanceDepositReadiness.js && node scripts/runEquipmentFinanceNotificationPolicyMigration.js"
   },
   "engines": {
     "node": ">=20"

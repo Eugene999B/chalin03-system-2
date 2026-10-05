@@ -81,7 +81,7 @@ test("Finance keeps applications and installment start eager while secondary sta
   );
   assert.match(
     workspace,
-    /^import EquipmentFinancePhaseThreeStartRedirectPage from "\.\/EquipmentFinancePhaseThreeStartRedirectPage";/m
+    /^import EquipmentFinanceStartInstallmentPage from "\.\/EquipmentFinanceStartInstallmentPage";/m
   );
   assert.doesNotMatch(
     workspace,

@@ -6,8 +6,9 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "../..");
 function read(...parts) { return fs.readFileSync(path.join(root, ...parts), "utf8"); }
 
-test("Finance Railway runs date-evidence repair before runtime contract repair", () => {
-  const railway = read("railway.json");
+test("Controlled maintenance retains date-evidence repair without automatic deployment mutation", () => {
+  const railway = JSON.parse(read("backend", "package.json")).scripts["maintenance:legacy-predeploy-repairs"];
+  assert.deepEqual(JSON.parse(read("railway.json")).deploy.preDeployCommand, []);
   assert.match(railway, /runEquipmentFinanceDateEvidenceRepairV3\.js/);
   assert.match(railway, /runEquipmentFinanceRuntimeContractRepairV2\.js/);
 });
