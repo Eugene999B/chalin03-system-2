@@ -44,22 +44,26 @@ assert.match(
 );
 assert.doesNotMatch(appIndex, /content="noindex/i);
 assert.match(appIndex, /<title>Chalin 03 Company Limited \| Ghana<\/title>/);
-assert.match(
-  appIndex,
-  /<link rel="icon" type="image\/png" sizes="192x192" href="\/app-icon-192\.png"\/>/s
-);
-assert.match(
-  appIndex,
-  /<link rel="shortcut icon" type="image\/png" href="\/app-icon-192\.png"\/>/s
-);
-assert.match(
-  appIndex,
-  /<link rel="apple-touch-icon" sizes="192x192" href="\/app-icon-192\.png"\/>/s
-);
+assert.match(appIndex, /<link rel="icon" href="\/favicon\.ico" sizes="any" \/>/);
+assert.match(appIndex, /<link rel="icon" type="image\/png" sizes="16x16" href="\/favicon-16x16\.png" \/>/);
+assert.match(appIndex, /<link rel="icon" type="image\/png" sizes="32x32" href="\/favicon-32x32\.png" \/>/);
+assert.match(appIndex, /<link rel="icon" type="image\/png" sizes="48x48" href="\/favicon-48x48\.png" \/>/);
+assert.match(appIndex, /<link rel="icon" type="image\/png" sizes="192x192" href="\/favicon-192x192\.png" \/>/);
+assert.match(appIndex, /<link rel="shortcut icon" href="\/favicon\.ico" \/>/);
+assert.match(appIndex, /<link rel="apple-touch-icon" sizes="180x180" href="\/apple-touch-icon\.png" \/>/);
 assert.match(appIndex, /<link rel="manifest" href="\/site\.webmanifest"/);
 
-assert.equal(fs.existsSync(path.join(frontendRoot, "public/app-icon-192.png")), true);
-assert.equal(fs.existsSync(path.join(frontendRoot, "public/app-icon-512.png")), true);
+for (const asset of [
+  "favicon.ico",
+  "favicon-16x16.png",
+  "favicon-32x32.png",
+  "favicon-48x48.png",
+  "favicon-192x192.png",
+  "favicon-512x512.png",
+  "apple-touch-icon.png",
+]) {
+  assert.equal(fs.existsSync(path.join(frontendRoot, "public", asset)), true);
+}
 assert.equal(
   fs.existsSync(path.join(frontendRoot, "public/site.webmanifest")),
   true
@@ -83,8 +87,7 @@ assert.match(
   /const CACHE_NAME = `\$\{CACHE_PREFIX\}app-shell-\$\{safeRelease\}`/
 );
 assert.match(serviceWorker, /\/site\.webmanifest/);
-assert.match(serviceWorker, /\/app-icon-192\.png/);
-assert.match(serviceWorker, /\/app-icon-512\.png/);
+assert.doesNotMatch(serviceWorker, /\/app-icon-(192|512)\.png/);
 assert.match(serviceWorker, /url\.origin !== self\.location\.origin/);
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api"\)/);
 assert.match(serviceWorker, /name\.startsWith\(CACHE_PREFIX\) && name !== CACHE_NAME/);

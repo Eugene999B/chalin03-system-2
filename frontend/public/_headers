@@ -55,6 +55,27 @@ https://chalin03.com/
 /site.webmanifest
   Cache-Control: no-cache, max-age=0, must-revalidate
 
+/favicon.ico
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-16x16.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-32x32.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-48x48.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-192x192.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-512x512.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
   X-Content-Type-Options: nosniff
