@@ -883,7 +883,7 @@ export default function GroupExecutiveControlPage() {
                   label="Installment Finance collection rate"
                   value={finance.collection_rate}
                   displayValue={percent(finance.collection_rate)}
-                  tone="blue"
+                  tone="green"
                 />
                 <ProgressLine
                   label="Finance portfolio currently overdue"
