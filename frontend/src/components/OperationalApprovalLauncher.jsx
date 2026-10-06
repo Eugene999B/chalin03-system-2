@@ -505,10 +505,10 @@ export default function OperationalApprovalLauncher() {
           right: 18px;
           bottom: 18px;
           z-index: 2450;
-          border: 1px solid #7c5d00;
+          border: 1px solid #7c5d00 !important;
           border-radius: 999px;
-          background: linear-gradient(135deg, #f3cf4f, #d9a90e);
-          color: #07182c;
+          background: linear-gradient(135deg, #f3cf4f, #d9a90e) !important;
+          color: #07182c !important;
           box-shadow: 0 18px 48px rgba(7, 24, 44, .30);
           padding: 12px 17px;
           font-weight: 950;
