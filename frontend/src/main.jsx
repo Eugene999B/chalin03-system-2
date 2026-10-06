@@ -70,11 +70,38 @@ function requestAssetRecovery(reason) {
 }
 
 if ("serviceWorker" in navigator) {
-  // Temporary host-offline operation:
-  // actively remove every Chalin03 service worker and its caches so browsers
-  // cannot serve a Chalin03-generated offline page after DNS is disconnected.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "CHALIN03_ASSET_MISMATCH") {
+      requestAssetRecovery("service-worker-asset-mismatch");
+    }
+  });
+
   window.addEventListener("load", () => {
+    if (import.meta.env.PROD) {
+      const hadActiveController = Boolean(navigator.serviceWorker.controller);
+      let reloadingForUpdate = false;
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadActiveController || reloadingForUpdate) return;
+        reloadingForUpdate = true;
+        window.location.reload();
+      });
+
+      navigator.serviceWorker
+        .register(`/sw.js?release=${encodeURIComponent(APP_SHELL_RELEASE)}`, {
+          scope: "/",
+          updateViaCache: "none",
+        })
+        .then((registration) => {
+          registration.waiting?.postMessage({ type: "CHALIN03_SKIP_WAITING" });
+          registration.update().catch(() => {});
+          console.log(`✅ Chalin 03 service worker registered (${APP_SHELL_RELEASE})`);
+        })
+        .catch((error) => {
+          console.error("❌ Service worker registration failed:", error);
+        });
+      return;
+    }
     removeDevelopmentServiceWorkerCaches();
   });
 }
-
