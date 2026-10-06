@@ -1,15 +1,16 @@
 const STORAGE_KEY = "chalin03-theme";
+const THEME_RESTORE_KEY = "chalin03-theme-restore-20261006-v1";
 const VALID_MODES = new Set(["light", "dark", "system"]);
 
 function normalizeMode(value) {
-  return VALID_MODES.has(value) ? value : "system";
+  return VALID_MODES.has(value) ? value : "light";
 }
 
 export function getStoredChalinTheme() {
   try {
     return normalizeMode(window.localStorage.getItem(STORAGE_KEY));
   } catch {
-    return "system";
+    return "light";
   }
 }
 
@@ -42,6 +43,15 @@ export function setChalinTheme(mode) {
 }
 
 export function initializeChalinTheme() {
+  try {
+    if (window.localStorage.getItem(THEME_RESTORE_KEY) !== "1") {
+      window.localStorage.setItem(STORAGE_KEY, "light");
+      window.localStorage.setItem(THEME_RESTORE_KEY, "1");
+    }
+  } catch {
+    // Restricted storage still falls back to the classic light interface.
+  }
+
   applyChalinTheme(getStoredChalinTheme());
 
   const media = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -56,4 +66,4 @@ export function getChalinThemeMode() {
   return document.documentElement.dataset.chalinThemeMode || getStoredChalinTheme();
 }
 
-export { STORAGE_KEY };
+export { STORAGE_KEY, THEME_RESTORE_KEY };
