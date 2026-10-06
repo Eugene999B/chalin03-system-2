@@ -22,8 +22,8 @@ import "./styles/chalinDarkModeV4.css";
 import "./styles/chalinDarkModeV4Compat.css";
 
 const APP_BUILD_ID =
-  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v38";
-const APP_SHELL_RELEASE = `browser-cache-integrity-v38-${APP_BUILD_ID}`;
+  import.meta.env.VITE_CHALIN03_BUILD_ID || "browser-cache-integrity-v39";
+const APP_SHELL_RELEASE = `browser-cache-integrity-v39-${APP_BUILD_ID}`;
 
 initializeChalinTheme();
 installCommandGateHistoryTracker();
