@@ -24,6 +24,8 @@ assert.match(themeCss, /bwl-shell\.bwl-theme-finance-signature/);
 assert.match(themeUtil, /VALID_MODES = new Set\(\["light", "dark", "system"\]\)/);
 assert.match(themeUtil, /localStorage\.getItem\(STORAGE_KEY\)/);
 assert.match(themeUtil, /localStorage\.setItem\(STORAGE_KEY, normalized\)/);
+assert.match(themeUtil, /THEME_RESTORE_KEY/);
+assert.match(themeUtil, /localStorage\.setItem\(STORAGE_KEY, "light"\)/);
 assert.match(themeUtil, /prefers-color-scheme: dark/);
 assert.match(themeUtil, /chalin03-theme-change/);
 
@@ -58,6 +60,8 @@ assert.match(entry, /\.\/styles\/chalinDarkModeV4Compat\.css/);
 assert.ok(entry.indexOf('./styles/chalinDarkModeV4Compat.css') > entry.indexOf('./styles/chalinDarkModeV4.css'));
 assert.ok(entry.indexOf('./styles/chalinDarkModeV4Compat.css') > entry.indexOf('./styles/themeHardening.css'));
 assert.doesNotMatch(html, /<script[^>]+src=["']\/darkMode\.js["']/);
+assert.match(html, /chalin03-theme-restore-20261006-v1/);
+assert.match(html, /localStorage\.setItem\("chalin03-theme", "light"\)/);
 assert.doesNotMatch(html, /c03-dark-mode/);
 
 console.log("✅ Chalin 03 dark-mode V4 coverage and integration checks passed.");

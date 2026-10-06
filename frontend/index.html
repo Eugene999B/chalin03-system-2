@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b1118" />
+    <meta name="theme-color" content="#f7f9fc" />
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="Chalin 03 Company Limited provides spare-parts, mining-operations and equipment-hire services in Ghana." />
     <meta name="robots" content="index, follow" />
@@ -25,16 +25,27 @@
     <script>
       (() => {
         try {
+          const restoreKey = "chalin03-theme-restore-20261006-v1";
+          if (window.localStorage.getItem(restoreKey) !== "1") {
+            window.localStorage.setItem("chalin03-theme", "light");
+            window.localStorage.setItem(restoreKey, "1");
+          }
+
           const stored = window.localStorage.getItem("chalin03-theme");
-          const mode = stored === "dark" || stored === "light" || stored === "system" ? stored : "system";
-          const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches === true;
-          const resolved = mode === "system" ? (systemDark ? "dark" : "light") : mode;
+          const mode =
+            stored === "dark" || stored === "light" || stored === "system"
+              ? stored
+              : "light";
+          const systemDark =
+            window.matchMedia?.("(prefers-color-scheme: dark)")?.matches === true;
+          const resolved =
+            mode === "system" ? (systemDark ? "dark" : "light") : mode;
           document.documentElement.dataset.chalinTheme = resolved;
           document.documentElement.dataset.chalinThemeMode = mode;
           document.documentElement.style.colorScheme = resolved;
         } catch {
           document.documentElement.dataset.chalinTheme = "light";
-          document.documentElement.dataset.chalinThemeMode = "system";
+          document.documentElement.dataset.chalinThemeMode = "light";
           document.documentElement.style.colorScheme = "light";
         }
       })();
