@@ -62,7 +62,11 @@ export function equipmentWorkspaceRole(user = {}) {
 }
 
 export function isEquipmentAdministrator(user = {}) {
-  return enabled(user.is_original_system_administrator);
+  return (
+    enabled(user.is_original_system_administrator) ||
+    (normalized(user.role) === "admin" &&
+      String(user.primary_workspace_code || "").trim() === "*")
+  );
 }
 
 export function canAccessEquipmentDivision(user = {}, division) {
