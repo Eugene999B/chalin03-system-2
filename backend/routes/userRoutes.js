@@ -561,6 +561,10 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
         updated_at
        FROM users
        WHERE primary_workspace_code = 'spare_parts'
+          OR (
+            role = 'admin'
+            AND category_assignment_status = 'system_admin'
+          )
           OR (id = ? AND username = ? AND role = 'admin')
        ORDER BY created_at DESC`,
       [SYSTEM_ADMIN_ID, SYSTEM_ADMIN_USERNAME]
@@ -865,14 +869,31 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
+    const isDelegatedSystemAdmin =
+      String(existingUser.role || "").toLowerCase() === "admin" &&
+      String(existingUser.category_assignment_status || "").toLowerCase() ===
+        "system_admin";
+
     if (
       !isOriginalSystemAdministrator(existingUser) &&
+      !isDelegatedSystemAdmin &&
       String(existingUser.primary_workspace_code || "") !== "spare_parts"
     ) {
       return res.status(409).json({
         status: "error",
         message: "This user belongs to another independent business category.",
       });
+    }
+
+    if (isDelegatedSystemAdmin) {
+      const requester = await getUserById(req.user.id);
+      if (!isOriginalSystemAdministrator(requester)) {
+        return res.status(403).json({
+          status: "error",
+          message:
+            "Only the original System Administrator can edit a Delegated System Administrator account.",
+        });
+      }
     }
 
     if (isOriginalSystemAdministrator(existingUser)) {
