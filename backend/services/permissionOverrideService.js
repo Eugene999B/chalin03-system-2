@@ -170,12 +170,10 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
     String(session?.role || "").trim().toLowerCase() === "admin" &&
     (await hasDelegatedCapability(session, "enabled", connection))
   ) {
-    return uniquePermissions(
-      getEffectivePermissions({
-        ...session,
-        workspace_code: workspaceCode,
-      })
-    );
+    // Owner-approved Delegated System Administrators receive the complete
+    // operational permission catalog. Original-owner-only recovery/destructive
+    // actions remain protected by their separate identity gates.
+    return uniquePermissions(ALL_PERMISSIONS);
   }
 
   const basePermissions = roleDefaultPermissions({
