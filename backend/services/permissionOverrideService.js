@@ -12,6 +12,9 @@ const {
 const {
   isOriginalSystemAdministrator,
 } = require("../security/systemAdminIdentity");
+const {
+  hasDelegatedCapability,
+} = require("./delegatedAdministrationService");
 
 const WORKSPACE_CODES = new Set([
   "spare_parts",
@@ -162,6 +165,19 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
     );
   }
 
+  const connection = options.connection || pool;
+  if (
+    String(session?.role || "").trim().toLowerCase() === "admin" &&
+    (await hasDelegatedCapability(session, "enabled", connection))
+  ) {
+    return uniquePermissions(
+      getEffectivePermissions({
+        ...session,
+        workspace_code: workspaceCode,
+      })
+    );
+  }
+
   const basePermissions = roleDefaultPermissions({
     ...session,
     workspace_code: workspaceCode,
@@ -169,7 +185,7 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
   const overrides = await loadActivePermissionOverrides({
     userId: session.id,
     workspaceCode,
-    connection: options.connection || pool,
+    connection,
   });
 
   return applyPermissionOverrides(basePermissions, overrides);
