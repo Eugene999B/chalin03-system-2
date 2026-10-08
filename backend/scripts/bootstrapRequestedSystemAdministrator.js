@@ -44,12 +44,12 @@ async function bootstrap() {
   const fullName = clean(process.env.REQUESTED_SYSTEM_ADMIN_FULL_NAME);
   const username = clean(process.env.REQUESTED_SYSTEM_ADMIN_USERNAME);
   const phone = clean(process.env.REQUESTED_SYSTEM_ADMIN_PHONE);
-  const temporaryPassword = String(
-    process.env.REQUESTED_SYSTEM_ADMIN_TEMP_PASSWORD || ""
-  );
+  // Owner requested the initial temporary password to match the login phone.
+  // It is hashed immediately and is never stored in source control or audit text.
+  const temporaryPassword = phone;
   const normalizedPhone = normalizedPhoneForStorage(phone);
 
-  if (!fullName || !username || !phone || !temporaryPassword) {
+  if (!fullName || !username || !phone) {
     throw new Error(
       "Requested System Administrator bootstrap variables are incomplete."
     );
