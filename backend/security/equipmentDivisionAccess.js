@@ -58,7 +58,11 @@ function workspaceRoleFor(user = {}) {
 }
 
 function isEquipmentAdministrator(user = {}) {
-  return isOriginalSystemAdministrator(user);
+  return (
+    isOriginalSystemAdministrator(user) ||
+    (normalizeCode(user.role) === "admin" &&
+      String(user.primary_workspace_code || "").trim() === "*")
+  );
 }
 
 function hasEquipmentDivisionAccess(user = {}, division) {
