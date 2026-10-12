@@ -731,7 +731,12 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
         };
       }
 
-      if (isCurrencyHeader(header) && typeof cell.value === "number") {
+      // A column containing "Total Item Quantity" or "Units Bought" is a
+      // count, even if a generic currency heuristic sees "total".
+      if (isExplicitQuantityHeader(header) && typeof cell.value === "number") {
+        cell.numFmt = "#,##0.##";
+        cell.alignment = { vertical: "top", horizontal: "right" };
+      } else if (isCurrencyHeader(header) && typeof cell.value === "number") {
         cell.numFmt = '"GHS" #,##0.00;[Red]-"GHS" #,##0.00';
         cell.alignment = { vertical: "top", horizontal: "right" };
       } else if (isQuantityHeader(header) && typeof cell.value === "number") {
@@ -769,6 +774,81 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
 
     column.width = Math.min(Math.max(maxLength, minimumWidth), 42);
   });
+
+  // A compact management review sheet: readable rows, clear financial
+  // amounts, no currency symbols in units, counts, staff IDs or summary counts.
+  if (baseName === "discount-audit") {
+    const widths = {
+      "Receipt Number": 25,
+      "Sale Date": 22,
+      "Staff Member": 23,
+      "Products Bought (Summary)": 64,
+      "Units Bought": 14,
+      "Discount Amount (GHS)": 23,
+      "Original Amount (GHS)": 24,
+      "Final Sale Amount (GHS)": 24,
+      "Customer": 27,
+      "Payment Type": 17,
+      "Amount Paid (GHS)": 22,
+      "Outstanding (GHS)": 21,
+      "Sale Status": 17,
+      "Voided?": 13,
+      "Product Bought": 37,
+      "Quantity": 13,
+      "Unit Price (GHS)": 21,
+      "Line Amount (GHS)": 21,
+      "Sale ID": 14,
+      "Branch ID": 14,
+      "Staff ID": 14,
+      "Product Lines": 14,
+      "Customer Phone": 20,
+      "Void Reason": 34,
+      "Voided By": 22,
+      "Voided At": 22,
+      "Metric": 56,
+      "Value": 43,
+      "Active Sales Count": 21,
+      "Voided Sales Count": 23,
+      "Total Discount Amount (GHS)": 28,
+      "Largest Single Discount (GHS)": 30,
+    };
+    worksheet.columns.forEach((column, index) => {
+      const name = analysis.headers[index] || "";
+      if (widths[name]) column.width = widths[name];
+    });
+
+    if (worksheet.name === "Discounted Sales") {
+      worksheet.views = [{ state: "frozen", xSplit: 2, ySplit: headerRowIndex }];
+    }
+    for (let i = startDataRow; i <= endDataRow; i += 1) {
+      const row = worksheet.getRow(i);
+      row.height = worksheet.name === "Discounted Sales" ? 46 : 26;
+      if (worksheet.name === "Investigation Summary") {
+        const metric = String(row.getCell(1).value || "");
+        const valueCell = row.getCell(2);
+        if (typeof valueCell.value === "number") {
+          valueCell.numFmt = metric.includes("(GHS)")
+            ? '"GHS" #,##0.00;[Red]-"GHS" #,##0.00'
+            : "#,##0.##";
+        }
+        if (/discount amount|largest single discount/i.test(metric)) {
+          valueCell.font = { bold: true, color: { argb: "FF754300" } };
+        }
+      }
+      if (["Discounted Sales", "Staff Breakdown"].includes(worksheet.name)) {
+        const discountColumn = analysis.headers.findIndex((name) =>
+          name === "Discount Amount (GHS)" ||
+          name === "Total Discount Amount (GHS)"
+        );
+        if (discountColumn >= 0) {
+          const cell = row.getCell(discountColumn + 1);
+          cell.font = { bold: true, color: { argb: "FF754300" } };
+          cell.fill = { type: "pattern", pattern: "solid",
+            fgColor: { argb: "FFFFF3CC" } };
+        }
+      }
+    }
+  }
 
   worksheet.pageSetup = {
     orientation: analysis.columnCount > 7 ? "landscape" : "portrait",
@@ -3124,10 +3204,10 @@ router.get(
       staffSheet.columns = [
         { header: "Staff ID", key: "id" },
         { header: "Staff Member", key: "name" },
-        { header: "Active Discounted Sales", key: "count" },
+        { header: "Active Sales Count", key: "count" },
         { header: "Total Discount Amount (GHS)", key: "discount" },
         { header: "Largest Single Discount (GHS)", key: "maxDiscount" },
-        { header: "Voided Discounted Sales", key: "voidedCount" },
+        { header: "Voided Sales Count", key: "voidedCount" },
       ];
       for (const [id, member] of byStaff) {
         staffSheet.addRow({ id, ...member, name: safe(member.name) });
