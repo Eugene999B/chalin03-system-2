@@ -6,7 +6,7 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 
-const { isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent } =
+const { isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems } =
   require("../services/discountAuditHelpers");
 
 const router = express.Router();
@@ -2946,6 +2946,9 @@ router.get(
         { header: "Staff", key: "staff" },
         { header: "Customer", key: "customer" },
         { header: "Customer Phone", key: "phone" },
+        { header: "Items Purchased (Qty, Product, Price)", key: "items_purchased" },
+        { header: "Product Lines", key: "item_lines" },
+        { header: "Total Item Quantity", key: "item_quantity" },
         { header: "Subtotal Before Discount (GHS)", key: "subtotal" },
         { header: "Discount (GHS)", key: "discount" },
         { header: "Discount % of Subtotal", key: "percent" },
@@ -2967,12 +2970,16 @@ router.get(
       itemsSheet.columns = [
         { header: "Sale ID", key: "sale_id" },
         { header: "Receipt", key: "receipt" },
+        { header: "Customer", key: "customer" },
+        { header: "Staff", key: "staff" },
+        { header: "Sale Date", key: "date" },
         { header: "Product", key: "product" },
         { header: "Quantity", key: "quantity" },
         { header: "Unit Price (GHS)", key: "price" },
         { header: "Line Total (GHS)", key: "total" },
         { header: "Sale Discount (GHS) - Reference Only, Do Not Sum", key: "sale_discount" },
       ];
+      const saleItemsById = new Map();
       for (let startIndex = 0; startIndex < sales.length; startIndex += 300) {
         const batch = sales.slice(startIndex, startIndex + 300);
         const placeholders = batch.map(() => "?").join(",");
@@ -2987,8 +2994,13 @@ router.get(
         for (const item of items) {
           const parent = salesById.get(Number(item.sale_id));
           if (!parent) continue;
+          const saleItems = saleItemsById.get(Number(item.sale_id)) || [];
+          saleItems.push(item);
+          saleItemsById.set(Number(item.sale_id), saleItems);
           itemsSheet.addRow({
             sale_id: item.sale_id, receipt: safe(parent.receipt_number),
+            customer: safe(parent.customer_name), staff: safe(parent.staff_name),
+            date: formatDateTime(parent.created_at),
             product: safe(item.product_name),
             quantity: Number(item.quantity || 0),
             price: Number(item.unit_price || 0),
@@ -3000,6 +3012,7 @@ router.get(
       const byStaff = new Map();
       let activeDiscount = 0, voidedDiscount = 0, activeGross = 0;
       for (const sale of sales) {
+        const recordedItems = saleItemsById.get(Number(sale.id)) || [];
         const discount = Number(sale.discount_amount || 0);
         const subtotal = Number(sale.subtotal || 0);
         const voided = isVoidedSale(sale);
@@ -3016,6 +3029,9 @@ router.get(
           date: formatDateTime(sale.created_at), branch: sale.branch_id,
           staff_id: sale.staff_id, staff: safe(sale.staff_name),
           customer: safe(sale.customer_name), phone: safe(sale.customer_phone),
+          items_purchased: describeSaleItems(recordedItems),
+          item_lines: recordedItems.length,
+          item_quantity: recordedItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
           subtotal, discount, percent: percent === null ? "N/A" : Number(percent.toFixed(2)),
           tax: Number(sale.tax_amount || 0), total: Number(sale.total || 0),
           paid: Number(sale.amount_paid || 0), balance: Number(sale.balance || 0),
@@ -3037,7 +3053,7 @@ router.get(
         ["Voided/cancelled discount total (GHS) — excluded above", voidedDiscount],
         ["Review threshold", "20%+ of recorded subtotal; flag is not proof of misconduct"],
         ["Scope", "Selected branch only; based on stored sale-level discount_amount"],
-        ["Item breakdown disclaimer", "Products listed per sale. Discounts are not allocated to individual items."],
+        ["Item breakdown disclaimer", "Each receipt lists purchased products, quantities and historical line prices. The recorded discount applies to the sale as a whole."],
       ].forEach(([metric, value]) => summary.addRow({ metric, value }));
       const staffSheet = workbook.addWorksheet("Staff Breakdown");
       staffSheet.columns = [
