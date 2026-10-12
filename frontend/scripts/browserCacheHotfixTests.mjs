@@ -68,7 +68,7 @@ assert.match(recovery, /url\.pathname\.startsWith\("\/assets\/"\)/);
 assert.match(recovery, /Updating Chalin 03/);
 
 assert.match(mainEntry, /VITE_CHALIN03_BUILD_ID/);
-assert.match(mainEntry, /browser-cache-integrity-v38/);
+assert.match(mainEntry, /browser-cache-integrity-v40/);
 assert.match(mainEntry, /updateViaCache: "none"/);
 assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
 assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
