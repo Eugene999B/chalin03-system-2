@@ -6,6 +6,9 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 
+const { isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent } =
+  require("../services/discountAuditHelpers");
+
 const router = express.Router();
 
 function getBranchId(req) {
@@ -2903,20 +2906,17 @@ router.get(
   requireRole("admin"),
   async (req, res) => {
     try {
-      const actorRole = String(req.user?.role || "").toLowerCase();
       // requireRole permits auditors on exports generally, so check explicitly.
-      if (actorRole !== "admin") {
+      if (!isAdminAuthorized(req.user)) {
         return res.status(403).json({ status: "error", message: "Administrator authorization required." });
       }
       const branchId = getBranchId(req);
       const from = cleanText(req.query.from);
       const to = cleanText(req.query.to);
-      if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) ||
-          (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) ||
-          (from && to && from > to)) {
+      if (!isValidDateRange(from, to)) {
         return res.status(400).json({ message: "Invalid reporting date range." });
       }
-      const params = [branchId];
+            const params = [branchId];
       const dateFilter = buildDateFilter("s", "created_at", from, to, params);
       const [sales] = await pool.query(
         `SELECT s.id, s.branch_id, s.receipt_number, s.created_at,
@@ -2961,10 +2961,7 @@ router.get(
         { header: "Voided At", key: "voided_at" },
         { header: "Review Flag", key: "flag" },
       ];
-      const safe = (value) => {
-        const text = cleanText(value);
-        return /^[\s]*[=+@-]/.test(text) ? "'" + text : text;
-      };
+      const safe = escapeExcelText;
       // Product-level detail. Discounts are stored on the sale, not on each line.
       const itemsSheet = workbook.addWorksheet("Products in Discounted Sales");
       itemsSheet.columns = [
@@ -3006,7 +3003,7 @@ router.get(
         const discount = Number(sale.discount_amount || 0);
         const subtotal = Number(sale.subtotal || 0);
         const voided = isVoidedSale(sale);
-        const percent = subtotal > 0 ? discount / subtotal * 100 : null;
+        const percent = discountPercent(discount, subtotal);
         if (voided) voidedDiscount += discount;
         else { activeDiscount += discount; activeGross += subtotal; }
         const staffKey = sale.staff_id || "Unknown";
