@@ -2971,7 +2971,7 @@ router.get(
         { header: "Quantity", key: "quantity" },
         { header: "Unit Price (GHS)", key: "price" },
         { header: "Line Total (GHS)", key: "total" },
-        { header: "Sale-Level Discount (GHS)", key: "sale_discount" },
+        { header: "Sale Discount (GHS) - Reference Only, Do Not Sum", key: "sale_discount" },
       ];
       for (let startIndex = 0; startIndex < sales.length; startIndex += 300) {
         const batch = sales.slice(startIndex, startIndex + 300);
@@ -3009,7 +3009,7 @@ router.get(
         const staffKey = sale.staff_id || "Unknown";
         const aggregate = byStaff.get(staffKey) || { name: sale.staff_name || "Unknown", count: 0, discount: 0, high: 0 };
         if (!voided) { aggregate.count += 1; aggregate.discount += discount; }
-        if (percent !== null && percent >= 20) aggregate.high += 1;
+        if (!voided && percent !== null && percent >= 20) aggregate.high += 1;
         byStaff.set(staffKey, aggregate);
         details.addRow({
           id: sale.id, receipt: safe(sale.receipt_number),
@@ -3046,7 +3046,7 @@ router.get(
         { header: "Active Discounts (GHS)", key: "discount" },
         { header: "High Discount Flags", key: "high" },
       ];
-      for (const [id, info] of byStaff) staffSheet.addRow({ id, name: safe(info.name), ...info });
+      for (const [id, info] of byStaff) staffSheet.addRow({ id, ...info, name: safe(info.name) });
       styleWorksheet(details); styleWorksheet(summary); styleWorksheet(staffSheet); styleWorksheet(itemsSheet);
       console.info("Discount audit export", { userId: req.user?.id, branchId, from, to, count: sales.length });
       return sendStoreWorkbook(req, res, workbook, "discount-audit");
