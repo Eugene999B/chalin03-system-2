@@ -2903,11 +2903,16 @@ router.get(
   requireRole("admin"),
   async (req, res) => {
     try {
+      const actorRole = String(req.user?.role || "").toLowerCase();
+      // requireRole permits auditors on exports generally, so check explicitly.
+      if (actorRole !== "admin") {
+        return res.status(403).json({ status: "error", message: "Administrator authorization required." });
+      }
       const branchId = getBranchId(req);
       const from = cleanText(req.query.from);
       const to = cleanText(req.query.to);
-      if ((from && !/^\\d{4}-\\d{2}-\\d{2}$/.test(from)) ||
-          (to && !/^\\d{4}-\\d{2}-\\d{2}$/.test(to)) ||
+      if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) ||
+          (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) ||
           (from && to && from > to)) {
         return res.status(400).json({ message: "Invalid reporting date range." });
       }
@@ -2958,8 +2963,43 @@ router.get(
       ];
       const safe = (value) => {
         const text = cleanText(value);
-        return /^[=+@\\-\\t\\r]/.test(text) ? "'" + text : text;
+        return /^[\s]*[=+@-]/.test(text) ? "'" + text : text;
       };
+      // Product-level detail. Discounts are stored on the sale, not on each line.
+      const itemsSheet = workbook.addWorksheet("Products in Discounted Sales");
+      itemsSheet.columns = [
+        { header: "Sale ID", key: "sale_id" },
+        { header: "Receipt", key: "receipt" },
+        { header: "Product", key: "product" },
+        { header: "Quantity", key: "quantity" },
+        { header: "Unit Price (GHS)", key: "price" },
+        { header: "Line Total (GHS)", key: "total" },
+        { header: "Sale-Level Discount (GHS)", key: "sale_discount" },
+      ];
+      for (let startIndex = 0; startIndex < sales.length; startIndex += 300) {
+        const batch = sales.slice(startIndex, startIndex + 300);
+        const placeholders = batch.map(() => "?").join(",");
+        const [items] = await pool.query(
+          `SELECT si.sale_id, si.product_name, si.quantity, si.unit_price, si.line_total
+             FROM sale_items si
+            WHERE si.sale_id IN (${placeholders})
+            ORDER BY si.sale_id, si.id`,
+          batch.map((sale) => sale.id)
+        );
+        const salesById = new Map(batch.map((sale) => [Number(sale.id), sale]));
+        for (const item of items) {
+          const parent = salesById.get(Number(item.sale_id));
+          if (!parent) continue;
+          itemsSheet.addRow({
+            sale_id: item.sale_id, receipt: safe(parent.receipt_number),
+            product: safe(item.product_name),
+            quantity: Number(item.quantity || 0),
+            price: Number(item.unit_price || 0),
+            total: Number(item.line_total || 0),
+            sale_discount: Number(parent.discount_amount || 0),
+          });
+        }
+      }
       const byStaff = new Map();
       let activeDiscount = 0, voidedDiscount = 0, activeGross = 0;
       for (const sale of sales) {
@@ -3000,6 +3040,7 @@ router.get(
         ["Voided/cancelled discount total (GHS) — excluded above", voidedDiscount],
         ["Review threshold", "20%+ of recorded subtotal; flag is not proof of misconduct"],
         ["Scope", "Selected branch only; based on stored sale-level discount_amount"],
+        ["Item breakdown disclaimer", "Products listed per sale. Discounts are not allocated to individual items."],
       ].forEach(([metric, value]) => summary.addRow({ metric, value }));
       const staffSheet = workbook.addWorksheet("Staff Breakdown");
       staffSheet.columns = [
@@ -3009,7 +3050,7 @@ router.get(
         { header: "High Discount Flags", key: "high" },
       ];
       for (const [id, info] of byStaff) staffSheet.addRow({ id, name: safe(info.name), ...info });
-      styleWorksheet(details); styleWorksheet(summary); styleWorksheet(staffSheet);
+      styleWorksheet(details); styleWorksheet(summary); styleWorksheet(staffSheet); styleWorksheet(itemsSheet);
       console.info("Discount audit export", { userId: req.user?.id, branchId, from, to, count: sales.length });
       return sendStoreWorkbook(req, res, workbook, "discount-audit");
     } catch (error) {
