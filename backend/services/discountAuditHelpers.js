@@ -35,19 +35,39 @@ function discountPercent(discount, subtotal) {
  * An overall sale discount must never be misrepresented as an item discount.
  */
 function describeSaleItems(items) {
-  if (!Array.isArray(items) || items.length === 0) return "No recorded items — review receipt";
-  const lines = items.map((item) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return "No items recorded - see receipt";
+  }
+  const labels = items.map((item) => {
     const quantity = Number(item.quantity || 0);
-    const unitPrice = Number(item.unit_price || 0);
-    const lineTotal = Number(item.line_total || 0);
-    const productName = String(item.product_name || "Unnamed product").replace(/[\r\n]+/g, " ").trim();
-    return `${quantity} × ${productName} @ GHS ${unitPrice.toFixed(2)} = GHS ${lineTotal.toFixed(2)}`;
+    const name = String(item.product_name || "Unnamed product")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return `${quantity} x ${name}`;
   });
-  // Excel cells cannot exceed 32,767 characters. Never silently omit items:
-  // the full product list remains available on the separate item worksheet.
-  const value = lines.join("\n");
-  if (value.length <= 32000) return escapeExcelText(value);
-  return escapeExcelText(value.slice(0, 31900) + "\n[Long item list — see Products in Discounted Sales worksheet for full detail]");
+  // Keep the overview readable on mobile. The item worksheet preserves every
+  // historic item and exact price without truncation.
+  const preview = [];
+  let used = 0;
+  for (const label of labels) {
+    if (preview.length >= 4 || used + label.length > 175) break;
+    preview.push(label);
+    used += label.length + 3;
+  }
+  if (preview.length === 0) preview.push(labels[0].slice(0, 120));
+  const remaining = labels.length - preview.length;
+  return escapeExcelText(
+    preview.join("; ") +
+      (remaining > 0 ? ` (+${remaining} more - see Purchased Items sheet)` : "")
+  );
 }
 
-module.exports = { isAdminAuthorized, isValidDate, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems };
+/** True count/quantity headers must never be printed with a GHS currency mask. */
+function isExplicitQuantityHeader(header) {
+  return /\b(?:quantity|qty|units? bought|units? purchased|product lines|item count|number of items|discounted sales count|receipt count)\b/i.test(
+    String(header || "")
+  );
+}
+
+module.exports = { isAdminAuthorized, isValidDate, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems, isExplicitQuantityHeader };
