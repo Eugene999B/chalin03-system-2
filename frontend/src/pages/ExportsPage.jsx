@@ -71,7 +71,7 @@ const REPORTS = [
     category: "Sales",
     icon: "🔍",
     endpoint: "/exports/discount-audit",
-    description: "Boss-only audit of every sale with a recorded discount above zero. Includes employee breakdown, voided sales and high-discount review flags. Clear dates for all history; selected branch only.",
+    description: "Boss-only report of every discounted receipt, now showing exactly which products were bought, quantities, historical unit prices and line totals. Includes staff analysis, voided sales and high-discount flags. Clear dates for all history; selected branch only.",
     dateFilter: true,
     featured: true,
     adminOnly: true,
