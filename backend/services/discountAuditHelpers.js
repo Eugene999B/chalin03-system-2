@@ -65,7 +65,7 @@ function describeSaleItems(items) {
 
 /** True count/quantity headers must never be printed with a GHS currency mask. */
 function isExplicitQuantityHeader(header) {
-  return /\b(?:quantity|qty|units? bought|units? purchased|product lines|item count|number of items|discounted sales count|receipt count)\b/i.test(
+  return /\b(?:quantity|qty|units? bought|units? purchased|product lines|item count|number of items|discounted sales count|sales count|receipt count)\b/i.test(
     String(header || "")
   );
 }
