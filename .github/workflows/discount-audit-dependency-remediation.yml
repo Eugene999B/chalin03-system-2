@@ -11,12 +11,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Resolve and audit backend dependencies
         working-directory: backend
         run: |
+          npm install --package-lock-only --ignore-scripts
           npm ci
           npm audit fix
           npm audit --omit=dev --audit-level=high
