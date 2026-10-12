@@ -1,10 +1,8 @@
 name: One-time discount audit dependency remediation
 on:
-  push:
+  pull_request:
     branches:
-      - feature/discount-audit-download-713
-    paths:
-      - .github/workflows/discount-audit-dependency-remediation.yml
+      - production
 permissions:
   contents: write
 jobs:
