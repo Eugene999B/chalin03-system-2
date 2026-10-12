@@ -1,0 +1,45 @@
+name: One-time discount audit dependency remediation
+on:
+  push:
+    branches:
+      - feature/discount-audit-download-713
+    paths:
+      - .github/workflows/discount-audit-dependency-remediation.yml
+permissions:
+  contents: read
+jobs:
+  generate-safe-lockfiles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Resolve and audit backend dependencies
+        working-directory: backend
+        run: |
+          npm ci
+          npm audit fix
+          npm audit --omit=dev --audit-level=high
+      - name: Resolve and audit frontend dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit fix
+          npm audit --omit=dev --audit-level=high
+      - name: Verify packages after remediation
+        run: |
+          (cd backend && npm run syntax-check && npm test)
+          (cd frontend && npm test && npm run lint && npm run build)
+      - name: Upload remediated lockfile artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: discount-audit-remediated-lockfiles
+          path: |
+            backend/package.json
+            backend/package-lock.json
+            frontend/package.json
+            frontend/package-lock.json
+          retention-days: 2
