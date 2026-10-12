@@ -48,7 +48,7 @@ test("each discounted receipt lists its historical items, quantities and pre-dis
   ]);
   assert.equal(
     result,
-    "2 × Rice 5kg @ GHS 65.00 = GHS 130.00\\n1 × Cooking Oil @ GHS 40.00 = GHS 40.00"
+    "2 × Rice 5kg @ GHS 65.00 = GHS 130.00\n1 × Cooking Oil @ GHS 40.00 = GHS 40.00"
   );
   assert.equal(describeSaleItems([]), "No recorded items — review receipt");
 });
@@ -61,7 +61,7 @@ test("receipt item list preserves sale snapshots rather than applying sale disco
 
 test("receipt item list normalizes newlines and protects against spreadsheet formulas", () => {
   assert.equal(
-    describeSaleItems([{ product_name: "=HYPERLINK(1)\\nspam", quantity: 1, unit_price: 4, line_total: 4 }]),
+    describeSaleItems([{ product_name: "=HYPERLINK(1)\nspam", quantity: 1, unit_price: 4, line_total: 4 }]),
     "1 × =HYPERLINK(1) spam @ GHS 4.00 = GHS 4.00"
   );
 });
