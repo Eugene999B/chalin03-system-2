@@ -40,14 +40,14 @@ function describeSaleItems(items) {
     const quantity = Number(item.quantity || 0);
     const unitPrice = Number(item.unit_price || 0);
     const lineTotal = Number(item.line_total || 0);
-    const productName = String(item.product_name || "Unnamed product").replace(/[\\r\\n]+/g, " ").trim();
+    const productName = String(item.product_name || "Unnamed product").replace(/[\r\n]+/g, " ").trim();
     return `${quantity} × ${productName} @ GHS ${unitPrice.toFixed(2)} = GHS ${lineTotal.toFixed(2)}`;
   });
   // Excel cells cannot exceed 32,767 characters. Never silently omit items:
   // the full product list remains available on the separate item worksheet.
-  const value = lines.join("\\n");
+  const value = lines.join("\n");
   if (value.length <= 32000) return escapeExcelText(value);
-  return escapeExcelText(value.slice(0, 31900) + "\\n[Long item list — see Products in Discounted Sales worksheet for full detail]");
+  return escapeExcelText(value.slice(0, 31900) + "\n[Long item list — see Products in Discounted Sales worksheet for full detail]");
 }
 
 module.exports = { isAdminAuthorized, isValidDate, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems };
