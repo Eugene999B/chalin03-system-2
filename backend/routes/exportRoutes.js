@@ -2895,6 +2895,130 @@ router.get(
   }
 );
 
+// GET /api/exports/discount-audit — restricted financial investigation report.
+// Uses the authoritative persisted sale-level discount, not inferred price differences.
+router.get(
+  "/discount-audit",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+      if ((from && !/^\\d{4}-\\d{2}-\\d{2}$/.test(from)) ||
+          (to && !/^\\d{4}-\\d{2}-\\d{2}$/.test(to)) ||
+          (from && to && from > to)) {
+        return res.status(400).json({ message: "Invalid reporting date range." });
+      }
+      const params = [branchId];
+      const dateFilter = buildDateFilter("s", "created_at", from, to, params);
+      const [sales] = await pool.query(
+        `SELECT s.id, s.branch_id, s.receipt_number, s.created_at,
+                s.customer_name, s.customer_phone, s.staff_id,
+                u.full_name AS staff_name, s.subtotal, s.discount_amount,
+                s.tax_amount, s.total, s.payment_type, s.amount_paid,
+                s.balance, s.sale_status, s.is_voided, s.void_reason,
+                s.voided_at, vu.full_name AS voided_by_name
+           FROM sales s
+           LEFT JOIN users u ON u.id = s.staff_id
+           LEFT JOIN users vu ON vu.id = s.voided_by
+          WHERE s.branch_id = ? AND s.discount_amount > 0
+          ${dateFilter}
+          ORDER BY s.created_at DESC, s.id DESC`,
+        params
+      );
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+      const details = workbook.addWorksheet("Discounted Sales");
+      details.columns = [
+        { header: "Sale ID", key: "id" },
+        { header: "Receipt", key: "receipt" },
+        { header: "Date and Time", key: "date" },
+        { header: "Branch ID", key: "branch" },
+        { header: "Staff ID", key: "staff_id" },
+        { header: "Staff", key: "staff" },
+        { header: "Customer", key: "customer" },
+        { header: "Customer Phone", key: "phone" },
+        { header: "Subtotal Before Discount (GHS)", key: "subtotal" },
+        { header: "Discount (GHS)", key: "discount" },
+        { header: "Discount % of Subtotal", key: "percent" },
+        { header: "Tax (GHS)", key: "tax" },
+        { header: "Final Total (GHS)", key: "total" },
+        { header: "Amount Paid (GHS)", key: "paid" },
+        { header: "Outstanding (GHS)", key: "balance" },
+        { header: "Payment Type", key: "payment" },
+        { header: "Sale Status", key: "status" },
+        { header: "Voided", key: "voided" },
+        { header: "Void Reason", key: "reason" },
+        { header: "Voided By", key: "voided_by" },
+        { header: "Voided At", key: "voided_at" },
+        { header: "Review Flag", key: "flag" },
+      ];
+      const safe = (value) => {
+        const text = cleanText(value);
+        return /^[=+@\\-\\t\\r]/.test(text) ? "'" + text : text;
+      };
+      const byStaff = new Map();
+      let activeDiscount = 0, voidedDiscount = 0, activeGross = 0;
+      for (const sale of sales) {
+        const discount = Number(sale.discount_amount || 0);
+        const subtotal = Number(sale.subtotal || 0);
+        const voided = isVoidedSale(sale);
+        const percent = subtotal > 0 ? discount / subtotal * 100 : null;
+        if (voided) voidedDiscount += discount;
+        else { activeDiscount += discount; activeGross += subtotal; }
+        const staffKey = sale.staff_id || "Unknown";
+        const aggregate = byStaff.get(staffKey) || { name: sale.staff_name || "Unknown", count: 0, discount: 0, high: 0 };
+        if (!voided) { aggregate.count += 1; aggregate.discount += discount; }
+        if (percent !== null && percent >= 20) aggregate.high += 1;
+        byStaff.set(staffKey, aggregate);
+        details.addRow({
+          id: sale.id, receipt: safe(sale.receipt_number),
+          date: formatDateTime(sale.created_at), branch: sale.branch_id,
+          staff_id: sale.staff_id, staff: safe(sale.staff_name),
+          customer: safe(sale.customer_name), phone: safe(sale.customer_phone),
+          subtotal, discount, percent: percent === null ? "N/A" : Number(percent.toFixed(2)),
+          tax: Number(sale.tax_amount || 0), total: Number(sale.total || 0),
+          paid: Number(sale.amount_paid || 0), balance: Number(sale.balance || 0),
+          payment: safe(sale.payment_type), status: safe(sale.sale_status),
+          voided: voided ? "YES" : "NO", reason: safe(sale.void_reason),
+          voided_by: safe(sale.voided_by_name), voided_at: formatDateTime(sale.voided_at),
+          flag: percent !== null && percent >= 20 ? "REVIEW: 20%+ discount" : "",
+        });
+      }
+      const summary = workbook.addWorksheet("Investigation Summary");
+      summary.columns = [{ header: "Metric", key: "metric" }, { header: "Value", key: "value" }];
+      [
+        ["Branch ID", branchId], ["From", from || "All history"],
+        ["To", to || "All history"], ["Discounted sales including voided", sales.length],
+        ["Active discounted sales", sales.filter((s) => !isVoidedSale(s)).length],
+        ["Active sales subtotal (GHS)", activeGross],
+        ["Active discount total (GHS)", activeDiscount],
+        ["Active effective discount %", activeGross ? Number((100 * activeDiscount / activeGross).toFixed(2)) : 0],
+        ["Voided/cancelled discount total (GHS) — excluded above", voidedDiscount],
+        ["Review threshold", "20%+ of recorded subtotal; flag is not proof of misconduct"],
+        ["Scope", "Selected branch only; based on stored sale-level discount_amount"],
+      ].forEach(([metric, value]) => summary.addRow({ metric, value }));
+      const staffSheet = workbook.addWorksheet("Staff Breakdown");
+      staffSheet.columns = [
+        { header: "Staff ID", key: "id" }, { header: "Staff", key: "name" },
+        { header: "Active Discounted Sales", key: "count" },
+        { header: "Active Discounts (GHS)", key: "discount" },
+        { header: "High Discount Flags", key: "high" },
+      ];
+      for (const [id, info] of byStaff) staffSheet.addRow({ id, name: safe(info.name), ...info });
+      styleWorksheet(details); styleWorksheet(summary); styleWorksheet(staffSheet);
+      console.info("Discount audit export", { userId: req.user?.id, branchId, from, to, count: sales.length });
+      return sendStoreWorkbook(req, res, workbook, "discount-audit");
+    } catch (error) {
+      console.error("Discount audit export failed:", error);
+      return res.status(500).json({ status: "error", message: "Could not prepare discount audit export." });
+    }
+  }
+);
+
 // GET /api/exports/sales
 router.get(
   "/sales",
