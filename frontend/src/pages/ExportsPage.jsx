@@ -71,7 +71,7 @@ const REPORTS = [
     category: "Sales",
     icon: "🔍",
     endpoint: "/exports/discount-audit",
-    description: "Boss-only report of every discounted receipt, now showing exactly which products were bought, quantities, historical unit prices and line totals. Includes staff analysis, voided sales and high-discount flags. Clear dates for all history; selected branch only.",
+    description: "Clear Excel investigation report with purchased products, quantities, staff, customer, and actual discount amounts in Ghana cedis. Separate worksheets show full purchased-item prices, staff totals and audit references. Clear dates for all history.",
     dateFilter: true,
     featured: true,
     adminOnly: true,
