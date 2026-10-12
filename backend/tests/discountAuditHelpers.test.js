@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems,
+  isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems, isExplicitQuantityHeader,
 } = require("../services/discountAuditHelpers");
 
 test("discount audit is restricted to true administrators, not auditors or managers", () => {
@@ -41,27 +41,37 @@ test("discount percentage is computed from persisted sale-level gross and discou
   assert.equal(discountPercent(20, 0), null);
 });
 
-test("each discounted receipt lists its historical items, quantities and pre-discount amounts", () => {
+test("discount summary is compact but clearly identifies purchased products and quantities", () => {
   const result = describeSaleItems([
     { product_name: "Rice 5kg", quantity: 2, unit_price: 65, line_total: 130 },
     { product_name: "Cooking Oil", quantity: 1, unit_price: 40, line_total: 40 },
   ]);
-  assert.equal(
-    result,
-    "2 × Rice 5kg @ GHS 65.00 = GHS 130.00\n1 × Cooking Oil @ GHS 40.00 = GHS 40.00"
-  );
-  assert.equal(describeSaleItems([]), "No recorded items — review receipt");
+  assert.equal(result, "2 x Rice 5kg; 1 x Cooking Oil");
+  assert.equal(describeSaleItems([]), "No items recorded - see receipt");
 });
 
-test("receipt item list preserves sale snapshots rather than applying sale discount to individual products", () => {
-  const source = { product_name: "Mixer", quantity: 1, unit_price: 200, line_total: 200 };
-  assert.equal(describeSaleItems([source]), "1 × Mixer @ GHS 200.00 = GHS 200.00");
+test("products summary never invents a discount per item", () => {
+  const item = { product_name: "Mixer", quantity: 1, unit_price: 200, line_total: 200 };
+  assert.equal(describeSaleItems([item]), "1 x Mixer");
   assert.equal(discountPercent(50, 200), 25);
 });
 
-test("receipt item list normalizes newlines and protects against spreadsheet formulas", () => {
-  assert.equal(
-    describeSaleItems([{ product_name: "=HYPERLINK(1)\nspam", quantity: 1, unit_price: 4, line_total: 4 }]),
-    "1 × =HYPERLINK(1) spam @ GHS 4.00 = GHS 4.00"
-  );
+test("product lists prevent row overflow and link to the complete item worksheet", () => {
+  const manyItems = Array.from({ length: 9 }, (_, n) => ({
+    product_name: "Item " + (n + 1), quantity: 1,
+  }));
+  const preview = describeSaleItems(manyItems);
+  assert.match(preview, /1 x Item 1/);
+  assert.match(preview, /\(\+5 more - see Purchased Items sheet\)/);
+  assert.doesNotMatch(preview, /Item 9/);
+  assert.equal(describeSaleItems([{ product_name: "=HYPERLINK(1)\nspam", quantity: 1 }]), "1 x =HYPERLINK(1) spam");
+});
+
+test("quantities and staff counts cannot receive Ghana-cedi number formatting", () => {
+  for (const header of ["Total Item Quantity", "Units Bought", "Quantity", "Product Lines", "Active Sales Count", "Voided Sales Count"]) {
+    assert.equal(isExplicitQuantityHeader(header), true, header);
+  }
+  for (const header of ["Unit Price (GHS)", "Discount Amount (GHS)", "Final Sale Amount (GHS)", "Amount Paid (GHS)"]) {
+    assert.equal(isExplicitQuantityHeader(header), false, header);
+  }
 });
