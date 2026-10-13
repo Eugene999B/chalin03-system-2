@@ -1,3 +1,5 @@
+const { nameForRole, signatureImageForRole } =
+  require("./equipmentFinanceDocumentPartyNamesService");
 const PDFDocument = require("pdfkit");
 
 const {
@@ -321,16 +323,14 @@ function signatures(doc, snapshot, document, roles) {
     const rowY = index % 2 === 0 ? doc.y : doc.y - 80;
     const x = left + (index % 2) * columnWidth;
     const record = snapshot.signatures?.find((item) => item.signer_role === role);
-    const fallback = role === "seller" ? snapshot.company?.authorised_seller_signature_data_url : null;
-    const image = dataImage(record?.signature_data_url || fallback);
+    const image = dataImage(signatureImageForRole(snapshot, role, record));
     doc.fillColor("#174f35").font("Helvetica-Bold").fontSize(8).text(title, x, rowY, {
       width: columnWidth - 15,
     });
     if (image) doc.image(image, x, rowY + 13, { fit: [145, 40] });
     doc.fillColor("#26362e").font("Helvetica").fontSize(7).text(
       `Name: ${text(
-        record?.signer_name ||
-          (role === "seller" ? snapshot.company?.authorised_seller_name : ""),
+        nameForRole(snapshot, role, record),
         ""
       )}`,
       x,
