@@ -102,8 +102,10 @@ function signingParties(document) {
     ? [["guarantor", "Guarantor"], ["buyer", "Buyer"], ["seller", "Authorised seller representative"]]
     : type === "settlement_confirmation"
       ? [["seller", "Authorised seller representative"], ["buyer", "Customer"]]
-      : [["seller", "Authorised seller representative"], ["buyer", "Buyer"],
-         ["buyer_witness", "Buyer witness"], ["guarantor", "Guarantor"]];
+      : ["ownership_transfer", "amendment_agreement", "delivery_handover_note"].includes(type)
+        ? [["seller", "Authorised seller representative"], ["buyer", "Buyer"], ["buyer_witness", "Witness"]]
+        : [["seller", "Authorised seller representative"], ["buyer", "Buyer"],
+           ["buyer_witness", "Buyer witness"], ["guarantor", "Guarantor"]];
 
   const rows = roles.map(([role, title]) => {
     const record = document.snapshot?.signatures?.find((item) => item.signer_role === role);
