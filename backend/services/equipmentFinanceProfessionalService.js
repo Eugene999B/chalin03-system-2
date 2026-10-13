@@ -1152,6 +1152,12 @@ function addPdfHeader(doc, snapshot, documentNumberValue) {
       : "EXCAVATOR SALE & INSTALLMENT AGREEMENT",
     { align: "center" }
   );
+  if (snapshot.source_reference && !snapshot.price_scenario) {
+    doc.moveDown(0.2).font("Helvetica-Bold").fontSize(8.5)
+      .fillColor("#9a571d")
+      .text("SOURCE REPRINT - REFERENCE COPY, NOT A NEW ISSUED DOCUMENT", { align: "center" })
+      .fillColor("#000000");
+  }
   if (snapshot.price_scenario) {
     doc.moveDown(0.2);
     doc.font("Helvetica-Bold").fontSize(9).fillColor("#984018")
