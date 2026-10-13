@@ -111,6 +111,31 @@ router.get("/professional/price-documents/:agreementId", async (req, res) => {
   }
 });
 
+// Reference reprint from ORIGINAL finance values; never writes or issues a new contract.
+// The actual issued document download remains the preferred original when available.
+router.get("/professional/price-documents/:agreementId/source-pdf", async (req, res) => {
+  try {
+    const id = safeId(req.params.agreementId);
+    if (!id) return res.status(400).json({ status: "error", message: "Invalid agreement." });
+    const original = await loadAgreementSnapshot(id);
+    const reference = {
+      ...original,
+      source_reference: true,
+    };
+    const pdf = await renderAgreementPdf(reference, `SOURCE-REFERENCE-${id}`);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="Excavator-${id}-Original-Reference.pdf"`,
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-store",
+    });
+    return res.send(pdf);
+  } catch (error) {
+    console.error("Original price document reference:", error);
+    return err(res, error);
+  }
+});
+
 async function scenarioFromRequest(req) {
   if (!safeId(req.params.agreementId)) {
     const error = new Error("Invalid agreement.");
