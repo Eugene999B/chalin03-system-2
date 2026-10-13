@@ -41,7 +41,6 @@ export default function ExcavatorPriceDocumentsPage() {
   const [agreement, setAgreement] = useState(null);
   const [original, setOriginal] = useState(null);
   const [price, setPrice] = useState("");
-  const [deposit, setDeposit] = useState("");
   const [projection, setProjection] = useState(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -85,7 +84,6 @@ export default function ExcavatorPriceDocumentsPage() {
       if (!loaded) throw new Error("Agreement details are unavailable.");
       setAgreement(loaded);
       setPrice(String(loaded.total_amount || ""));
-      setDeposit(String(loaded.deposit_required || 0));
       const issued = (documents.data?.documents || [])
         .filter((d) => d.document_type === "installment_agreement")
         .sort((a, b) => Number(b.id) - Number(a.id));
@@ -99,14 +97,12 @@ export default function ExcavatorPriceDocumentsPage() {
 
   function proposed() {
     const priceNumber = Number(price);
-    const depositNumber = Number(deposit);
     if (!Number.isFinite(priceNumber) || priceNumber <= 0 ||
-        !Number.isFinite(depositNumber) || depositNumber < 0 ||
-        depositNumber > priceNumber) {
-      setError("Enter a valid price and deposit.");
+        priceNumber < Number(agreement?.deposit_required || 0)) {
+      setError("Enter a valid selling price above the original deposit.");
       return null;
     }
-    return { price: priceNumber, deposit: depositNumber };
+    return { price: priceNumber };
   }
 
   async function preview() {
@@ -242,6 +238,7 @@ export default function ExcavatorPriceDocumentsPage() {
                 <div className="price-documents__amounts">
                   <div><span>Original price</span><strong>GHS {money(agreement.total_amount)}</strong></div>
                   <div><span>Already received</span><strong>GHS {money(agreement.amount_paid)}</strong></div>
+                  <div><span>Original deposit</span><strong>GHS {money(agreement.deposit_required)}</strong></div>
                 </div>
 
                 <div className="price-documents__fields">
@@ -252,13 +249,7 @@ export default function ExcavatorPriceDocumentsPage() {
                         value={price} onChange={(event) => { setPrice(event.target.value); setProjection(null); }} />
                     </span>
                   </label>
-                  <label>Proposed deposit
-                    <span className="price-documents__input">
-                      <span>GHS</span>
-                      <input type="number" min="0" step="0.01" inputMode="decimal"
-                        value={deposit} onChange={(event) => { setDeposit(event.target.value); setProjection(null); }} />
-                    </span>
-                  </label>
+
                 </div>
 
                 <div className="price-documents__actions">
