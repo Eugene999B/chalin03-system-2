@@ -143,18 +143,22 @@ export default function ExcavatorPriceDocumentsPage() {
   }
 
   async function downloadOriginal() {
-    if (!original?.id) return;
+    if (!selectedId) return;
     setBusy("original");
     setError("");
     try {
-      const response = await axiosClient.get(
-        `/equipment-catalogue/sales/professional/documents/${original.id}/download`, {
-          params: { format: "pdf" }, responseType: "blob",
-        }
-      );
-      savePdf(response.data, `Original-${original.document_number || selectedId}.pdf`);
+      const path = original?.id
+        ? `/equipment-catalogue/sales/professional/documents/${original.id}/download`
+        : `${ROOT}/${selectedId}/source-pdf`;
+      const response = await axiosClient.get(path, {
+        ...(original?.id ? { params: { format: "pdf" } } : {}),
+        responseType: "blob",
+      });
+      savePdf(response.data, original?.id
+        ? `Original-${original.document_number || selectedId}.pdf`
+        : `Excavator-${selectedId}-Original-Reference.pdf`);
     } catch (err) {
-      setError(await errorMessage(err, "Could not download the issued original."));
+      setError(await errorMessage(err, "Could not download the original agreement copy."));
     } finally {
       setBusy("");
     }
@@ -267,11 +271,11 @@ export default function ExcavatorPriceDocumentsPage() {
                     Preview payments
                   </button>
                   <button type="button" className="price-documents__secondary"
-                    disabled={Boolean(busy) || !original} onClick={downloadOriginal}>
-                    {busy === "original" ? "Downloading…" : "Original agreement"}
+                    disabled={Boolean(busy)} onClick={downloadOriginal}>
+                    {busy === "original" ? "Downloading…" : original ? "Original agreement" : "Original reference PDF"}
                   </button>
                 </div>
-                {!original && <p className="price-documents__muted">No previously issued original PDF found.</p>}
+
 
                 {projection && (
                   <div className="price-documents__projection">
