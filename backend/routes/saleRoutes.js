@@ -1881,6 +1881,19 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
     const sale = sales[0];
 
+    // Prevent unapproved users from quietly removing or altering an existing
+    // discount while editing a historic sale. Both increases and reversals
+    // of a positive discount require the protected boss identity.
+    if (discountApprovalRequired(sale.discount_amount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "A discounted sale can only be changed by Agyapong Charles (Boss) or the original System Administrator.",
+      });
+    }
+
     if (sale.payment_type === "installment" || payment_type === "installment") {
       await connection.rollback();
       return res.status(409).json({
