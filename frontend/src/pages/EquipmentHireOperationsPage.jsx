@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import {
   HIRE_ACTION_PERMISSIONS,
@@ -375,7 +376,7 @@ const createReportsData = () => ({
 });
 
 export default function EquipmentHireOperationsPage({ section = "overview" }) {
-  const { effectivePermissions, hasAnyPermission } = useAuth();
+  const { user, effectivePermissions, hasAnyPermission } = useAuth();
   const {
     options: hireLocationOptions,
     selectedContextId,
@@ -383,6 +384,7 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
     automaticAccess,
     loading: contextLoading,
   } = useWorkspaceContext();
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, selectedContextId);
   const hireMutationPermissions = Object.values(HIRE_ACTION_PERMISSIONS).filter(Boolean);
   const canEdit = hasAnyPermission(hireMutationPermissions);
   const canManageCustomer = canUseHireAction(effectivePermissions, "customer");
@@ -1708,21 +1710,23 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
                     <option value="mixed">Mixed</option>
                   </select>
                 </label>
-                <label>
-                  Discount
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={quotationForm.discount_amount}
-                    onChange={(event) =>
-                      setQuotationForm({
-                        ...quotationForm,
-                        discount_amount: event.target.value,
-                      })
-                    }
-                  />
-                </label>
+                {canApplyDiscount && (
+                  <label>
+                    Discount (Boss / System Administrator)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={quotationForm.discount_amount}
+                      onChange={(event) =>
+                        setQuotationForm({
+                          ...quotationForm,
+                          discount_amount: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                )}
                 <label>
                   Tax rate %
                   <input
@@ -2533,21 +2537,23 @@ export default function EquipmentHireOperationsPage({ section = "overview" }) {
                     }
                   />
                 </label>
-                <label>
-                  Discount
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={invoiceForm.discount_amount}
-                    onChange={(event) =>
-                      setInvoiceForm({
-                        ...invoiceForm,
-                        discount_amount: event.target.value,
-                      })
-                    }
-                  />
-                </label>
+                {canApplyDiscount && (
+                  <label>
+                    Discount (Boss / System Administrator)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={invoiceForm.discount_amount}
+                      onChange={(event) =>
+                        setInvoiceForm({
+                          ...invoiceForm,
+                          discount_amount: event.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                )}
                 <label>
                   Tax rate %
                   <input
