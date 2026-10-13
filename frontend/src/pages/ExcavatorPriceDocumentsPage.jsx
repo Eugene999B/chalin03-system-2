@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
@@ -10,11 +11,12 @@ const money = (value) => Number(value || 0).toLocaleString("en-GH", {
   maximumFractionDigits: 2,
 });
 
-function savePdf(data, filename) {
-  const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+function saveFile(data, filename, format = "pdf") {
+  const url = URL.createObjectURL(new Blob([data], { type: format === "word" ? "application/msword" : "application/pdf" }));
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
+  if (format === "print") link.target = "_blank";
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -37,6 +39,7 @@ export default function ExcavatorPriceDocumentsPage() {
   const allowed = useSaleDiscountPermission(user?.id, user?.branch_id);
   const [search, setSearch] = useState("");
   const [agreements, setAgreements] = useState([]);
+  const [documents, setDocuments] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [agreement, setAgreement] = useState(null);
   const [original, setOriginal] = useState(null);
@@ -63,6 +66,9 @@ export default function ExcavatorPriceDocumentsPage() {
   useEffect(() => {
     if (!allowed) return;
     fetchAgreements("");
+    axiosClient.get(`${ROOT}/options`)
+      .then((response) => setDocuments(response.data?.documents || []))
+      .catch(() => setError("Could not load the document options."));
   }, [allowed, fetchAgreements]);
 
   async function chooseAgreement(id) {
@@ -121,18 +127,25 @@ export default function ExcavatorPriceDocumentsPage() {
     }
   }
 
-  async function downloadCopy() {
+  async function downloadVersion(type, format = "pdf") {
     const input = proposed();
     if (!input || !selectedId) return;
-    setBusy("copy");
+    setBusy(`${type}:${format}`);
     setError("");
     try {
       const response = await axiosClient.post(
-        `${ROOT}/${selectedId}/download`, input, { responseType: "blob" }
+        `${ROOT}/${selectedId}/download`,
+        { ...input, document_type: type, format },
+        { responseType: "blob" }
       );
-      savePdf(response.data, `Excavator-${selectedId}-Price-Copy.pdf`);
+      const extension = format === "word" ? "doc" : "pdf";
+      saveFile(
+        response.data,
+        `Excavator-${selectedId}-${type.replaceAll("_", "-")}-Selling-Price.${extension}`,
+        format
+      );
     } catch (err) {
-      setError(await errorMessage(err, "Could not download the pricing copy."));
+      setError(await errorMessage(err, "Could not prepare the selected document."));
     } finally {
       setBusy("");
     }
@@ -150,7 +163,7 @@ export default function ExcavatorPriceDocumentsPage() {
         ...(original?.id ? { params: { format: "pdf" } } : {}),
         responseType: "blob",
       });
-      savePdf(response.data, original?.id
+      saveFile(response.data, original?.id
         ? `Original-${original.document_number || selectedId}.pdf`
         : `Excavator-${selectedId}-Original-Reference.pdf`);
     } catch (err) {
@@ -179,7 +192,7 @@ export default function ExcavatorPriceDocumentsPage() {
             <span className="price-documents__eyebrow">FINANCE · DOCUMENTS</span>
             <h1>Excavator Price Documents</h1>
           </div>
-          <span className="price-documents__read-only">Original agreement protected</span>
+          <span className="price-documents__read-only">Boss documents</span>
         </header>
 
         {error && <div role="alert" className="price-documents__alert">{error}</div>}
@@ -253,10 +266,6 @@ export default function ExcavatorPriceDocumentsPage() {
                 </div>
 
                 <div className="price-documents__actions">
-                  <button type="button" className="price-documents__primary"
-                    disabled={Boolean(busy)} onClick={downloadCopy}>
-                    {busy === "copy" ? "Preparing PDF…" : "Download Price Copy"}
-                  </button>
                   <button type="button" className="price-documents__secondary"
                     disabled={Boolean(busy)} onClick={preview}>
                     Preview payments
@@ -266,7 +275,33 @@ export default function ExcavatorPriceDocumentsPage() {
                     {busy === "original" ? "Downloading…" : original ? "Original agreement" : "Original reference PDF"}
                   </button>
                 </div>
-
+                <div className="price-documents__document-head">
+                  <h3>Documents</h3>
+                  <Link to={`/equipment-installment-finance/applications?stage=generated-documents&agreement=${selectedId}`}>
+                    Original documents
+                  </Link>
+                </div>
+                <div className="price-documents__document-list">
+                  {documents.map((document) => (
+                    <div key={document.code} className="price-documents__document-row">
+                      <span>{document.label}</span>
+                      <div className="price-documents__document-buttons">
+                        <button type="button" disabled={Boolean(busy)}
+                          onClick={() => downloadVersion(document.code, "pdf")}>
+                          {busy === `${document.code}:pdf` ? "Preparing…" : "PDF"}
+                        </button>
+                        <button type="button" disabled={Boolean(busy)}
+                          onClick={() => downloadVersion(document.code, "word")}>
+                          {busy === `${document.code}:word` ? "Preparing…" : "Word"}
+                        </button>
+                        <button type="button" disabled={Boolean(busy)}
+                          onClick={() => downloadVersion(document.code, "print")}>
+                          {busy === `${document.code}:print` ? "Preparing…" : "Print"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
                 {projection && (
                   <div className="price-documents__projection">
@@ -286,9 +321,7 @@ export default function ExcavatorPriceDocumentsPage() {
                     </div>
                   </div>
                 )}
-                <p className="price-documents__muted">
-                  Pricing copy only · Original agreement and payment records remain unchanged.
-                </p>
+
               </>
             )}
           </section>
