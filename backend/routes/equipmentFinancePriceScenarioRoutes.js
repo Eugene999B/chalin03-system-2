@@ -143,7 +143,7 @@ async function scenarioFromRequest(req) {
     throw error;
   }
   const source = await loadAgreementSnapshot(req.params.agreementId);
-  return priceScenario(source, req.body?.price, req.body?.deposit);
+  return priceScenario(source, req.body?.price);
 }
 
 router.post("/professional/price-documents/:agreementId/preview", async (req, res) => {
