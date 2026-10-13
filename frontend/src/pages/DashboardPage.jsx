@@ -40,6 +40,8 @@ export default function DashboardPage() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [debtSummary, setDebtSummary] = useState(null);
+  const [financialSummary, setFinancialSummary] = useState(null);
+  const [financialSummaryError, setFinancialSummaryError] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -150,16 +152,28 @@ export default function DashboardPage() {
     setLoading(true);
 
     try {
-      const [productsResponse, salesResponse, debtsResponse] =
+      // Sales history intentionally returns at most 250 receipts. Never use it
+      // for the boss's all-time revenue/profit: read the unrestricted database
+      // aggregate from Reports instead. A reporting error must not fake zero.
+      const financialResult = canManage
+        ? axiosClient.get("/reports/summary")
+            .then((response) => ({ summary: response.data?.summary || null, failed: false }))
+            .catch(() => ({ summary: null, failed: true }))
+        : Promise.resolve({ summary: null, failed: false });
+
+      const [productsResponse, salesResponse, debtsResponse, finance] =
         await Promise.all([
           axiosClient.get("/products"),
           axiosClient.get("/sales"),
           axiosClient.get("/debts/summary"),
+          financialResult,
         ]);
 
       setProducts(productsResponse.data.products || []);
       setSales(salesResponse.data.sales || []);
       setDebtSummary(debtsResponse.data.summary || debtsResponse.data || null);
+      setFinancialSummary(finance.summary);
+      setFinancialSummaryError(finance.failed || (canManage && !finance.summary));
       setMessage("Dashboard refreshed successfully.");
     } catch (error) {
       setError(error.response?.data?.message || "Failed to load dashboard.");
@@ -171,7 +185,7 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboard();
     // Reload dashboard when the selected store changes.
-  }, [branchId]);
+  }, [branchId, role]);
 
   useEffect(() => {
     function checkScreenSize() {
@@ -222,10 +236,12 @@ export default function DashboardPage() {
       0
     );
 
-    const totalSalesAmount = activeSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
-      0
-    );
+    const totalSalesAmount = financialSummary
+      ? Number(financialSummary.total_sales_amount || 0)
+      : activeSales.reduce(
+          (sum, sale) => sum + Number(sale.total || 0),
+          0
+        );
 
     const todaySalesAmount = todaySales.reduce(
       (sum, sale) => sum + Number(sale.total || 0),
@@ -1316,35 +1332,54 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div style={styles.panelDark}>
-            <h2 style={styles.darkTitle}>Boss View</h2>
-            <p style={styles.darkText}>
-              Valid sales are counted. Voided/cancelled sales are excluded from
-              income. Debt exposure, low stock, cash movement and business score
-              are monitored live.
-            </p>
+          {canManage && (
+            <div style={styles.panelDark}>
+              <h2 style={styles.darkTitle}>Boss View — Verified Business Figures</h2>
+              <p style={styles.darkText}>
+                All-time completed sales from the database, excluding voided and cancelled
+                transactions. Net profit is estimated from recorded sale-time product
+                costs, business expenses and executed returns/refunds. Credit sales
+                are revenue, not necessarily cash collected.
+              </p>
 
-            <div
-              style={{ ...styles.darkMiniGrid, ...(isMobile ? oneColumn : {}) }}
-            >
-              <div>
-                <span>All Sales</span>
-                <strong>GHS {formatMoney(dashboardData.totalSalesAmount)}</strong>
+              {financialSummaryError && (
+                <p style={{ color: "#f9c97e", fontWeight: 700 }}>
+                  Financial summary unavailable. Refresh to retry; no amounts are guessed.
+                </p>
+              )}
+              <div style={{ ...styles.darkMiniGrid, ...(isMobile ? oneColumn : {}),
+                rowGap: 18, columnGap: 16 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span>Completed Sales Revenue</span>
+                  <strong>{financialSummary ? `GHS ${formatMoney(financialSummary.total_sales_amount)}` : "Unavailable"}</strong>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span>Recorded Discounts Given</span>
+                  <strong>{financialSummary ? `GHS ${formatMoney(financialSummary.total_discount_amount)}` : "Unavailable"}</strong>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span>Recorded Refunds</span>
+                  <strong>{financialSummary ? `GHS ${formatMoney(financialSummary.total_refunds)}` : "Unavailable"}</strong>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span>Estimated Net Profit (After Recorded Expenses)</span>
+                  <strong>{financialSummary ? `GHS ${formatMoney(financialSummary.net_profit)}` : "Unavailable"}</strong>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span>Report Date</span>
+                  <strong>{formatDate(new Date())}</strong>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span>Operational Status</span>
+                  <strong>{dashboardData.businessScoreLabel}</strong>
+                </div>
               </div>
-              <div>
-                <span>Profit View</span>
-                <strong>GHS {formatMoney(dashboardData.estimatedProfit)}</strong>
-              </div>
-              <div>
-                <span>Report Date</span>
-                <strong>{formatDate(new Date())}</strong>
-              </div>
-              <div>
-                <span>Status</span>
-                <strong>{dashboardData.businessScoreLabel}</strong>
-              </div>
+              <p style={{ ...styles.darkText, marginTop: 18, fontSize: 12 }}>
+                These figures represent the selected store. Profit is an estimate
+                based on recorded data, not a cash balance or inventory markup.
+              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
