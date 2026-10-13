@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const { nameForRole, signatureImageForRole } =
+  require("./equipmentFinanceDocumentPartyNamesService");
 const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
@@ -518,14 +520,13 @@ function addSignatures(doc, snapshot, document, roles = [
   roles.forEach(([role, title], index) => {
     ensurePage(doc, 95, snapshot, document);
     const signature = snapshot.signatures?.find((item) => item.signer_role === role);
-    const fallback = role === "seller" ? snapshot.company?.authorised_seller_signature_data_url : null;
-    const image = dataImageBuffer(signature?.signature_data_url || fallback);
+    const image = dataImageBuffer(signatureImageForRole(snapshot, role, signature));
     const x = index % 2 === 0 ? 45 : 305;
     const y = index % 2 === 0 ? doc.y : doc.y - 82;
     doc.fillColor("#174f35").font("Helvetica-Bold").fontSize(8).text(title, x, y, { width: 245 });
     if (image) doc.image(image, x, y + 15, { fit: [170, 45] });
     doc.fillColor("#27372e").font("Helvetica").fontSize(7.5).text(
-      `Name: ${signature?.signer_name || (role === "seller" ? snapshot.company?.authorised_seller_name || "" : "")}`,
+      `Name: ${nameForRole(snapshot, role, signature)}`,
       x,
       y + 62,
       { width: 245 }
