@@ -20,7 +20,7 @@ const cents = (value) => {
 };
 const money = (amountCents) => Number((amountCents / 100).toFixed(2));
 
-function priceScenario(snapshot, priceInput, depositInput) {
+function priceScenario(snapshot, priceInput) {
   if (!snapshot?.agreement || !Array.isArray(snapshot.schedule)) {
     throw new PriceScenarioError("The original agreement is unavailable.", 409);
   }
@@ -28,14 +28,13 @@ function priceScenario(snapshot, priceInput, depositInput) {
   const originalPrice = cents(source.total_amount);
   const originalDeposit = cents(source.deposit_required || 0);
   const targetPrice = cents(priceInput);
-  const targetDeposit = depositInput === undefined || depositInput === "" ||
-    depositInput === null ? originalDeposit : cents(depositInput);
+  const targetDeposit = originalDeposit; // Preserve all non-price contract terms.
   const recordedPaid = cents(source.amount_paid || 0);
   if (targetPrice <= 0 || targetPrice > 99999999999) {
     throw new PriceScenarioError("Enter a valid excavator price.");
   }
-  if (targetDeposit < 0 || targetDeposit > targetPrice) {
-    throw new PriceScenarioError("The proposed deposit must not exceed the selling price.");
+  if (targetPrice < targetDeposit) {
+    throw new PriceScenarioError("The price cannot be below the original required deposit.");
   }
   if (targetPrice < recordedPaid) {
     throw new PriceScenarioError("The proposed price is below payments already recorded.");
@@ -45,8 +44,7 @@ function priceScenario(snapshot, priceInput, depositInput) {
   }
 
   const priceDifference = targetPrice - originalPrice;
-  const depositDifference = targetDeposit - originalDeposit;
-  const financeDifference = priceDifference - depositDifference;
+  const financeDifference = priceDifference;
   const originalFinanced = cents(source.financed_amount || 0);
   const originalOutstanding = cents(source.outstanding_balance || 0);
   if (originalFinanced + financeDifference < 0 ||
@@ -114,7 +112,7 @@ function priceScenario(snapshot, priceInput, depositInput) {
       original_price: money(originalPrice),
       proposed_price: money(targetPrice),
       original_deposit: money(originalDeposit),
-      proposed_deposit: money(targetDeposit),
+      proposed_deposit: money(originalDeposit),
       price_difference: money(priceDifference),
       recorded_paid: money(recordedPaid),
       finance_difference: money(financeDifference),
