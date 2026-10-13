@@ -276,7 +276,9 @@ function drawFooters(doc, document) {
     doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(5.5);
     safeAbsoluteText(
       doc,
-      "SECURE • VERIFIED • SYSTEM-GENERATED",
+      document.snapshot?.price_scenario
+        ? "PRICE VERSION • SIGNATURES REQUIRED"
+        : "SECURE • VERIFIED • SYSTEM-GENERATED",
       doc.page.margins.left,
       y + 5,
       { width: 170, align: "left" }
