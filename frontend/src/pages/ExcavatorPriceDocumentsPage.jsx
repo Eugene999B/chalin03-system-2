@@ -16,7 +16,7 @@ function saveFile(data, filename, format = "pdf") {
   const link = document.createElement("a");
   link.href = url;
   link.download = filename;
-  if (format === "print") link.target = "_blank";
+
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -132,6 +132,9 @@ export default function ExcavatorPriceDocumentsPage() {
     if (!input || !selectedId) return;
     setBusy(`${type}:${format}`);
     setError("");
+    // Open synchronously on the user's click, before awaiting the download.
+    // Mobile browsers may otherwise block a PDF print preview as a popup.
+    const printWindow = format === "print" ? window.open("", "_blank") : null;
     try {
       const response = await axiosClient.post(
         `${ROOT}/${selectedId}/download`,
@@ -139,12 +142,16 @@ export default function ExcavatorPriceDocumentsPage() {
         { responseType: "blob" }
       );
       const extension = format === "word" ? "doc" : "pdf";
-      saveFile(
-        response.data,
-        `Excavator-${selectedId}-${type.replaceAll("_", "-")}-Selling-Price.${extension}`,
-        format
-      );
+      const filename = `Excavator-${selectedId}-${type.replaceAll("_", "-")}-Selling-Price.${extension}`;
+      if (format === "print" && printWindow && !printWindow.closed) {
+        const url = URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+        printWindow.location.href = url;
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        saveFile(response.data, filename, format);
+      }
     } catch (err) {
+      if (printWindow && !printWindow.closed) printWindow.close();
       setError(await errorMessage(err, "Could not prepare the selected document."));
     } finally {
       setBusy("");
