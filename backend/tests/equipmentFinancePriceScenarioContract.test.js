@@ -67,7 +67,7 @@ test("scenario accepts same price and refuses invalid or impossible prices", () 
   assert.throws(() => priceScenario(source(), -1), /valid excavator price/);
   assert.throws(() => priceScenario(source(), 100000), /below payments already recorded/);
   assert.throws(() => priceScenario(source(), 450000, 500000), /must not exceed/);
-  assert.throws(() => priceScenario({ ...source(), schedule: [] }, 1000), /no installment schedule/);
+  assert.throws(() => priceScenario({ ...source(), schedule: [] }, 500000), /no installment schedule/);
 });
 
 test("alternative PDF cannot overwrite issued agreement, signatures or payment records", () => {
