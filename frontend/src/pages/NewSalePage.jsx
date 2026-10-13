@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 
 export default function NewSalePage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, branchId);
 
   const currentStoreCode =
     branchCode ||
@@ -535,7 +537,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     }, 0);
   }, [cart]);
 
-  const cleanDiscountAmount = Math.max(Number(discountAmount || 0), 0);
+  const cleanDiscountAmount = canApplyDiscount
+    ? Math.max(Number(discountAmount || 0), 0)
+    : 0;
   const estimatedAmountDue = Math.max(subtotal - cleanDiscountAmount, 0);
   const immediatePayment = ["cash", "momo", "bank"].includes(paymentType);
   const allocationTotal = Object.values(paymentAllocations).reduce(
@@ -753,7 +757,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       return;
     }
 
-    const discount = Number(discountAmount || 0);
+    const discount = canApplyDiscount ? Number(discountAmount || 0) : 0;
 
     if (Number.isNaN(discount) || discount < 0) {
       setError("Discount must be a valid number and cannot be negative.");
@@ -1701,15 +1705,19 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 ))}
               </div>
 
-              <label>Discount Amount</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={discountAmount}
-                onChange={(event) => setDiscountAmount(event.target.value)}
-                placeholder="Enter discount amount"
-              />
+              {canApplyDiscount && (
+                <>
+                  <label>Discount Amount (Boss / System Administrator)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={discountAmount}
+                    onChange={(event) => setDiscountAmount(event.target.value)}
+                    placeholder="Enter discount amount"
+                  />
+                </>
+              )}
 
               {immediatePayment ? (
                 <>

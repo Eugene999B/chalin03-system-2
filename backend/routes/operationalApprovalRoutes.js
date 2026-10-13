@@ -1,6 +1,8 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { canApplySaleDiscount, discountApprovalRequired } =
+  require("../services/saleDiscountAuthorizationService");
 const {
   actionRoute,
   claimOperationalRequest,
@@ -443,6 +445,15 @@ async function createSaleEditRequest(req, res) {
     });
 
     const discountAmount = money(req.body?.discount_amount);
+    // A manager cannot submit a hidden positive-discount request for an
+    // administrator to approve later. Only the boss/system admin may do so.
+    if (discountApprovalRequired(discountAmount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      throw Object.assign(
+        new Error("Only Agyapong Charles (Boss) or the original System Administrator may request a discount."),
+        { statusCode: 403, code: "DISCOUNT_BOSS_ONLY" }
+      );
+    }
     const amountTendered = money(
       req.body?.amount_tendered ?? req.body?.amount_paid ?? 0
     );

@@ -16,6 +16,8 @@ const { createAgreementForSale } = require("../services/installmentService");
 const { sendInstallmentEventSms } = require("../services/installmentReminderService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateSaleCreateRequest } = require("../validation/financialRequestValidators");
+const { canApplySaleDiscount, discountApprovalRequired } =
+  require("../services/saleDiscountAuthorizationService");
 
 const router = express.Router();
 
@@ -901,6 +903,22 @@ async function findOrCreateCustomer(
   };
 }
 
+// GET /api/sales/discount-permission — current authenticated server-side policy.
+// Registered before the /:id lookup so "discount-permission" is never an ID.
+router.get("/discount-permission", requireAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const allowed = await canApplySaleDiscount(req.user);
+    return res.json({ status: "success", can_apply_discount: allowed });
+  } catch (error) {
+    console.error("Discount permission lookup failed:", error);
+    return res.status(503).json({
+      status: "error", code: "DISCOUNT_PERMISSION_UNAVAILABLE",
+      message: "Discount authority could not be verified.",
+    });
+  }
+});
+
 // POST /api/sales
 router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
   const connection = await pool.getConnection();
@@ -962,6 +980,15 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       return res.status(400).json({
         status: "error",
         message: "Discount must be a valid number and cannot be negative.",
+      });
+    }
+
+    if (discountApprovalRequired(discountAmount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "Only Agyapong Charles (Boss) or the original System Administrator may apply discounts.",
       });
     }
 
@@ -1797,6 +1824,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
+    if (discountApprovalRequired(discountAmount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "Only Agyapong Charles (Boss) or the original System Administrator may apply discounts.",
+      });
+    }
+
     if (
       (["credit", "mixed", "installment"].includes(payment_type)) &&
       !cleanCustomerName &&
@@ -1844,6 +1880,19 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const sale = sales[0];
+
+    // Prevent unapproved users from quietly removing or altering an existing
+    // discount while editing a historic sale. Both increases and reversals
+    // of a positive discount require the protected boss identity.
+    if (discountApprovalRequired(sale.discount_amount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "A discounted sale can only be changed by Agyapong Charles (Boss) or the original System Administrator.",
+      });
+    }
 
     if (sale.payment_type === "installment" || payment_type === "installment") {
       await connection.rollback();
