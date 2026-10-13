@@ -13,6 +13,13 @@ const {
   summarizePriceScenario,
 } = require("../services/equipmentFinancePriceScenarioService");
 
+const { renderCompletionPdf, renderCompletionWord } =
+  require("../services/equipmentFinanceDocumentRendererV2Service");
+const {
+  listPriceVersionDocuments,
+  buildPriceVersionDocument,
+} = require("../services/equipmentFinancePriceVersionDocumentsService");
+
 const router = express.Router();
 
 // Pricing copies contain protected buyer data. Only the explicitly verified
@@ -50,6 +57,10 @@ function safeId(value) {
   const n = Number(value);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
+
+router.get("/professional/price-documents/options", (_req, res) => {
+  return res.json({ status: "success", documents: listPriceVersionDocuments() });
+});
 
 router.get("/professional/price-documents/agreements", async (req, res) => {
   try {
@@ -157,23 +168,37 @@ router.post("/professional/price-documents/:agreementId/preview", async (req, re
 
 router.post("/professional/price-documents/:agreementId/download", async (req, res) => {
   try {
-    const snapshot = await scenarioFromRequest(req);
-    // Distinct document reference; NEVER issue a replacement official agreement.
     const id = safeId(req.params.agreementId);
-    const reference = `PRICE-COPY-${id}`;
-    const pdf = await renderAgreementPdf(snapshot, reference);
+    if (!id) return res.status(400).json({ status: "error", message: "Choose a valid agreement." });
+    const source = await loadAgreementSnapshot(id);
+    const type = String(req.body?.document_type || "installment_agreement").trim().toLowerCase();
+    const format = String(req.body?.format || "pdf").trim().toLowerCase();
+    if (!["pdf", "word", "print"].includes(format)) {
+      return res.status(400).json({ status: "error", message: "Select PDF, Word or Print." });
+    }
+    const document = buildPriceVersionDocument(source, req.body?.price, type);
+
+    const isWord = format === "word";
+    const buffer = isWord
+      ? await renderCompletionWord(document)
+      : await renderCompletionPdf(document);
+    const extension = isWord ? "doc" : "pdf";
+    const safeType = type.replace(/[^a-z_]/g, "").replaceAll("_", "-");
     res.set({
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="Excavator-${id}-Price-Copy.pdf"`,
+      "Content-Type": isWord ? "application/msword; charset=utf-8" : "application/pdf",
+      "Content-Disposition": `${format === "print" ? "inline" : "attachment"}; filename="Excavator-${id}-${safeType}-Price-Version.${extension}"`,
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",
+      "X-Chalin03-Document-Design": "professional-logo-led-v3",
     });
-    console.info("Boss price-only document downloaded", {
-      agreementId: id, actorId: Number(req.user?.id), projectedPrice: snapshot.agreement.total_amount,
+    console.info("Boss alternative-price document rendered", {
+      agreementId: id, actorId: Number(req.user?.id),
+      projectedPrice: document.snapshot.agreement.total_amount,
+      documentType: type, format,
     });
-    return res.send(pdf);
+    return res.send(buffer);
   } catch (error) {
-    console.error("Price copy PDF:", error);
+    console.error("Price version document render:", error);
     return err(res, error);
   }
 });

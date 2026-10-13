@@ -55,3 +55,17 @@
 .price-documents__alert{background:#fff0eb;border:1px solid #e8bdb2;border-radius:12px;color:#9d3420;padding:13px 16px;margin-bottom:16px;font-size:13px}
 @media(max-width:820px){.price-documents__layout{grid-template-columns:1fr}.price-documents__list{max-height:285px}.price-documents__editor{padding:0 16px 22px}}
 @media(max-width:470px){.price-documents{padding:12px}.price-documents__read-only{font-size:11px}.price-documents__fields{grid-template-columns:1fr}.price-documents__actions{display:grid}.price-documents__actions button{width:100%}.price-documents__amounts strong{font-size:16px}}
+
+.price-documents__document-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:24px 0 11px}
+.price-documents__document-head h3{font-size:15px;letter-spacing:-.02em;margin:0}
+.price-documents__document-head a{font-size:12px;font-weight:750;color:#1c547d;text-decoration:none}
+.price-documents__document-head a:hover{text-decoration:underline}
+.price-documents__document-list{border:1px solid #e4eaf3;border-radius:12px;overflow:hidden}
+.price-documents__document-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px}
+.price-documents__document-row+.price-documents__document-row{border-top:1px solid #edf1f6}
+.price-documents__document-row>span{font-size:13px;font-weight:700;color:#22344a}
+.price-documents__document-buttons{display:flex;align-items:center;justify-content:flex-end;gap:5px}
+.price-documents__document-buttons button{font:inherit;font-size:11px;font-weight:750;border:1px solid #d9e2ee;border-radius:8px;background:#fff;color:#304865;padding:9px 11px;cursor:pointer}
+.price-documents__document-buttons button:first-child{color:#102c40;background:#f4e6b6;border-color:#e7d197}
+.price-documents__document-buttons button:disabled{opacity:.4;cursor:default}
+@media(max-width:500px){.price-documents__document-row{align-items:stretch;flex-direction:column}.price-documents__document-buttons{justify-content:stretch}.price-documents__document-buttons button{flex:1}.price-documents__document-head{flex-wrap:wrap}}

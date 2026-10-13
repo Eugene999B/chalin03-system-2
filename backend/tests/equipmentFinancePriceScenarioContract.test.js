@@ -41,6 +41,8 @@ test("different excavator price recalculates finance and each due payment withou
   assert.equal(copy.schedule[0].amount_paid, 80000);
   assert.equal(copy.schedule[0].due_date, "2026-11-01");
   assert.equal(copy.agreement.amount_paid, 180000);
+  assert.equal(copy.agreement.periodic_amount, 175000);
+  assert.equal(copy.agreement.installment_amount, 175000);
   assert.equal(copy.policy.agreement_terms, "Original untouched terms");
   assert.equal(original.agreement.total_amount, 400000);
   assert.equal(original.schedule[0].scheduled_amount, 150000);
@@ -80,7 +82,8 @@ test("alternative PDF cannot overwrite issued agreement, signatures or payment r
   assert.match(routes, /renderAgreementPdf/);
   assert.match(routes, /res\.send\(pdf\)/);
   assert.doesNotMatch(routes, /\b(?:INSERT|UPDATE|DELETE)\s+(?:INTO|FROM|equipment_)/i);
-  assert.match(renderer, /PRICING COPY ONLY - NOT AN ISSUED OR SIGNED AGREEMENT/);
+  assert.doesNotMatch(renderer, /PRICING COPY ONLY - NOT AN ISSUED OR SIGNED AGREEMENT/);
+  assert.match(renderer, /EXCAVATOR SALE & INSTALLMENT AGREEMENT/);
   assert.match(renderer, /if \(snapshot\.price_scenario\)/);
   assert.match(app, /path="price-documents"/);
 });

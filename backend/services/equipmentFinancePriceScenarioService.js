@@ -92,6 +92,8 @@ function priceScenario(snapshot, priceInput) {
     deposit_received: Number(source.deposit_received || 0),
     financed_amount: money(originalFinanced + financeDifference),
     scheduled_total: money(scheduleTotal + financeDifference),
+    periodic_amount: newSchedule[0]?.scheduled_amount || 0,
+    installment_amount: newSchedule[0]?.scheduled_amount || 0,
     outstanding_balance: money(originalOutstanding + priceDifference),
     amount_paid: Number(source.amount_paid || 0),
   };

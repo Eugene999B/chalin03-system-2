@@ -1147,25 +1147,9 @@ function addPdfHeader(doc, snapshot, documentNumberValue) {
   doc.moveDown(0.5).lineWidth(3).moveTo(45, doc.y).lineTo(550, doc.y).stroke();
   doc.moveDown(0.8);
   doc.font("Helvetica-Bold").fontSize(17).text(
-    snapshot.price_scenario
-      ? "EXCAVATOR PRICE PRESENTATION - PRO FORMA"
-      : "EXCAVATOR SALE & INSTALLMENT AGREEMENT",
+    "EXCAVATOR SALE & INSTALLMENT AGREEMENT",
     { align: "center" }
   );
-  if (snapshot.source_reference && !snapshot.price_scenario) {
-    doc.moveDown(0.2).font("Helvetica-Bold").fontSize(8.5)
-      .fillColor("#9a571d")
-      .text("SOURCE REPRINT - REFERENCE COPY, NOT A NEW ISSUED DOCUMENT", { align: "center" })
-      .fillColor("#000000");
-  }
-  if (snapshot.price_scenario) {
-    doc.moveDown(0.2);
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#984018")
-      .text("PRICING COPY ONLY - NOT AN ISSUED OR SIGNED AGREEMENT", { align: "center" })
-      .fillColor("#000000");
-    doc.font("Helvetica").fontSize(7.5)
-      .text("No changes to the original contract, receipts, payments or business account.", { align: "center" });
-  }
   doc
     .font("Helvetica")
     .fontSize(8)
@@ -1309,13 +1293,6 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
         if (index % 2 === 1 || index === photos.length - 1) doc.y = photoY + 150;
       }
 
-      if (snapshot.price_scenario) {
-        if (doc.y > 610) doc.addPage();
-        doc.moveDown().font("Helvetica-Bold").fontSize(11)
-          .text("Price presentation - not signed");
-        doc.moveDown(0.35).font("Helvetica").fontSize(8)
-          .text("The original approved agreement remains authoritative. This independently generated pricing copy does not evidence changed buyer consent, payment receipts, or approval.");
-      } else {
       if (doc.y > 610) doc.addPage();
       doc.moveDown().font("Helvetica-Bold").fontSize(12).text("Signatures");
       const roles = [
@@ -1337,7 +1314,6 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
           }`
         );
         doc.moveTo(45, doc.y + 5).lineTo(280, doc.y + 5).stroke();
-      }
       }
       doc
         .font("Helvetica")

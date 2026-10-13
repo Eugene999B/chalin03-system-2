@@ -135,8 +135,8 @@ function renderLegalAgreement(doc, document) {
     [
       "Periodic payment",
       money(
-        agreement.periodic_amount ||
-          agreement.installment_amount ||
+        (document.snapshot?.price_scenario ? 0 : agreement.periodic_amount) ||
+          (document.snapshot?.price_scenario ? 0 : agreement.installment_amount) ||
           document.snapshot?.schedule?.[0]?.scheduled_amount
       ),
     ],
@@ -231,7 +231,7 @@ function renderExecutivePack(doc, document) {
       document.snapshot?.reconciliation?.consistent ? COLORS.forest : COLORS.red,
     ],
     ["Purchase price", money(agreement.total_amount)],
-    ["Official balance", money(agreement.outstanding_balance)],
+    [document.snapshot?.price_scenario ? "Price-version balance" : "Official balance", money(agreement.outstanding_balance)],
   ]);
   drawFactGrid(doc, document, [
     ["Applicant", customerName(document)],
