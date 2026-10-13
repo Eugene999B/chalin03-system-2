@@ -599,7 +599,7 @@ export default function DashboardPage() {
     };
     // Pure display helpers are intentionally stable for the lifetime of this component.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, sales, debtSummary]);
+  }, [products, sales, debtSummary, financialSummary]);
 
   const recentSales = [...sales].slice(0, 8);
 
