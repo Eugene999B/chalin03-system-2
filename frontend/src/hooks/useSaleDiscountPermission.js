@@ -10,7 +10,7 @@ export default function useSaleDiscountPermission(userId, branchId) {
     setAllowed(false);
     if (!userId) return () => { active = false; };
 
-    axiosClient.get("/sales/discount-permission", {
+    axiosClient.get("/auth/discount-permission", {
       headers: { "Cache-Control": "no-store" },
     }).then((response) => {
       if (active) setAllowed(response.data?.can_apply_discount === true);
