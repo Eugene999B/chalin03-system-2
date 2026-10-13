@@ -1220,7 +1220,7 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       doc.font("Helvetica-Bold").fontSize(12).text("Commercial terms");
       y = doc.y + 7;
       pdfField(doc, "Purchase price", money(agreement.total_amount), 45, y);
-      pdfField(doc, snapshot.price_scenario ? "Deposit proposed" : "Deposit", money(
+      pdfField(doc, snapshot.price_scenario ? "Deposit required" : "Deposit", money(
         snapshot.price_scenario ? agreement.deposit_required : agreement.deposit_received
       ), 305, y);
       y += 18;
