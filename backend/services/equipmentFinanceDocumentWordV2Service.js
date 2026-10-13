@@ -91,7 +91,7 @@ async function renderCompletionWord(document) {
   const template = templateFor(document);
   const company = document.snapshot?.company || {};
   const logo = officialLogoDataUrl();
-  const qr = await QRCode.toDataURL(verificationPayload(document), {
+  const qr = document.snapshot?.price_scenario ? null : await QRCode.toDataURL(verificationPayload(document), {
     width: 220,
     margin: 1,
     errorCorrectionLevel: "M",
