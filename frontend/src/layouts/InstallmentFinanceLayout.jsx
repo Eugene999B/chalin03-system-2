@@ -5,6 +5,7 @@ import InstallmentMobileEnhancements from "../components/InstallmentMobileEnhanc
 import InstallmentFinanceWorkspaceEnhancements from "../components/InstallmentFinanceWorkspaceEnhancements";
 import InstallmentFinancePolicyAndLateFee from "../components/InstallmentFinancePolicyAndLateFee";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 import {
   EQUIPMENT_DIVISIONS,
   canAccessEquipmentDivision,
@@ -65,6 +66,7 @@ const navigationSections = [
   { title: "Documents & Reports", items: [
     { title: "Secure Case Documents", description: "Private KYC evidence, reviews, approvals and controlled delivery files", path: "/equipment-installment-finance/applications?stage=case-workspace", icon: "🔒", matchSearch: true, permissions: ["fleet.assets.view"] },
     { title: "Generated Documents", description: "Issued agreements, schedules, receipts, statements and document history", path: "/equipment-installment-finance/applications?stage=generated-documents", icon: "📄", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Price Documents", description: "Original and alternative excavator price PDFs", path: "/equipment-installment-finance/price-documents", icon: "🗃️", permissions: ["fleet.assets.view"], bossOnly: true },
     { title: "Portfolio, SMS & Reports", description: "Statements, arrears, cash flow, accounting exports and thermal receipts", path: "/equipment-installment-finance/reports", icon: "📊", permissions: ["fleet.assets.view"] },
     { title: "Staff & Workforce", description: "Finance staff logins, roles, profiles, documents and permissions", path: "/equipment-installment-finance/workforce", icon: "👷", permissions: ["workers.view"] },
     { title: "Payroll Processing", description: "Validate, approve, pay and reconcile protected salary cycles", path: "/equipment-installment-finance/payroll", icon: "💵", permissions: ["payroll.view"] },
@@ -85,6 +87,7 @@ function isBlockedFinancePath(pathname) {
 export default function InstallmentFinanceLayout() {
   const { user } = useAuth();
   const location = useLocation();
+  const canUsePriceDocuments = useSaleDiscountPermission(user?.id, user?.branch_id);
 
   useEffect(() => {
     document.body.classList.remove(...THREE_PAGE_PRESENTATION_CLASSES);
@@ -111,7 +114,10 @@ export default function InstallmentFinanceLayout() {
         contextHeading="Company-wide Finance portfolio — no Hire-location selection"
         workspaceEyebrow="Current Equipment Business division"
         separationBadge="No access to Hire jobs or contracts"
-        navigationSections={navigationSections}
+        navigationSections={navigationSections.map((section) => ({
+          ...section,
+          items: section.items.filter((item) => !item.bossOnly || canUsePriceDocuments),
+        }))}
       />
       <InstallmentFinanceWorkspaceEnhancements />
       <InstallmentFinancePolicyAndLateFee />

@@ -1146,9 +1146,26 @@ function addPdfHeader(doc, snapshot, documentNumberValue) {
   );
   doc.moveDown(0.5).lineWidth(3).moveTo(45, doc.y).lineTo(550, doc.y).stroke();
   doc.moveDown(0.8);
-  doc.font("Helvetica-Bold").fontSize(17).text("EXCAVATOR SALE & INSTALLMENT AGREEMENT", {
-    align: "center",
-  });
+  doc.font("Helvetica-Bold").fontSize(17).text(
+    snapshot.price_scenario
+      ? "EXCAVATOR PRICE PRESENTATION - PRO FORMA"
+      : "EXCAVATOR SALE & INSTALLMENT AGREEMENT",
+    { align: "center" }
+  );
+  if (snapshot.source_reference && !snapshot.price_scenario) {
+    doc.moveDown(0.2).font("Helvetica-Bold").fontSize(8.5)
+      .fillColor("#9a571d")
+      .text("SOURCE REPRINT - REFERENCE COPY, NOT A NEW ISSUED DOCUMENT", { align: "center" })
+      .fillColor("#000000");
+  }
+  if (snapshot.price_scenario) {
+    doc.moveDown(0.2);
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#984018")
+      .text("PRICING COPY ONLY - NOT AN ISSUED OR SIGNED AGREEMENT", { align: "center" })
+      .fillColor("#000000");
+    doc.font("Helvetica").fontSize(7.5)
+      .text("No changes to the original contract, receipts, payments or business account.", { align: "center" });
+  }
   doc
     .font("Helvetica")
     .fontSize(8)
@@ -1203,10 +1220,13 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       doc.font("Helvetica-Bold").fontSize(12).text("Commercial terms");
       y = doc.y + 7;
       pdfField(doc, "Purchase price", money(agreement.total_amount), 45, y);
-      pdfField(doc, "Deposit", money(agreement.deposit_received), 305, y);
+      pdfField(doc, snapshot.price_scenario ? "Deposit required" : "Deposit", money(
+        snapshot.price_scenario ? agreement.deposit_required : agreement.deposit_received
+      ), 305, y);
       y += 18;
       pdfField(doc, "Financed balance", money(agreement.financed_amount), 45, y);
-      pdfField(doc, "Outstanding", money(agreement.outstanding_balance), 305, y);
+      pdfField(doc, snapshot.price_scenario ? "Scenario balance" : "Outstanding",
+        money(agreement.outstanding_balance), 305, y);
       y += 18;
       pdfField(doc, "Frequency", agreement.payment_frequency, 45, y);
       pdfField(doc, "Installments", agreement.installment_count, 305, y);
@@ -1217,7 +1237,10 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       doc.font("Helvetica-Bold").fontSize(12).text("Installment payment schedule");
       doc.moveDown(0.4);
       const columns = [45, 78, 145, 235, 325, 415];
-      ["No.", "Due date", "Scheduled", "Paid", "Balance", "Status"].forEach((heading, index) => {
+      (snapshot.price_scenario
+        ? ["No.", "Due date", "Proposed", "Paid*", "Balance", "Status"]
+        : ["No.", "Due date", "Scheduled", "Paid", "Balance", "Status"]
+      ).forEach((heading, index) => {
         doc.font("Helvetica-Bold").fontSize(7).text(heading, columns[index], doc.y, { width: index === 1 ? 65 : 85 });
       });
       doc.moveDown(1.1);
@@ -1242,6 +1265,11 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
         });
         doc.y = rowY + 17;
         doc.moveTo(45, doc.y - 2).lineTo(550, doc.y - 2).lineWidth(0.3).stroke();
+      }
+
+      if (snapshot.price_scenario) {
+        doc.moveDown(0.5).fontSize(7).font("Helvetica")
+          .text("* Paid amounts shown are actual historical receipts from the unchanged source agreement.");
       }
 
       doc.addPage();
@@ -1281,6 +1309,13 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
         if (index % 2 === 1 || index === photos.length - 1) doc.y = photoY + 150;
       }
 
+      if (snapshot.price_scenario) {
+        if (doc.y > 610) doc.addPage();
+        doc.moveDown().font("Helvetica-Bold").fontSize(11)
+          .text("Price presentation - not signed");
+        doc.moveDown(0.35).font("Helvetica").fontSize(8)
+          .text("The original approved agreement remains authoritative. This independently generated pricing copy does not evidence changed buyer consent, payment receipts, or approval.");
+      } else {
       if (doc.y > 610) doc.addPage();
       doc.moveDown().font("Helvetica-Bold").fontSize(12).text("Signatures");
       const roles = [
@@ -1302,6 +1337,7 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
           }`
         );
         doc.moveTo(45, doc.y + 5).lineTo(280, doc.y + 5).stroke();
+      }
       }
       doc
         .font("Helvetica")

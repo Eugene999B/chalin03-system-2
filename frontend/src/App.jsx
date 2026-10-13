@@ -66,6 +66,9 @@ const EquipmentSalesWorkspacePage = lazy(() =>
 const EquipmentSalesReportsPage = lazy(() =>
   import("./pages/EquipmentSalesReportsPage")
 );
+const ExcavatorPriceDocumentsPage = lazy(() =>
+  import("./pages/ExcavatorPriceDocumentsPage")
+);
 const EquipmentBusinessWorkforcePage = lazy(() =>
   import("./pages/EquipmentBusinessWorkforcePage")
 );
@@ -729,6 +732,12 @@ export default function App() {
               element={permissionOnlyPage(
                 "fleet.assets.view",
                 <EquipmentSalesReportsPage />
+              )}
+            />
+            <Route
+              path="price-documents"
+              element={rolePage(adminOnlyRoles,
+                permissionOnlyPage("fleet.assets.view", <ExcavatorPriceDocumentsPage />)
               )}
             />
             <Route
