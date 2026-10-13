@@ -51,12 +51,12 @@ test("different excavator price recalculates finance and each due payment withou
   assert.equal(copy.price_scenario.is_official_agreement, false);
 });
 
-test("price and deposit variations preserve actual receipts and future dates", () => {
-  const copy = priceScenario(source(), 500000, 120000);
-  assert.equal(copy.agreement.deposit_required, 120000);
+test("alternate price keeps contractual deposit, receipts and due dates unchanged", () => {
+  const copy = priceScenario(source(), 500000);
+  assert.equal(copy.agreement.deposit_required, 100000);
   assert.equal(copy.agreement.deposit_received, 100000);
-  assert.equal(copy.agreement.financed_amount, 380000);
-  assert.equal(copy.schedule.reduce((s, r) => s + r.scheduled_amount, 0), 380000);
+  assert.equal(copy.agreement.financed_amount, 400000);
+  assert.equal(copy.schedule.reduce((s, r) => s + r.scheduled_amount, 0), 400000);
   assert.equal(copy.schedule[0].amount_paid, 80000);
   assert.equal(copy.schedule[1].due_date, "2026-12-01");
   assert.equal(summarizePriceScenario(copy).scenario_price, 500000);
@@ -66,7 +66,7 @@ test("scenario accepts same price and refuses invalid or impossible prices", () 
   assert.equal(priceScenario(source(), 400000).schedule[0].scheduled_amount, 150000);
   assert.throws(() => priceScenario(source(), -1), /valid excavator price/);
   assert.throws(() => priceScenario(source(), 100000), /below payments already recorded/);
-  assert.throws(() => priceScenario(source(), 450000, 500000), /must not exceed/);
+  assert.throws(() => priceScenario(source(), 90000), /original required deposit/);
   assert.throws(() => priceScenario({ ...source(), schedule: [] }, 500000), /no installment schedule/);
 });
 
