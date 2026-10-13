@@ -986,6 +986,11 @@ function imageHtml(dataUrl, alt, className = "machine-photo") {
   return `<img class="${className}" src="${htmlEscape(dataUrl)}" alt="${htmlEscape(alt)}" />`;
 }
 
+const {
+  nameForRole,
+  signatureImageForRole,
+} = require("./equipmentFinanceDocumentPartyNamesService");
+
 function renderAgreementWord(snapshot, documentNumberValue) {
   const agreement = snapshot.agreement;
   const mainPhoto =
@@ -1015,15 +1020,15 @@ function renderAgreementWord(snapshot, documentNumberValue) {
     .split(/\n\s*\n/)
     .map((paragraph) => `<p>${paragraph.replaceAll("\n", "<br />")}</p>`)
     .join("");
-  const sellerSignature =
-    snapshot.signatures.find((row) => row.signer_role === "seller")?.signature_data_url ||
-    snapshot.company.authorised_seller_signature_data_url;
+  const sellerRecord = snapshot.signatures.find((row) => row.signer_role === "seller");
+  const sellerSignature = signatureImageForRole(snapshot, "seller", sellerRecord);
   const signer = (role, label) => {
     const row = snapshot.signatures.find((item) => item.signer_role === role);
+    const signature = signatureImageForRole(snapshot, role, row);
     return `<div class="signature"><strong>${label}</strong>${
-      row ? imageHtml(row.signature_data_url, label, "signature-image") : ""
-    }<p>Name: ${htmlEscape(row?.signer_name || "")}</p><p>Date: ${htmlEscape(
-      row ? dateLabel(row.signed_at) : ""
+      signature ? imageHtml(signature, label, "signature-image") : ""
+    }<p>Name: ${htmlEscape(nameForRole(snapshot, role, row))}</p><p>Date: ${htmlEscape(
+      signature && row?.signed_at ? dateLabel(row.signed_at) : ""
     )}</p></div>`;
   };
 
@@ -1117,7 +1122,7 @@ function renderAgreementWord(snapshot, documentNumberValue) {
         "Seller signature",
         "signature-image"
       )}<p>Name: ${htmlEscape(
-        snapshot.company.authorised_seller_name || ""
+        nameForRole(snapshot, "seller", sellerRecord)
       )}</p><p>Title: ${htmlEscape(
         snapshot.company.authorised_seller_title || ""
       )}</p></div>` : signer("seller", "Seller's Representative")}${signer(
@@ -1303,14 +1308,13 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       ];
       for (const [role, title] of roles) {
         const signature = snapshot.signatures.find((item) => item.signer_role === role);
-        const fallbackSignature = role === "seller" ? snapshot.company.authorised_seller_signature_data_url : null;
-        const signatureImage = dataImageBuffer(signature?.signature_data_url || fallbackSignature);
+        const signatureImage = dataImageBuffer(signatureImageForRole(snapshot, role, signature));
         if (doc.y > 710) doc.addPage();
         doc.moveDown(0.8).font("Helvetica-Bold").fontSize(9).text(title);
         if (signatureImage) doc.image(signatureImage, 45, doc.y + 2, { fit: [180, 50] });
         doc.moveDown(3.2).font("Helvetica").fontSize(8).text(
-          `Name: ${signature?.signer_name || (role === "seller" ? snapshot.company.authorised_seller_name || "" : "")}    Date: ${
-            signature ? dateLabel(signature.signed_at) : ""
+          `Name: ${nameForRole(snapshot, role, signature)}    Date: ${
+            signatureImage && signature?.signed_at ? dateLabel(signature.signed_at) : ""
           }`
         );
         doc.moveTo(45, doc.y + 5).lineTo(280, doc.y + 5).stroke();
