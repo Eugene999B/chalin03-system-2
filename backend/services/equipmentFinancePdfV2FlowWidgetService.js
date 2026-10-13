@@ -113,6 +113,11 @@ function writeFlowText(doc, document, value, options = {}) {
   });
 }
 
+const {
+  nameForRole,
+  signatureImageForRole,
+} = require("./equipmentFinanceDocumentPartyNamesService");
+
 function drawSignatureBlocks(doc, document, roles) {
   sectionTitle(doc, document, "Execution and signatures");
   const snapshot = document.snapshot || {};
@@ -128,8 +133,8 @@ function drawSignatureBlocks(doc, document, roles) {
     roles.slice(index, index + 2).forEach(([role, title], columnIndex) => {
       const x = left + columnIndex * (columnWidth + gap);
       const record = snapshot.signatures?.find((item) => item.signer_role === role);
-      const fallback = role === "seller" ? snapshot.company?.authorised_seller_signature_data_url : null;
-      const signature = imageBuffer(record?.signature_data_url || fallback);
+      const signature = imageBuffer(signatureImageForRole(snapshot, role, record));
+      const printedName = nameForRole(snapshot, role, record);
       doc.roundedRect(x, y, columnWidth, 98, 9).fillAndStroke(COLORS.paper, COLORS.line);
       doc.roundedRect(x, y, columnWidth, 23, 9).fill(template.accent);
       doc.rect(x, y + 11, columnWidth, 12).fill(template.accent);
@@ -150,17 +155,15 @@ function drawSignatureBlocks(doc, document, roles) {
       doc.moveTo(x + 14, y + 70).lineTo(x + columnWidth - 14, y + 70)
         .lineWidth(0.65).strokeColor(COLORS.goldDark).stroke();
       doc.fillColor(COLORS.ink).font("Helvetica-Bold").fontSize(6.8).text(
-        clean(
-          record?.signer_name ||
-            (role === "seller" ? snapshot.company?.authorised_seller_name : ""),
-          "Name / signature"
-        ),
+        clean(printedName, "Name / signature"),
         x + 10,
         y + 78,
         { width: columnWidth - 20, align: "center", lineBreak: false, ellipsis: true }
       );
       doc.fillColor(COLORS.muted).font("Helvetica").fontSize(5.5).text(
-        record?.signed_at ? dateTimeLabel(record.signed_at) : "Date / time",
+        record?.signed_at && signature
+          ? dateTimeLabel(record.signed_at)
+          : "Date / time",
         x + 10,
         y + 89,
         { width: columnWidth - 20, align: "center", lineBreak: false }
