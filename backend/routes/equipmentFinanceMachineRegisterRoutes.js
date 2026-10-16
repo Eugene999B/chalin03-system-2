@@ -152,7 +152,9 @@ router.put("/:assetId", requirePermission("fleet.assets.manage"), async (req, re
     });
     return res.json({
       status: "success",
-      message: "Finance machine identity and photo evidence updated.",
+      message: machine?.finance_price_correction
+        ? "Excavator updated. The active agreement purchase price, unpaid installments and remaining balance were adjusted automatically. Previous receipts and signed document evidence remain intact."
+        : "Finance machine identity and photo evidence updated.",
       machine,
     });
   } catch (error) {
