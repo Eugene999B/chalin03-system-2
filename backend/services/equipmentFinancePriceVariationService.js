@@ -179,7 +179,7 @@ async function applyApprovedPriceVariation({ connection, amendment, proposed }) 
  * are deliberately NOT rewritten.
  */
 async function syncActiveAgreementPriceFromMachine({
-  connection, assetId, newPrice, correctionReason,
+  connection, assetId, newPrice, correctionReason, activeAgreementCount = 0,
 }) {
   if (String(correctionReason || "").trim().length < 12) {
     throw new PriceVariationError(400, "Record a reason for the financial correction.");
@@ -193,7 +193,13 @@ async function syncActiveAgreementPriceFromMachine({
       FOR UPDATE`,
     [assetId]
   );
-  if (!rows.length) return null;
+  if (!rows.length) {
+    if (Number(activeAgreementCount) > 0) {
+      throw new PriceVariationError(409,
+        "This excavator has a protected agreement that cannot be automatically repriced. No account or machine price was changed.");
+    }
+    return null;
+  }
   if (rows.length !== 1) {
     throw new PriceVariationError(409,
       "The excavator is linked to multiple active agreements. No price or balance was changed.");
@@ -219,6 +225,15 @@ async function syncActiveAgreementPriceFromMachine({
     paymentsReceived: reconciled.calculated.amount_paid,
     schedule,
   });
+  const projectedBalance = cents(plan.new_total) + cents(reconciled.calculated.late_charges_total)
+    - cents(reconciled.calculated.waived_charges_total)
+    + cents(reconciled.calculated.ledger_debits)
+    - cents(reconciled.calculated.amount_paid)
+    - cents(reconciled.calculated.ledger_credits);
+  if (projectedBalance <= 0) {
+    throw new PriceVariationError(409,
+      "A revised price must leave a positive, fully reconciled outstanding balance. Use a settlement correction for fully paid accounts.");
+  }
   if (cents(plan.new_total) <= cents(reconciled.calculated.amount_paid)) {
     throw new PriceVariationError(409,
       "The corrected price must leave an outstanding instalment balance. Use a settlement correction if receipts already cover the revised price.");
