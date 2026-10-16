@@ -20,7 +20,7 @@ function cents(value) {
   return Math.round(n * 100);
 }
 
-function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paymentsReceived, schedule }) {
+function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paymentsReceived, schedule, allowSamePriceRebalance = false }) {
   const oldTotal = cents(oldPrice);
   const newTotal = cents(newPrice);
   const deposit = cents(depositRequired);
@@ -29,7 +29,7 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
     throw new PriceVariationError(409, "The revised price must exceed the deposit, cover all receipts and leave a valid financed amount.");
   }
   const delta = newTotal - oldTotal;
-  if (!delta) throw new PriceVariationError(409, "The proposed price is already the agreement price.");
+  if (!delta && !allowSamePriceRebalance) throw new PriceVariationError(409, "The proposed price is already the agreement price.");
   const lines = schedule.map(row => ({
     id: Number(row.id),
     sequence_number: Number(row.sequence_number),
@@ -214,8 +214,8 @@ async function syncActiveAgreementPriceFromMachine({
       "The excavator is linked to multiple active agreements. No price or balance was changed.");
   }
   const agreement = rows[0];
-  if (cents(agreement.total_amount) === cents(newPrice)) return null;
-
+  // If prices already match but past corrections left unequal open instalments,
+  // a same-price save should still rebalance only those unpaid periods.
   const reconciled = await reconcileFinanceAgreement(agreement.id, { connection, lock: false });
   if (!reconciled.consistent) {
     throw new PriceVariationError(409,
@@ -233,7 +233,11 @@ async function syncActiveAgreementPriceFromMachine({
     depositRequired: agreement.deposit_required,
     paymentsReceived: reconciled.calculated.amount_paid,
     schedule,
+    allowSamePriceRebalance: true,
   });
+  // An already equal schedule is a no-op: never rewrite a live account just
+  // because the editor saved the same value again.
+  if (!plan.schedule_updates.length && cents(agreement.total_amount) === cents(newPrice)) return null;
   const projectedBalance = cents(plan.new_total) + cents(reconciled.calculated.late_charges_total)
     - cents(reconciled.calculated.waived_charges_total)
     + cents(reconciled.calculated.ledger_debits)
