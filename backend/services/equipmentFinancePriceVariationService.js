@@ -69,9 +69,11 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
   const basePeriodBalance = Math.floor(remainingPrincipal / unpaid.length);
   const roundingCents = remainingPrincipal % unpaid.length;
   for (const [index, row] of unpaid.entries()) {
-    // The last remaining payment absorbs any rounding; all earlier remaining
-    // principal balances are identical to the cent.
-    row.after = row.paid + basePeriodBalance + (index === unpaid.length - 1 ? roundingCents : 0);
+    // Keep the amount STILL DUE in each remaining period equal. When exact
+    // division is impossible, distribute the odd pesewas so no two unpaid
+    // principal payments differ by more than GHS 0.01. A partially paid
+    // period retains its receipt allocation above that equal unpaid share.
+    row.after = row.paid + basePeriodBalance + (index < roundingCents ? 1 : 0);
   }
   const finalPrincipal = lines.filter(row => row.schedule_status !== "rescheduled")
     .reduce((sum, row) => sum + row.after, 0);
@@ -87,6 +89,7 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
     unpaid_period_count: unpaid.length,
     remaining_principal_to_schedule: remainingPrincipal / 100,
     typical_remaining_period_principal: basePeriodBalance / 100,
+    rounding_extra_pesewas: roundingCents,
     schedule_updates: lines.filter(row => row.after !== row.before).map(row => ({
       id: row.id,
       sequence_number: row.sequence_number,
