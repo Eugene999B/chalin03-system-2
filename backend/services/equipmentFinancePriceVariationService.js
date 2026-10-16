@@ -47,26 +47,32 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
   if (originalFinanced !== scheduledPrincipal) {
     throw new PriceVariationError(409, "The agreement's instalment schedule does not match the financed amount.");
   }
-  const unpaid = lines.filter(row => ["upcoming", "due", "partial", "overdue"].includes(row.schedule_status))
-    .sort((a, b) => b.sequence_number - a.sequence_number);
+  // Every settled or otherwise closed line is historical evidence and remains
+  // untouched. Spread the new outstanding *principal* across all remaining
+  // active periods, rather than adding the difference only to the final bill.
+  // For partially paid periods retain their allocation, then add their new
+  // share of the unpaid principal to that existing paid amount.
+  const openStatuses = new Set(["upcoming", "due", "partial", "overdue"]);
+  const unpaid = lines.filter(row => openStatuses.has(row.schedule_status))
+    .sort((a, b) => a.sequence_number - b.sequence_number);
   if (!unpaid.length) throw new PriceVariationError(409, "There are no unpaid instalments to amend. A separate settlement review is needed.");
-  if (delta > 0) {
-    unpaid[0].after += delta;
-  } else {
-    let remainder = -delta;
-    for (const row of unpaid) {
-      // Preserve every existing receipt allocation and a strictly positive schedule line.
-      const capacity = Math.max(0, row.after - Math.max(row.paid, 1));
-      const reduction = Math.min(remainder, capacity);
-      row.after -= reduction;
-      remainder -= reduction;
-      if (remainder === 0) break;
-    }
-    if (remainder > 0) throw new PriceVariationError(
-      409, "The reduction exceeds unpaid schedule principal. Use a separate overpayment/settlement correction."
-    );
-  }
   const newFinanced = newTotal - deposit;
+  const protectedPrincipal = lines
+    .filter(row => row.schedule_status !== "rescheduled" && !openStatuses.has(row.schedule_status))
+    .reduce((sum, row) => sum + row.before, 0);
+  const alreadyAllocatedToOpen = unpaid.reduce((sum, row) => sum + row.paid, 0);
+  const remainingPrincipal = newFinanced - protectedPrincipal - alreadyAllocatedToOpen;
+  if (remainingPrincipal < unpaid.length) {
+    throw new PriceVariationError(409,
+      "The revised price cannot cover already-paid instalments and leave a positive amount in every remaining period. Use a settlement correction.");
+  }
+  const basePeriodBalance = Math.floor(remainingPrincipal / unpaid.length);
+  const roundingCents = remainingPrincipal % unpaid.length;
+  for (const [index, row] of unpaid.entries()) {
+    // The last remaining payment absorbs any rounding; all earlier remaining
+    // principal balances are identical to the cent.
+    row.after = row.paid + basePeriodBalance + (index === unpaid.length - 1 ? roundingCents : 0);
+  }
   const finalPrincipal = lines.filter(row => row.schedule_status !== "rescheduled")
     .reduce((sum, row) => sum + row.after, 0);
   if (finalPrincipal !== newFinanced || lines.some(row => row.after <= 0 || row.after < row.paid)) {
@@ -78,6 +84,9 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
     deposit_required: deposit / 100,
     old_financed: originalFinanced / 100,
     new_financed: newFinanced / 100,
+    unpaid_period_count: unpaid.length,
+    remaining_principal_to_schedule: remainingPrincipal / 100,
+    typical_remaining_period_principal: basePeriodBalance / 100,
     schedule_updates: lines.filter(row => row.after !== row.before).map(row => ({
       id: row.id,
       sequence_number: row.sequence_number,
