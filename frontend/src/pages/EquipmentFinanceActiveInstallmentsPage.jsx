@@ -238,6 +238,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                   <div><span>Balance</span><strong>{money(account.outstanding_balance)}</strong></div>
                   <div><span>Overdue</span><strong>{money(account.overdue_amount)}</strong></div>
                   <div><span>Next due</span><strong>{dateLabel(account.next_due_date)}</strong></div>
+                  <div><span>Next instalment</span><strong>{account.next_installment_due_amount == null ? "—" : money(account.next_installment_due_amount)}</strong></div>
                   <div><span>Last payment</span><strong>{dateLabel(account.last_payment_at)}</strong></div>
                 </div>
                 {registerPriceDiffers(account) ? (
@@ -314,6 +315,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                   <article><span>Official balance</span><strong>{money(selected.outstanding_balance)}</strong></article>
                   <article><span>Overdue</span><strong>{money(selected.overdue_amount)}</strong></article>
                   <article><span>Next due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
+                  <article><span>Next instalment</span><strong>{selected.next_installment_due_amount == null ? "—" : money(selected.next_installment_due_amount)}</strong></article>
                   <article><span>Delivery</span><strong>{label(selected.delivery_status)}</strong></article>
                   <article><span>Ownership</span><strong>{label(selected.ownership_status)}</strong></article>
                 </div>
@@ -327,7 +329,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                           <span>Payment {row.sequence_number}</span>
                           <strong>{dateLabel(row.due_date)}</strong>
                           <b>{money(row.scheduled_amount)}</b>
-                          <small>{label(row.schedule_status)}</small>
+                          <small>{label(row.schedule_status)} · Paid {money(row.amount_paid)} · Still due {money(Math.max(0, Number(row.scheduled_amount || 0) + Number(row.late_charge_amount || 0) - Number(row.waived_charge_amount || 0) - Number(row.amount_paid || 0)))}</small>
                         </article>
                       ))}
                     </div>
