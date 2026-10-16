@@ -220,11 +220,6 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
         newPrice: machine.target_selling_price,
         correctionReason: reason,
       });
-      if (Number(existing.active_agreement_count || 0) > 0 &&
-          !financePriceCorrection &&
-          !Number.isFinite(Number(machine.target_selling_price))) {
-        throw new ProfessionalFinanceError(409, "The correction could not be reconciled.");
-      }
     }
     if (editability.temporary_correction && !changedValues.size && !photos.length &&
         !financePriceCorrection) {
