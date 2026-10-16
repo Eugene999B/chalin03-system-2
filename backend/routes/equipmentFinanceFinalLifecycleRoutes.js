@@ -262,7 +262,14 @@ function accountSql({ lock = false } = {}) {
       (SELECT MAX(payment.payment_date)
          FROM equipment_sale_payments payment
         WHERE payment.agreement_id = agreement.id
-          AND payment.is_voided = FALSE) AS last_payment_at
+          AND payment.is_voided = FALSE) AS last_payment_at,
+      (SELECT GREATEST(period.scheduled_amount + period.late_charge_amount
+                        - period.waived_charge_amount - period.amount_paid, 0)
+         FROM equipment_installment_schedule period
+        WHERE period.agreement_id = agreement.id
+          AND period.schedule_status IN ('upcoming','due','partial','overdue')
+        ORDER BY period.due_date, period.sequence_number
+        LIMIT 1) AS next_installment_due_amount
     FROM equipment_sale_agreements agreement
     INNER JOIN equipment_credit_applications application
       ON application.id = agreement.credit_application_id
@@ -318,7 +325,14 @@ function accountListSql() {
       (SELECT MAX(payment.payment_date)
          FROM equipment_sale_payments payment
         WHERE payment.agreement_id = agreement.id
-          AND payment.is_voided = FALSE) AS last_payment_at
+          AND payment.is_voided = FALSE) AS last_payment_at,
+      (SELECT GREATEST(period.scheduled_amount + period.late_charge_amount
+                        - period.waived_charge_amount - period.amount_paid, 0)
+         FROM equipment_installment_schedule period
+        WHERE period.agreement_id = agreement.id
+          AND period.schedule_status IN ('upcoming','due','partial','overdue')
+        ORDER BY period.due_date, period.sequence_number
+        LIMIT 1) AS next_installment_due_amount
     FROM equipment_sale_agreements agreement
     INNER JOIN equipment_credit_applications application
       ON application.id = agreement.credit_application_id
@@ -389,6 +403,8 @@ function publicAccount(account) {
     next_due_date: account.next_due_date,
     final_due_date: account.final_due_date,
     last_payment_at: account.last_payment_at,
+    next_installment_due_amount: account.next_installment_due_amount == null
+      ? null : Number(account.next_installment_due_amount),
     delivery_policy: account.delivery_policy,
     delivery_threshold_percent: Number(account.delivery_threshold_percent || 0),
     delivery_eligible: deliveryAllowed(account),

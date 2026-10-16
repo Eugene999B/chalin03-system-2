@@ -17,8 +17,12 @@ test("a price increase goes only to an unpaid instalment, preserving all receive
     paymentsReceived: 7000, schedule: original,
   });
   assert.equal(plan.new_financed, 11000);
+  assert.equal(plan.unpaid_period_count, 2);
+  assert.equal(plan.remaining_principal_to_schedule, 7000);
+  assert.equal(plan.typical_remaining_period_principal, 3500);
   assert.deepEqual(plan.schedule_updates, [
-    { id: 3, sequence_number: 3, before: 3000, after: 5000, paid: 0 },
+    { id: 2, sequence_number: 2, before: 3000, after: 4500, paid: 1000 },
+    { id: 3, sequence_number: 3, before: 3000, after: 3500, paid: 0 },
   ]);
   assert.deepEqual(original, before);
 });
@@ -30,8 +34,8 @@ test("price reductions preserve settled payments and reduce unpaid principal", (
   });
   assert.equal(plan.new_financed, 5500);
   assert.deepEqual(plan.schedule_updates, [
-    { id: 2, sequence_number: 2, before: 3000, after: 2499.99, paid: 1000 },
-    { id: 3, sequence_number: 3, before: 3000, after: 0.01, paid: 0 },
+    { id: 2, sequence_number: 2, before: 3000, after: 1750, paid: 1000 },
+    { id: 3, sequence_number: 3, before: 3000, after: 750, paid: 0 },
   ]);
   assert.equal(original[0].scheduled_amount, 3000);
 });
@@ -44,9 +48,9 @@ test("reject reduction below receipts, deposit or remaining positive schedule pr
     }));
   }
   assert.throws(() => planUnpaidScheduleVariation({
-    oldPrice: 12000, newPrice: 7000, depositRequired: 3000,
+    oldPrice: 12000, newPrice: 7000.01, depositRequired: 3000,
     paymentsReceived: 7000, schedule: original,
-  }), /reduction exceeds unpaid schedule principal/);
+  }), /positive amount in every remaining period/);
 });
 
 test("no adjustment is permitted without open schedule lines or with inconsistent evidence", () => {
@@ -58,6 +62,40 @@ test("no adjustment is permitted without open schedule lines or with inconsisten
     oldPrice: 12000, newPrice: 13000, depositRequired: 3000,
     paymentsReceived: 3000, schedule: original.map((row, i) => i ? row : ({...row, scheduled_amount: 100})),
   }), /Schedule evidence is inconsistent/);
+});
+
+test("rounding difference goes to the final remaining period only", () => {
+  const plan = planUnpaidScheduleVariation({
+    oldPrice: 12000, newPrice: 12001.01, depositRequired: 3000,
+    paymentsReceived: 7000, schedule: original,
+  });
+  assert.equal(plan.unpaid_period_count, 2);
+  assert.deepEqual(plan.schedule_updates, [
+    { id: 2, sequence_number: 2, before: 3000, after: 3500.50, paid: 1000 },
+    { id: 3, sequence_number: 3, before: 3000, after: 2500.51, paid: 0 },
+  ]);
+  assert.equal(plan.schedule_updates[0].after + plan.schedule_updates[1].after + 3000, 9001.01);
+});
+
+test("remaining principal is spread across all three open periods without changing paid evidence", () => {
+  const input = [
+    { id: 1, sequence_number: 1, scheduled_amount: 3000, amount_paid: 3000, schedule_status: "paid" },
+    { id: 2, sequence_number: 2, scheduled_amount: 3000, amount_paid: 1000, schedule_status: "partial" },
+    { id: 3, sequence_number: 3, scheduled_amount: 3000, amount_paid: 0, schedule_status: "overdue" },
+    { id: 4, sequence_number: 4, scheduled_amount: 3000, amount_paid: 0, schedule_status: "upcoming" },
+  ];
+  const plan = planUnpaidScheduleVariation({
+    oldPrice: 16000, newPrice: 19000, depositRequired: 4000,
+    paymentsReceived: 8000, schedule: input,
+  });
+  assert.equal(plan.unpaid_period_count, 3);
+  assert.equal(plan.new_financed, 15000);
+  assert.deepEqual(plan.schedule_updates.map(row => [row.id, row.after, row.paid]), [
+    [2, 4666.66, 1000],
+    [3, 3666.66, 0],
+    [4, 3666.68, 0],
+  ]);
+  assert.equal(input[0].scheduled_amount, 3000);
 });
 
 test("approved variation requires independent approval and verified signed acceptance", () => {
