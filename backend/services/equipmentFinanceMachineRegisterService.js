@@ -174,24 +174,26 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
         Number(locationId || 0) !== Number(existing.hire_location_id || 0)) {
       throw new ProfessionalFinanceError(409, "An in-progress agreement's equipment location cannot be reassigned from this correction screen.");
     }
-    const changedValues = {};
+    // Map lookups avoid dynamic object-property access from request-supplied values.
+    const existingValues = new Map(Object.entries(existing));
+    const changedValues = new Map();
     for (const [field, value] of Object.entries(machine)) {
-      const before = auditComparable(existing[field], field);
+      const before = auditComparable(existingValues.get(field), field);
       const after = auditComparable(value, field);
       if (before === after) continue;
       if (editability.temporary_correction && FINANCE_LOCKED_MACHINE_FIELDS.has(field)) {
         throw new ProfessionalFinanceError(409, `Cannot change ${field.replaceAll("_", " ")} during an installment. Use the controlled operational process.`);
       }
-      changedValues[field] = { before, after };
+      changedValues.set(field, { before, after });
     }
-    if (editability.temporary_correction && !Object.keys(changedValues).length && !photos.length) {
+    if (editability.temporary_correction && !changedValues.size && !photos.length) {
       throw new ProfessionalFinanceError(400, "Change at least one machine detail or add a photo to record a correction.");
     }
     if (Number(existing.active_hire_count || 0) > 0 && machine.operational_purpose === "sale_only") {
       throw new ProfessionalFinanceError(409, "An active Hire machine cannot be changed to sale-only.");
     }
     await assertUnique(connection, id, machine);
-    const updates = Object.fromEntries(Object.entries(machine).filter(([field]) => Object.hasOwn(changedValues, field)));
+    const updates = Object.fromEntries(Object.entries(machine).filter(([field]) => changedValues.has(field)));
     if (Object.keys(updates).length || photos.length || (locationId !== undefined && !editability.temporary_correction)) {
       updates.updated_by = userId || null;
     }
@@ -204,7 +206,7 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
     if (entries.length) await connection.query(`UPDATE fleet_assets SET ${entries.map(([key]) => `\`${key}\` = ?`).join(", ")} WHERE id = ?`, [...entries.map(([, value]) => value), id]);
     const effectiveLocationId = locationId === undefined ? existing.hire_location_id : locationId;
     await addPhotos(connection, id, effectiveLocationId, photos, userId);
-    await writeAuditEvent({ connection, req, action: "EQUIPMENT_FINANCE_MACHINE_UPDATED", actionType: "equipment.finance.machine.update", entityType: "fleet_asset", entityId: id, workspaceCode: "equipment_installment_finance", hireLocationId: effectiveLocationId || null, severity: editability.temporary_correction ? "warning" : "notice", details: `Updated ${existing.asset_code} - ${existing.asset_name} in the Finance Machine Register.`, metadata: { temporary_in_progress_correction: editability.temporary_correction, correction_reason: editability.temporary_correction ? reason : null, before_after: changedValues, added_photo_count: photos.length, contracts_and_payments_unchanged: true } });
+    await writeAuditEvent({ connection, req, action: "EQUIPMENT_FINANCE_MACHINE_UPDATED", actionType: "equipment.finance.machine.update", entityType: "fleet_asset", entityId: id, workspaceCode: "equipment_installment_finance", hireLocationId: effectiveLocationId || null, severity: editability.temporary_correction ? "warning" : "notice", details: `Updated ${existing.asset_code} - ${existing.asset_name} in the Finance Machine Register.`, metadata: { temporary_in_progress_correction: editability.temporary_correction, correction_reason: editability.temporary_correction ? reason : null, before_after: Object.fromEntries(changedValues), added_photo_count: photos.length, contracts_and_payments_unchanged: true } });
     await connection.commit(); const machines = await listProfessionalMachines({ search: machine.asset_code || existing.asset_code, limit: 20 });
     return machines.find((item) => Number(item.id) === id) || null;
   } catch (error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
