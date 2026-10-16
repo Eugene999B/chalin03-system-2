@@ -247,6 +247,13 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                     An approved agreement variation is required to change what the customer owes.
                   </div>
                 ) : null}
+                {registerPriceDiffers(account) && account.reconciliation_consistent &&
+                Number(account.outstanding_balance || 0) > 0.01 ? (
+                  <Link className="finance-accounts__price-correction"
+                    to={`/equipment-installment-finance/applications?stage=operations&tab=amendments&case_type=agreement&case_id=${account.agreement_id}&price_variation=${encodeURIComponent(registerPurchasePrice(account))}`}>
+                    Request agreed-price &amp; balance correction
+                  </Link>
+                ) : null}
                 {!account.reconciliation_consistent ? (
                   <div className="finance-accounts__inline-warning">Account reconciliation requires attention.</div>
                 ) : null}
