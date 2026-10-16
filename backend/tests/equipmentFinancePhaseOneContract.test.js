@@ -88,7 +88,7 @@ test("Active instalment machine corrections are temporary, reasoned and independ
   assert.match(editPolicy, /TEMPORARY_FINANCE_MACHINE_CORRECTIONS_ENABLED = true/);
   assert.match(editPolicy, /installment_active/);
   assert.match(machineService, /correction_reason/);
-  assert.match(machineService, /before_after: changedValues/);
+  assert.match(machineService, /before_after: Object\.fromEntries\(changedValues\)/);
   assert.match(machineService, /FINANCE_LOCKED_MACHINE_FIELDS/);
 });
 
