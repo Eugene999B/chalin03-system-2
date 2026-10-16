@@ -76,13 +76,20 @@ test("Finance customers are reusable and duplicate protected", () => {
   assert.match(route, /EQUIPMENT_FINANCE_CUSTOMER_UPDATED/);
 });
 
-test("Excavator editing locks when an installment starts", () => {
+test("Active instalment machine corrections are temporary, reasoned and independently guarded", () => {
+  const machineService = readBackend("services", "equipmentFinanceMachineRegisterService.js");
+  const editPolicy = readBackend("services", "equipmentFinanceTemporaryMachineEditPolicy.js");
   assert.match(machineRouter, /assertMachineStillEditable/);
   assert.match(machineRouter, /equipment_credit_applications/);
   assert.match(machineRouter, /equipment_asset_sale_locks/);
   assert.match(machineRouter, /equipment_sale_agreements/);
   assert.match(machineRouter, /FINANCE_MACHINE_EDIT_LOCKED/);
-  assert.match(machineRouter, /sale_status !== "available"/);
+  assert.match(machineRouter, /getFinanceMachineEditability/);
+  assert.match(editPolicy, /TEMPORARY_FINANCE_MACHINE_CORRECTIONS_ENABLED = true/);
+  assert.match(editPolicy, /installment_active/);
+  assert.match(machineService, /correction_reason/);
+  assert.match(machineService, /before_after: changedValues/);
+  assert.match(machineService, /FINANCE_LOCKED_MACHINE_FIELDS/);
 });
 
 test("Finance sidebar is simplified around the daily journey", () => {
