@@ -219,6 +219,7 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
         assetId: id,
         newPrice: machine.target_selling_price,
         correctionReason: reason,
+        activeAgreementCount: Number(existing.active_agreement_count || 0),
       });
     }
     if (editability.temporary_correction && !changedValues.size && !photos.length &&
