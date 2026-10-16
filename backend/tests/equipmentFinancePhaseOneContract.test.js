@@ -61,7 +61,7 @@ test("Start New Installment creates the commercial offer automatically", () => {
   assert.match(route, /equipment_credit_application_decisions/);
   assert.match(route, /Installment Offer and draft credit application created/);
   assert.match(minimalWorkflow, /automatic Installment Offer/);
-  assert.match(wizard, /Create Draft Installment/i);
+  assert.match(wizard, /Create installment draft/i);
   assert.doesNotMatch(wizard, /Choose a Finance location|Choose a Hire location/);
 });
 
