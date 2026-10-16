@@ -145,6 +145,7 @@ export default function EquipmentFinanceExcavatorsPage() {
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState(null);
+  const [correctionReason, setCorrectionReason] = useState("");
   const [form, setForm] = useState(EMPTY_MACHINE);
   const [photos, setPhotos] = useState([]);
   const [viewerPhoto, setViewerPhoto] = useState(null);
@@ -194,6 +195,7 @@ export default function EquipmentFinanceExcavatorsPage() {
 
   function openCreate() {
     setEditing({ id: null });
+    setCorrectionReason("");
     setForm(EMPTY_MACHINE);
     setPhotos([]);
     setProblem("");
@@ -205,6 +207,7 @@ export default function EquipmentFinanceExcavatorsPage() {
       return;
     }
     setEditing(machine);
+    setCorrectionReason("");
     setForm({
       ...EMPTY_MACHINE,
       asset_code: machine.asset_code || "",
@@ -289,11 +292,12 @@ export default function EquipmentFinanceExcavatorsPage() {
     setProblem("");
     setNotice("");
     try {
-      const payload = { ...form, photos };
+      const payload = { ...form, photos, ...(editing?.editability?.temporary_correction ? { correction_reason: correctionReason.trim() } : {}) };
       const response = editing?.id
         ? await axiosClient.put(`${MACHINE_API}/${editing.id}`, payload)
         : await axiosClient.post(MACHINE_API, payload);
       setEditing(null);
+      setCorrectionReason("");
       setForm(EMPTY_MACHINE);
       setPhotos([]);
       setNotice(response.data?.message || "Excavator saved.");
@@ -318,7 +322,7 @@ export default function EquipmentFinanceExcavatorsPage() {
           <h1>Excavators</h1>
           <span>
             The old register and Finance Equipment Reference are now one page. View complete
-            photos and values here; edit only before an installment application begins.
+            photos and values here. During the temporary correction window, authorised staff may correct an in-progress machine record with a recorded reason; signed agreements and payments remain unchanged.
           </span>
         </div>
         <div className="finance-simple__hero-actions">
@@ -390,6 +394,13 @@ export default function EquipmentFinanceExcavatorsPage() {
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
             <form onSubmit={save}>
+              {editing?.editability?.temporary_correction ? (
+                <div className="finance-simple__notice" role="note">
+                  <strong>Temporary in-progress correction window.</strong> Record what was entered incorrectly and why. This changes the machine register only, not the signed instalment agreement, its selling price, payment schedule, receipts, or payment history. Financial terms must use an approved amendment.
+                  <Field title="Correction reason" wide><textarea required minLength={12} maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Describe the mistake and the correct information..." /></Field>
+                  <Link to="/equipment-installment-finance/applications?stage=operations&tab=amendments">Open agreement amendments</Link>
+                </div>
+              ) : null}
               <div className="finance-simple__grid">
                 <Field title="Equipment code"><input value={form.asset_code} onChange={(event) => setValue("asset_code", event.target.value)} required /></Field>
                 <Field title="Machine name"><input value={form.asset_name} onChange={(event) => setValue("asset_name", event.target.value)} required /></Field>
@@ -403,10 +414,10 @@ export default function EquipmentFinanceExcavatorsPage() {
                 <Field title="Registration / number plate"><input value={form.registration_number} onChange={(event) => setValue("registration_number", event.target.value)} /></Field>
                 <Field title="Capacity / specification"><input value={form.capacity_description} onChange={(event) => setValue("capacity_description", event.target.value)} /></Field>
                 <Field title="Condition"><select value={form.condition_status} onChange={(event) => setValue("condition_status", event.target.value)}><option value="excellent">Excellent</option><option value="good">Good</option><option value="fair">Fair</option><option value="under_inspection">Under inspection</option><option value="damaged">Damaged</option></select></Field>
-                <Field title="Sale purpose"><select value={form.operational_purpose} onChange={(event) => setValue("operational_purpose", event.target.value)}><option value="sale_only">Sale only</option><option value="sale_or_hire">Sale or Hire</option></select></Field>
+                <Field title="Sale purpose"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.operational_purpose} onChange={(event) => setValue("operational_purpose", event.target.value)}><option value="sale_only">Sale only</option><option value="sale_or_hire">Sale or Hire</option></select></Field>
                 <Field title="Ownership"><select value={form.ownership_type} onChange={(event) => setValue("ownership_type", event.target.value)}><option value="company_owned">Company owned</option><option value="consignment">Consignment</option><option value="leased">Leased</option><option value="customer_owned">Customer owned</option></select></Field>
-                <Field title="Current meter"><input type="number" min="0" step="0.01" value={form.current_meter} onChange={(event) => setValue("current_meter", event.target.value)} /></Field>
-                <Field title="Physical yard / storage"><select value={form.equipment_origin_location_id} onChange={(event) => setValue("equipment_origin_location_id", event.target.value)}><option value="">Company-wide / not assigned</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
+                <Field title="Current meter"><input disabled={Boolean(editing?.editability?.temporary_correction)} type="number" min="0" step="0.01" value={form.current_meter} onChange={(event) => setValue("current_meter", event.target.value)} /></Field>
+                <Field title="Physical yard / storage"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.equipment_origin_location_id} onChange={(event) => setValue("equipment_origin_location_id", event.target.value)}><option value="">Company-wide / not assigned</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
                 <Field title="Target selling price" hint={money(form.target_selling_price)}><input inputMode="decimal" value={form.target_selling_price} onChange={(event) => setValue("target_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} required /></Field>
                 <Field title="Minimum approved price" hint={money(form.minimum_selling_price)}><input inputMode="decimal" value={form.minimum_selling_price} onChange={(event) => setValue("minimum_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
                 <Field title="Acquisition cost" hint={money(form.acquisition_cost)}><input inputMode="decimal" value={form.acquisition_cost} onChange={(event) => setValue("acquisition_cost", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
@@ -429,7 +440,7 @@ export default function EquipmentFinanceExcavatorsPage() {
                   </article>
                 ))}
               </div>
-              <div className="finance-simple__sticky-actions"><span>{editing.id ? "Editable because no installment has started" : "New protected excavator file"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></div>
+              <div className="finance-simple__sticky-actions"><span>{editing.id ? (editing.editability?.temporary_correction ? "Temporary correction • original contracts and payments preserved" : "Editable because no installment has started") : "New protected excavator file"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></div>
             </form>
           </section>
         </div>
