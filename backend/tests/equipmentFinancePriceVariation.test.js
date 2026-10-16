@@ -64,15 +64,15 @@ test("no adjustment is permitted without open schedule lines or with inconsisten
   }), /Schedule evidence is inconsistent/);
 });
 
-test("rounding difference goes to the final remaining period only", () => {
+test("rounding is shared in single-pesewa steps to keep remaining periods nearly identical", () => {
   const plan = planUnpaidScheduleVariation({
     oldPrice: 12000, newPrice: 12001.01, depositRequired: 3000,
     paymentsReceived: 7000, schedule: original,
   });
   assert.equal(plan.unpaid_period_count, 2);
   assert.deepEqual(plan.schedule_updates, [
-    { id: 2, sequence_number: 2, before: 3000, after: 3500.50, paid: 1000 },
-    { id: 3, sequence_number: 3, before: 3000, after: 2500.51, paid: 0 },
+    { id: 2, sequence_number: 2, before: 3000, after: 3500.51, paid: 1000 },
+    { id: 3, sequence_number: 3, before: 3000, after: 2500.50, paid: 0 },
   ]);
   assert.equal(plan.schedule_updates[0].after + plan.schedule_updates[1].after + 3000, 9001.01);
 });
@@ -91,9 +91,9 @@ test("remaining principal is spread across all three open periods without changi
   assert.equal(plan.unpaid_period_count, 3);
   assert.equal(plan.new_financed, 15000);
   assert.deepEqual(plan.schedule_updates.map(row => [row.id, row.after, row.paid]), [
-    [2, 4666.66, 1000],
-    [3, 3666.66, 0],
-    [4, 3666.68, 0],
+    [2, 4666.67, 1000],
+    [3, 3666.67, 0],
+    [4, 3666.66, 0],
   ]);
   assert.equal(input[0].scheduled_amount, 3000);
 });

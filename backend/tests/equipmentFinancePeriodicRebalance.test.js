@@ -20,10 +20,10 @@ test("reprice reconciles all open periods evenly while preserving historic alloc
   assert.equal(plan.unpaid_period_count, 3);
   assert.equal(plan.remaining_principal_to_schedule, 11000);
   assert.deepEqual(plan.schedule_updates.map(x => [x.id, x.after - x.paid]), [
-    [2, 3666.66], [3, 3666.66], [4, 3666.68],
+    [2, 3666.67], [3, 3666.67], [4, 3666.66],
   ]);
   assert.deepEqual(input, fixture, "source rows, paid instalments and allocated payments remain unchanged");
-  const revisedTotal = 3000 + 4666.66 + 3666.66 + 3666.68;
+  const revisedTotal = 3000 + 4666.67 + 3666.67 + 3666.66;
   assert.equal(Math.round(revisedTotal * 100), 1500000);
 });
 

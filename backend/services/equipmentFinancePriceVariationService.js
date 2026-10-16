@@ -20,7 +20,7 @@ function cents(value) {
   return Math.round(n * 100);
 }
 
-function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paymentsReceived, schedule }) {
+function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paymentsReceived, schedule, allowSamePriceRebalance = false }) {
   const oldTotal = cents(oldPrice);
   const newTotal = cents(newPrice);
   const deposit = cents(depositRequired);
@@ -29,7 +29,7 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
     throw new PriceVariationError(409, "The revised price must exceed the deposit, cover all receipts and leave a valid financed amount.");
   }
   const delta = newTotal - oldTotal;
-  if (!delta) throw new PriceVariationError(409, "The proposed price is already the agreement price.");
+  if (!delta && !allowSamePriceRebalance) throw new PriceVariationError(409, "The proposed price is already the agreement price.");
   const lines = schedule.map(row => ({
     id: Number(row.id),
     sequence_number: Number(row.sequence_number),
@@ -69,9 +69,11 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
   const basePeriodBalance = Math.floor(remainingPrincipal / unpaid.length);
   const roundingCents = remainingPrincipal % unpaid.length;
   for (const [index, row] of unpaid.entries()) {
-    // The last remaining payment absorbs any rounding; all earlier remaining
-    // principal balances are identical to the cent.
-    row.after = row.paid + basePeriodBalance + (index === unpaid.length - 1 ? roundingCents : 0);
+    // Keep the amount STILL DUE in each remaining period equal. When exact
+    // division is impossible, distribute the odd pesewas so no two unpaid
+    // principal payments differ by more than GHS 0.01. A partially paid
+    // period retains its receipt allocation above that equal unpaid share.
+    row.after = row.paid + basePeriodBalance + (index < roundingCents ? 1 : 0);
   }
   const finalPrincipal = lines.filter(row => row.schedule_status !== "rescheduled")
     .reduce((sum, row) => sum + row.after, 0);
@@ -87,6 +89,7 @@ function planUnpaidScheduleVariation({ oldPrice, newPrice, depositRequired, paym
     unpaid_period_count: unpaid.length,
     remaining_principal_to_schedule: remainingPrincipal / 100,
     typical_remaining_period_principal: basePeriodBalance / 100,
+    rounding_extra_pesewas: roundingCents,
     schedule_updates: lines.filter(row => row.after !== row.before).map(row => ({
       id: row.id,
       sequence_number: row.sequence_number,
@@ -214,8 +217,8 @@ async function syncActiveAgreementPriceFromMachine({
       "The excavator is linked to multiple active agreements. No price or balance was changed.");
   }
   const agreement = rows[0];
-  if (cents(agreement.total_amount) === cents(newPrice)) return null;
-
+  // If prices already match but past corrections left unequal open instalments,
+  // a same-price save should still rebalance only those unpaid periods.
   const reconciled = await reconcileFinanceAgreement(agreement.id, { connection, lock: false });
   if (!reconciled.consistent) {
     throw new PriceVariationError(409,
@@ -233,7 +236,11 @@ async function syncActiveAgreementPriceFromMachine({
     depositRequired: agreement.deposit_required,
     paymentsReceived: reconciled.calculated.amount_paid,
     schedule,
+    allowSamePriceRebalance: true,
   });
+  // An already equal schedule is a no-op: never rewrite a live account just
+  // because the editor saved the same value again.
+  if (!plan.schedule_updates.length && cents(agreement.total_amount) === cents(newPrice)) return null;
   const projectedBalance = cents(plan.new_total) + cents(reconciled.calculated.late_charges_total)
     - cents(reconciled.calculated.waived_charges_total)
     + cents(reconciled.calculated.ledger_debits)
