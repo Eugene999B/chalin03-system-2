@@ -34,6 +34,20 @@ function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
+// Show the latest corrected machine-register price without rewriting the
+// original finance agreement or the reconciled balance/payment schedule.
+function registerPurchasePrice(account) {
+  const price = account?.machine_register_price;
+  if (price !== null && price !== undefined && Number.isFinite(Number(price)) && Number(price) > 0) {
+    return Number(price);
+  }
+  return Number(account?.total_amount || 0);
+}
+
+function registerPriceDiffers(account) {
+  return Math.abs(registerPurchasePrice(account) - Number(account?.total_amount || 0)) >= 0.005;
+}
+
 function accountTone(account) {
   if (Number(account.outstanding_balance || 0) <= 0.01) return "completed";
   if (Number(account.overdue_amount || 0) > 0.01) return "overdue";
@@ -214,13 +228,25 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                   <span style={{ width: `${progress}%` }} />
                 </div>
                 <div className="finance-accounts__facts">
-                  <div><span>Purchase price</span><strong>{money(account.total_amount)}</strong></div>
+                  <div><span>Purchase price</span><strong>{money(registerPurchasePrice(account))}</strong>
+                    {registerPriceDiffers(account) ? <small>Updated excavator register price</small> : null}
+                  </div>
+                  {registerPriceDiffers(account) ? (
+                    <div><span>Signed agreement price</span><strong>{money(account.total_amount)}</strong></div>
+                  ) : null}
                   <div><span>Paid</span><strong>{money(account.amount_paid)}</strong></div>
                   <div><span>Balance</span><strong>{money(account.outstanding_balance)}</strong></div>
                   <div><span>Overdue</span><strong>{money(account.overdue_amount)}</strong></div>
                   <div><span>Next due</span><strong>{dateLabel(account.next_due_date)}</strong></div>
                   <div><span>Last payment</span><strong>{dateLabel(account.last_payment_at)}</strong></div>
                 </div>
+                {registerPriceDiffers(account) ? (
+                  <div className="finance-accounts__inline-warning" role="note">
+                    The excavator price was corrected in the machine register. The original signed agreement,
+                    scheduled instalments, recorded payments and outstanding balance have not changed.
+                    An approved agreement variation is required to change what the customer owes.
+                  </div>
+                ) : null}
                 {!account.reconciliation_consistent ? (
                   <div className="finance-accounts__inline-warning">Account reconciliation requires attention.</div>
                 ) : null}
@@ -265,6 +291,14 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                   <div className="finance-accounts__notice is-error">
                     Payment and completion actions must remain blocked until receipts, allocations,
                     schedule and ledger evidence reconcile.
+                  </div>
+                ) : null}
+                {registerPriceDiffers(selected) ? (
+                  <div className="finance-accounts__inline-warning" role="note">
+                    <strong>Updated excavator purchase price: {money(registerPurchasePrice(selected))}.</strong>{" "}
+                    Signed agreement price: {money(selected.total_amount)}. The official balance,
+                    paid instalments and original agreement remain unchanged until a separately approved
+                    financial correction is processed.
                   </div>
                 ) : null}
                 <div className="finance-accounts__summary">

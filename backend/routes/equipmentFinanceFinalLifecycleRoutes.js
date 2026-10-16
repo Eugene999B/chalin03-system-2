@@ -242,6 +242,7 @@ function accountSql({ lock = false } = {}) {
       asset.current_meter,
       asset.meter_type,
       asset.sale_status AS asset_sale_status,
+      asset.target_selling_price AS machine_register_price,
       asset.is_active AS asset_is_active,
       location.name AS equipment_origin_name,
       delivery.id AS delivery_id,
@@ -302,6 +303,7 @@ function accountListSql() {
       asset.asset_code, asset.asset_name, asset.asset_type, asset.make,
       asset.model, asset.model_year, asset.serial_number,
       asset.chassis_number, asset.engine_number,
+      asset.target_selling_price AS machine_register_price,
       location.name AS equipment_origin_name,
       delivery.id AS delivery_id, delivery.delivery_number,
       delivery.delivery_datetime, delivery.status AS delivery_status_record,
@@ -372,6 +374,9 @@ function publicAccount(account) {
     main_image_url: account.main_image_url_snapshot || account.main_image_url,
     equipment_origin_name: account.equipment_origin_name,
     hire_location_id: account.hire_location_id,
+    // The live excavator-register price is a separate reference value. Never
+    // substitute it for the signed agreement total used by repayment ledgers.
+    machine_register_price: account.machine_register_price == null ? null : Number(account.machine_register_price),
     total_amount: Number(account.total_amount || 0),
     deposit_required: Number(account.deposit_required || 0),
     deposit_received: Number(account.deposit_received || 0),
