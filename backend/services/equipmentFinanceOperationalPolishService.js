@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
 const { pool } = require("../config/db");
+const { applyApprovedPriceVariation } = require("./equipmentFinancePriceVariationService");
 const { writeAuditEvent } = require("./auditTrailService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
@@ -2174,6 +2175,18 @@ async function createAmendment({ caseType, caseId, userId, body = {}, req = null
     throw new OperationalPolishError(400, "Submit between one and twenty amendment fields.");
   }
   const proposed = Object.fromEntries(entries);
+  if (Object.hasOwn(proposed, "purchase_price")) {
+    const keys = Object.keys(proposed).sort();
+    if (caseType !== "agreement" || !identity.agreement_id ||
+        cleanText(body.amendment_type, 80) !== "commercial_variation" ||
+        keys.join(",") !== "customer_acceptance_document_id,purchase_price" ||
+        !positiveId(proposed.customer_acceptance_document_id) ||
+        !Number.isFinite(Number(proposed.purchase_price)) ||
+        Number(proposed.purchase_price) <= 0) {
+      throw new OperationalPolishError(400,
+        "Price corrections need an active agreement, the commercial_variation type, a purchase_price and the verified customer-signed acceptance document ID.");
+    }
+  }
   const before = {
     application_number: identity.application_number,
     application_status: identity.application_status,
@@ -2319,6 +2332,12 @@ async function decideAmendment({ amendmentId, userId, body = {}, req = null }) {
     if (amendment.amendment_status !== "pending_approval") {
       throw new OperationalPolishError(409, "Only a pending amendment can be decided.");
     }
+    const changes = parseJson(amendment.proposed_changes_json, {});
+    if (decision === "approved" && Object.hasOwn(changes, "purchase_price") &&
+        Number(amendment.requested_by) === positiveId(userId)) {
+      throw new OperationalPolishError(403,
+        "The person who requested a purchase-price correction cannot approve it. An independent authorised approver is required.");
+    }
     await connection.query(
       `UPDATE equipment_finance_case_amendments
        SET amendment_status = ?, decision_reason = ?, approved_by = ?, approved_at = NOW(),
@@ -2385,9 +2404,15 @@ async function applyAmendment({ amendmentId, userId, req = null }) {
     const proposed = parseJson(amendment.proposed_changes_json, {});
     const fields = Object.keys(proposed);
     const directOnly = fields.length > 0 && fields.every((field) => DIRECT_SAFE_AMENDMENT_FIELDS.has(field));
+    const isPriceVariation = Object.hasOwn(proposed, "purchase_price");
     const changedColumns = [];
+    let effectivePriceResult = null;
     let applyMode = "numbered_variation";
-    if (directOnly) {
+    if (isPriceVariation) {
+      effectivePriceResult = await applyApprovedPriceVariation({ connection, amendment, proposed });
+      changedColumns.push("equipment_sale_agreements.total_amount", "equipment_sale_agreements.financed_amount",
+        "equipment_sale_agreements.outstanding_balance", "equipment_installment_schedule.scheduled_amount");
+    } else if (directOnly) {
       const kycChanges = {
         customer_name_snapshot: proposed.customer_name,
         customer_phone_snapshot: proposed.customer_phone,
@@ -2429,7 +2454,9 @@ async function applyAmendment({ amendmentId, userId, req = null }) {
       apply_mode: applyMode,
       changed_columns: changedColumns,
       preserved_original_financial_records: true,
-      numbered_variation_required: applyMode === "numbered_variation",
+      numbered_variation_required: applyMode === "numbered_variation" && !effectivePriceResult,
+      effective_purchase_price_updated: Boolean(effectivePriceResult),
+      price_variation: effectivePriceResult,
       proposed_changes: proposed,
     };
     await connection.query(
@@ -2477,9 +2504,11 @@ async function applyAmendment({ amendmentId, userId, req = null }) {
       eventType: "amendment_applied",
       title: `${amendment.amendment_number} applied as ${humanize(applyMode)}`,
       description:
-        applyMode === "numbered_variation"
-          ? "The original financial and payment records remain unchanged; the approved variation is now part of the case file."
-          : "Approved safe contact or narrative fields were updated with the original snapshot preserved.",
+        effectivePriceResult
+          ? "The approved customer-signed price variation updated the active agreement and unpaid schedule. Original signed documents, receipts and payment allocations remain preserved."
+          : applyMode === "numbered_variation"
+            ? "The original financial and payment records remain unchanged; the approved variation is now part of the case file."
+            : "Approved safe contact or narrative fields were updated with the original snapshot preserved.",
       status: "applied",
       sourceType: "amendment",
       sourceId: id,
