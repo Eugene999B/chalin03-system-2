@@ -396,9 +396,8 @@ export default function EquipmentFinanceExcavatorsPage() {
             <form onSubmit={save}>
               {editing?.editability?.temporary_correction ? (
                 <div className="finance-simple__notice" role="note">
-                  <strong>Temporary in-progress correction window.</strong> Record what was entered incorrectly and why. This changes the machine register only, not the signed instalment agreement, its selling price, payment schedule, receipts, or payment history. Financial terms must use an approved amendment.
+                  <strong>Immediate instalment price correction.</strong> Save your corrected selling price and enter a reason. If this excavator has an active instalment, CHALIN03 updates its current agreement price, remaining balance and unpaid instalment schedule together. Previously signed documents and actual receipts are preserved. Corrections that conflict with received payments will be rejected. If you edited the price earlier, save the same price again to synchronise that agreement.
                   <Field title="Correction reason" wide><textarea required minLength={12} maxLength={1000} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Describe the mistake and the correct information..." /></Field>
-                  <Link to="/equipment-installment-finance/applications?stage=operations&tab=amendments">Open agreement amendments</Link>
                 </div>
               ) : null}
               <div className="finance-simple__grid">
@@ -440,7 +439,7 @@ export default function EquipmentFinanceExcavatorsPage() {
                   </article>
                 ))}
               </div>
-              <div className="finance-simple__sticky-actions"><span>{editing.id ? (editing.editability?.temporary_correction ? "Temporary correction • original contracts and payments preserved" : "Editable because no installment has started") : "New protected excavator file"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></div>
+              <div className="finance-simple__sticky-actions"><span>{editing.id ? (editing.editability?.temporary_correction ? "Instant price & balance sync • original signed PDFs and receipts preserved" : "Editable because no installment has started") : "New protected excavator file"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></div>
             </form>
           </section>
         </div>

@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { pool } = require("../config/db");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { getFinanceMachineEditability } = require("./equipmentFinanceTemporaryMachineEditPolicy");
+const { syncActiveAgreementPriceFromMachine } = require("./equipmentFinancePriceVariationService");
 const {
   assertProfessionalSchema,
   listProfessionalMachines,
@@ -186,7 +187,8 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
       }
       changedValues.set(field, { before, after });
     }
-    if (editability.temporary_correction && !changedValues.size && !photos.length) {
+    if (editability.temporary_correction && !changedValues.size && !photos.length &&
+        machine.target_selling_price === undefined) {
       throw new ProfessionalFinanceError(400, "Change at least one machine detail or add a photo to record a correction.");
     }
     if (Number(existing.active_hire_count || 0) > 0 && machine.operational_purpose === "sale_only") {
@@ -206,9 +208,30 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
     if (entries.length) await connection.query(`UPDATE fleet_assets SET ${entries.map(([key]) => `\`${key}\` = ?`).join(", ")} WHERE id = ?`, [...entries.map(([, value]) => value), id]);
     const effectiveLocationId = locationId === undefined ? existing.hire_location_id : locationId;
     await addPhotos(connection, id, effectiveLocationId, photos, userId);
-    await writeAuditEvent({ connection, req, action: "EQUIPMENT_FINANCE_MACHINE_UPDATED", actionType: "equipment.finance.machine.update", entityType: "fleet_asset", entityId: id, workspaceCode: "equipment_installment_finance", hireLocationId: effectiveLocationId || null, severity: editability.temporary_correction ? "warning" : "notice", details: `Updated ${existing.asset_code} - ${existing.asset_name} in the Finance Machine Register.`, metadata: { temporary_in_progress_correction: editability.temporary_correction, correction_reason: editability.temporary_correction ? reason : null, before_after: Object.fromEntries(changedValues), added_photo_count: photos.length, contracts_and_payments_unchanged: true } });
+    // Synchronise ONLY explicit sale-price edits. With the existing asset row
+    // locked, changes to machine price and Finance money evidence commit or
+    // rollback atomically. Re-saving an already edited price can also repair
+    // that single machine's active agreement without any bulk backfill.
+    let financePriceCorrection = null;
+    if (editability.temporary_correction && machine.target_selling_price !== undefined) {
+      financePriceCorrection = await syncActiveAgreementPriceFromMachine({
+        connection,
+        assetId: id,
+        newPrice: machine.target_selling_price,
+        correctionReason: reason,
+        activeAgreementCount: Number(existing.active_agreement_count || 0),
+      });
+    }
+    if (editability.temporary_correction && !changedValues.size && !photos.length &&
+        !financePriceCorrection) {
+      throw new ProfessionalFinanceError(400, "Change a machine detail or provide an outstanding price correction to save.");
+    }
+    await writeAuditEvent({ connection, req, action: "EQUIPMENT_FINANCE_MACHINE_UPDATED", actionType: "equipment.finance.machine.update", entityType: "fleet_asset", entityId: id, workspaceCode: "equipment_installment_finance", hireLocationId: effectiveLocationId || null, severity: editability.temporary_correction ? "warning" : "notice", details: `Updated ${existing.asset_code} - ${existing.asset_name} in the Finance Machine Register.`, metadata: { temporary_in_progress_correction: editability.temporary_correction, correction_reason: editability.temporary_correction ? reason : null, before_after: Object.fromEntries(changedValues), added_photo_count: photos.length, contracts_and_payments_unchanged: !financePriceCorrection, finance_price_correction: financePriceCorrection, original_signed_documents_preserved: true, existing_payment_receipts_preserved: true } });
     await connection.commit(); const machines = await listProfessionalMachines({ search: machine.asset_code || existing.asset_code, limit: 20 });
-    return machines.find((item) => Number(item.id) === id) || null;
+    const savedMachine = machines.find((item) => Number(item.id) === id) || null;
+    return savedMachine && financePriceCorrection
+      ? { ...savedMachine, finance_price_correction: financePriceCorrection }
+      : savedMachine;
   } catch (error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
 }
 

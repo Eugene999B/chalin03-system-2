@@ -24,7 +24,8 @@ test("Active Installments shows edited purchase price separately from signed agr
   assert.match(page, /<span>Purchase price<\/span><strong>\{money\(registerPurchasePrice\(account\)\)\}/);
   assert.match(page, /<span>Signed agreement price<\/span><strong>\{money\(account\.total_amount\)\}/);
   assert.match(page, /Updated excavator purchase price/);
-  assert.match(page, /An approved agreement variation is required to change what the customer owes/);
+  assert.match(page, /update the effective agreement price, unpaid installments and/);
+  assert.match(page, /Open excavators to sync price/);
 });
 
 test("payment progress, balance and portfolio accounting remain based on agreement totals", () => {

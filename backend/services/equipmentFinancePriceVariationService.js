@@ -168,8 +168,111 @@ async function applyApprovedPriceVariation({ connection, amendment, proposed }) 
   };
 }
 
+
+/**
+ * Automatically reconcile ONE active agreement when an authorised Finance
+ * machine-register editor explicitly saves that machine's selling price.
+ *
+ * Called by updateFinanceMachine() inside its existing transaction. An invalid
+ * or underpaid schedule throws and rolls back BOTH the catalog edit and the
+ * financial correction. Original signed/issued documents and paid receipts
+ * are deliberately NOT rewritten.
+ */
+async function syncActiveAgreementPriceFromMachine({
+  connection, assetId, newPrice, correctionReason, activeAgreementCount = 0,
+}) {
+  if (String(correctionReason || "").trim().length < 12) {
+    throw new PriceVariationError(400, "Record a reason for the financial correction.");
+  }
+  const [rows] = await connection.query(
+    `SELECT agreement.*
+       FROM equipment_sale_agreements agreement
+      WHERE agreement.asset_id = ? AND agreement.sale_type = 'installment'
+        AND agreement.activation_source = 'approved_credit_application'
+        AND agreement.agreement_status NOT IN ('cancelled','completed','defaulted')
+      FOR UPDATE`,
+    [assetId]
+  );
+  if (!rows.length) {
+    if (Number(activeAgreementCount) > 0) {
+      throw new PriceVariationError(409,
+        "This excavator has a protected agreement that cannot be automatically repriced. No account or machine price was changed.");
+    }
+    return null;
+  }
+  if (rows.length !== 1) {
+    throw new PriceVariationError(409,
+      "The excavator is linked to multiple active agreements. No price or balance was changed.");
+  }
+  const agreement = rows[0];
+  if (cents(agreement.total_amount) === cents(newPrice)) return null;
+
+  const reconciled = await reconcileFinanceAgreement(agreement.id, { connection, lock: false });
+  if (!reconciled.consistent) {
+    throw new PriceVariationError(409,
+      "The existing installment balance, receipts and schedule do not reconcile. Correct them before editing the agreed price.");
+  }
+  const [schedule] = await connection.query(
+    `SELECT id, sequence_number, scheduled_amount, amount_paid, schedule_status
+       FROM equipment_installment_schedule WHERE agreement_id = ?
+       ORDER BY sequence_number FOR UPDATE`,
+    [agreement.id]
+  );
+  const plan = planUnpaidScheduleVariation({
+    oldPrice: agreement.total_amount,
+    newPrice,
+    depositRequired: agreement.deposit_required,
+    paymentsReceived: reconciled.calculated.amount_paid,
+    schedule,
+  });
+  const projectedBalance = cents(plan.new_total) + cents(reconciled.calculated.late_charges_total)
+    - cents(reconciled.calculated.waived_charges_total)
+    + cents(reconciled.calculated.ledger_debits)
+    - cents(reconciled.calculated.amount_paid)
+    - cents(reconciled.calculated.ledger_credits);
+  if (projectedBalance <= 0) {
+    throw new PriceVariationError(409,
+      "A revised price must leave a positive, fully reconciled outstanding balance. Use a settlement correction for fully paid accounts.");
+  }
+  if (cents(plan.new_total) <= cents(reconciled.calculated.amount_paid)) {
+    throw new PriceVariationError(409,
+      "The corrected price must leave an outstanding instalment balance. Use a settlement correction if receipts already cover the revised price.");
+  }
+  for (const line of plan.schedule_updates) {
+    await connection.query(
+      `UPDATE equipment_installment_schedule
+          SET scheduled_amount = ?, updated_at = NOW()
+        WHERE id = ? AND agreement_id = ?`,
+      [line.after, line.id, agreement.id]
+    );
+  }
+  await connection.query(
+    `UPDATE equipment_sale_agreements
+        SET total_amount = ?, financed_amount = ?, updated_at = NOW()
+      WHERE id = ?`,
+    [plan.new_total, plan.new_financed, agreement.id]
+  );
+  const after = await refreshFinanceAgreementFromEvidence(connection, agreement.id);
+  if (!after.consistent) {
+    throw new PriceVariationError(409, "Post-correction reconciliation failed. The entire edit was rolled back.");
+  }
+  return {
+    agreement_id: Number(agreement.id),
+    agreement_number: agreement.agreement_number,
+    previous_agreement_price: plan.old_total,
+    effective_agreement_price: plan.new_total,
+    previous_outstanding_balance: reconciled.calculated.outstanding_balance,
+    effective_outstanding_balance: after.calculated.outstanding_balance,
+    installment_schedule_changes: plan.schedule_updates,
+    original_signed_documents_preserved: true,
+    existing_receipts_and_allocations_preserved: true,
+    financial_correction_reason: String(correctionReason).trim(),
+  };
+}
+
 module.exports = {
   PriceVariationError,
   planUnpaidScheduleVariation,
   applyApprovedPriceVariation,
+  syncActiveAgreementPriceFromMachine,
 };
