@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const express = require("express");
+const { getFinanceMachineEditability } = require("../services/equipmentFinanceTemporaryMachineEditPolicy");
 
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
@@ -340,15 +341,13 @@ async function loadMachines(req) {
           (asset.has_legacy_image ? signedImageUrl(req, asset.id, "legacy") : null),
       };
       machine.readiness = machineReadiness(machine);
-      const editable =
-        machine.sale_status === "available" &&
-        machine.active_application_count === 0 &&
-        machine.active_sale_lock_count === 0 &&
-        machine.active_hire_count === 0;
+      const editability = getFinanceMachineEditability(machine);
       machine.editability = {
-        editable,
-        reason: editable
-          ? "This excavator has not entered an installment workflow."
+        ...editability,
+        reason: editability.temporary_correction
+          ? "Temporary correction available. Agreement terms and payments remain protected."
+          : editability.editable
+            ? "This excavator has not entered an installment workflow."
           : machine.blocking_application_number
             ? `Held by Finance application ${machine.blocking_application_number}.`
             : machine.blocking_agreement_number
