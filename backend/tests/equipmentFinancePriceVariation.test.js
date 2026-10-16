@@ -30,8 +30,8 @@ test("price reductions preserve settled payments and reduce unpaid principal", (
   });
   assert.equal(plan.new_financed, 5500);
   assert.deepEqual(plan.schedule_updates, [
-    { id: 3, sequence_number: 3, before: 3000, after: 0.01, paid: 0 },
     { id: 2, sequence_number: 2, before: 3000, after: 2499.99, paid: 1000 },
+    { id: 3, sequence_number: 3, before: 3000, after: 0.01, paid: 0 },
   ]);
   assert.equal(original[0].scheduled_amount, 3000);
 });
@@ -57,7 +57,7 @@ test("no adjustment is permitted without open schedule lines or with inconsisten
   assert.throws(() => planUnpaidScheduleVariation({
     oldPrice: 12000, newPrice: 13000, depositRequired: 3000,
     paymentsReceived: 3000, schedule: original.map((row, i) => i ? row : ({...row, scheduled_amount: 100})),
-  }), /schedule does not match/);
+  }), /Schedule evidence is inconsistent/);
 });
 
 test("approved variation requires independent approval and verified signed acceptance", () => {
