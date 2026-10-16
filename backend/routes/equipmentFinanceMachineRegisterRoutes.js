@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { getFinanceMachineEditability } = require("../services/equipmentFinanceTemporaryMachineEditPolicy");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
   installFinanceImageCompatibility,
@@ -58,7 +59,10 @@ async function assertMachineStillEditable(assetId) {
              WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count,
             (SELECT COUNT(*) FROM equipment_sale_agreements agreement
              WHERE agreement.asset_id = asset.id
-               AND agreement.agreement_status NOT IN ('cancelled','completed')) AS active_agreement_count
+               AND agreement.agreement_status NOT IN ('cancelled','completed')) AS active_agreement_count,
+            (SELECT COUNT(*) FROM hire_contract_assets hire_asset
+             WHERE hire_asset.asset_id = asset.id
+               AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count
      FROM fleet_assets asset
      WHERE asset.id = ?
      LIMIT 1`,
@@ -71,19 +75,16 @@ async function assertMachineStillEditable(assetId) {
     error.code = "FINANCE_MACHINE_NOT_FOUND";
     throw error;
   }
-  if (
-    machine.sale_status !== "available" ||
-    Number(machine.active_application_count || 0) > 0 ||
-    Number(machine.active_sale_lock_count || 0) > 0 ||
-    Number(machine.active_agreement_count || 0) > 0
-  ) {
+  const editability = getFinanceMachineEditability(machine);
+  if (!editability.editable) {
     const error = new Error(
-      "This excavator has entered an installment application, reservation or agreement. Its protected identity and pricing can no longer be edited from the register."
+      "This excavator is locked. Only authorised, reason-recorded machine corrections are temporarily allowed for in-progress instalments. Completed sales, active Hire and unrelated reservations remain protected."
     );
     error.statusCode = 409;
     error.code = "FINANCE_MACHINE_EDIT_LOCKED";
     throw error;
   }
+  machine.editability = editability;
   return machine;
 }
 
