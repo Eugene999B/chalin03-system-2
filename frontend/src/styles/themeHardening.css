@@ -1,0 +1,209 @@
+/* Chalin 03 theme hardening.
+   Loaded after the legacy stylesheet stack so older page-specific white/black declarations
+   cannot break the active theme. Status colors and image surfaces are intentionally excluded. */
+
+html[data-chalin-theme="dark"] body,
+html[data-chalin-theme="dark"] #root {
+  background: #0b1118 !important;
+  color: #edf5f1 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell:not(.bwl-theme-finance-signature),
+html[data-chalin-theme="dark"] .bwl-main:not(.finance-preview-page) {
+  background: #0b1118 !important;
+  color: #edf5f1 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content {
+  background: #0b1118 !important;
+  color: #edf5f1 !important;
+}
+
+/* Common app surfaces. */
+html[data-chalin-theme="dark"] .section-card,
+html[data-chalin-theme="dark"] .stat-card,
+html[data-chalin-theme="dark"] .card,
+html[data-chalin-theme="dark"] .panel,
+html[data-chalin-theme="dark"] .surface,
+html[data-chalin-theme="dark"] .section,
+html[data-chalin-theme="dark"] .table-card,
+html[data-chalin-theme="dark"] .form-card,
+html[data-chalin-theme="dark"] .settings-card,
+html[data-chalin-theme="dark"] .receipt-modal,
+html[data-chalin-theme="dark"] .receipt-preview,
+html[data-chalin-theme="dark"] .selected-sale-box,
+html[data-chalin-theme="dark"] .purchase-item-box,
+html[data-chalin-theme="dark"] .installment-completion__panel,
+html[data-chalin-theme="dark"] .installment-completion__metric,
+html[data-chalin-theme="dark"] .installment-completion__workflow article,
+html[data-chalin-theme="dark"] .installment-completion__inbox article,
+html[data-chalin-theme="dark"] .installment-completion__case-summary,
+html[data-chalin-theme="dark"] .installment-completion__payment-guide,
+html[data-chalin-theme="dark"] .finance-simple,
+html[data-chalin-theme="dark"] .finance-simple__section,
+html[data-chalin-theme="dark"] .finance-simple__card,
+html[data-chalin-theme="dark"] .finance-simple__metric,
+html[data-chalin-theme="dark"] .finance-simple__summary article,
+html[data-chalin-theme="dark"] .finance-simple__dialog,
+html[data-chalin-theme="dark"] [role="dialog"] {
+  background: #121a24 !important;
+  color: #edf5f1 !important;
+  border-color: #2d3a48 !important;
+}
+
+html[data-chalin-theme="dark"] .section-card,
+html[data-chalin-theme="dark"] .stat-card,
+html[data-chalin-theme="dark"] .card,
+html[data-chalin-theme="dark"] .panel,
+html[data-chalin-theme="dark"] .surface,
+html[data-chalin-theme="dark"] .section,
+html[data-chalin-theme="dark"] .table-card,
+html[data-chalin-theme="dark"] .form-card,
+html[data-chalin-theme="dark"] .settings-card {
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* Legacy utility surfaces with literal light backgrounds. */
+html[data-chalin-theme="dark"] .bg-white,
+html[data-chalin-theme="dark"] .background-white,
+html[data-chalin-theme="dark"] .bg-light,
+html[data-chalin-theme="dark"] .bg-muted,
+html[data-chalin-theme="dark"] [class*="white-bg"],
+html[data-chalin-theme="dark"] [class*="light-bg"] {
+  background: #121a24 !important;
+  color: #edf5f1 !important;
+}
+
+/* Forms and native controls. */
+html[data-chalin-theme="dark"] input,
+html[data-chalin-theme="dark"] select,
+html[data-chalin-theme="dark"] textarea,
+html[data-chalin-theme="dark"] button:not(.is-primary):not(.danger-button):not(.small-danger):not(.small-success) {
+  background: #101923 !important;
+  color: #edf5f1 !important;
+  border-color: #405160 !important;
+}
+
+html[data-chalin-theme="dark"] input::placeholder,
+html[data-chalin-theme="dark"] textarea::placeholder {
+  color: #84988e !important;
+}
+
+html[data-chalin-theme="dark"] option {
+  background: #101923 !important;
+  color: #edf5f1 !important;
+}
+
+/* Tables and list rows. */
+html[data-chalin-theme="dark"] thead,
+html[data-chalin-theme="dark"] tbody,
+html[data-chalin-theme="dark"] tr,
+html[data-chalin-theme="dark"] th,
+html[data-chalin-theme="dark"] td {
+  border-color: #2d3a48 !important;
+  color: #edf5f1 !important;
+}
+
+html[data-chalin-theme="dark"] th {
+  background: #17212d !important;
+}
+
+html[data-chalin-theme="dark"] tbody tr:nth-child(even) td {
+  background: #141d27 !important;
+}
+
+/* Typography and muted copy. */
+html[data-chalin-theme="dark"] .bwl-content h1,
+html[data-chalin-theme="dark"] .bwl-content h2,
+html[data-chalin-theme="dark"] .bwl-content h3,
+html[data-chalin-theme="dark"] .bwl-content h4,
+html[data-chalin-theme="dark"] .bwl-content h5,
+html[data-chalin-theme="dark"] .bwl-content h6 {
+  color: #ffffff !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content p,
+html[data-chalin-theme="dark"] .bwl-content li,
+html[data-chalin-theme="dark"] .bwl-content dt,
+html[data-chalin-theme="dark"] .bwl-content dd {
+  color: #b5c2bc !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content small,
+html[data-chalin-theme="dark"] .bwl-content .muted,
+html[data-chalin-theme="dark"] .bwl-content [class*="muted"],
+html[data-chalin-theme="dark"] .bwl-content [class*="secondary"] {
+  color: #98aaa1 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content a:not(.bwl-nav-item) {
+  color: #83e49d !important;
+}
+
+/* Dialogs and overlays remain dark and scrollable. */
+html[data-chalin-theme="dark"] .modal-backdrop,
+html[data-chalin-theme="dark"] .finance-simple__dialog-backdrop,
+html[data-chalin-theme="dark"] .dialog-backdrop {
+  background: rgba(2, 7, 11, 0.78) !important;
+}
+
+html[data-chalin-theme="dark"] .modal,
+html[data-chalin-theme="dark"] .drawer,
+html[data-chalin-theme="dark"] .dialog,
+html[data-chalin-theme="dark"] .finance-simple__dialog,
+html[data-chalin-theme="dark"] [role="dialog"] {
+  background: #121a24 !important;
+  color: #edf5f1 !important;
+  border-color: #344452 !important;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Deliberate image tiles stay neutral so photos keep their natural appearance. */
+html[data-chalin-theme="dark"] .finance-simple__machine-image,
+html[data-chalin-theme="dark"] .finance-simple__photo-preview,
+html[data-chalin-theme="dark"] .equipment-image,
+html[data-chalin-theme="dark"] [class*="image-frame"],
+html[data-chalin-theme="dark"] [class*="photo-frame"] {
+  background: #18232d !important;
+  border-color: #344452 !important;
+}
+
+/* Finance workspace identity: green/gold accent, deep green canvas. */
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature {
+  background: #07110d !important;
+  color: #edf6f1 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-main,
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-content {
+  background: #07110d !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-topbar {
+  background: rgba(6, 18, 13, 0.96) !important;
+  color: #f6fbf8 !important;
+  border-color: rgba(217, 184, 93, 0.19) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-topbar::after {
+  background: linear-gradient(90deg, #17734a, #4ab974 55%, #d9b85d 80%, transparent) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-theme-control {
+  border-color: rgba(217, 184, 93, 0.3) !important;
+  background: rgba(217, 184, 93, 0.1) !important;
+  color: #f5d77e !important;
+}
+
+/* Keep known semantic status treatments readable. */
+html[data-chalin-theme="dark"] .success-box { background: #103d27 !important; color: #c4f6d1 !important; border-color: #2a7650 !important; }
+html[data-chalin-theme="dark"] .warning-box { background: #45350f !important; color: #f8dfa0 !important; border-color: #7a5e20 !important; }
+html[data-chalin-theme="dark"] .error-box { background: #481c24 !important; color: #ffcbd2 !important; border-color: #7a3641 !important; }
+
+/* Reduced motion respects the user's accessibility preference. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,137 @@
+/* Real Finance UI fixes.
+ * Modal overlays are viewport-owned. They must never switch between the viewport and
+ * the post-sidebar content lane based on window width, because docked DevTools changes
+ * window.innerWidth and can otherwise move the same dialog underneath the sidebar.
+ */
+.finance-simple__dialog-backdrop,
+.finance-accounts__backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1000000 !important;
+  width: auto !important;
+  height: 100dvh !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
+  transform: none !important;
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
+}
+
+@media (max-width: 720px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop {
+    inset: 0 !important;
+    padding: 0 !important;
+    place-items: end stretch !important;
+  }
+}
+
+/* Start New Installment: eliminate the inherited top whitespace in the actual Finance content lane. */
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content {
+  padding-top: 4px !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .c03-ifx-root {
+  margin-top: 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-nav {
+  margin-top: 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-start {
+  margin-top: .35rem !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-optional-profile-shell,
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-profile {
+  margin-top: .35rem !important;
+}
+
+/* Keep the older start-wizard route compact as well, without affecting other Finance screens. */
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple.finance-start-wizard,
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple {
+  padding-top: .35rem !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero {
+  min-height: auto !important;
+  padding: .8rem .95rem !important;
+  border-radius: 15px !important;
+  align-items: center !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero h1 {
+  font-size: clamp(1.45rem, 3vw, 2rem) !important;
+  line-height: 1.03 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero span {
+  margin-top: .3rem !important;
+  font-size: .86rem !important;
+  line-height: 1.45 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__steps {
+  margin: .35rem 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__panel {
+  margin-top: .35rem !important;
+}
+
+/* The optional start-screen customer photo is compact so the actual customer form remains immediately visible. */
+.finance-customer-photo {
+  grid-template-columns: minmax(0, 1fr) 180px !important;
+  gap: .75rem !important;
+  margin: .35rem auto .5rem !important;
+  padding: .75rem !important;
+  border-radius: .9rem !important;
+}
+.finance-customer-photo__copy > span {
+  margin-top: .25rem !important;
+  line-height: 1.35 !important;
+  font-size: .82rem !important;
+}
+.finance-customer-photo__rules {
+  margin-top: .5rem !important;
+}
+.finance-customer-photo__preview {
+  min-height: 130px !important;
+  height: 130px !important;
+}
+.finance-customer-photo__preview img {
+  max-height: 130px !important;
+}
+.finance-customer-photo__actions {
+  gap: .4rem !important;
+}
+.finance-customer-photo button {
+  min-height: 38px !important;
+  padding: .55rem .7rem !important;
+  font-size: .78rem !important;
+}
+.finance-draft-bar {
+  margin-bottom: .35rem !important;
+  padding: .55rem .7rem !important;
+}
+@media (max-width: 720px) {
+  .finance-customer-photo {
+    grid-template-columns: 1fr !important;
+  }
+  .finance-customer-photo__preview {
+    min-height: 110px !important;
+    height: 110px !important;
+  }
+}
+
+/* The new guided shell should sit directly beneath the sticky Finance header, not create a second blank band. */
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-root,
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-root > * {
+  max-width: none;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-nav__identity {
+  min-width: 0 !important;
+}
+body.finance-installment-page--start .bwl-theme-finance-signature .c03-ifx-nav__links {
+  min-width: 0;
+}
+@media (max-width: 800px) {
+  body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content {
+    padding-top: 4px !important;
+  }
+}

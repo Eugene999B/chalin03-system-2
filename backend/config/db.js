@@ -48,6 +48,20 @@ function queryText(statement) {
   return String(statement?.sql || "");
 }
 
+function normalizeEquipmentAssetSaleLockStatement(statement) {
+  const sql = queryText(statement);
+  if (
+    !/\bequipment_asset_sale_locks\s+sale_lock\b/i.test(sql) ||
+    !/\bsale_lock\.id\b/i.test(sql)
+  ) {
+    return statement;
+  }
+
+  const normalizedSql = sql.replace(/\bsale_lock\.id\b/gi, "sale_lock.asset_id");
+  if (typeof statement === "string") return normalizedSql;
+  return { ...statement, sql: normalizedSql };
+}
+
 function stripSqlComments(statement) {
   return String(statement || "")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
@@ -108,7 +122,8 @@ function runtimeDdlBlockedError(decision) {
 
 function guardedExecutor(original, receiver) {
   return async function executeWithRuntimeDdlGuard(statement, values) {
-    const decision = runtimeDdlDecision(statement);
+    const normalizedStatement = normalizeEquipmentAssetSaleLockStatement(statement);
+    const decision = runtimeDdlDecision(normalizedStatement);
 
     if (decision.action === "block") {
       throw runtimeDdlBlockedError(decision);
@@ -126,7 +141,7 @@ function guardedExecutor(original, receiver) {
       ];
     }
 
-    return original.call(receiver, statement, values);
+    return original.call(receiver, normalizedStatement, values);
   };
 }
 
@@ -213,6 +228,7 @@ module.exports = {
   RUNTIME_DDL_PATTERN,
   getSslConfig,
   isProduction,
+  normalizeEquipmentAssetSaleLockStatement,
   pool,
   protectConnection,
   runtimeDdlDecision,

@@ -1,0 +1,411 @@
+.worker-payroll {
+  display: grid;
+  gap: 18px;
+}
+
+.worker-payroll__loading,
+.worker-payroll__empty,
+.worker-payroll__notice {
+  border: 1px solid #d9e1ea;
+  border-radius: 14px;
+  background: #f7f9fc;
+  padding: 16px;
+  color: #425466;
+}
+
+.worker-payroll__notice {
+  display: grid;
+  gap: 5px;
+  border-color: #b8d6f1;
+  background: #eef7ff;
+}
+
+.worker-payroll__notice strong {
+  color: #123d63;
+}
+
+.worker-payroll__notice.is-error {
+  border-color: #efb4b4;
+  background: #fff1f1;
+  color: #9f1c1c;
+}
+
+.worker-payroll__notice.is-success {
+  border-color: #a7d9b6;
+  background: #f1fbf4;
+  color: #176b36;
+}
+
+.worker-payroll__notice.is-neutral {
+  margin-bottom: 14px;
+  border-color: #dce3eb;
+  background: #f8fafc;
+  color: #52657b;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.worker-payroll__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.worker-payroll__metric,
+.worker-payroll__card {
+  border: 1px solid #dfe5ec;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(20, 35, 55, 0.05);
+}
+
+.worker-payroll__metric {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  justify-content: center;
+  padding: 15px;
+}
+
+.worker-payroll__metric span,
+.worker-payroll__metric small,
+.worker-payroll__current-grid span,
+.worker-payroll__section-head span {
+  color: #65758a;
+}
+
+.worker-payroll__metric strong {
+  color: #17263a;
+  font-size: 1.05rem;
+}
+
+.worker-payroll__metric.is-warning {
+  border-color: #e9c97c;
+  background: #fffaf0;
+}
+
+.worker-payroll__metric.is-success {
+  border-color: #9dd2ae;
+  background: #f2fbf5;
+}
+
+.worker-payroll__card {
+  padding: 18px;
+}
+
+.worker-payroll__section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 15px;
+}
+
+.worker-payroll__section-head p {
+  margin: 0 0 4px;
+  color: #8b6b00;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.worker-payroll__section-head h3 {
+  margin: 0;
+  color: #13233a;
+}
+
+.worker-payroll__current-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.worker-payroll__current-grid > div {
+  display: grid;
+  gap: 5px;
+  border-radius: 12px;
+  background: #f7f9fc;
+  padding: 12px;
+}
+
+.worker-payroll__component-groups,
+.worker-payroll__two-column,
+.worker-payroll__loan-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.worker-payroll__component-groups {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.worker-payroll__component-groups > div {
+  border: 1px solid #e4e8ee;
+  border-radius: 13px;
+  padding: 13px;
+}
+
+.worker-payroll__component-groups h4 {
+  margin: 0 0 10px;
+  color: #26384f;
+}
+
+.worker-payroll__component-groups article {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid #edf0f4;
+}
+
+.worker-payroll__component-groups article:first-of-type {
+  border-top: 0;
+}
+
+.worker-payroll__table-wrap {
+  overflow-x: auto;
+}
+
+.worker-payroll__table-wrap table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.worker-payroll__table-wrap th,
+.worker-payroll__table-wrap td {
+  text-align: left;
+  padding: 11px 10px;
+  border-bottom: 1px solid #edf0f4;
+  vertical-align: top;
+}
+
+.worker-payroll__table-wrap th {
+  color: #65758a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.worker-payroll__table-wrap td small {
+  display: block;
+  margin-top: 3px;
+  color: #718096;
+}
+
+.worker-payroll__status {
+  display: inline-flex;
+  border-radius: 999px;
+  background: #edf2f7;
+  padding: 5px 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.worker-payroll__status.is-paid,
+.worker-payroll__status.is-current {
+  background: #e7f7ec;
+  color: #18743a;
+}
+
+.worker-payroll__status.is-part_paid,
+.worker-payroll__status.is-due,
+.worker-payroll__status.is-superseded {
+  background: #fff2cf;
+  color: #855f00;
+}
+
+.worker-payroll__status.is-revoked {
+  background: #fde8e8;
+  color: #a61b1b;
+}
+
+.worker-payroll__payslip-issue-list,
+.worker-payroll__payslip-grid {
+  display: grid;
+  gap: 11px;
+}
+
+.worker-payroll__payslip-issue-list {
+  margin-bottom: 14px;
+}
+
+.worker-payroll__payslip-issue-list article,
+.worker-payroll__payslip-grid article {
+  border: 1px solid #dfe5ec;
+  border-radius: 13px;
+  background: #fbfcfe;
+  padding: 13px;
+}
+
+.worker-payroll__payslip-issue-list article,
+.worker-payroll__payslip-head,
+.worker-payroll__payslip-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.worker-payroll__payslip-issue-list article,
+.worker-payroll__payslip-head {
+  justify-content: space-between;
+}
+
+.worker-payroll__payslip-issue-list article > div,
+.worker-payroll__payslip-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.worker-payroll__payslip-issue-list span,
+.worker-payroll__payslip-head span,
+.worker-payroll__payslip-head small {
+  color: #65758a;
+}
+
+.worker-payroll__payslip-head strong {
+  overflow-wrap: anywhere;
+  color: #17263a;
+}
+
+.worker-payroll__payslip-actions {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.worker-payroll__button {
+  border: 1px solid #c8d2de;
+  border-radius: 9px;
+  background: #ffffff;
+  padding: 8px 11px;
+  color: #17314f;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.worker-payroll__button:hover:not(:disabled) {
+  border-color: #8ea6be;
+  background: #f3f7fb;
+}
+
+.worker-payroll__button.is-primary {
+  border-color: #17314f;
+  background: #17314f;
+  color: #ffffff;
+}
+
+.worker-payroll__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.worker-payroll__salary-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.worker-payroll__salary-actions span,
+.worker-payroll__salary-form-footer span,
+.worker-payroll__history-actions span { color:#65758a; font-size:.86rem; }
+.worker-payroll__salary-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px; border:1px solid #d9e3ed; border-radius:14px; background:#f8fbfe; padding:14px; }
+.worker-payroll__salary-form label { display:grid; gap:6px; color:#40556c; font-size:.88rem; font-weight:700; }
+.worker-payroll__salary-form input,
+.worker-payroll__salary-form select,
+.worker-payroll__salary-form textarea { width:100%; box-sizing:border-box; border:1px solid #cbd6e1; border-radius:10px; background:#fff; padding:9px 10px; color:#20364e; font:inherit; }
+.worker-payroll__salary-form .is-wide { grid-column:1 / -1; }
+.worker-payroll__salary-form-footer,
+.worker-payroll__history-actions { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.worker-payroll__history-actions { margin-top:10px; justify-content:flex-start; }
+
+.worker-payroll__two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.worker-payroll__stack {
+  display: grid;
+  gap: 10px;
+}
+
+.worker-payroll__stack article,
+.worker-payroll__loan-grid article {
+  border: 1px solid #e5e9ef;
+  border-radius: 13px;
+  padding: 13px;
+  background: #fbfcfe;
+}
+
+.worker-payroll__stack article > div,
+.worker-payroll__loan-grid article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.worker-payroll__stack p,
+.worker-payroll__loan-grid p {
+  margin: 7px 0;
+  color: #52657b;
+}
+
+.worker-payroll__stack small {
+  color: #718096;
+}
+
+.worker-payroll__loan-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.worker-payroll__loan-grid dl {
+  margin: 12px 0 0;
+  display: grid;
+  gap: 7px;
+}
+
+.worker-payroll__loan-grid dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.worker-payroll__loan-grid dt {
+  color: #65758a;
+}
+
+.worker-payroll__loan-grid dd {
+  margin: 0;
+  font-weight: 700;
+  color: #26384f;
+}
+
+@media (max-width: 1100px) {
+  .worker-payroll__metrics,
+  .worker-payroll__current-grid,
+  .worker-payroll__component-groups,
+  .worker-payroll__loan-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .worker-payroll__metrics,
+  .worker-payroll__current-grid,
+  .worker-payroll__component-groups,
+  .worker-payroll__salary-form,
+  .worker-payroll__two-column,
+  .worker-payroll__loan-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worker-payroll__section-head,
+  .worker-payroll__payslip-issue-list article,
+  .worker-payroll__payslip-head {
+    display: grid;
+  }
+
+  .worker-payroll__card {
+    padding: 14px;
+  }
+}

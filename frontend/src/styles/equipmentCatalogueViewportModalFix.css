@@ -1,0 +1,61 @@
+/* Equipment Catalogue modal: keep the Register/Edit/Detail sheet independent of the fixed sidebar. */
+.equipment-catalogue__sheet-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-width: 100vw !important;
+  min-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 16px !important;
+  z-index: 2147483000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+/* A fixed-position child becomes relative to an ancestor that establishes a containing block.
+   Finance workspaces sometimes use these properties for layout effects, so neutralize them while
+   an Equipment Catalogue sheet is open. */
+body:has(.equipment-catalogue__sheet-backdrop) #root,
+body:has(.equipment-catalogue__sheet-backdrop) .bwl-shell,
+body:has(.equipment-catalogue__sheet-backdrop) .bwl-main,
+body:has(.equipment-catalogue__sheet-backdrop) .bwl-content,
+body:has(.equipment-catalogue__sheet-backdrop) .finance-shell,
+body:has(.equipment-catalogue__sheet-backdrop) .finance-workspace,
+body:has(.equipment-catalogue__sheet-backdrop) .finance-simple {
+  transform: none !important;
+  filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+  will-change: auto !important;
+}
+
+.equipment-catalogue__sheet-backdrop .equipment-catalogue__sheet {
+  position: relative !important;
+  inset: auto !important;
+  flex: 0 1 auto !important;
+  width: min(1040px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px) !important;
+  max-height: calc(100dvh - 32px) !important;
+  margin: 0 !important;
+}
+
+@media (max-width: 720px) {
+  .equipment-catalogue__sheet-backdrop {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  .equipment-catalogue__sheet-backdrop .equipment-catalogue__sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 94dvh !important;
+    border-radius: 24px 24px 0 0 !important;
+  }
+}

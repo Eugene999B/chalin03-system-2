@@ -7,6 +7,9 @@ const {
   permissionsForWorkspace,
 } = require("../security/permissionCatalog");
 const {
+  equipmentRoleDefaultPermissions,
+} = require("../security/equipmentBusinessRoleTemplates");
+const {
   isOriginalSystemAdministrator,
 } = require("../security/systemAdminIdentity");
 
@@ -16,17 +19,10 @@ const WORKSPACE_CODES = new Set([
   "equipment_hire",
 ]);
 
-const OWNER_PROTECTED_PERMISSIONS = Object.freeze([
-  "workspace.admin",
-  "users.manage",
-  "users.permissions.manage",
-  "security.admin",
-  "security.view",
-  "system.diagnostics",
-  "backup.download",
-  "backup.validate",
-  "backup.restore",
-]);
+// The original System Administrator is the protected owner account. Every
+// permission is immutable for that identity; ordinary administrators remain
+// category-scoped and can still receive controlled overrides.
+const OWNER_PROTECTED_PERMISSIONS = Object.freeze([...ALL_PERMISSIONS]);
 
 const ADMIN_ONLY_GRANTS = Object.freeze([
   "workspace.admin",
@@ -55,6 +51,27 @@ function isKnownPermission(permissionCode) {
   return ALL_PERMISSIONS.includes(String(permissionCode || "").trim());
 }
 
+function uniquePermissions(values = []) {
+  return [...new Set(values.filter(Boolean))].sort();
+}
+
+function roleDefaultPermissions(session = {}) {
+  if (isOriginalSystemAdministrator(session)) {
+    return uniquePermissions(getEffectivePermissions(session));
+  }
+
+  const workspace = normalizeWorkspace(
+    session.workspace_code || session.active_workspace?.code
+  );
+  const allowed = new Set(permissionsForWorkspace(workspace));
+  return uniquePermissions([
+    ...getEffectivePermissions(session),
+    ...equipmentRoleDefaultPermissions({
+      ...session,
+      workspace_code: workspace,
+    }),
+  ]).filter((permission) => allowed.has(permission));
+}
 
 function applyPermissionOverrides(basePermissions = [], overrides = []) {
   const allowed = new Set(basePermissions.filter(Boolean));
@@ -128,13 +145,30 @@ async function loadActivePermissionOverrides({
 }
 
 async function resolveEffectivePermissions(session = {}, options = {}) {
-  const basePermissions = getEffectivePermissions(session);
+  const workspaceCode =
+    options.workspaceCode ||
+    session.workspace_code ||
+    session.active_workspace?.code;
+
+  // Never filter or override the protected owner account. This preserves
+  // Backup, Security Centre, System Operations and all business permissions
+  // even while the owner is logged into the Spare Parts workspace.
+  if (isOriginalSystemAdministrator(session)) {
+    return uniquePermissions(
+      getEffectivePermissions({
+        ...session,
+        workspace_code: workspaceCode,
+      })
+    );
+  }
+
+  const basePermissions = roleDefaultPermissions({
+    ...session,
+    workspace_code: workspaceCode,
+  });
   const overrides = await loadActivePermissionOverrides({
     userId: session.id,
-    workspaceCode:
-      options.workspaceCode ||
-      session.workspace_code ||
-      session.active_workspace?.code,
+    workspaceCode,
     connection: options.connection || pool,
   });
 
@@ -161,17 +195,13 @@ function validateOverridePolicy({ targetUser, permissionCode, effect, workspaceC
     };
   }
 
-  if (
-    normalizedEffect === "deny" &&
-    isOriginalSystemAdministrator(targetUser) &&
-    OWNER_PROTECTED_PERMISSIONS.includes(permissionCode)
-  ) {
+  if (isOriginalSystemAdministrator(targetUser)) {
     return {
       ok: false,
       statusCode: 409,
-      code: "OWNER_PERMISSION_PROTECTED",
+      code: "OWNER_PERMISSION_IMMUTABLE",
       message:
-        "This owner-security permission cannot be denied for the original System Administrator.",
+        "The original System Administrator always retains every system permission and cannot receive permission overrides.",
     };
   }
 
@@ -241,15 +271,17 @@ function humanizePermission(permissionCode) {
 
 function buildPermissionDescriptors(workspaceCode = "spare_parts") {
   const allowed = new Set(permissionsForWorkspace(workspaceCode));
-  return ALL_PERMISSIONS.filter((permissionCode) => allowed.has(permissionCode)).map((permissionCode) => ({
-    code: permissionCode,
-    label: humanizePermission(permissionCode),
-    category: permissionCategory(permissionCode),
-    owner_protected: OWNER_PROTECTED_PERMISSIONS.includes(permissionCode),
-    admin_only_grant: ADMIN_ONLY_GRANTS.includes(permissionCode),
-  })).sort((a, b) =>
-    `${a.category}:${a.label}`.localeCompare(`${b.category}:${b.label}`)
-  );
+  return ALL_PERMISSIONS.filter((permissionCode) => allowed.has(permissionCode))
+    .map((permissionCode) => ({
+      code: permissionCode,
+      label: humanizePermission(permissionCode),
+      category: permissionCategory(permissionCode),
+      owner_protected: OWNER_PROTECTED_PERMISSIONS.includes(permissionCode),
+      admin_only_grant: ADMIN_ONLY_GRANTS.includes(permissionCode),
+    }))
+    .sort((a, b) =>
+      `${a.category}:${a.label}`.localeCompare(`${b.category}:${b.label}`)
+    );
 }
 
 module.exports = {
@@ -263,5 +295,6 @@ module.exports = {
   normalizeEffect,
   normalizeWorkspace,
   resolveEffectivePermissions,
+  roleDefaultPermissions,
   validateOverridePolicy,
 };

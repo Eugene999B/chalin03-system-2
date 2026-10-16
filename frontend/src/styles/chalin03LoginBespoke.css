@@ -1,0 +1,425 @@
+/* Chalin 03 bespoke login treatment. Presentation only; authentication flow is unchanged. */
+
+.gate4.biometric-login {
+  --c03-ink: #07182c;
+  --c03-ink-2: #0d2945;
+  --c03-gold: #d9a827;
+  --c03-gold-bright: #f3c64d;
+  --c03-paper: #f5f6f4;
+  --c03-line: #cfd7df;
+  --c03-text: #10223a;
+  --c03-muted: #687687;
+  position: relative;
+  isolation: isolate;
+  padding: 0;
+  background:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+    radial-gradient(circle at 15% 12%, rgba(217,168,39,.17), transparent 26%),
+    radial-gradient(circle at 86% 78%, rgba(36,116,163,.16), transparent 29%),
+    linear-gradient(135deg, #06111d 0%, #0a243b 52%, #06121f 100%);
+  background-size: 42px 42px, 42px 42px, auto, auto, auto;
+}
+
+.gate4.biometric-login::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 0 46%, rgba(243,198,77,.09) 46.2% 46.7%, transparent 47% 100%);
+  mix-blend-mode: screen;
+  z-index: -1;
+}
+
+.gate4.biometric-login .gate4__shell {
+  width: min(1240px, 100%);
+  min-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  background: rgba(4, 15, 27, .82);
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+}
+
+.gate4.biometric-login .gate4__topbar {
+  min-height: 68px;
+  padding: 12px clamp(18px, 3vw, 38px);
+  border-bottom: 1px solid rgba(255,255,255,.14);
+}
+
+.gate4.biometric-login .gate4__logo {
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(243,198,77,.62);
+  border-radius: 10px;
+  color: transparent;
+  font-size: 0;
+  background:
+    linear-gradient(135deg, rgba(243,198,77,.24), rgba(243,198,77,.04)),
+    url('/chalin03-logo.png') center / 30px 30px no-repeat,
+    #07182c;
+  clip-path: polygon(0 0, 82% 0, 100% 18%, 100% 100%, 0 100%);
+  box-shadow: 0 10px 28px rgba(0,0,0,.22);
+}
+
+.gate4.biometric-login .gate4__logo::after {
+  content: "03";
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  color: #f3c64d;
+  font: 900 7px/1 Arial, sans-serif;
+  letter-spacing: .08em;
+}
+
+.gate4.biometric-login .gate4__brand small {
+  color: rgba(255,255,255,.52);
+  letter-spacing: .18em;
+}
+
+.gate4.biometric-login .gate4__brand strong {
+  font-size: 16px;
+  letter-spacing: -.02em;
+}
+
+.gate4.biometric-login .gate4__status > * {
+  border-radius: 6px;
+}
+
+.gate4.biometric-login .gate4__layout {
+  min-height: calc(100dvh - 68px);
+  grid-template-columns: minmax(0, 1.02fr) minmax(470px, .98fr);
+}
+
+.gate4.biometric-login .gate4__story {
+  padding: clamp(34px, 5vw, 72px);
+  border-right: 1px solid rgba(255,255,255,.11);
+  background: linear-gradient(155deg, rgba(255,255,255,.035), rgba(255,255,255,.005));
+}
+
+.gate4.biometric-login .gate4__story-copy h1 {
+  max-width: 610px;
+  font-size: clamp(40px, 4.2vw, 64px);
+  line-height: .94;
+}
+
+.gate4.biometric-login .gate4__story-copy h1 span {
+  color: #f3c64d;
+  text-shadow: none;
+}
+
+.gate4.biometric-login .gate4__story-copy p {
+  max-width: 560px;
+  color: rgba(255,255,255,.68);
+}
+
+.gate4.biometric-login .gate4__story-copy > small::after {
+  content: " · SHIFT ACCESS";
+  color: rgba(255,255,255,.38);
+}
+
+.gate4.biometric-login .gate4__story-foot span {
+  text-transform: none;
+  letter-spacing: .02em;
+}
+
+.gate4.biometric-login .gate4__access {
+  position: relative;
+  padding: clamp(24px, 4vw, 54px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.98), rgba(246,247,245,.98));
+  border-left: 4px solid #d9a827;
+}
+
+.gate4.biometric-login .gate4__access::before {
+  content: "CHALIN 03 / OPERATOR ENTRY";
+  display: block;
+  margin: -6px 0 18px;
+  color: #7a8490;
+  font: 900 9px/1.2 Arial, sans-serif;
+  letter-spacing: .16em;
+}
+
+.gate4.biometric-login .gate4__access-heading h2 {
+  font-size: 0;
+  margin-top: 7px;
+  letter-spacing: -.04em;
+}
+
+.gate4.biometric-login .gate4__access-heading h2::after {
+  content: "Open your shift";
+  font-size: clamp(30px, 4vw, 42px);
+}
+
+.gate4.biometric-login .gate4__access-heading p {
+  font-size: 0;
+}
+
+.gate4.biometric-login .gate4__access-heading p::after {
+  content: "Choose your operating division and assigned store, then authenticate.";
+  font-size: 12px;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: 8px;
+  margin: 22px 0 12px;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button {
+  min-height: 78px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px 1fr 14px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid #d5dce3;
+  border-radius: 7px;
+  color: #536172;
+  background: #fff;
+  text-align: left;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease, background .16s ease;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button:hover {
+  transform: translateY(-1px);
+  border-color: #b9c2cc;
+  box-shadow: 0 10px 22px rgba(23,44,68,.08);
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button.is-selected {
+  border-color: #c99a22;
+  color: #0b1d31;
+  background: linear-gradient(135deg, #fffdf3, #f6f1df);
+  box-shadow: inset 4px 0 0 #d9a827, 0 10px 22px rgba(48,42,16,.08);
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  font-size: 0;
+  border: 1px solid #ccd4dc;
+  background: #f2f5f7;
+  clip-path: polygon(0 0, 76% 0, 100% 24%, 100% 100%, 0 100%);
+}
+
+.gate4.biometric-login .gate4__workspace-tabs button:nth-child(1) > span::before { content: "SP"; color: #87680c; font: 950 10px/1 Arial,sans-serif; letter-spacing: .04em; }
+.gate4.biometric-login .gate4__workspace-tabs button:nth-child(2) > span::before { content: "MO"; color: #7c4e19; font: 950 10px/1 Arial,sans-serif; letter-spacing: .04em; }
+.gate4.biometric-login .gate4__workspace-tabs button:nth-child(3) > span::before { content: "EH"; color: #14577e; font: 950 10px/1 Arial,sans-serif; letter-spacing: .04em; }
+
+.gate4.biometric-login .gate4__workspace-tabs strong {
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.gate4.biometric-login .gate4__workspace-tabs i {
+  font-style: normal;
+  font-size: 11px;
+  color: #a4740d;
+}
+
+.gate4.biometric-login .gate4__context-strip {
+  min-height: 62px;
+  padding: 11px 13px;
+  border: 1px solid #d6dde5;
+  border-left: 3px solid #d9a827;
+  border-radius: 6px;
+  background: #fbfcfc;
+}
+
+.gate4.biometric-login .gate4__context-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  margin-right: 10px;
+  color: #7c5f10;
+  font: 950 10px/1 Arial,sans-serif;
+  border: 1px solid #d0d8df;
+  background: #f2f4f3;
+}
+
+.gate4.biometric-login .gate4__context-icon::after {
+  content: "03";
+}
+
+.gate4.biometric-login .gate4__context-icon {
+  font-size: 0;
+}
+
+.gate4.biometric-login .gate4__context-icon + div strong {
+  font-size: 11px;
+}
+
+.gate4.biometric-login .gate4__field > span {
+  color: #4f5c6b;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.gate4.biometric-login .gate4__field input,
+.gate4.biometric-login .gate4__field select {
+  border-radius: 5px;
+  border: 1px solid #ccd5de;
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(16,34,58,.04);
+}
+
+.gate4.biometric-login .gate4__field input:focus,
+.gate4.biometric-login .gate4__field select:focus {
+  border-color: #bf901b;
+  box-shadow: 0 0 0 3px rgba(217,168,39,.13);
+  outline: none;
+}
+
+.gate4.biometric-login .gate4__passkey,
+.gate4.biometric-login .gate4__submit {
+  border-radius: 6px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+
+.gate4.biometric-login .gate4__submit {
+  border: 1px solid #b18314;
+  background: #0a1e33;
+  box-shadow: 0 14px 28px rgba(7,24,44,.18);
+}
+
+.gate4.biometric-login .gate4__submit:hover:not(:disabled) {
+  background: #0d2945;
+  box-shadow: 0 18px 34px rgba(7,24,44,.24);
+}
+
+.gate4.biometric-login .gate4__submit strong {
+  font-size: 0;
+}
+
+.gate4.biometric-login .gate4__submit strong::after {
+  content: "Enter operating floor";
+  color: #fff;
+  font-size: 13px;
+}
+
+.gate4.biometric-login .gate4__submit small {
+  font-size: 0;
+}
+
+.gate4.biometric-login .gate4__submit small::after {
+  content: "Verified access for this Chalin 03 session";
+  color: rgba(255,255,255,.62);
+  font-size: 9px;
+}
+
+.gate4.biometric-login .gate4__divider span {
+  font-size: 0;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.gate4.biometric-login .gate4__divider span::after {
+  content: "Password verification";
+  font-size: 8px;
+  color: #788392;
+}
+
+.gate4.biometric-login .gate4__quick-links button {
+  border-radius: 4px;
+  text-transform: none;
+}
+
+.gate4.biometric-login .gate4__progress-message {
+  border-left: 3px solid #d9a827;
+  border-radius: 0 5px 5px 0;
+}
+
+/* Replace the map's emoji glyphs with simple Chalin monograms. */
+.gate4.biometric-login .group-operations-map__node > span {
+  width: 34px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  font-size: 0;
+  border: 1px solid rgba(243,198,77,.32);
+  background: rgba(3,18,33,.42);
+}
+
+.gate4.biometric-login .group-operations-map__node > span::before {
+  font: 950 9px/1 Arial,sans-serif;
+  letter-spacing: .08em;
+  color: #f3c64d;
+}
+
+.gate4.biometric-login .group-operations-map__node.is-parts > span::before { content: "SP"; }
+.gate4.biometric-login .group-operations-map__node.is-mining > span::before { content: "MO"; }
+.gate4.biometric-login .group-operations-map__node.is-hire > span::before { content: "EH"; }
+
+.gate4.biometric-login .group-operations-map__node,
+.gate4.biometric-login .group-operations-map__centre {
+  border-radius: 8px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+
+.gate4.biometric-login .group-operations-map__centre {
+  width: 108px;
+  height: 108px;
+}
+
+.gate4.biometric-login .group-operations-map__centre img {
+  border-radius: 6px;
+  background: transparent;
+}
+
+@media (max-width: 760px) {
+  .gate4.biometric-login .gate4__topbar {
+    min-height: 60px;
+    padding: 10px 14px;
+  }
+
+  .gate4.biometric-login .gate4__layout {
+    min-height: calc(100dvh - 60px);
+  }
+
+  .gate4.biometric-login .gate4__access {
+    border-left: 0;
+    border-top: 3px solid #d9a827;
+    padding: 22px 16px 28px;
+  }
+
+  .gate4.biometric-login .gate4__workspace-tabs {
+    gap: 6px;
+  }
+
+  .gate4.biometric-login .gate4__workspace-tabs button {
+    min-height: 70px;
+    grid-template-columns: 30px 1fr;
+    padding: 8px;
+  }
+
+  .gate4.biometric-login .gate4__workspace-tabs button > span {
+    width: 30px;
+    height: 30px;
+  }
+
+  .gate4.biometric-login .gate4__workspace-tabs i {
+    display: none;
+  }
+
+  .gate4.biometric-login .gate4__access-heading h2::after {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate4.biometric-login .gate4__workspace-tabs button {
+    transition: none;
+  }
+}

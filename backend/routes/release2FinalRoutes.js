@@ -157,9 +157,24 @@ const COMMON_DEPENDENCIES = [
   "installment_reminder_log",
 ];
 
+const PAYROLL_WORKFORCE_TABLES = Object.freeze([
+  "payroll_statutory_rule_versions",
+  "payroll_compensation_profiles",
+  "payroll_recurring_components",
+  "payroll_periods",
+  "payroll_entries",
+  "payroll_entry_lines",
+  "payroll_salary_payments",
+  "payroll_adjustment_requests",
+  "payroll_worker_loans",
+  "payroll_loan_transactions",
+  "payroll_payslips",
+]);
+
 const SCOPE_TABLES = Object.freeze({
   spare_parts: [
     ...COMMON_DEPENDENCIES,
+    ...PAYROLL_WORKFORCE_TABLES,
     "products",
     "stock_adjustments",
     "suppliers",
@@ -188,6 +203,7 @@ const SCOPE_TABLES = Object.freeze({
 
   mining: [
     ...COMMON_DEPENDENCIES,
+    ...PAYROLL_WORKFORCE_TABLES,
     "mining_sites",
     "user_mining_site_access",
     "mining_daily_logs",
@@ -230,6 +246,7 @@ const SCOPE_TABLES = Object.freeze({
 
   equipment_hire: [
     ...COMMON_DEPENDENCIES,
+    ...PAYROLL_WORKFORCE_TABLES,
     "user_hire_location_access",
     "hire_customers",
     "hire_enquiries",
@@ -344,6 +361,7 @@ const CATEGORY_TABLES = Object.freeze({
   ]),
 
   financial: new Set([
+    ...PAYROLL_WORKFORCE_TABLES,
     "suppliers",
     "purchases",
     "purchase_items",
@@ -398,6 +416,7 @@ const CATEGORY_TABLES = Object.freeze({
   ]),
 
   workforce: new Set([
+    ...PAYROLL_WORKFORCE_TABLES,
     "users",
     "user_branch_access",
     "user_business_access",

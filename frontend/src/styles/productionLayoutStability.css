@@ -1,0 +1,209 @@
+/* Production layout stability: dialogs stay in the viewport and wizard content stays contiguous. */
+
+.finance-simple__dialog-backdrop,
+.finance-accounts__backdrop,
+.excavator-registration-modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1000000 !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 24px !important;
+  overflow: hidden !important;
+}
+
+.finance-simple__dialog,
+.finance-accounts__dialog {
+  width: min(920px, calc(100vw - 48px)) !important;
+  max-width: calc(100vw - 48px) !important;
+  height: min(88dvh, 820px) !important;
+  max-height: calc(100dvh - 48px) !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.finance-simple__dialog > form {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scroll-padding-bottom: 6rem;
+  padding-bottom: 6rem;
+}
+
+.finance-simple__dialog > form > .finance-simple__sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-bottom: 0;
+}
+
+.finance-simple:has(.finance-simple__steps) {
+  width: min(100%, 1280px);
+  padding-top: .45rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__hero {
+  min-height: auto;
+  padding: .8rem .95rem;
+  border-radius: 15px;
+  align-items: center;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__hero h1 {
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__hero span {
+  margin-top: .3rem;
+  font-size: .86rem;
+}
+
+.finance-simple:has(.finance-simple__steps) > .finance-simple__notice {
+  margin: .5rem 0;
+  padding: .55rem .72rem;
+  font-size: .82rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__steps {
+  position: sticky;
+  top: .35rem;
+  z-index: 20;
+  margin: .5rem 0;
+  gap: .35rem;
+  padding: .25rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__step {
+  min-height: 46px;
+  padding: .45rem .55rem;
+  border-radius: 11px;
+  font-size: .82rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__panel {
+  margin-top: .55rem;
+  padding: .75rem;
+  border-radius: 16px;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__grid {
+  gap: .6rem;
+  margin-top: .65rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__section {
+  margin-top: .6rem;
+  padding: .72rem;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.finance-simple:has(.finance-simple__steps) input,
+.finance-simple:has(.finance-simple__steps) select,
+.finance-simple:has(.finance-simple__steps) textarea {
+  min-height: 40px;
+  padding: .58rem .68rem;
+  border-radius: 10px;
+}
+
+.finance-simple:has(.finance-simple__steps) textarea {
+  min-height: 80px;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__sticky-actions {
+  width: min(900px, 100%);
+  margin: .55rem auto 0;
+  border-radius: 14px;
+  padding: .6rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__cards {
+  gap: .75rem;
+  margin-top: .7rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__card-body {
+  padding: .8rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__facts {
+  gap: .45rem;
+  margin: .6rem 0;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__facts div {
+  padding: .5rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__summary {
+  gap: .55rem;
+  margin-top: .7rem;
+}
+
+.finance-simple:has(.finance-simple__steps) .finance-simple__summary article {
+  padding: .65rem;
+}
+
+.finance-profile {
+  padding-top: .45rem !important;
+}
+
+.finance-profile__hero {
+  min-height: auto !important;
+  padding: .85rem 1rem !important;
+}
+
+@media (max-width: 900px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop,
+  .excavator-registration-modal-backdrop {
+    padding: 14px !important;
+  }
+
+  .finance-simple__dialog,
+  .finance-accounts__dialog {
+    width: min(760px, calc(100vw - 28px)) !important;
+    max-width: calc(100vw - 28px) !important;
+    height: min(92dvh, 840px) !important;
+    max-height: calc(100dvh - 28px) !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop,
+  .excavator-registration-modal-backdrop {
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+
+  .finance-simple__dialog,
+  .finance-accounts__dialog {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: min(94dvh, 880px) !important;
+    max-height: 94dvh !important;
+    border-radius: 18px 18px 0 0 !important;
+  }
+
+  .finance-simple:has(.finance-simple__steps) .finance-simple__steps {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+
+  .finance-simple:has(.finance-simple__steps) .finance-simple__step {
+    flex: 0 0 min(72vw, 235px);
+    scroll-snap-align: start;
+  }
+}

@@ -86,14 +86,18 @@ test("duplicate sanitized worksheet names remain unique", () => {
 test("service-worker network failures always resolve to a Response", () => {
   const serviceWorkerSource = read("frontend/public/sw.js");
 
-  assert.match(serviceWorkerSource, /function buildOfflineResponse\(\)/);
+  assert.match(serviceWorkerSource, /function offlineShell\(\)/);
+  assert.match(serviceWorkerSource, /function failedBuildAsset\(request, status = 410\)/);
   assert.match(serviceWorkerSource, /return new Response\(/);
-  assert.match(serviceWorkerSource, /async function cachedResponseOrOffline/);
-  assert.match(serviceWorkerSource, /return buildOfflineResponse\(\)/);
+  assert.match(serviceWorkerSource, /async function networkBuildAsset\(request\)/);
+  assert.match(serviceWorkerSource, /return failedBuildAsset\(request, 503\)/);
+  assert.match(serviceWorkerSource, /async function networkNavigation\(request\)/);
   assert.match(
     serviceWorkerSource,
-    /return networkResponse \|\| buildOfflineResponse\(\)/
+    /return \(await cachedShell\(\)\) \|\| offlineShell\(\)/
   );
+  assert.match(serviceWorkerSource, /async function networkCoreAsset\(request\)/);
+  assert.match(serviceWorkerSource, /status: 503/);
   assert.doesNotMatch(
     serviceWorkerSource,
     /\.catch\(\(\) => caches\.match\(/,

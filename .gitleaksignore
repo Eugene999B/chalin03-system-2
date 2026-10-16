@@ -1,2 +1,7 @@
 98e5ca271d70cb880a8f8a860aaf629f90be3faf:.commandgate/recovered-manifest.json:generic-api-key:45
 83408ba15fe3be4ecaf0f08844b079757fb96ad2:.commandgate/recovered_apply_command_gate.py.partial:generic-api-key:6
+2cd8aa7f78e5cf033b438e5e0898f2928d4ee166:backend/services/aiChalinIntelligenceExpertPackService.js:generic-api-key:103
+2cd8aa7f78e5cf033b438e5e0898f2928d4ee166:backend/services/aiChalinIntelligenceExpertPackService.js:generic-api-key:112
+515db3b30630214b13b93fcd86bbb281d0a9a2bd:backend/tests/inventoryTraceabilityFoundation20260810.test.js:generic-api-key:20
+83a33dfb472c043d602f19eb11f6ca9a84c8cbac:backend/tests/geminiRuntimeDiagnosticsProvider.test.js:generic-api-key:94
+728c71d3059c7b980e62ae1d7b8b529219edb037:backend/tests/chalinOneAiSafety.test.js:generic-api-key:88

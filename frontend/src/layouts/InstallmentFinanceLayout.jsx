@@ -1,160 +1,119 @@
+import { useEffect } from "react";
 import { Navigate, useLocation } from "react-router";
 import BusinessWorkspaceLayout from "../components/BusinessWorkspaceLayout";
+import InstallmentMobileEnhancements from "../components/InstallmentMobileEnhancements";
+import InstallmentFinanceWorkspaceEnhancements from "../components/InstallmentFinanceWorkspaceEnhancements";
+import InstallmentFinancePolicyAndLateFee from "../components/InstallmentFinancePolicyAndLateFee";
 import { useAuth } from "../context/AuthContext";
 import {
   EQUIPMENT_DIVISIONS,
   canAccessEquipmentDivision,
   ensureFinanceUiCompatibilityPermissions,
 } from "../security/equipmentDivisionAccess";
+import "../styles/equipmentFinanceLifecycleProfessional.css";
+import "../styles/equipmentFinanceSignatureShell.css";
+import "../styles/equipmentFinanceSignaturePolish.css";
+import "../styles/equipmentFinanceThreePageRouteSignature.css";
+import "../styles/installmentMobileProfessional.css";
+import "../styles/financeUiRealFix.css";
+import "../styles/installmentFinanceDesktopPalette.css";
+import "../utils/installmentFinanceNextDue.js";
 
 const BLOCKED_FINANCE_PATHS = [
-  "/equipment-installment-finance/customers",
-  "/equipment-installment-finance/documents",
   "/equipment-installment-finance/shared-controls",
-  "/equipment-installment-finance/workers",
-  "/equipment-installment-finance/employment-documents",
   "/equipment-installment-finance/document-signature-settings",
   "/equipment-installment-finance/administration",
 ];
 
+const THREE_PAGE_PRESENTATION_CLASSES = [
+  "finance-installment-page--start",
+  "finance-installment-page--applications",
+  "finance-installment-page--excavators",
+];
+
+function presentationClassFor(location) {
+  if (location.pathname !== "/equipment-installment-finance/applications") return null;
+  const stage = new URLSearchParams(location.search).get("stage");
+  if (stage === "start") return "finance-installment-page--start";
+  if (stage === "machines") return "finance-installment-page--excavators";
+  if (!stage) return "finance-installment-page--applications";
+  return null;
+}
+
 const navigationSections = [
-  {
-    title: "Installment Finance",
-    items: [
-      {
-        title: "Finance Command Centre",
-        description: "Finance portfolio health, risk, collections and expected cash flow",
-        path: "/equipment-installment-finance",
-        icon: "🎯",
-        end: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Credit Applications & Approval",
-        description: "Finance applications, KYC, affordability and independent decisions",
-        path: "/equipment-installment-finance/applications",
-        icon: "📝",
-        matchSearch: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Agreement Activation",
-        description: "Create the approved Finance agreement and installment schedule",
-        path: "/equipment-installment-finance/applications?stage=activation",
-        icon: "📄",
-        matchSearch: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Deposit & Machine Reservation",
-        description: "Record the controlled opening deposit and reserve the approved machine",
-        path: "/equipment-installment-finance/applications?stage=deposit",
-        icon: "🔒",
-        matchSearch: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Installment Collections",
-        description: "Record controlled payments, receipts and schedule allocations",
-        path: "/equipment-installment-finance/applications?stage=collections",
-        icon: "💳",
-        matchSearch: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Delivery Handover",
-        description: "Record Finance handover only after the approved payment threshold",
-        path: "/equipment-installment-finance/applications?stage=delivery",
-        icon: "🚜",
-        matchSearch: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Ownership Transfer",
-        description: "Transfer ownership only after full payment and controlled delivery",
-        path: "/equipment-installment-finance/applications?stage=ownership",
-        icon: "📜",
-        matchSearch: true,
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Installment Documents & Reports",
-        description: "Finance agreements, receipts, aging, collections and expected payments",
-        path: "/equipment-installment-finance/reports",
-        icon: "📊",
-        permissions: ["fleet.assets.view"],
-      },
-      {
-        title: "Finance Equipment Reference",
-        description: "Read-only machine identity and availability reference for Finance work",
-        path: "/equipment-installment-finance/catalogue",
-        icon: "🔎",
-        permissions: ["fleet.assets.view"],
-      },
-    ],
-  },
-  {
-    title: "Division Control",
-    items: [
-      {
-        title: "Back to Equipment Divisions",
-        description: "Return to the protected division gateway",
-        path: "/equipment-hire",
-        icon: "◫",
-      },
-    ],
-  },
-  {
-    title: "Account",
-    items: [
-      {
-        title: "Installment Finance Help",
-        description: "Guide for credit, approvals, collections and customer protection",
-        path: "/equipment-installment-finance/help",
-        icon: "❓",
-      },
-      {
-        title: "Change Password",
-        description: "Update your secure account password",
-        path: "/equipment-installment-finance/change-password",
-        icon: "🔐",
-      },
-    ],
-  },
+  { title: "Installment Workflow", items: [
+    { title: "Finance Home", description: "One clear path from customer and excavator to approval, agreement and payments", path: "/equipment-installment-finance", icon: "🏠", end: true, permissions: ["fleet.assets.view"] },
+    { title: "Start New Installment", description: "Choose customer, excavator and payment plan, then create a recoverable draft", path: "/equipment-installment-finance/applications?stage=start", icon: "➕", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Applications & Approvals", description: "Complete drafts, submit applications and record manager decisions", path: "/equipment-installment-finance/applications", icon: "📝", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Task & Approval Inbox", description: "Only work requiring action, approval, verification or correction", path: "/equipment-installment-finance/applications?stage=inbox", legacyPath: "/equipment-installment-finance/applications?stage=operations&tab=inbox", icon: "📥", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Case Operations", description: "One selected customer case with excavator photo, timeline, evidence and payments", path: "/equipment-installment-finance/applications?stage=case-operations", legacyPath: "/equipment-installment-finance/applications?stage=operations&tab=case", icon: "🗂️", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Prepare Agreement", description: "Turn an approved application into the authoritative installment agreement", path: "/equipment-installment-finance/applications?stage=activation", icon: "✍️", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Opening Deposits", description: "Record the controlled opening deposit and reserve the exact excavator", path: "/equipment-installment-finance/applications?stage=deposit", icon: "💰", matchSearch: true, permissions: ["fleet.assets.view"] },
+  ] },
+  { title: "Accounts & Payments", items: [
+    { title: "Active Installments", description: "Read-only account register with schedules, balances, overdue amounts and progress", path: "/equipment-installment-finance/applications?stage=accounts", legacyPath: "/equipment-installment-finance/applications?stage=collections", icon: "📒", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Payments & Collections", description: "Record normal installment receipts and review allocation and payment history", path: "/equipment-installment-finance/applications?stage=collections", icon: "💳", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Customer Installment Profiles", description: "One customer view for applications, agreements, schedules, payments and balances", path: "/equipment-installment-finance/applications?stage=customer-portfolios", icon: "👤", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Payments & Arrears", description: "Due and overdue accounts, reminders, promises and follow-up", path: "/equipment-installment-finance/applications?stage=arrears", icon: "📞", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Corrections & Reversals", description: "Governed payment corrections, reversals, returns and approved accounting entries", path: "/equipment-installment-finance/applications?stage=corrections", icon: "↩️", matchSearch: true, permissions: ["fleet.assets.view"] },
+  ] },
+  { title: "Customers & Equipment", items: [
+    { title: "Customers", description: "Create, search and update reusable company-wide Finance customers", path: "/equipment-installment-finance/applications?stage=customers", icon: "👥", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Excavators", description: "Identity, selling price, protected photographs and sale availability", path: "/equipment-installment-finance/applications?stage=machines", icon: "🚜", matchSearch: true, permissions: ["fleet.assets.view"] },
+  ] },
+  { title: "Documents & Reports", items: [
+    { title: "Secure Case Documents", description: "Private KYC evidence, reviews, approvals and controlled delivery files", path: "/equipment-installment-finance/applications?stage=case-workspace", icon: "🔒", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Generated Documents", description: "Issued agreements, schedules, receipts, statements and document history", path: "/equipment-installment-finance/applications?stage=generated-documents", icon: "📄", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Portfolio, SMS & Reports", description: "Statements, arrears, cash flow, accounting exports and thermal receipts", path: "/equipment-installment-finance/reports", icon: "📊", permissions: ["fleet.assets.view"] },
+    { title: "Staff & Workforce", description: "Finance staff logins, roles, profiles, documents and permissions", path: "/equipment-installment-finance/workforce", icon: "👷", permissions: ["workers.view"] },
+    { title: "Payroll Processing", description: "Validate, approve, pay and reconcile protected salary cycles", path: "/equipment-installment-finance/payroll", icon: "💵", permissions: ["payroll.view"] },
+    { title: "Finance Settings", description: "Payment rules, reminders, alerts, receipts, delivery and legal terms", path: "/equipment-installment-finance/applications?stage=settings", icon: "⚙️", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Final Operations & Reset", description: "Verify completion, prepare the read-only reset impact and prove a fresh journey", path: "/equipment-installment-finance/applications?stage=finalization", icon: "✅", matchSearch: true, permissions: ["fleet.assets.view"] },
+    { title: "Help & Guide", description: "Beginner guide for creating, approving and operating an installment account", path: "/equipment-installment-finance/applications?stage=guide", icon: "❓", matchSearch: true },
+    { title: "Back to Equipment Divisions", description: "Return to the protected Equipment Business division gateway", path: "/equipment-hire", icon: "◫" },
+  ] },
+  { title: "Account", items: [
+    { title: "Change Password", description: "Update your secure Equipment Business account password", path: "/equipment-installment-finance/change-password", icon: "🔐" },
+  ] },
 ];
 
 function isBlockedFinancePath(pathname) {
-  return BLOCKED_FINANCE_PATHS.some(
-    (blockedPath) => pathname === blockedPath || pathname.startsWith(`${blockedPath}/`)
-  );
+  return BLOCKED_FINANCE_PATHS.some((blockedPath) => pathname === blockedPath || pathname.startsWith(`${blockedPath}/`));
 }
 
 export default function InstallmentFinanceLayout() {
   const { user } = useAuth();
   const location = useLocation();
 
-  if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) {
-    return <Navigate to="/equipment-hire" replace />;
-  }
+  useEffect(() => {
+    document.body.classList.remove(...THREE_PAGE_PRESENTATION_CLASSES);
+    const activeClass = presentationClassFor(location);
+    if (activeClass) document.body.classList.add(activeClass);
+    return () => document.body.classList.remove(...THREE_PAGE_PRESENTATION_CLASSES);
+  }, [location.pathname, location.search]);
 
-  if (isBlockedFinancePath(location.pathname)) {
-    return <Navigate to="/equipment-installment-finance" replace />;
-  }
+  if (!canAccessEquipmentDivision(user, EQUIPMENT_DIVISIONS.FINANCE)) return <Navigate to="/equipment-hire" replace />;
+  if (isBlockedFinancePath(location.pathname)) return <Navigate to="/equipment-installment-finance" replace />;
 
   ensureFinanceUiCompatibilityPermissions(user, location.pathname);
 
   return (
-    <BusinessWorkspaceLayout
-      workspaceCode="equipment_installment_finance"
-      workspaceName="Equipment Installment Finance"
-      icon="🏦"
-      theme="earth"
-      independenceLabel="Independent Finance staff division"
-      contextHeading="Company-wide Finance portfolio"
-      workspaceEyebrow="Current staff division"
-      separationBadge="No access to Hire jobs or contracts"
-      description="Dedicated company-wide credit applications, agreements, deposits, machine reservations, installment collections, controlled delivery and final ownership transfer. Finance staff do not select Hire locations. Hire enquiries, Hire contracts, dispatch, job cards, Hire invoices, returns, workers and administration remain inside Equipment Hire Operations and cannot be opened from this division."
-      navigationSections={navigationSections}
-    />
+    <>
+      <InstallmentMobileEnhancements />
+      <BusinessWorkspaceLayout
+        workspaceCode="equipment_installment_finance"
+        workspaceName="Equipment Installment Finance"
+        icon="🏦"
+        theme="finance-signature"
+        independenceLabel=""
+        description=""
+        contextHeading="Company-wide Finance portfolio — no Hire-location selection"
+        workspaceEyebrow="Current Equipment Business division"
+        separationBadge="No access to Hire jobs or contracts"
+        navigationSections={navigationSections}
+      />
+      <InstallmentFinanceWorkspaceEnhancements />
+      <InstallmentFinancePolicyAndLateFee />
+    </>
   );
 }

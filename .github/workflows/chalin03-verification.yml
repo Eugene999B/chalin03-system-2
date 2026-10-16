@@ -102,3 +102,83 @@ jobs:
             frontend/frontend-build.log
           if-no-files-found: ignore
           retention-days: 7
+
+  finance-phase-three-browser:
+    name: Finance Completion Phase 2, 3 and 4 Chromium journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright test runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Prove authenticated Finance excavator pictures
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinancePhaseTwoImages.spec.js 2>&1 | tee finance-phase-two-images-browser.log
+
+      - name: Prove Completion Phase 2 accounts customers and payments
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinanceCompletionPhaseTwo.spec.js --timeout=120000 2>&1 | tee finance-completion-phase-two-browser.log
+
+      - name: Prove Completion Phase 3 professional documents and printing
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinanceCompletionPhaseThreeDocuments.spec.js --timeout=120000 2>&1 | tee finance-completion-phase-three-documents-browser.log
+
+      - name: Prove Completion Phase 4 final operations and reset safety
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinanceCompletionPhaseFour.spec.js --timeout=120000 2>&1 | tee finance-completion-phase-four-browser.log
+
+      - name: Prove the complete Finance application and approval pipeline
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinancePhaseThreeApprovalPipeline.spec.js --timeout=120000 2>&1 | tee finance-phase-three-approval-browser.log
+
+      - name: Run the complete Finance Phase 3 collection journey
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinancePhaseThree.spec.js 2>&1 | tee finance-phase-three-browser.log
+
+      - name: Run the complete Finance Phase 4 return settlement journey
+        run: |
+          set -o pipefail
+          npx playwright test e2e/equipmentFinancePhaseFour.spec.js 2>&1 | tee finance-phase-four-browser.log
+
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-completion-browser-evidence
+          path: |
+            frontend/finance-phase-two-images-browser.log
+            frontend/finance-completion-phase-two-browser.log
+            frontend/finance-completion-phase-three-documents-browser.log
+            frontend/finance-completion-phase-four-browser.log
+            frontend/finance-phase-three-approval-browser.log
+            frontend/finance-phase-three-browser.log
+            frontend/finance-phase-four-browser.log
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 7

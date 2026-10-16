@@ -1,0 +1,73 @@
+/* Chalin 03 Finance modal viewport contract.
+   Applied while a Finance dialog is open so it cannot be anchored to the sidebar/content lane. */
+body:has(.finance-simple__dialog-backdrop, .finance-accounts__backdrop, [role="dialog"][aria-modal="true"]) #root,
+body:has(.finance-simple__dialog-backdrop, .finance-accounts__backdrop, [role="dialog"][aria-modal="true"]) #root * {
+  transform: none !important;
+  filter: none !important;
+  perspective: none !important;
+  clip-path: none !important;
+  contain: none !important;
+  will-change: auto !important;
+}
+body:has(.finance-simple__dialog-backdrop, .finance-accounts__backdrop) .finance-simple__dialog-backdrop,
+body:has(.finance-simple__dialog-backdrop, .finance-accounts__backdrop) .finance-accounts__backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  height: 100dvh !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 20px !important;
+  display: grid !important;
+  place-items: center !important;
+  z-index: 2147483000 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+.finance-simple__dialog-backdrop,
+.finance-accounts__backdrop {
+  left: 0 !important;
+  right: 0 !important;
+}
+.finance-simple__dialog,
+.finance-accounts__dialog,
+.finance-accounts__panel {
+  width: min(920px, calc(100vw - 40px)) !important;
+  max-width: 920px !important;
+  height: min(86dvh, 820px) !important;
+  max-height: calc(100dvh - 40px) !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+.finance-simple__dialog > form,
+.finance-simple__dialog > .finance-simple__dialog-body,
+.finance-accounts__dialog > .finance-accounts__dialog-body,
+.finance-accounts__panel > .finance-accounts__body {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+@media (max-width: 720px) {
+  .finance-simple__dialog-backdrop,
+  .finance-accounts__backdrop {
+    padding: 0 !important;
+    place-items: end stretch !important;
+  }
+  .finance-simple__dialog,
+  .finance-accounts__dialog,
+  .finance-accounts__panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: min(94dvh, 900px) !important;
+    max-height: 94dvh !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+}
