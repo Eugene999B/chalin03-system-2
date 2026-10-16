@@ -2,6 +2,7 @@ const crypto = require("crypto");
 
 const { pool } = require("../config/db");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const { getFinanceMachineEditability } = require("./equipmentFinanceTemporaryMachineEditPolicy");
 const {
   assertProfessionalSchema,
   listProfessionalMachines,
@@ -17,6 +18,15 @@ const CONDITIONS = new Set(["excellent", "good", "fair", "damaged", "under_inspe
 const OWNERSHIP_TYPES = new Set(["company_owned", "leased", "consignment", "customer_owned"]);
 const METER_TYPES = new Set(["hour_meter", "odometer"]);
 const MAX_PHOTO_BYTES = 48 * 1024;
+
+const FINANCE_LOCKED_MACHINE_FIELDS = new Set(["operational_purpose", "current_meter"]);
+const NUMERIC_MACHINE_FIELDS = new Set(["model_year", "current_meter", "acquisition_cost", "target_selling_price", "minimum_selling_price", "standard_hire_rate"]);
+function auditComparable(value, field) {
+  if (value == null || value === "") return null;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (NUMERIC_MACHINE_FIELDS.has(field)) return Number(value);
+  return String(value).trim();
+}
 
 function cleanText(value, maxLength = 1000) { return String(value ?? "").trim().slice(0, maxLength); }
 function nullableText(value, maxLength = 1000) { return cleanText(value, maxLength) || null; }
@@ -150,18 +160,51 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
   const locationId = input?.equipment_origin_location_id === undefined ? undefined : positiveId(input.equipment_origin_location_id); const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const [rows] = await connection.query(`SELECT asset.*, (SELECT COUNT(*) FROM hire_contract_assets hire_asset WHERE hire_asset.asset_id = asset.id AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count, (SELECT COUNT(*) FROM equipment_asset_sale_locks sale_lock WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count FROM fleet_assets asset WHERE asset.id = ? LIMIT 1 FOR UPDATE`, [id]);
+    const [rows] = await connection.query(`SELECT asset.*, (SELECT COUNT(*) FROM hire_contract_assets hire_asset WHERE hire_asset.asset_id = asset.id AND hire_asset.status IN ('assigned','dispatched','active')) AS active_hire_count, (SELECT COUNT(*) FROM equipment_asset_sale_locks sale_lock WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL) AS active_sale_lock_count, (SELECT COUNT(*) FROM equipment_credit_applications application WHERE application.asset_id = asset.id AND application.application_status NOT IN ('declined','withdrawn')) AS active_application_count, (SELECT COUNT(*) FROM equipment_sale_agreements agreement WHERE agreement.asset_id = asset.id AND agreement.agreement_status NOT IN ('cancelled','completed')) AS active_agreement_count FROM fleet_assets asset WHERE asset.id = ? LIMIT 1 FOR UPDATE`, [id]);
     const existing = rows[0]; if (!existing) throw new ProfessionalFinanceError(404, "Machine was not found.");
-    if (["sold", "cancelled"].includes(existing.sale_status)) throw new ProfessionalFinanceError(409, "Sold or cancelled machine evidence cannot be edited here.");
-    if (Number(existing.active_hire_count || 0) > 0 && machine.operational_purpose === "sale_only") throw new ProfessionalFinanceError(409, "An active Hire machine cannot be changed to sale-only.");
+    const editability = getFinanceMachineEditability(existing);
+    if (!editability.editable) {
+      throw new ProfessionalFinanceError(409, "Machine editing is locked by an active Hire, completed sale or protected Finance status.");
+    }
+    const reason = cleanText(input?.correction_reason, 1000);
+    if (editability.temporary_correction && reason.length < 12) {
+      throw new ProfessionalFinanceError(400, "Explain the correction in at least 12 characters to preserve the audit evidence.");
+    }
+    if (editability.temporary_correction && locationId !== undefined &&
+        Number(locationId || 0) !== Number(existing.hire_location_id || 0)) {
+      throw new ProfessionalFinanceError(409, "An in-progress agreement's equipment location cannot be reassigned from this correction screen.");
+    }
+    const changedValues = {};
+    for (const [field, value] of Object.entries(machine)) {
+      const before = auditComparable(existing[field], field);
+      const after = auditComparable(value, field);
+      if (before === after) continue;
+      if (editability.temporary_correction && FINANCE_LOCKED_MACHINE_FIELDS.has(field)) {
+        throw new ProfessionalFinanceError(409, `Cannot change ${field.replaceAll("_", " ")} during an installment. Use the controlled operational process.`);
+      }
+      changedValues[field] = { before, after };
+    }
+    if (editability.temporary_correction && !Object.keys(changedValues).length && !photos.length) {
+      throw new ProfessionalFinanceError(400, "Change at least one machine detail or add a photo to record a correction.");
+    }
+    if (Number(existing.active_hire_count || 0) > 0 && machine.operational_purpose === "sale_only") {
+      throw new ProfessionalFinanceError(409, "An active Hire machine cannot be changed to sale-only.");
+    }
     await assertUnique(connection, id, machine);
-    const updates = { ...machine, updated_by: userId || null };
-    if (locationId !== undefined) { const location = await locationRecord(connection, locationId); updates.hire_location_id = locationId || null; updates.current_location = location?.name || null; }
+    const updates = Object.fromEntries(Object.entries(machine).filter(([field]) => Object.hasOwn(changedValues, field)));
+    if (Object.keys(updates).length || photos.length || (locationId !== undefined && !editability.temporary_correction)) {
+      updates.updated_by = userId || null;
+    }
+    if (locationId !== undefined && !editability.temporary_correction) {
+      const location = await locationRecord(connection, locationId);
+      updates.hire_location_id = locationId || null;
+      updates.current_location = location?.name || null;
+    }
     const entries = Object.entries(updates).filter(([, value]) => value !== undefined);
     if (entries.length) await connection.query(`UPDATE fleet_assets SET ${entries.map(([key]) => `\`${key}\` = ?`).join(", ")} WHERE id = ?`, [...entries.map(([, value]) => value), id]);
     const effectiveLocationId = locationId === undefined ? existing.hire_location_id : locationId;
     await addPhotos(connection, id, effectiveLocationId, photos, userId);
-    await writeAuditEvent({ connection, req, action: "EQUIPMENT_FINANCE_MACHINE_UPDATED", actionType: "equipment.finance.machine.update", entityType: "fleet_asset", entityId: id, workspaceCode: "equipment_installment_finance", hireLocationId: effectiveLocationId || null, severity: "notice", details: `Updated ${existing.asset_code} - ${existing.asset_name} in the Finance Machine Register.`, metadata: { changed_fields: Object.keys(machine), added_photo_count: photos.length } });
+    await writeAuditEvent({ connection, req, action: "EQUIPMENT_FINANCE_MACHINE_UPDATED", actionType: "equipment.finance.machine.update", entityType: "fleet_asset", entityId: id, workspaceCode: "equipment_installment_finance", hireLocationId: effectiveLocationId || null, severity: editability.temporary_correction ? "warning" : "notice", details: `Updated ${existing.asset_code} - ${existing.asset_name} in the Finance Machine Register.`, metadata: { temporary_in_progress_correction: editability.temporary_correction, correction_reason: editability.temporary_correction ? reason : null, before_after: changedValues, added_photo_count: photos.length, contracts_and_payments_unchanged: true } });
     await connection.commit(); const machines = await listProfessionalMachines({ search: machine.asset_code || existing.asset_code, limit: 20 });
     return machines.find((item) => Number(item.id) === id) || null;
   } catch (error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
