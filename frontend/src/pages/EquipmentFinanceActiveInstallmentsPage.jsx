@@ -242,16 +242,18 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                 </div>
                 {registerPriceDiffers(account) ? (
                   <div className="finance-accounts__inline-warning" role="note">
-                    The excavator price was corrected in the machine register. The original signed agreement,
-                    scheduled instalments, recorded payments and outstanding balance have not changed.
-                    An approved agreement variation is required to change what the customer owes.
+                    This excavator's register price differs from the active agreement. Open the
+                    Excavators page, edit this exact machine and save its current price with a correction
+                    reason. CHALIN03 will update the effective agreement price, unpaid installments and
+                    remaining balance immediately if the account reconciles. Original signed PDFs and
+                    payment receipts remain preserved.
                   </div>
                 ) : null}
                 {registerPriceDiffers(account) && account.reconciliation_consistent &&
                 Number(account.outstanding_balance || 0) > 0.01 ? (
                   <Link className="finance-accounts__price-correction"
-                    to={`/equipment-installment-finance/applications?stage=operations&tab=amendments&case_type=agreement&case_id=${account.agreement_id}&price_variation=${encodeURIComponent(registerPurchasePrice(account))}`}>
-                    Request agreed-price &amp; balance correction
+                    to="/equipment-installment-finance/applications?stage=machines">
+                    Open excavators to sync price &amp; balance
                   </Link>
                 ) : null}
                 {!account.reconciliation_consistent ? (
