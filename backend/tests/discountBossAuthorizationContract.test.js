@@ -78,5 +78,7 @@ test("boss view cannot show inventory markup as sales profit or truncate revenue
   assert.match(bossView, /financialSummary\.total_sales_amount/);
   assert.doesNotMatch(bossView, /dashboardData\.estimatedProfit/);
   assert.match(reports, /total_refunds: totalRefunds/);
-  assert.match(reports, /netProfit = grossProfit - totalExpenses - totalRefunds \+ recoveredReturnCost/);
+  const profitCalculator = read("services/sparePartsProfitSummaryService.js");
+  assert.match(reports, /calculateSparePartsProfitSummary\(\{/);
+  assert.match(profitCalculator, /grossProfit - totalExpenses - totalRefunds \+ recoveredReturnCost/);
 });

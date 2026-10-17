@@ -432,9 +432,19 @@ export default function ReportsPage() {
       note: "Store costs",
     },
     {
+      label: "Refunds",
+      value: summary?.total_refunds,
+      note: "Deducted from profit; date of return",
+    },
+    {
+      label: "Returned Stock Cost",
+      value: summary?.recovered_return_cost,
+      note: "Recovered merchandise cost added back",
+    },
+    {
       label: "Net Profit",
       value: summary?.net_profit,
-      note: "Final profit",
+      note: "Gross profit − expenses − refunds + returned stock cost",
     },
   ];
 
@@ -586,6 +596,10 @@ export default function ReportsPage() {
         <section style={styles.moneyFlowPanel}>
           <p style={styles.eyebrowDark}>Money Flow</p>
           <h2>Profit Pipeline</h2>
+          <p style={{ ...styles.panelSubtitle, marginTop: 6 }}>
+            Sales, expenses and refunds all follow the selected date range. No transactions
+            means zero profit; refunds or expenses on a closed day still count.
+          </p>
 
           <div style={styles.pipeline}>
             {moneyFlow.map((item) => (
