@@ -596,7 +596,7 @@ export default function ReportsPage() {
         <section style={styles.moneyFlowPanel}>
           <p style={styles.eyebrowDark}>Money Flow</p>
           <h2>Profit Pipeline</h2>
-          <p style={{ ...styles.mutedText, marginTop: 6 }}>
+          <p style={{ ...styles.panelSubtitle, marginTop: 6 }}>
             Sales, expenses and refunds all follow the selected date range. No transactions
             means zero profit; refunds or expenses on a closed day still count.
           </p>
