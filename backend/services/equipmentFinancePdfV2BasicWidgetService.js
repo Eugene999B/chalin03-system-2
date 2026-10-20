@@ -7,6 +7,7 @@ const {
   money,
   templateFor,
 } = require("./equipmentFinanceDocumentDesignV2Service");
+const { financeDepositEvidence } = require("./equipmentFinanceDepositDeclarationService");
 const {
   addPage,
   bodyBottom,
@@ -128,7 +129,13 @@ function drawSummaryCards(doc, document, cards, { columns = 3 } = {}) {
         y + 33,
         { width: cellWidth - 16, align: "center", lineGap: 1 }
       );
-      doc.moveTo(x + 16, y + 56).lineTo(x + cellWidth - 16, y + 56)
+      if (card[3]) {
+        doc.fillColor(COLORS.muted).font("Helvetica-Bold").fontSize(6.1).text(
+          clean(card[3]), x + 8, y + 47,
+          { width: cellWidth - 16, align: "center", lineBreak: false, ellipsis: true }
+        );
+      }
+      doc.moveTo(x + 16, y + 59).lineTo(x + cellWidth - 16, y + 59)
         .lineWidth(0.7).strokeColor(COLORS.gold).stroke();
     });
     doc.y = y + 72;
@@ -244,9 +251,13 @@ function drawPaymentTable(doc, document, rows = document.snapshot?.payments || [
 
 function agreementSummaryCards(document) {
   const agreement = agreementOf(document);
+  const depositEvidence = financeDepositEvidence(document.snapshot);
+  const depositDateLine = depositEvidence.first_paid_date
+    ? `Paid on ${dateLabel(depositEvidence.first_paid_date)}`
+    : "Deposit date not recorded";
   return [
     ["Purchase price", money(agreement.total_amount)],
-    ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received)],
+    ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received), null, depositDateLine],
     ["Financed amount", money(agreement.financed_amount)],
     ["Total paid", money(agreement.amount_paid)],
     ["Official balance", money(agreement.outstanding_balance)],
