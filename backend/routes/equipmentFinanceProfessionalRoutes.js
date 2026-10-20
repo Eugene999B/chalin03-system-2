@@ -15,8 +15,6 @@ const {
   listProfessionalMachines,
   loadAgreementSnapshot,
   professionalSchemaStatus,
-  renderAgreementPdf,
-  renderAgreementWord,
   saveSignature,
   sendBossPaymentAlert,
   updateProfessionalSettings,
