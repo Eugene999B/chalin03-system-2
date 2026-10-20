@@ -1008,7 +1008,9 @@ const {
 } = require("./equipmentFinanceDocumentPartyNamesService");
 
 function renderAgreementWord(snapshot, documentNumberValue) {
+  const { financeDepositEvidence, buyerDeclaration } = require("./equipmentFinanceDepositDeclarationService");
   const agreement = snapshot.agreement;
+  const depositEvidence = financeDepositEvidence(snapshot);
   const mainPhoto =
     snapshot.media.find((item) => item.evidence_type === "main")?.file_url ||
     snapshot.media.find((item) => item.is_primary)?.file_url ||
@@ -1115,6 +1117,8 @@ function renderAgreementWord(snapshot, documentNumberValue) {
       agreement.deposit_required
     )}</p><p><strong>Deposit received:</strong> ${money(
       agreement.deposit_received
+    )}</p><p><strong>Initial deposit payment date:</strong> ${htmlEscape(
+      depositEvidence.first_paid_date ? dateLabel(depositEvidence.first_paid_date) : "Date not recorded"
     )}</p><p><strong>Financed balance:</strong> ${money(
       agreement.financed_amount
     )}</p><p><strong>Frequency:</strong> ${htmlEscape(
@@ -1133,6 +1137,10 @@ function renderAgreementWord(snapshot, documentNumberValue) {
       <div class="page-break"></div><h3>Installment Payment Schedule</h3><table><thead><tr><th>No.</th><th>Due date</th><th>Scheduled</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>${scheduleRows}</tbody></table>
       <h3>Terms and Conditions</h3>${terms}
       <div class="page-break"></div><h3>Machine Identity and Photo Annexure</h3><div class="photos">${mediaRows}</div>
+      <h3>Buyer's Declaration</h3>
+      <p style="border-left:5px solid #0b5d44;background:#f6fbf8;border-radius:6px;padding:12px 16px;page-break-inside:avoid">
+        ${htmlEscape(buyerDeclaration(snapshot))}
+      </p>
       <h3>Signatures</h3><div class="signatures">${sellerSignature ? `<div class="signature"><strong>Seller's Representative</strong>${imageHtml(
         sellerSignature,
         "Seller signature",
