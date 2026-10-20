@@ -252,12 +252,14 @@ function drawPaymentTable(doc, document, rows = document.snapshot?.payments || [
 function agreementSummaryCards(document) {
   const agreement = agreementOf(document);
   const depositEvidence = financeDepositEvidence(document.snapshot);
-  const depositDateLine = depositEvidence.first_paid_date
-    ? `Paid on ${dateLabel(depositEvidence.first_paid_date)}`
-    : "Deposit date not recorded";
+  const depositDateLine = !depositEvidence.first_paid_date
+    ? "Payment date not recorded"
+    : depositEvidence.payment_count > 1
+      ? `Latest deposit: ${dateLabel(depositEvidence.last_paid_date)}`
+      : `Paid on ${dateLabel(depositEvidence.first_paid_date)}`;
   return [
     ["Purchase price", money(agreement.total_amount)],
-    ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received), null, depositDateLine],
+    ["Initial deposit paid", money(depositEvidence.amount), null, depositDateLine],
     ["Financed amount", money(agreement.financed_amount)],
     ["Total paid", money(agreement.amount_paid)],
     ["Official balance", money(agreement.outstanding_balance)],
