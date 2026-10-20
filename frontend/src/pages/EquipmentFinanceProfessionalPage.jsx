@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import { financeDateLabel } from "../utils/financeDisplayDate";
 import EquipmentDivisionStaffManager from "../components/EquipmentDivisionStaffManager";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinanceProfessional.css";
@@ -33,16 +34,7 @@ function currency(value) {
   })}`;
 }
 
-function dateLabel(value) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
-  return parsed.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
+function dateLabel(value) { return financeDateLabel(value, "—"); }
 
 function label(value) {
   return String(value || "")
