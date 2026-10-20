@@ -240,11 +240,14 @@ function drawHeader(doc, document) {
     { width, align: "center", characterSpacing: 1.2, lineBreak: false }
   );
 
-  const badgeWidth = Math.min(146, Math.max(92, template.classification.length * 6.1));
+  const badgeText = snapshot.document_revision?.reference
+    ? "CORRECTED COPY - FRESH SIGNATURES REQUIRED"
+    : template.classification;
+  const badgeWidth = Math.min(244, Math.max(92, badgeText.length * 5.2));
   const badgeX = left + (width - badgeWidth) / 2;
   doc.roundedRect(badgeX, titleY + 43, badgeWidth, 17, 8).fill(template.accent);
   doc.fillColor(COLORS.paper).font("Helvetica-Bold").fontSize(5.8).text(
-    template.classification,
+    badgeText,
     badgeX,
     titleY + 49,
     { width: badgeWidth, align: "center", lineBreak: false }

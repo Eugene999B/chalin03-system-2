@@ -201,6 +201,12 @@ function renderLegalAgreement(doc, document) {
 
   addPage(doc, document);
   sectionTitle(doc, document, "Official installment schedule");
+  if (document.snapshot?.document_revision?.reference) {
+    drawFactGrid(doc, document, [
+      ["Document status", "Corrected schedule - fresh signatures required"],
+      ["Previous issued document", document.snapshot.document_revision.original_document_number],
+    ], { columns: 2 });
+  }
   drawScheduleTable(doc, document, document.snapshot?.schedule || []);
 
   addPage(doc, document);

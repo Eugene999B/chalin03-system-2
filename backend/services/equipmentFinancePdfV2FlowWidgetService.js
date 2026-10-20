@@ -119,13 +119,36 @@ const {
 } = require("./equipmentFinanceDocumentPartyNamesService");
 
 function drawSignatureBlocks(doc, document, roles) {
-  sectionTitle(doc, document, "Execution and signatures");
   const snapshot = document.snapshot || {};
+  // Keep the declaration and four existing signature boxes together on
+  // a clean page if there is insufficient space; never overlap a box or
+  // the immutable verification panel.
+  ensureSpace(doc, document, 364);
+  sectionTitle(doc, document, "Execution and signatures");
   const template = templateFor(document);
   const left = doc.page.margins.left;
   const width = pageWidth(doc);
   const gap = 12;
   const columnWidth = (width - gap) / 2;
+  const { buyerDeclaration } = require("./equipmentFinanceDepositDeclarationService");
+  const statement = buyerDeclaration(snapshot);
+  const declarationHeight = Math.max(57, doc.font("Helvetica").fontSize(7.3)
+    .heightOfString(statement, { width: width - 39, lineGap: 2 }) + 28);
+  ensureSpace(doc, document, declarationHeight + 226);
+  const declarationTop = doc.y;
+  doc.roundedRect(left, declarationTop, width, declarationHeight, 8)
+    .fillAndStroke(COLORS.paper, COLORS.line);
+  doc.rect(left, declarationTop, 5, declarationHeight).fill(template.accent);
+  doc.circle(left + 18, declarationTop + 18, 7).fill(COLORS.gold);
+  doc.fillColor(template.accent).font("Helvetica-Bold").fontSize(8.1).text(
+    "BUYER'S DECLARATION", left + 32, declarationTop + 10,
+    { width: width - 45, lineBreak: false }
+  );
+  doc.fillColor(COLORS.ink).font("Helvetica").fontSize(7.3).text(
+    statement, left + 16, declarationTop + 26,
+    { width: width - 32, lineGap: 2, align: "left" }
+  );
+  doc.y = declarationTop + declarationHeight + 11;
 
   for (let index = 0; index < roles.length; index += 2) {
     ensureSpace(doc, document, 112);
