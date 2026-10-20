@@ -34,14 +34,14 @@ function snapshot(overrides = {}) {
   };
 }
 
-test("all unsigned finance documents print Agyapong Charles as representative and the recorded buyer", () => {
+test("all unsigned finance documents print AGYAPONG CHARLES as representative and the recorded buyer", () => {
   const source = snapshot();
-  assert.equal(SELLER_REPRESENTATIVE_NAME, "Agyapong Charles");
-  assert.equal(nameForRole(source, "seller"), "Agyapong Charles");
+  assert.equal(SELLER_REPRESENTATIVE_NAME, "AGYAPONG CHARLES");
+  assert.equal(nameForRole(source, "seller"), "AGYAPONG CHARLES");
   assert.equal(nameForRole(source, "buyer"), "Akosua Owusu");
   assert.equal(nameForRole(source, "guarantor"), "Kojo Mensah");
   assert.equal(nameForRole(source, "buyer_witness"), "");
-  assert.equal(nameForRole(source, "seller", { signer_name: "Previous Manager" }), "Agyapong Charles");
+  assert.equal(nameForRole(source, "seller", { signer_name: "Previous Manager" }), "AGYAPONG CHARLES");
 });
 
 test("buyer details use the existing contractual name without fabricating a missing one", () => {
@@ -55,9 +55,9 @@ test("a stored person's signature is never falsely attributed to a different pri
   assert.equal(signatureImageForRole(source, "seller", { signer_name: "Another Worker", signature_data_url: "encodedSignature" }), null);
   assert.equal(signatureImageForRole(source, "buyer", { signer_name: "Wrong Buyer", signature_data_url: "encodedSignature" }), null);
   assert.equal(signatureImageForRole(source, "buyer", { signer_name: "Akosua Owusu", signature_data_url: "buyerImage" }), "buyerImage");
-  assert.equal(signatureImageForRole(source, "seller", { signer_name: "Agyapong Charles", signature_data_url: "bossImage" }), "bossImage");
+  assert.equal(signatureImageForRole(source, "seller", { signer_name: "AGYAPONG CHARLES", signature_data_url: "bossImage" }), "bossImage");
   assert.equal(signatureImageForRole(source, "seller"), null);
-  assert.equal(signatureImageForRole({ ...source, company: { ...source.company, authorised_seller_name: "Agyapong Charles", authorised_seller_signature_data_url: "bossImage" } }, "seller"), "bossImage");
+  assert.equal(signatureImageForRole({ ...source, company: { ...source.company, authorised_seller_name: "AGYAPONG CHARLES", authorised_seller_signature_data_url: "bossImage" } }, "seller"), "bossImage");
 });
 
 test("all Word signing-document types prefill the boss and buyer names in the existing branded design", async () => {
@@ -78,7 +78,7 @@ test("all Word signing-document types prefill the boss and buyer names in the ex
       snapshot_checksum: "a".repeat(64),
     };
     const html = (await renderCompletionWord(doc)).toString("utf8");
-    assert.match(html, /Agyapong Charles/, type);
+    assert.match(html, /AGYAPONG CHARLES/, type);
     assert.match(html, /Akosua Owusu/, type);
     assert.match(html, /Execution and signatures/, type);
     assert.match(html, /Date \/ time/, type);
