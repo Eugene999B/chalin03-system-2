@@ -263,11 +263,21 @@ function accountSql({ lock = false } = {}) {
          FROM equipment_sale_payments payment
         WHERE payment.agreement_id = agreement.id
           AND payment.is_voided = FALSE) AS last_payment_at,
+      (SELECT DATE_FORMAT(period.due_date, '%Y-%m-%d')
+         FROM equipment_installment_schedule period
+        WHERE period.agreement_id = agreement.id
+          AND period.schedule_status IN ('upcoming','due','partial','overdue')
+          AND GREATEST(period.scheduled_amount + period.late_charge_amount
+                       - period.waived_charge_amount - period.amount_paid, 0) > 0.005
+        ORDER BY period.due_date, period.sequence_number
+        LIMIT 1) AS schedule_next_due_date,
       (SELECT GREATEST(period.scheduled_amount + period.late_charge_amount
                         - period.waived_charge_amount - period.amount_paid, 0)
          FROM equipment_installment_schedule period
         WHERE period.agreement_id = agreement.id
           AND period.schedule_status IN ('upcoming','due','partial','overdue')
+          AND GREATEST(period.scheduled_amount + period.late_charge_amount
+                       - period.waived_charge_amount - period.amount_paid, 0) > 0.005
         ORDER BY period.due_date, period.sequence_number
         LIMIT 1) AS next_installment_due_amount
     FROM equipment_sale_agreements agreement
@@ -326,11 +336,21 @@ function accountListSql() {
          FROM equipment_sale_payments payment
         WHERE payment.agreement_id = agreement.id
           AND payment.is_voided = FALSE) AS last_payment_at,
+      (SELECT DATE_FORMAT(period.due_date, '%Y-%m-%d')
+         FROM equipment_installment_schedule period
+        WHERE period.agreement_id = agreement.id
+          AND period.schedule_status IN ('upcoming','due','partial','overdue')
+          AND GREATEST(period.scheduled_amount + period.late_charge_amount
+                       - period.waived_charge_amount - period.amount_paid, 0) > 0.005
+        ORDER BY period.due_date, period.sequence_number
+        LIMIT 1) AS schedule_next_due_date,
       (SELECT GREATEST(period.scheduled_amount + period.late_charge_amount
                         - period.waived_charge_amount - period.amount_paid, 0)
          FROM equipment_installment_schedule period
         WHERE period.agreement_id = agreement.id
           AND period.schedule_status IN ('upcoming','due','partial','overdue')
+          AND GREATEST(period.scheduled_amount + period.late_charge_amount
+                       - period.waived_charge_amount - period.amount_paid, 0) > 0.005
         ORDER BY period.due_date, period.sequence_number
         LIMIT 1) AS next_installment_due_amount
     FROM equipment_sale_agreements agreement
@@ -400,7 +420,7 @@ function publicAccount(account) {
     overdue_amount: Number(account.overdue_amount || 0),
     payment_frequency: account.payment_frequency,
     installment_count: Number(account.installment_count || 0),
-    next_due_date: account.next_due_date,
+    next_due_date: account.schedule_next_due_date || account.next_due_date,
     final_due_date: account.final_due_date,
     last_payment_at: account.last_payment_at,
     next_installment_due_amount: account.next_installment_due_amount == null
