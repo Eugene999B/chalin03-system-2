@@ -85,6 +85,18 @@ test("the same original signed PDF snapshot can be professionally re-rendered wi
   assert.equal(JSON.stringify(doc), jsonBefore);
 });
 
+test("both Finance list and detail derive date and installment amount from identical unpaid schedule evidence", () => {
+  const route = source("routes/equipmentFinanceFinalLifecycleRoutes.js");
+  assert.equal(route.split("AS schedule_next_due_date").length - 1, 2);
+  assert.equal(route.split("AS next_installment_due_amount").length - 1, 2);
+  assert.equal(route.split("period.schedule_status IN ('upcoming','due','partial','overdue')").length - 1, 4);
+  assert.match(route, /next_due_date: account\.schedule_next_due_date \|\| account\.next_due_date/);
+  const frontend = fs.readFileSync(path.join(root, "../frontend/src/pages/EquipmentFinanceActiveInstallmentsPage.jsx"),"utf8");
+  assert.match(frontend, /Oldest unpaid due/);
+  assert.match(frontend, /Amount due on that date/);
+  assert.match(frontend, /earliestUnpaidFinancePeriod\(body\.schedule\)/);
+});
+
 test("Finance accounts never show [object Object] as dates and use oldest actually unpaid period", async () => {
   const util = fs.readFileSync(path.join(root, "../frontend/src/utils/financeDisplayDate.js"), "utf8");
   const { financeDateLabel, financeDateOnly, earliestUnpaidFinancePeriod } =
