@@ -78,6 +78,7 @@ test("PDF and both Word paths preserve brand while showing deposit date and buye
   assert.match(pdf, /ensureSpace\(doc, document, 364\)/);
   assert.match(pdf, /BUYER'S DECLARATION/);
   assert.match(cards, /Paid on \$\{dateLabel\(depositEvidence\.first_paid_date\)\}/);
+  assert.match(cards, /\["Initial deposit paid", money\(depositEvidence\.amount\)/);
   assert.match(wordV2, /Deposit paid on/);
   assert.match(wordV2, /BUYER'S DECLARATION/);
   assert.match(professional, /Initial deposit payment date/);
