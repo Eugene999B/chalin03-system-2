@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import { financeDateLabel } from "../utils/financeDisplayDate";
 import "../styles/equipmentFinanceAccountsCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
@@ -19,17 +20,7 @@ function label(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function dateLabel(value) {
-  if (!value) return "Not recorded";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value).slice(0, 10)
-    : parsed.toLocaleDateString("en-GH", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      });
-}
+function dateLabel(value) { return financeDateLabel(value, "Not recorded"); }
 
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
