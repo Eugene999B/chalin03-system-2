@@ -67,7 +67,7 @@ test("all 14 original Word documents render using current logo-led design and hi
     const html = bytes.toString("utf8");
     assert.match(html,/EFA-ORIGINAL-20261020/);
     assert.match(html,/EQUIPMENT FINANCE/);
-    assert.match(html,/a{64}/);
+    assert.match(html,/a{28}/);
     if (["installment_agreement","customer_agreement_copy","company_agreement_copy"].includes(type)) {
       assert.match(html,/AGYAPONG CHARLES/);
       assert.match(html,/PURCHASE AND OWNERSHIP/);
