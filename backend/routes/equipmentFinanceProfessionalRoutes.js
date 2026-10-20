@@ -1,4 +1,8 @@
 const express = require("express");
+const {
+  renderCompletionPdf: renderOriginalFinancePdfWithCurrentDesign,
+  renderCompletionWord: renderOriginalFinanceWordWithCurrentDesign,
+} = require("../services/equipmentFinanceDocumentRendererV2Service");
 
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
@@ -366,7 +370,9 @@ router.get(
         });
       }
       if (requested === "word" || requested === "doc") {
-        const buffer = renderAgreementWord(document.snapshot, document.document_number);
+        // Re-render this ORIGINAL immutable snapshot with the current professional
+        // layout. The document number, signed evidence and SHA remain unchanged.
+        const buffer = await renderOriginalFinanceWordWithCurrentDesign(document);
         res.setHeader("Content-Type", "application/msword; charset=utf-8");
         res.setHeader(
           "Content-Disposition",
@@ -377,7 +383,9 @@ router.get(
       if (requested !== "pdf" && requested !== "print") {
         throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON.");
       }
-      const buffer = await renderAgreementPdf(document.snapshot, document.document_number);
+      // Original issued records are generated on download from verified snapshots.
+      // Change presentation only; never overwrite the snapshot or checksum.
+      const buffer = await renderOriginalFinancePdfWithCurrentDesign(document);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
