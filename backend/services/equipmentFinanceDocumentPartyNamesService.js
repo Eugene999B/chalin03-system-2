@@ -5,7 +5,7 @@
  * documents. These are printed names, not digital signatures or an indication
  * that someone has signed or approved a document.
  */
-const SELLER_REPRESENTATIVE_NAME = "Agyapong Charles";
+const SELLER_REPRESENTATIVE_NAME = "AGYAPONG CHARLES";
 
 function text(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ");

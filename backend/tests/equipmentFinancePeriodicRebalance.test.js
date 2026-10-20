@@ -49,7 +49,7 @@ test("active account list and detail expose the recalculated next period and iss
   const pdf = fs.readFileSync(path.join(__dirname,"../services/equipmentFinancePdfV2AccountBodies.js"),"utf8");
   assert.equal(routes.split("AS next_installment_due_amount").length - 1, 2);
   assert.match(routes, /next_installment_due_amount: account\.next_installment_due_amount/);
-  assert.match(page, /Next instalment/);
+  assert.match(page, /Amount due on that date/);
   assert.match(page, /Paid \{money\(row\.amount_paid\)\}/);
   assert.match(pdf, /nextOpenPeriod/);
   assert.match(pdf, /scheduled_amount \|\| 0\) - Number\(nextOpenPeriod\.amount_paid/);

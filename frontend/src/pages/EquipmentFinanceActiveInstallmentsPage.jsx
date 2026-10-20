@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import { financeDateLabel, earliestUnpaidFinancePeriod } from "../utils/financeDisplayDate";
 import "../styles/equipmentFinanceAccountsCompletion.css";
 
 const API = "/equipment-catalogue/sales/finance-lifecycle";
@@ -18,17 +19,7 @@ function label(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function dateLabel(value) {
-  if (!value) return "Not scheduled";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value).slice(0, 10)
-    : parsed.toLocaleDateString("en-GH", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      });
-}
+function dateLabel(value) { return financeDateLabel(value); }
 
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
@@ -79,8 +70,19 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
     setProblem("");
     try {
       const response = await axiosClient.get(`${API}/accounts/${account.agreement_id}`);
-      setSelected(response.data?.account || account);
-      setDetail(response.data || null);
+      const body = response.data || {};
+      const nextPeriod = earliestUnpaidFinancePeriod(body.schedule);
+      setSelected({
+        ...(body.account || account),
+        next_due_date: nextPeriod?.due_date ?? body.account?.next_due_date ?? account.next_due_date,
+        next_installment_due_amount: nextPeriod
+          ? Math.max(0, Number(nextPeriod.scheduled_amount || 0)
+            + Number(nextPeriod.late_charge_amount || 0)
+            - Number(nextPeriod.waived_charge_amount || 0)
+            - Number(nextPeriod.amount_paid || 0))
+          : body.account?.next_installment_due_amount ?? account.next_installment_due_amount,
+      });
+      setDetail(body);
     } catch (error) {
       setProblem(errorMessage(error, "Could not load the selected installment account."));
     } finally {
@@ -237,8 +239,8 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                   <div><span>Paid</span><strong>{money(account.amount_paid)}</strong></div>
                   <div><span>Balance</span><strong>{money(account.outstanding_balance)}</strong></div>
                   <div><span>Overdue</span><strong>{money(account.overdue_amount)}</strong></div>
-                  <div><span>Next due</span><strong>{dateLabel(account.next_due_date)}</strong></div>
-                  <div><span>Next instalment</span><strong>{account.next_installment_due_amount == null ? "—" : money(account.next_installment_due_amount)}</strong></div>
+                  <div><span>Oldest unpaid due</span><strong>{dateLabel(account.next_due_date)}</strong></div>
+                  <div><span>Amount due on that date</span><strong>{account.next_installment_due_amount == null ? "—" : money(account.next_installment_due_amount)}</strong></div>
                   <div><span>Last payment</span><strong>{dateLabel(account.last_payment_at)}</strong></div>
                 </div>
                 {registerPriceDiffers(account) ? (
@@ -306,16 +308,16 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
                 {registerPriceDiffers(selected) ? (
                   <div className="finance-accounts__inline-warning" role="note">
                     <strong>Updated excavator purchase price: {money(registerPurchasePrice(selected))}.</strong>{" "}
-                    Signed agreement price: {money(selected.total_amount)}. The official balance,
-                    paid instalments and original agreement remain unchanged until a separately approved
-                    financial correction is processed.
+                    Effective agreement price: {money(selected.total_amount)}. The original issued
+                    agreement and receipts remain preserved. Save the machine price correction again to
+                    sync and reconcile the active account, if all financial checks pass.
                   </div>
                 ) : null}
                 <div className="finance-accounts__summary">
                   <article><span>Official balance</span><strong>{money(selected.outstanding_balance)}</strong></article>
                   <article><span>Overdue</span><strong>{money(selected.overdue_amount)}</strong></article>
-                  <article><span>Next due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
-                  <article><span>Next instalment</span><strong>{selected.next_installment_due_amount == null ? "—" : money(selected.next_installment_due_amount)}</strong></article>
+                  <article><span>Oldest unpaid due</span><strong>{dateLabel(selected.next_due_date)}</strong></article>
+                  <article><span>Amount due on that date</span><strong>{selected.next_installment_due_amount == null ? "—" : money(selected.next_installment_due_amount)}</strong></article>
                   <article><span>Delivery</span><strong>{label(selected.delivery_status)}</strong></article>
                   <article><span>Ownership</span><strong>{label(selected.ownership_status)}</strong></article>
                 </div>

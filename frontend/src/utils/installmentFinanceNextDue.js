@@ -1,7 +1,7 @@
 import axiosClient from "../api/axiosClient";
+import { earliestUnpaidFinancePeriod, financeDateOnly } from "./financeDisplayDate";
 
 const ACCOUNTS_PATH = "/equipment-catalogue/sales/finance-lifecycle/accounts";
-const TERMINAL = new Set(["paid", "cancelled", "waived", "rescheduled"]);
 let installed = false;
 
 function normalizedPath(value) {
@@ -15,16 +15,7 @@ function normalizedPath(value) {
 }
 
 function nextDueFromSchedule(schedule) {
-  return [...(Array.isArray(schedule) ? schedule : [])]
-    .filter((row) => {
-      const status = String(row?.schedule_status || "").toLowerCase();
-      return Boolean(row?.due_date) && !TERMINAL.has(status);
-    })
-    .sort((left, right) => {
-      const dateCompare = String(left.due_date).slice(0, 10).localeCompare(String(right.due_date).slice(0, 10));
-      if (dateCompare !== 0) return dateCompare;
-      return Number(left.sequence_number || 0) - Number(right.sequence_number || 0);
-    })[0]?.due_date || null;
+  return financeDateOnly(earliestUnpaidFinancePeriod(schedule)?.due_date);
 }
 
 export async function enrichFinanceAccountsWithSchedule(accounts) {

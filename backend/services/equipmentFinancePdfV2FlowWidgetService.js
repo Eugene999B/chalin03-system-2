@@ -21,6 +21,8 @@ const {
   sectionTitle,
 } = require("./equipmentFinancePdfV2BasicWidgetService");
 
+const { documentBlocks } = require("./equipmentFinanceDocumentTypographyService");
+
 function writeRawFlow(doc, document, text, options) {
   const width = options.width || pageWidth(doc);
   const x = options.x || doc.page.margins.left;
@@ -67,18 +69,35 @@ function writeRawFlow(doc, document, text, options) {
 function writeFlowText(doc, document, value, options = {}) {
   const text = clean(value, "");
   if (!text) return;
-  const paragraphs = text.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
+  const paragraphs = documentBlocks(text);
   const template = templateFor(document);
   const width = options.width || pageWidth(doc);
   const x = options.x || doc.page.margins.left;
   const size = options.size || 8.5;
   const lineGap = options.lineGap ?? 2;
 
-  paragraphs.forEach((paragraph, paragraphIndex) => {
+  paragraphs.forEach((block, paragraphIndex) => {
+    const paragraph = block.text;
+    if (block.kind === "heading") {
+      const titleSize = 9.1;
+      const titleHeight = doc.font("Helvetica-Bold").fontSize(titleSize)
+        .heightOfString(paragraph, { width: width - 23, lineGap: 1.4 });
+      ensureSpace(doc, document, titleHeight + 24);
+      const titleY = doc.y;
+      doc.roundedRect(x, titleY, width, titleHeight + 17, 6)
+        .fillAndStroke(template.accentSoft, COLORS.line);
+      doc.rect(x, titleY, 4, titleHeight + 17).fill(template.accent);
+      doc.fillColor(template.accent).font("Helvetica-Bold").fontSize(titleSize).text(
+        paragraph, x + 12, titleY + 8,
+        { width: width - 23, lineGap: 1.4 }
+      );
+      doc.y = titleY + titleHeight + 25;
+      return;
+    }
     const height = doc.font(options.bold ? "Helvetica-Bold" : options.font || "Helvetica")
       .fontSize(size)
       .heightOfString(paragraph, {
-        width: width - 34,
+        width: width - 46,
         lineGap,
         align: options.align || "justify",
       });

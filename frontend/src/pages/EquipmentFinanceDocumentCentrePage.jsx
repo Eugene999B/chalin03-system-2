@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import { financeDateLabel } from "../utils/financeDisplayDate";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinanceDocumentCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
@@ -51,13 +52,7 @@ function money(value) {
   })}`;
 }
 
-function dateLabel(value) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? String(value).slice(0, 10)
-    : date.toLocaleDateString("en-GH", { year: "numeric", month: "short", day: "2-digit" });
-}
+function dateLabel(value) { return financeDateLabel(value, "Not recorded"); }
 
 function label(value) {
   return String(value || "Not recorded")
