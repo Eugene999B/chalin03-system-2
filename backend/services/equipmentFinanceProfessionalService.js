@@ -855,13 +855,29 @@ async function documentNumber(type, userId) {
   }
 }
 
-async function issueDocument({ agreementId, documentType, format, userId }) {
+async function issueDocument({ agreementId, documentType, format, userId, connection = pool, documentRevision = null }) {
   const allowedFormats = new Set(["pdf", "word", "print", "json"]);
   const cleanFormat = cleanText(format, 20).toLowerCase();
   if (!allowedFormats.has(cleanFormat)) {
     throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON format.");
   }
-  const snapshot = await loadAgreementSnapshot(agreementId);
+  const snapshot = await loadAgreementSnapshot(agreementId, connection);
+  if (documentRevision) {
+    // Corrected official copies must receive their own checksum/document number.
+    // Previous signatures cannot automatically be represented as consent to
+    // the revised payment dates. A new buyer signature is required.
+    snapshot.document_revision = {
+      reference: String(documentRevision.reference || "").slice(0, 100),
+      original_document_number: String(documentRevision.original_document_number || "").slice(0, 100),
+      corrected_fields: ["first_due_date", "final_due_date", "schedule.due_date"],
+      customer_acceptance: "pending_new_signature",
+      description: "Corrected payment dates; previous issued document remains on file",
+    };
+    snapshot.signatures = (snapshot.signatures || []).map((item) => ({
+      ...item, signature_data_url: null, signed_at: null,
+    }));
+    snapshot.company.authorised_seller_signature_data_url = null;
+  }
   if (!snapshot.reconciliation.consistent) {
     throw new ProfessionalFinanceError(
       409,
@@ -880,7 +896,7 @@ async function issueDocument({ agreementId, documentType, format, userId }) {
   const number = await documentNumber(type, userId);
   const snapshotText = safeJson(snapshot);
   const checksum = crypto.createHash("sha256").update(snapshotText).digest("hex");
-  const [result] = await pool.query(
+  const [result] = await connection.query(
     `INSERT INTO equipment_finance_issued_documents (
        document_number, agreement_id, document_type, document_format,
        template_version, snapshot_json, snapshot_checksum, issued_by
@@ -897,7 +913,7 @@ async function issueDocument({ agreementId, documentType, format, userId }) {
     ]
   );
   if (type === "installment_agreement") {
-    await pool.query(
+    await connection.query(
       `UPDATE equipment_sale_agreements
        SET agreement_document_number = COALESCE(agreement_document_number, ?),
            terms_version = COALESCE(terms_version, ?),
