@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { dateOnly } = require("./equipmentFinanceDateOnlyService");
 
 const TERMINAL_STATUSES = new Set(["paid", "cancelled", "waived", "rescheduled"]);
 
@@ -7,7 +8,7 @@ function amount(value) {
 }
 
 function dateText(value) {
-  return value ? String(value).slice(0, 10) : null;
+  return dateOnly(value);
 }
 
 function remainingExpression(alias = "s") {

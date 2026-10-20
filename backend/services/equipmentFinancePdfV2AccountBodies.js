@@ -140,7 +140,7 @@ function renderLegalAgreement(doc, document) {
   const facts = [
     ["Buyer", customerName(document)],
     ["Purchase price", money(agreement.total_amount)],
-    ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received)],
+    ["Deposit received", money(agreement.deposit_received)],
     ["Financed amount", money(agreement.financed_amount)],
     ["Payment plan", `${agreement.installment_count || 0} ${label(agreement.payment_frequency)}`],
     [

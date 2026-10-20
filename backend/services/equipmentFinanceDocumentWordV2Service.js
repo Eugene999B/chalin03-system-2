@@ -86,7 +86,7 @@ function body(document) {
     ["Agreement", agreement.agreement_number],
     ["Equipment", machineName(document)],
     ["Classification", document.snapshot?.document_revision ? "Corrected schedule - new signatures required" : template.classification],
-    ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received)],
+    ["Initial deposit paid", money(depositEvidence.amount)],
     ["Deposit paid on", depositEvidence.first_paid_date ? dateLabel(depositEvidence.first_paid_date) : "Date not recorded"],
     ["First due date", dateLabel(agreement.first_due_date)],
     ["Final due date", dateLabel(agreement.final_due_date)],
