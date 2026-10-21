@@ -921,6 +921,15 @@ router.get("/discount-permission", requireAuth, async (req, res) => {
 
 // POST /api/sales
 router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
+  // Auditors may inspect sales and receipts but can never create sales.
+  if (String(req.user?.role || "").trim().toLowerCase() === "auditor") {
+    return res.status(403).json({
+      status: "error",
+      code: "AUDITOR_SALES_READ_ONLY",
+      message: "Auditors can review Sales History but cannot create or change sales.",
+    });
+  }
+
   const connection = await pool.getConnection();
 
   try {
@@ -1427,6 +1436,8 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
 });
 
 // GET /api/sales
+// Includes the auditor's view-only sales register. Both list and detail
+// remain scoped to the store selected in the authenticated session.
 router.get("/", requireAuth, async (req, res) => {
   try {
     const branchId = requireSelectedBranch(req, res);
