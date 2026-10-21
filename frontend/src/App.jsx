@@ -238,7 +238,7 @@ export default function App() {
             />
             <Route
               path="sales-history"
-              element={rolePage(businessWorkRoles, <SalesHistoryPage />)}
+              element={rolePage([...businessWorkRoles, "auditor"], <SalesHistoryPage />)}
             />
             <Route
               path="installments"
