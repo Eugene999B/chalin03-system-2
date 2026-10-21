@@ -920,7 +920,7 @@ router.get("/discount-permission", requireAuth, async (req, res) => {
 });
 
 // POST /api/sales
-router.post("/", requireAuth, (req, res, next) => {
+router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
   // Auditors may inspect sales and receipts but can never create sales.
   if (String(req.user?.role || "").trim().toLowerCase() === "auditor") {
     return res.status(403).json({
@@ -929,8 +929,7 @@ router.post("/", requireAuth, (req, res, next) => {
       message: "Auditors can review Sales History but cannot create or change sales.",
     });
   }
-  return next();
-}, validateRequest(validateSaleCreateRequest), async (req, res) => {
+
   const connection = await pool.getConnection();
 
   try {
