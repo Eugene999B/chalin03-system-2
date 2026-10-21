@@ -7,6 +7,7 @@ export default function SalesHistoryPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
   const isAdmin = role === "admin";
+  const isAuditor = role === "auditor";
   const canApplyDiscount = useSaleDiscountPermission(user?.id, branchId);
 
   const currentStoreCode =
@@ -1024,8 +1025,10 @@ export default function SalesHistoryPage() {
               </h1>
 
               <p style={styles.heroSubtitle}>
-                View past sales, reprint receipts, download PDF receipts and
-                void wrong sales for <strong>{currentStoreName}</strong>
+                {isAuditor
+                  ? "Read-only access to past sales, sale corrections, void history and downloadable receipts for "
+                  : "View past sales, reprint receipts, download PDF receipts and void wrong sales for "}
+                <strong>{currentStoreName}</strong>
                 {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
                 Every record shown here belongs to the selected store.
               </p>
@@ -1052,8 +1055,9 @@ export default function SalesHistoryPage() {
             {currentStoreCode} — {currentStoreName}
           </strong>
           <p>
-            Sales history, receipt preview, PDF download and void actions are
-            filtered to this selected store only.
+            {isAuditor
+              ? "Auditor read-only view: inspect and download selected-store sales and receipts. Creating, editing and voiding sales are not permitted."
+              : "Sales history, receipt preview, PDF download and void actions are filtered to this selected store only."}
           </p>
         </div>
       </div>
