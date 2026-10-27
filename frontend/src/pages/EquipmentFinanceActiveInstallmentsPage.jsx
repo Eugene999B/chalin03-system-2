@@ -59,7 +59,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("active");
+  const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [problem, setProblem] = useState("");
@@ -157,7 +157,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
       <header className="finance-accounts__hero">
         <div>
           <p>Account monitoring only</p>
-          <h1>Active Installments</h1>
+          <h1>Installment Account Register</h1>
           <span>
             Review every approved customer account, official balance, overdue amount,
             payment progress and next due date. Payments are recorded only in the Payments Centre.
