@@ -28,6 +28,36 @@ const PAYMENT_MESSAGE_INTERVAL_MS = Math.max(
 let phaseSixSchedulersStarted = false;
 let paymentMessageSyncRunning = false;
 
+const TRANSIENT_FINANCE_DB_CODES = new Set([
+  "ECONNREFUSED", "ETIMEDOUT", "ECONNRESET",
+  "EHOSTUNREACH", "EAI_AGAIN", "PROTOCOL_CONNECTION_LOST",
+]);
+
+function isTransientFinanceDatabaseError(error) {
+  if (!error) return false;
+  if (TRANSIENT_FINANCE_DB_CODES.has(String(error.code || ""))) return true;
+  return (Array.isArray(error.errors) && error.errors.some(isTransientFinanceDatabaseError)) ||
+    (error.cause && isTransientFinanceDatabaseError(error.cause)) || false;
+}
+
+async function waitForFinanceSchedulerDatabase() {
+  // MySQL on Railway may be waking from auto-sleep. Only retry a read-only
+  // connectivity probe, never the SMS provider call or a payment mutation.
+  for (const delayMs of [0, 4000, 12000]) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    try {
+      await pool.query("SELECT 1 AS finance_scheduler_database_ready");
+      return true;
+    } catch (error) {
+      if (!isTransientFinanceDatabaseError(error)) throw error;
+    }
+  }
+  console.warn(
+    "Equipment Finance payment SMS sync skipped: database is unavailable; pending receipts remain queued for the next scheduled run."
+  );
+  return false;
+}
+
 class EquipmentFinancePhaseSixError extends Error {
   constructor(statusCode, message, code = "EQUIPMENT_FINANCE_PHASE6_ERROR") {
     super(message);
@@ -1021,6 +1051,7 @@ function startEquipmentFinancePhaseSixSchedulers() {
     if (paymentMessageSyncRunning) return;
     paymentMessageSyncRunning = true;
     try {
+      if (!(await waitForFinanceSchedulerDatabase())) return;
       await syncCustomerPaymentReceipts({ limit: 100 });
     } catch (error) {
       console.error("Equipment Finance customer payment SMS scheduler failed:", error);
@@ -1039,6 +1070,7 @@ function startEquipmentFinancePhaseSixSchedulers() {
 
 module.exports = {
   EquipmentFinancePhaseSixError,
+  isTransientFinanceDatabaseError,
   accountingCsv,
   accountingRowsFromPayments,
   assertPhaseSixSchema,
