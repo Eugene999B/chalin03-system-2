@@ -158,10 +158,13 @@ export default function EquipmentFinanceCustomerCentrePage() {
       const response = editing?.id
         ? await axiosClient.put(`${API}/${editing.id}`, payload)
         : await axiosClient.post(API, payload);
+      const savedCustomerName = String(response.data?.customer?.customer_name || form.customer_name || "").trim();
+      const nextSearch = editing?.id ? search.trim() : savedCustomerName;
       setEditing(null);
       setForm(EMPTY_CUSTOMER);
       setNotice(response.data?.message || "Finance customer saved.");
-      await load();
+      if (!editing?.id) setSearch(nextSearch);
+      await load(nextSearch);
     } catch (error) {
       const duplicates = error?.response?.data?.duplicates || [];
       if (duplicates.length) {
