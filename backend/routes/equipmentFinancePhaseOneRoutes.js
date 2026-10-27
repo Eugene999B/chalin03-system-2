@@ -653,6 +653,23 @@ router.get(
         machinesWithEditability(),
         getProfessionalSettings(),
       ]);
+      // A newly-created customer can be outside the initial 250-record listing.
+      // Resolve only an explicitly selected, active company-wide Finance customer
+      // using the existing customer list query and include it without mutating data.
+      const selectedCustomerId = positiveId(req.query.customer_id);
+      if (selectedCustomerId && !customers.some((customer) => Number(customer.id) === selectedCustomerId)) {
+        const [selectedRows] = await pool.query(
+          "SELECT customer_code FROM hire_customers WHERE id = ? AND is_active = TRUE LIMIT 1",
+          [selectedCustomerId]
+        );
+        if (selectedRows.length) {
+          const selectedMatches = await customerList(selectedRows[0].customer_code);
+          const selectedCustomer = selectedMatches.find(
+            (customer) => Number(customer.id) === selectedCustomerId
+          );
+          if (selectedCustomer) customers.unshift(selectedCustomer);
+        }
+      }
       return res.json({
         status: "success",
         customers,
