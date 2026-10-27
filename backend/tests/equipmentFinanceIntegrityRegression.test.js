@@ -80,7 +80,7 @@ test("Finance reports fail closed on database errors and discard stale portfolio
   const reports = uiSource("pages/EquipmentSalesReportsPage.jsx");
   assert.match(reports, /setPortfolio\(null\)/);
   assert.match(reports, /portfolio\?\.reconciliation_warning/);
-  assert.match(reports, /String\(account\.agreement_id\) === String\(selectedAgreementId\)/);
+  assert.match(reports, /String\(account\.agreement_id \|\| account\.id\) === String\(selectedAgreementId\)/);
 });
 
 test("Finance schedule truth does not declare fully settled schedule lines due", () => {
