@@ -1,5 +1,7 @@
 name: Finance dependency lockfile patch
 on:
+  pull_request:
+    branches: [production]
   push:
     branches: [fix/finance-hire-roster-accounts-20261027]
   workflow_dispatch:
