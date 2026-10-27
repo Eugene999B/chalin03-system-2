@@ -217,7 +217,7 @@ export default function EquipmentSalesReportsPage() {
   const legacySummary = legacyManagement?.summary || {};
   const accounts = portfolio?.accounts || [];
   const selectedAccount = useMemo(
-    () => accounts.find((account) => String(account.agreement_id) === String(selectedAgreementId)),
+    () => accounts.find((account) => String(account.agreement_id || account.id) === String(selectedAgreementId)),
     [accounts, selectedAgreementId]
   );
   const messageRows = useMemo(() => {
