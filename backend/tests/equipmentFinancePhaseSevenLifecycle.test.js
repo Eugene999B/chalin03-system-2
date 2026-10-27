@@ -57,7 +57,8 @@ test("critical Finance mutations fail closed and return authoritative values", (
   assert.match(reconciliation, /values\.first_schedule_due_date/);
   assert.match(reconciliation, /values\.next_due_date/);
   assert.match(reconciliation, /values\.final_schedule_due_date/);
-  assert.match(reconciliation, /return reconcileFinanceAgreement\(agreementId, \{ connection, lock: false \}\)/);
+  assert.match(reconciliation, /const after = await reconcileFinanceAgreement/);
+  assert.match(reconciliation, /if \\(!after\\.consistent\\)/);
 });
 
 test("rescheduled schedule rows are never treated as collectible open installments", () => {
