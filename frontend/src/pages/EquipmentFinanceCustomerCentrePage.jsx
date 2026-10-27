@@ -60,22 +60,34 @@ export default function EquipmentFinanceCustomerCentrePage() {
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
   const [photoProblem, setPhotoProblem] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (query = "", signal) => {
     setLoading(true);
     setProblem("");
     try {
-      const response = await axiosClient.get(API);
-      setCustomers(response.data?.customers || []);
+      const response = await axiosClient.get(API, {
+        params: { search: query || undefined },
+        signal,
+      });
+      if (!signal?.aborted) setCustomers(response.data?.customers || []);
     } catch (error) {
+      if (signal?.aborted || error?.code === "ERR_CANCELED") return;
       setProblem(errorMessage(error, "Could not load Finance customers."));
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(
+      () => { void load(search.trim(), controller.signal); },
+      search.trim() ? 300 : 0
+    );
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [load, search]);
 
   const visibleCustomers = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -216,6 +228,10 @@ export default function EquipmentFinanceCustomerCentrePage() {
           />
         </div>
 
+        <p className="finance-simple__muted">
+          Search runs across the Finance customer register, not just the initially loaded records.
+          Up to 250 matches are shown; refine your search if there are more.
+        </p>
         {loading ? <div className="finance-simple__empty">Loading Finance customers…</div> : null}
         {!loading && !visibleCustomers.length ? <div className="finance-simple__empty">No matching customers. Add the first customer to begin.</div> : null}
 
