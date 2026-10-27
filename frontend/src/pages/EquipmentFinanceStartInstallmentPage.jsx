@@ -134,13 +134,15 @@ export default function EquipmentFinanceStartInstallmentPage() {
 
   useEffect(() => {
     let active = true;
-    axiosClient.get(`${API}/bootstrap`).then((response) => {
+    axiosClient.get(`${API}/bootstrap`, {
+      params: { customer_id: preselectedCustomer || undefined },
+    }).then((response) => {
       if (!active) return;
       setCustomers(response.data?.customers || []);
       setMachines(response.data?.machines || []);
     }).catch((error) => { if (active) setProblem(errorMessage(error, "Could not load customers and excavators.")); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [preselectedCustomer]);
 
   useEffect(() => {
     const next = mergeDraft(data);
