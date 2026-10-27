@@ -32,3 +32,12 @@ test("staff directory UI fetches scoped results and does not enable role changes
   assert.match(frontend, /tab === "staff" && !isSystemAdministrator && canViewStaff/);
   assert.match(frontend, /tab === "staff" && isSystemAdministrator/);
 });
+
+test("customer selection survives capped Finance customer register without cross-division mutation", () => {
+  const phaseOne = fs.readFileSync(path.join(__dirname, "../routes/equipmentFinancePhaseOneRoutes.js"), "utf8");
+  const wizard = fs.readFileSync(path.join(__dirname, "../../frontend/src/pages/EquipmentFinanceStartInstallmentPage.jsx"), "utf8");
+  assert.match(phaseOne, /selectedCustomerId = positiveId\(req\.query\.customer_id\)/);
+  assert.match(phaseOne, /WHERE id = \? AND is_active = TRUE LIMIT 1/);
+  assert.match(phaseOne, /customers\.unshift\(selectedCustomer\)/);
+  assert.match(wizard, /params: \{ customer_id: preselectedCustomer \|\| undefined \}/);
+});
