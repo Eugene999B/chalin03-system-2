@@ -87,3 +87,16 @@ test("Finance schedule truth does not declare fully settled schedule lines due",
   const truth = source("services/equipmentFinanceScheduleTruthService.js");
   assert.match(truth, /COALESCE\(s\.waived_charge_amount, 0\) > COALESCE\(s\.amount_paid, 0\) \+ 0\.009/);
 });
+
+test("Finance scheduler retries only read-only transient database wake failures", () => {
+  const { isTransientFinanceDatabaseError } = require("../services/equipmentFinancePhaseSixService");
+  assert.equal(isTransientFinanceDatabaseError({ code: "ECONNREFUSED" }), true);
+  assert.equal(isTransientFinanceDatabaseError({
+    errors: [{ code: "ETIMEDOUT" }, { code: "ECONNREFUSED" }],
+  }), true);
+  assert.equal(isTransientFinanceDatabaseError({ code: "ER_NO_SUCH_TABLE" }), false);
+  const phaseSix = source("services/equipmentFinancePhaseSixService.js");
+  assert.match(phaseSix, /SELECT 1 AS finance_scheduler_database_ready/);
+  assert.match(phaseSix, /if \(!\(await waitForFinanceSchedulerDatabase\(\)\)\) return;/);
+  assert.match(phaseSix, /pending receipts remain queued for the next scheduled run/);
+});
