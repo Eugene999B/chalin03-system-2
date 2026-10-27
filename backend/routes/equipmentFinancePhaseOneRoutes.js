@@ -543,9 +543,9 @@ async function customerList(search = "") {
   let searchSql = "";
   const term = cleanText(search, 120);
   if (term) {
-    searchSql = "AND (customer.customer_name LIKE ? OR customer.phone LIKE ? OR customer.customer_code LIKE ? OR customer.email LIKE ?)";
+    searchSql = "AND (customer.customer_name LIKE ? OR customer.phone LIKE ? OR customer.customer_code LIKE ? OR customer.email LIKE ? OR customer.address LIKE ? OR customer.contact_person LIKE ?)";
     const like = `%${term}%`;
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like, like);
   }
   const [rows] = await pool.query(
     `SELECT customer.*,
