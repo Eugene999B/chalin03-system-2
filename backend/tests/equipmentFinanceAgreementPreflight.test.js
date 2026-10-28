@@ -80,7 +80,7 @@ test("agreement activation preflight never bypasses atomic creation safeguards",
 
 test("Prepare Agreement page explains disabled buttons and displays the actual 409 inside the dialog", () => {
   const ui = fs.readFileSync(path.join(__dirname,"../../frontend/src/pages/EquipmentFinanceAgreementActivationPage.jsx"),"utf8");
-  assert.match(ui, /Why this application cannot proceed/);
+  assert.match(ui, /Agreement blocked — resolve these items/);
   assert.match(ui, /activation_blockers/);
   assert.match(ui, /Resolve blockers first/);
   assert.match(ui, /Reference: \$\{code\}/);
