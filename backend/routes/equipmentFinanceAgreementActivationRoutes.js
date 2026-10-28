@@ -300,7 +300,19 @@ async function loadApplication(connection, applicationId) {
        customer.address AS customer_address,
        asset.sale_status,
        asset.operational_purpose,
-       asset.is_active AS asset_is_active
+       asset.is_active AS asset_is_active,
+       EXISTS (
+         SELECT 1 FROM equipment_sale_agreements existing
+          WHERE existing.sale_type = 'installment'
+            AND (
+              existing.quotation_id = application.quotation_id
+              OR (
+                existing.asset_id = application.asset_id
+                AND existing.agreement_status NOT IN ('completed','cancelled','defaulted')
+              )
+            )
+            AND (application.agreement_id IS NULL OR existing.id <> application.agreement_id)
+       ) AS conflicting_agreement_exists
      FROM equipment_credit_applications application
      LEFT JOIN equipment_credit_application_kyc kyc
        ON kyc.application_id = application.id
@@ -318,7 +330,9 @@ async function loadApplication(connection, applicationId) {
      LIMIT 1`,
     [applicationId]
   );
-  return rows[0] ? { ...rows[0], quotation_item_id: rows[0].quotation_item_id || null, asset_exists: rows[0].asset_id } : null;
+  return rows[0]
+    ? { ...rows[0], asset_exists: rows[0].asset_id }
+    : null;
 }
 
 async function loadAgreement(connection, agreementId) {
@@ -995,6 +1009,7 @@ module.exports.ACTIVATION_ROLES = ACTIVATION_ROLES;
 module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
 module.exports.REQUIRED_MIGRATIONS = REQUIRED_MIGRATIONS;
 module.exports.REQUIRED_TRIGGERS = REQUIRED_TRIGGERS;
+module.exports.activationCandidate = activationCandidate;
 module.exports.approvedSchedule = approvedSchedule;
 module.exports.schemaStatus = schemaStatus;
 
