@@ -101,7 +101,9 @@ test("Approved critical-risk applications and historical due dates carry warning
     affordability_status: "not_assessed",
     risk_band: "critical",
   });
-  assert.equal(result.activation_ready, true);
+  assert.equal(result.activation_ready, false);
+  assert.equal(result.correction_required, true);
+  assert.match(result.activation_blockers.join(" "), /Approved first installment date/);
   assert.match(result.activation_advisories.join(" "), /first installment due date predates the application/);
   assert.match(result.activation_advisories.join(" "), /Affordability has not been assessed or credit risk is critical/);
 });
