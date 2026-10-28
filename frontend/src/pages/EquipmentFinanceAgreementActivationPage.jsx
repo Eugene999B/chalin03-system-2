@@ -31,7 +31,9 @@ function dateValue(value, fallback = "Not recorded") {
 }
 
 function errorMessage(error, fallback) {
-  return error?.response?.data?.message || error?.message || fallback;
+  const message = error?.response?.data?.message || error?.message || fallback;
+  const code = error?.response?.data?.code;
+  return code ? `${message} (Reference: ${code})` : message;
 }
 
 export default function EquipmentFinanceAgreementActivationPage() {
@@ -159,13 +161,25 @@ export default function EquipmentFinanceAgreementActivationPage() {
         </div>
       </header>
 
-      {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+      {problem && !selected ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
+      {!canActivate ? (
+        <div className="finance-simple__notice is-warning" role="status">
+          Your account can inspect approved agreements, but only an authorised Finance Manager,
+          Finance Accountant or System Administrator may create them.
+        </div>
+      ) : null}
 
       {readiness.ready === false ? (
         <section className="finance-simple__section">
           <h2>Agreement activation is not ready</h2>
-          <p>Missing: {(readiness.missing_tables || []).join(", ")}</p>
+          <p>Database readiness checks found the following outstanding requirements. Agreement creation remains blocked until they are verified.</p>
+          <ul>
+            {(readiness.missing_tables || []).map((item) => <li key={item}>Missing table: {item}</li>)}
+            {(readiness.missing_columns || []).map((item) => <li key={item}>Missing column: {item}</li>)}
+            {(readiness.missing_triggers || []).map((item) => <li key={item}>Missing trigger: {item}</li>)}
+            {(readiness.missing_migrations || []).map((item) => <li key={item}>Missing migration: {item}</li>)}
+          </ul>
         </section>
       ) : null}
 
@@ -189,7 +203,14 @@ export default function EquipmentFinanceAgreementActivationPage() {
             </div>
           </div>
           {loading ? <div className="finance-simple__empty">Loading approved applications…</div> : null}
-          {!loading && !visible.length ? <div className="finance-simple__empty">No approved application matches the current search.</div> : null}
+          {!loading && !visible.length ? (
+            <div className="finance-simple__empty">
+              No approved application matches this search and filter. Agreement preparation requires a
+              completed manager approval. Check Applications &amp; Approvals for drafts, submitted
+              applications or requested changes before returning here.
+              <div><Link to="/equipment-installment-finance/applications">Open Applications &amp; Approvals</Link></div>
+            </div>
+          ) : null}
           <div className="finance-simplified__compact-register">
             {visible.map((candidate) => {
               const blocked = Boolean(candidate.activation_blockers?.length) || candidate.activation_ready === false;
@@ -208,9 +229,15 @@ export default function EquipmentFinanceAgreementActivationPage() {
                     <span>Status</span>
                     <strong>{candidate.agreement_id ? "Activated" : blocked ? "Requires attention" : "Ready"}</strong>
                   </div>
+                  {blocked && !candidate.agreement_id ? (
+                    <div className="finance-simple__notice is-warning" role="status">
+                      <strong>Why this application cannot proceed:</strong>
+                      <ul>{(candidate.activation_blockers || ["This agreement is not yet ready."]).map((reason, index) => <li key={`${candidate.id}-${index}`}>{reason}</li>)}</ul>
+                    </div>
+                  ) : null}
                   <div className="finance-simplified__compact-record-actions">
                     <button className="is-primary" type="button" disabled={Boolean(candidate.agreement_id) || !canActivate || !candidate.activation_ready} onClick={() => open(candidate)}>
-                      {candidate.agreement_id ? "Agreement Created" : "Create Agreement"}
+                      {candidate.agreement_id ? "Agreement Created" : blocked ? "Resolve blockers first" : "Create Agreement"}
                     </button>
                   </div>
                 </article>
@@ -249,6 +276,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
               <div className="finance-simple__notice is-error">{selected.activation_blockers.join(" ")}</div>
             ) : null}
 
+            {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
             <form onSubmit={activate}>
               <div className="finance-simple__grid">
                 <div className="finance-simple__field">
