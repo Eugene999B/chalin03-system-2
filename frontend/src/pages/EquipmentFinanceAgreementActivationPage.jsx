@@ -4,6 +4,7 @@ import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
+import "../styles/equipmentFinanceFlowResponsive.css";
 
 const API = "/equipment-catalogue/sales/agreement-activations";
 const ACTIVATION_ROLES = new Set([
@@ -61,6 +62,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
+  const [createdAgreementId, setCreatedAgreementId] = useState(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("awaiting");
   const [selected, setSelected] = useState(null);
@@ -131,6 +133,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
       const response = await axiosClient.post(`${API}/${selected.id}`, form);
       setSelected(null);
       const nextAction = response.data?.next_action?.label;
+      setCreatedAgreementId(response.data?.agreement?.id || null);
       setNotice(
         [response.data?.message || "Agreement created with its exact installment schedule.", nextAction]
           .filter(Boolean)
@@ -145,24 +148,35 @@ export default function EquipmentFinanceAgreementActivationPage() {
   }
 
   return (
-    <main className="finance-simple finance-simplified">
+    <main className="finance-simple finance-simplified finance-lifecycle finance-lifecycle--agreement">
       <header className="finance-simple__hero">
         <div>
           <p>Search, select, then activate</p>
-          <h1>Activate Agreement</h1>
-          <span>
-            Find the approved application first. The complete price, deposit, schedule and advisory
-            details appear only after the correct application is selected.
-          </span>
+          <h1>Prepare Agreement</h1>
+          <span>Review an approved application, verify its terms, then create the agreement and payment schedule. No money is collected at this step.</span>
         </div>
         <div className="finance-simple__hero-actions">
           <Link className="finance-simple__button" to="/equipment-installment-finance/applications">Back to Applications</Link>
           <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">Help</Link>
         </div>
       </header>
+      <nav className="finance-lifecycle__progress" aria-label="Installment stages">
+        <Link to="/equipment-installment-finance/applications">1. Approvals</Link>
+        <span className="is-current" aria-current="step">2. Agreement</span>
+        <Link className="is-next" to="/equipment-installment-finance/applications?stage=deposit">3. Opening Deposit</Link>
+        <Link to="/equipment-installment-finance/applications?stage=accounts">4. Accounts</Link>
+      </nav>
 
       {problem && !selected ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
-      {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
+      {notice ? (
+        <section className="finance-lifecycle__next" role="status">
+          <h2>Agreement prepared</h2>
+          <p>{notice}</p>
+          <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=deposit${createdAgreementId ? `&agreement=${encodeURIComponent(createdAgreementId)}` : ""}`}>
+            Continue to Opening Deposit
+          </Link>
+        </section>
+      ) : null}
       {!canActivate ? (
         <div className="finance-simple__notice is-warning" role="status">
           Your account can inspect approved agreements, but only an authorised Finance Manager,
@@ -202,7 +216,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
               </select>
             </div>
           </div>
-          {loading ? <div className="finance-simple__empty">Loading approved applications…</div> : null}
+          {loading ? <div className="finance-simple__empty" role="status">Loading approved applications…</div> : null}
           {!loading && !visible.length ? (
             <div className="finance-simple__empty">
               No approved application matches this search and filter. Agreement preparation requires a
@@ -230,21 +244,27 @@ export default function EquipmentFinanceAgreementActivationPage() {
                     <strong>{candidate.agreement_id ? "Activated" : blocked ? "Requires attention" : "Ready"}</strong>
                   </div>
                   {(candidate.activation_advisories || []).length ? (
-                    <div className="finance-simple__notice is-warning" role="status">
-                      <strong>Financial review warnings (not automatic approval blockers):</strong>
+                    <details className="finance-lifecycle__warnings">
+                      <summary>{candidate.activation_advisories.length} financial review {candidate.activation_advisories.length === 1 ? "warning" : "warnings"} — check before signing</summary>
                       <ul>{candidate.activation_advisories.map((warning, index) => <li key={`advisory-${candidate.id}-${index}`}>{warning}</li>)}</ul>
-                    </div>
+                    </details>
                   ) : null}
                   {blocked && !candidate.agreement_id ? (
-                    <div className="finance-simple__notice is-warning" role="status">
-                      <strong>Why this application cannot proceed:</strong>
+                    <details className="finance-lifecycle__warnings is-blocked" open>
+                      <summary>Agreement blocked — resolve these items</summary>
                       <ul>{(candidate.activation_blockers || ["This agreement is not yet ready."]).map((reason, index) => <li key={`${candidate.id}-${index}`}>{reason}</li>)}</ul>
-                    </div>
+                    </details>
                   ) : null}
                   <div className="finance-simplified__compact-record-actions">
-                    <button className="is-primary" type="button" disabled={Boolean(candidate.agreement_id) || !canActivate || !candidate.activation_ready} onClick={() => open(candidate)}>
-                      {candidate.agreement_id ? "Agreement Created" : blocked ? "Resolve blockers first" : "Create Agreement"}
-                    </button>
+                    {candidate.agreement_id ? (
+                      <Link className="finance-simple__button" to={`/equipment-installment-finance/applications?stage=deposit&agreement=${encodeURIComponent(candidate.agreement_id)}`}>
+                        View opening deposit
+                      </Link>
+                    ) : (
+                      <button className="is-primary" type="button" disabled={!canActivate || !candidate.activation_ready} onClick={() => open(candidate)}>
+                        {blocked ? "Resolve blockers first" : "Review & Create"}
+                      </button>
+                    )}
                   </div>
                 </article>
               );
@@ -282,10 +302,10 @@ export default function EquipmentFinanceAgreementActivationPage() {
               <div className="finance-simple__notice is-error">{selected.activation_blockers.join(" ")}</div>
             ) : null}
             {selected.activation_advisories?.length ? (
-              <div className="finance-simple__notice is-warning" role="status">
-                <strong>Review the case file before recording the agreement:</strong>
+              <details className="finance-lifecycle__warnings" open>
+                <summary>Review {selected.activation_advisories.length} financial warning(s) before signing</summary>
                 <ul>{selected.activation_advisories.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
-              </div>
+              </details>
             ) : null}
 
             {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
@@ -311,7 +331,7 @@ export default function EquipmentFinanceAgreementActivationPage() {
               </div>
               <div className="finance-simple__sticky-actions">
                 <span>Agreement and schedule only.</span>
-                <div><button type="button" onClick={() => setSelected(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Creating…" : "Create Agreement"}</button></div>
+                <div><button type="button" onClick={() => setSelected(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving || !form.terms_accepted || selected.activation_ready === false}>{saving ? "Creating…" : "Create Agreement"}</button></div>
               </div>
             </form>
           </section>
