@@ -1129,6 +1129,7 @@ router.post(
 module.exports = router;
 module.exports.FinanceWorkflowError = FinanceWorkflowError;
 module.exports.REVIEW_TRANSITIONS = REVIEW_TRANSITIONS;
+module.exports.assertNewScheduleDate = assertNewScheduleDate;
 module.exports.classifyFinanceWorkflowError = classifyFinanceWorkflowError;
 module.exports.inspectWorkflowSchema = inspectWorkflowSchema;
 module.exports.listFilters = listFilters;
