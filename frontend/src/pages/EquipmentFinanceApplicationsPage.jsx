@@ -423,6 +423,7 @@ export default function EquipmentFinanceApplicationsPage() {
       verify: "Verify optional KYC evidence",
       reject_kyc: "Record a KYC issue",
       request_changes: "Request changes",
+      request_approved_correction: "Return approved application for schedule correction",
       approve: "Approve credit application",
       decline: "Decline credit application",
       withdraw: "Withdraw application",
@@ -437,6 +438,7 @@ export default function EquipmentFinanceApplicationsPage() {
     const reasonRequired = [
       "reject_kyc",
       "request_changes",
+      "request_approved_correction",
       "decline",
       "withdraw",
       "cancel",
@@ -730,6 +732,11 @@ export default function EquipmentFinanceApplicationsPage() {
                   {canManage && detail.withdrawable ? <button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "withdraw")}>Withdraw</button> : null}
                   {canReview && detail.application?.application_status === "submitted" ? <button type="button" onClick={() => requestDecision(detail.application, "start_review")}>Start review</button> : null}
                   {canReview && ["submitted", "under_review"].includes(detail.application?.application_status) && detail.application?.kyc_status !== "verified" ? <button type="button" onClick={() => requestDecision(detail.application, "verify")}>Review KYC</button> : null}
+                  {canReview && detail.application?.application_status === "approved" && !detail.application?.agreement_id ? (
+                    <button type="button" onClick={() => requestDecision(detail.application, "request_approved_correction")}>
+                      Return approval for correction
+                    </button>
+                  ) : null}
                   {canReview && detail.application?.application_status === "under_review" ? <><button type="button" onClick={() => requestDecision(detail.application, "request_changes")}>Request changes</button><button className="is-danger" type="button" onClick={() => requestDecision(detail.application, "decline")}>Decline</button><button className="is-primary" type="button" onClick={() => requestDecision(detail.application, "approve")}>Approve</button></> : null}
                 </div>
               </>
@@ -742,7 +749,7 @@ export default function EquipmentFinanceApplicationsPage() {
                   <Field title="Frequency"><select value={edit.payload.offer.payment_frequency} onChange={(event) => updateEdit("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly</option><option value="fortnightly">Fortnightly</option><option value="monthly">Monthly</option><option value="custom">Custom days</option></select></Field>
                   <Field title="Interval days"><input type="number" min="1" max="365" value={edit.payload.offer.custom_interval_days} onChange={(event) => updateEdit("offer", "custom_interval_days", event.target.value)} /></Field>
                   <Field title="Installment count"><input type="number" min="1" max="520" value={edit.payload.offer.installment_count} onChange={(event) => updateEdit("offer", "installment_count", event.target.value)} /></Field>
-                  <Field title="First due date"><input type="date" value={edit.payload.offer.first_due_date} onChange={(event) => updateEdit("offer", "first_due_date", event.target.value)} /></Field>
+                  <Field title="First due date"><input type="date" min={new Date().toISOString().slice(0, 10)} value={edit.payload.offer.first_due_date} onChange={(event) => updateEdit("offer", "first_due_date", event.target.value)} /></Field>
                   <Field title="ID type"><input value={edit.payload.kyc.id_type} onChange={(event) => updateEdit("kyc", "id_type", event.target.value)} /></Field>
                   <Field title="ID number"><input value={edit.payload.kyc.id_number} onChange={(event) => updateEdit("kyc", "id_number", event.target.value)} /></Field>
                   <Field title="Employment / business type"><input value={edit.payload.kyc.employment_type} onChange={(event) => updateEdit("kyc", "employment_type", event.target.value)} /></Field>
@@ -770,7 +777,14 @@ export default function EquipmentFinanceApplicationsPage() {
             <span className="finance-applications-v2__dialog-eyebrow">Application decision</span>
             <h2>{decision.title}</h2>
             <p>{decision.application?.application_number} · {decision.application?.customer_name}</p>
-            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
+            {decision.kind === "request_approved_correction" ? (
+              <div className="finance-simple__notice is-warning">
+                This removes the application’s current approval only. It does not change an existing agreement or payment.
+                Document why the scheduled date is wrong, obtain the customer’s confirmation of corrected terms,
+                save the new first due date, resubmit the application and have an authorised manager approve it again.
+              </div>
+            ) : null}
+            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
             <div className="finance-applications-v2__decision-footer"><button type="button" onClick={() => setDecision(null)} disabled={saving}>Cancel</button><button className={decision.kind === "approve" ? "is-primary" : decision.kind === "decline" || decision.kind === "cancel" || decision.kind === "withdraw" ? "is-danger" : "is-primary"} type="submit" disabled={saving}>{saving ? "Working…" : "Confirm action"}</button></div>
           </form>
         </div>
