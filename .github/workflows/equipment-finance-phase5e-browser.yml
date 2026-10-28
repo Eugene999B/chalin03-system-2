@@ -38,6 +38,9 @@ jobs:
       - name: Run Phase 5E four-role journey
         run: npx playwright test e2e/equipmentFinancePhaseFiveE.spec.js
 
+      - name: Verify new agreement and deposit layouts on phone and desktop
+        run: npx playwright test e2e/equipmentFinanceFlowResponsive.spec.js
+
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
