@@ -312,7 +312,12 @@ async function loadApplication(connection, applicationId) {
               )
             )
             AND (application.agreement_id IS NULL OR existing.id <> application.agreement_id)
-       ) AS conflicting_agreement_exists
+       ) AS conflicting_agreement_exists,
+       EXISTS (
+         SELECT 1 FROM equipment_asset_sale_locks sale_lock
+         WHERE sale_lock.asset_id = application.asset_id
+           AND sale_lock.released_at IS NULL
+       ) AS active_sale_lock_exists
      FROM equipment_credit_applications application
      LEFT JOIN equipment_credit_application_kyc kyc
        ON kyc.application_id = application.id
@@ -462,6 +467,25 @@ function activationCandidate(application) {
         "This quotation or excavator is already associated with another Finance agreement. Review the existing account; a duplicate cannot be created."
       );
     }
+    if (Boolean(Number(application.active_sale_lock_exists))) {
+      activationBlockers.push(
+        "The excavator already has an active sale or installment reservation lock. Ask an authorised manager to review the existing reservation; do not create another agreement or release a lock without verification."
+      );
+    }
+  }
+
+  const activationAdvisories = [];
+  const firstDueText = schedule?.first_due_date || application.proposed_first_due_date || application.quotation_first_due_date;
+  const createdText = application.created_at ? String(application.created_at).slice(0, 10) : null;
+  if (firstDueText && createdText && String(firstDueText).slice(0, 10) < createdText) {
+    activationAdvisories.push(
+      "The approved first installment due date predates the application. Verify the signed payment plan and obtain an authorised correction before relying on collection dates."
+    );
+  }
+  if (application.affordability_status === "not_assessed" || application.risk_band === "critical") {
+    activationAdvisories.push(
+      "Affordability has not been assessed or credit risk is critical. Manager approval is recorded, but the case file still requires a documented risk review before financial commitment."
+    );
   }
 
   return {
@@ -511,6 +535,7 @@ function activationCandidate(application) {
       activationBlockers.length === 0 &&
       Boolean(schedule),
     activation_blockers: activationBlockers,
+    activation_advisories: activationAdvisories,
     safeguards: {
       creates_hire_job: false,
       creates_hire_contract: false,
@@ -574,7 +599,12 @@ router.get(
                   )
                 )
                 AND (application.agreement_id IS NULL OR existing.id <> application.agreement_id)
-           ) AS conflicting_agreement_exists
+           ) AS conflicting_agreement_exists,
+           EXISTS (
+             SELECT 1 FROM equipment_asset_sale_locks sale_lock
+             WHERE sale_lock.asset_id = application.asset_id
+               AND sale_lock.released_at IS NULL
+           ) AS active_sale_lock_exists
          FROM equipment_credit_applications application
          LEFT JOIN equipment_credit_application_kyc kyc
            ON kyc.application_id = application.id
