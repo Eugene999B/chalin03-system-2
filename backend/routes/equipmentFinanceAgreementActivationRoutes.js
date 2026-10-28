@@ -415,6 +415,14 @@ function approvedSchedule(application) {
   return schedule;
 }
 
+function financeCalendarDate(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+  }
+  const match = /^\d{4}-\d{2}-\d{2}(?=$|[T\s])/.exec(String(value ?? "").trim());
+  return match ? match[0] : null;
+}
+
 function activationCandidate(application) {
   let schedule = null;
   let scheduleProblem = null;
@@ -475,9 +483,11 @@ function activationCandidate(application) {
   }
 
   const activationAdvisories = [];
-  const firstDueText = schedule?.first_due_date || application.proposed_first_due_date || application.quotation_first_due_date;
-  const createdText = application.created_at ? String(application.created_at).slice(0, 10) : null;
-  if (firstDueText && createdText && String(firstDueText).slice(0, 10) < createdText) {
+  const firstDueText = financeCalendarDate(
+    schedule?.first_due_date || application.proposed_first_due_date || application.quotation_first_due_date
+  );
+  const createdText = financeCalendarDate(application.created_at);
+  if (firstDueText && createdText && firstDueText < createdText) {
     activationAdvisories.push(
       "The approved first installment due date predates the application. Verify the signed payment plan and obtain an authorised correction before relying on collection dates."
     );
