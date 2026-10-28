@@ -137,3 +137,25 @@ for (const width of [375, 1440]) {
     await page.screenshot({ path: testInfo.outputPath(`deposits-${width}.png`), fullPage: true });
   });
 }
+
+test("Past approved due dates cannot be opened for agreement creation", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 850 });
+  await fixture(page, { activation: [{
+    ...candidate,
+    activation_ready: false,
+    correction_required: true,
+    proposed_first_due_date: "2025-10-24",
+    activation_blockers: [
+      "Approved first installment date 2025-10-24 has passed. An authorised manager must return it for correction, then review and reapprove the current schedule."
+    ],
+  }] });
+  await page.goto("/equipment-installment-finance/applications?stage=activation");
+  await expect(page.getByRole("heading", { name: "Prepare Agreement" })).toBeVisible();
+  const blocked = page.locator(".finance-simplified__compact-record").first();
+  await expect(blocked.getByText("Requires attention")).toBeVisible();
+  await expect(blocked.getByText(/Approved first installment date 2025-10-24/)).toBeVisible();
+  await expect(blocked.getByRole("button", { name: /Create Agreement|Review & Create/ })).toHaveCount(0);
+  await expect(blocked.getByRole("link", { name: "Return for schedule correction" }))
+    .toHaveAttribute("href", /stage=applications-core&application=28/);
+  await noHorizontalOverflow(page, blocked);
+});
