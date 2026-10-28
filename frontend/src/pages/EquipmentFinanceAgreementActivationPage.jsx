@@ -229,6 +229,12 @@ export default function EquipmentFinanceAgreementActivationPage() {
                     <span>Status</span>
                     <strong>{candidate.agreement_id ? "Activated" : blocked ? "Requires attention" : "Ready"}</strong>
                   </div>
+                  {(candidate.activation_advisories || []).length ? (
+                    <div className="finance-simple__notice is-warning" role="status">
+                      <strong>Financial review warnings (not automatic approval blockers):</strong>
+                      <ul>{candidate.activation_advisories.map((warning, index) => <li key={`advisory-${candidate.id}-${index}`}>{warning}</li>)}</ul>
+                    </div>
+                  ) : null}
                   {blocked && !candidate.agreement_id ? (
                     <div className="finance-simple__notice is-warning" role="status">
                       <strong>Why this application cannot proceed:</strong>
@@ -274,6 +280,12 @@ export default function EquipmentFinanceAgreementActivationPage() {
 
             {selected.activation_blockers?.length ? (
               <div className="finance-simple__notice is-error">{selected.activation_blockers.join(" ")}</div>
+            ) : null}
+            {selected.activation_advisories?.length ? (
+              <div className="finance-simple__notice is-warning" role="status">
+                <strong>Review the case file before recording the agreement:</strong>
+                <ul>{selected.activation_advisories.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+              </div>
             ) : null}
 
             {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
