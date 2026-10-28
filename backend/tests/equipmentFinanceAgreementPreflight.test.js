@@ -86,3 +86,22 @@ test("Prepare Agreement page explains disabled buttons and displays the actual 4
   assert.match(ui, /Reference: \$\{code\}/);
   assert.match(ui, /role="alert">\{problem\}/);
 });
+
+test("Active sale lock is surfaced before the database trigger can reject activation", () => {
+  const result = activationCandidate({ ...baseCandidate, active_sale_lock_exists: 1 });
+  assert.equal(result.activation_ready, false);
+  assert.match(result.activation_blockers.join(" "), /active sale or installment reservation lock/);
+});
+
+test("Approved critical-risk applications and historical due dates carry warnings without rewriting approvals", () => {
+  const result = activationCandidate({
+    ...baseCandidate,
+    created_at: "2026-10-26T10:00:00.000Z",
+    proposed_first_due_date: "2026-10-24",
+    affordability_status: "not_assessed",
+    risk_band: "critical",
+  });
+  assert.equal(result.activation_ready, true);
+  assert.match(result.activation_advisories.join(" "), /first installment due date predates the application/);
+  assert.match(result.activation_advisories.join(" "), /Affordability has not been assessed or credit risk is critical/);
+});
