@@ -485,7 +485,9 @@ export default function EquipmentFinanceApplicationsPage() {
         }`
       );
       await loadList();
-      if (!["withdraw", "cancel"].includes(kind)) await openDetail(application.id);
+      if (!["withdraw", "cancel"].includes(kind)) await openDetail(application.id, {
+        editAfterOpen: kind === "request_approved_correction",
+      });
       else closeDetail();
     } catch (error) {
       setProblem(errorMessage(error, "Could not complete the application action."));
@@ -784,6 +786,7 @@ export default function EquipmentFinanceApplicationsPage() {
                 save the new first due date, resubmit the application and have an authorised manager approve it again.
               </div>
             ) : null}
+            {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
             {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
             <div className="finance-applications-v2__decision-footer"><button type="button" onClick={() => setDecision(null)} disabled={saving}>Cancel</button><button className={decision.kind === "approve" ? "is-primary" : decision.kind === "decline" || decision.kind === "cancel" || decision.kind === "withdraw" ? "is-danger" : "is-primary"} type="submit" disabled={saving}>{saving ? "Working…" : "Confirm action"}</button></div>
           </form>
