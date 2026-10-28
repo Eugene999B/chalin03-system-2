@@ -300,7 +300,19 @@ async function loadApplication(connection, applicationId) {
        customer.address AS customer_address,
        asset.sale_status,
        asset.operational_purpose,
-       asset.is_active AS asset_is_active
+       asset.is_active AS asset_is_active,
+       EXISTS (
+         SELECT 1 FROM equipment_sale_agreements existing
+          WHERE existing.sale_type = 'installment'
+            AND (
+              existing.quotation_id = application.quotation_id
+              OR (
+                existing.asset_id = application.asset_id
+                AND existing.agreement_status NOT IN ('completed','cancelled','defaulted')
+              )
+            )
+            AND (application.agreement_id IS NULL OR existing.id <> application.agreement_id)
+       ) AS conflicting_agreement_exists
      FROM equipment_credit_applications application
      LEFT JOIN equipment_credit_application_kyc kyc
        ON kyc.application_id = application.id
@@ -318,7 +330,9 @@ async function loadApplication(connection, applicationId) {
      LIMIT 1`,
     [applicationId]
   );
-  return rows[0] || null;
+  return rows[0]
+    ? { ...rows[0], asset_exists: rows[0].asset_id }
+    : null;
 }
 
 async function loadAgreement(connection, agreementId) {
@@ -405,6 +419,51 @@ function activationCandidate(application) {
     scheduleProblem = error.message;
   }
 
+  const activationBlockers = [...(scheduleProblem ? [scheduleProblem] : [])];
+  if (!application.agreement_id) {
+    if (!application.quotation_id || !application.quotation_number) {
+      activationBlockers.push("The approved application has no linked Finance quotation.");
+    } else if (!["approved", "accepted"].includes(application.quotation_status)) {
+      activationBlockers.push(
+        `The linked quotation is ${application.quotation_status || "missing"}. It must be approved or accepted before agreement creation.`
+      );
+    }
+    if (!application.customer_id || !cleanText(application.customer_name_snapshot || application.customer_name)) {
+      activationBlockers.push("The customer record or legal name is missing.");
+    }
+    if (!cleanText(application.customer_phone_snapshot || application.customer_phone)) {
+      activationBlockers.push("The customer's telephone number is missing.");
+    }
+    if (!application.asset_id || !application.asset_exists) {
+      activationBlockers.push("The selected excavator no longer exists in the equipment register.");
+    } else {
+      if (!Boolean(Number(application.asset_is_active))) {
+        activationBlockers.push("The excavator is inactive in the equipment register.");
+      }
+      if (!["sale_only", "sale_or_hire"].includes(application.operational_purpose)) {
+        activationBlockers.push("The excavator is not authorised for sale.");
+      }
+      if (application.sale_status !== "available") {
+        activationBlockers.push(
+          `The excavator's sale status is ${application.sale_status || "unknown"}, not available.`
+        );
+      }
+    }
+    if (
+      !application.quotation_item_id ||
+      !cleanText(application.asset_code_snapshot) ||
+      !cleanText(application.asset_name_snapshot) ||
+      !cleanText(application.asset_type_snapshot)
+    ) {
+      activationBlockers.push("The quotation is missing the exact excavator identity snapshot.");
+    }
+    if (Boolean(Number(application.conflicting_agreement_exists))) {
+      activationBlockers.push(
+        "This quotation or excavator is already associated with another Finance agreement. Review the existing account; a duplicate cannot be created."
+      );
+    }
+  }
+
   return {
     id: application.id,
     application_number: application.application_number,
@@ -449,8 +508,9 @@ function activationCandidate(application) {
     activation_ready:
       application.application_status === "approved" &&
       !application.agreement_id &&
+      activationBlockers.length === 0 &&
       Boolean(schedule),
-    activation_blockers: scheduleProblem ? [scheduleProblem] : [],
+    activation_blockers: activationBlockers,
     safeguards: {
       creates_hire_job: false,
       creates_hire_contract: false,
@@ -493,16 +553,40 @@ router.get(
            quotation.status AS quotation_status,
            quotation.total_amount,
            quotation.proposed_first_due_date AS quotation_first_due_date,
+           item.id AS quotation_item_id,
            item.asset_code_snapshot,
-           item.asset_name_snapshot
+           item.asset_name_snapshot,
+           item.asset_type_snapshot,
+           customer.customer_name,
+           customer.phone AS customer_phone,
+           asset.id AS asset_exists,
+           asset.is_active AS asset_is_active,
+           asset.operational_purpose,
+           asset.sale_status,
+           EXISTS (
+             SELECT 1 FROM equipment_sale_agreements existing
+              WHERE existing.sale_type = 'installment'
+                AND (
+                  existing.quotation_id = application.quotation_id
+                  OR (
+                    existing.asset_id = application.asset_id
+                    AND existing.agreement_status NOT IN ('completed','cancelled','defaulted')
+                  )
+                )
+                AND (application.agreement_id IS NULL OR existing.id <> application.agreement_id)
+           ) AS conflicting_agreement_exists
          FROM equipment_credit_applications application
          LEFT JOIN equipment_credit_application_kyc kyc
            ON kyc.application_id = application.id
-         INNER JOIN equipment_sales_quotations quotation
+         LEFT JOIN equipment_sales_quotations quotation
            ON quotation.id = application.quotation_id
-         INNER JOIN equipment_sales_quotation_items item
+         LEFT JOIN equipment_sales_quotation_items item
            ON item.quotation_id = quotation.id
           AND item.asset_id = application.asset_id
+         LEFT JOIN hire_customers customer
+           ON customer.id = application.customer_id
+         LEFT JOIN fleet_assets asset
+           ON asset.id = application.asset_id
          WHERE application.application_status = 'approved'
          ORDER BY application.reviewed_at DESC, application.id DESC`
       );
@@ -925,6 +1009,7 @@ module.exports.ACTIVATION_ROLES = ACTIVATION_ROLES;
 module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
 module.exports.REQUIRED_MIGRATIONS = REQUIRED_MIGRATIONS;
 module.exports.REQUIRED_TRIGGERS = REQUIRED_TRIGGERS;
+module.exports.activationCandidate = activationCandidate;
 module.exports.approvedSchedule = approvedSchedule;
 module.exports.schemaStatus = schemaStatus;
 
