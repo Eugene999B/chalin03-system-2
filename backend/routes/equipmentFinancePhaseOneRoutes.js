@@ -419,6 +419,7 @@ function normalizeOffer(body = {}, machine, settings = {}) {
     installment_count: body.installment_count ?? 12,
     first_due_date:
       body.first_due_date || addDays(today(), Number(settings.default_first_due_days || 30)),
+    minimum_first_due_date: today(),
     non_working_day_rule: body.non_working_day_rule || "exact",
   });
 

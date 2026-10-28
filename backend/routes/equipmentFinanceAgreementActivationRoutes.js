@@ -3,6 +3,7 @@ const express = require("express");
 
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { ghanaToday } = require("../middleware/equipmentFinanceActivationIntegrityGuard");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   FinanceScheduleError,
@@ -434,6 +435,26 @@ function activationCandidate(application) {
 
   const activationBlockers = [...(scheduleProblem ? [scheduleProblem] : [])];
   if (!application.agreement_id) {
+    // Preflight must enforce the exact same date gate as POST's integrity
+    // middleware and database trigger; never show "Ready" for past terms.
+    const approvedFirstDue = financeCalendarDate(
+      application.proposed_first_due_date || application.quotation_first_due_date
+    );
+    const quotedFirstDue = financeCalendarDate(application.quotation_first_due_date);
+    const currentGhanaDate = ghanaToday();
+    const applicationCreatedDate = financeCalendarDate(application.created_at);
+    if (!approvedFirstDue) {
+      activationBlockers.push("Approved first installment date is missing or invalid. Return the application for correction and manager reapproval.");
+    } else if (approvedFirstDue < currentGhanaDate || (applicationCreatedDate && approvedFirstDue < applicationCreatedDate)) {
+      activationBlockers.push(
+        `Approved first installment date ${approvedFirstDue} has passed or predates the application. An authorised manager must return it for correction, then review and reapprove the current schedule.`
+      );
+    }
+    if (quotedFirstDue && approvedFirstDue && quotedFirstDue !== approvedFirstDue) {
+      activationBlockers.push(
+        "The approved application and linked quotation have different first installment dates. Both must be reconciled through the approved correction workflow."
+      );
+    }
     if (!application.quotation_id || !application.quotation_number) {
       activationBlockers.push("The approved application has no linked Finance quotation.");
     } else if (!["approved", "accepted"].includes(application.quotation_status)) {
@@ -546,6 +567,9 @@ function activationCandidate(application) {
       Boolean(schedule),
     activation_blockers: activationBlockers,
     activation_advisories: activationAdvisories,
+    correction_required: !application.agreement_id && activationBlockers.some((reason) =>
+      /first installment date|first installment dates/.test(reason)
+    ),
     safeguards: {
       creates_hire_job: false,
       creates_hire_contract: false,

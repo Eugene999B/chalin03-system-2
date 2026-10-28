@@ -256,7 +256,11 @@ export default function EquipmentFinanceAgreementActivationPage() {
                     </details>
                   ) : null}
                   <div className="finance-simplified__compact-record-actions">
-                    {candidate.agreement_id ? (
+                    {candidate.correction_required && !candidate.agreement_id ? (
+                      <Link className="finance-simple__button" to={`/equipment-installment-finance/applications?stage=applications-core&application=${encodeURIComponent(candidate.id)}`}>
+                        Return for schedule correction
+                      </Link>
+                    ) : candidate.agreement_id ? (
                       <Link className="finance-simple__button" to={`/equipment-installment-finance/applications?stage=deposit&agreement=${encodeURIComponent(candidate.agreement_id)}`}>
                         View opening deposit
                       </Link>
