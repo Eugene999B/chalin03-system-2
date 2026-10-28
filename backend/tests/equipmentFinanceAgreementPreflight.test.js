@@ -105,3 +105,21 @@ test("Approved critical-risk applications and historical due dates carry warning
   assert.match(result.activation_advisories.join(" "), /first installment due date predates the application/);
   assert.match(result.activation_advisories.join(" "), /Affordability has not been assessed or credit risk is critical/);
 });
+
+test("MySQL DATETIME objects do not create false historical-due warnings", () => {
+  const result = activationCandidate({
+    ...baseCandidate,
+    created_at: new Date("2026-10-26T12:00:00.000Z"),
+    proposed_first_due_date: "2026-11-10",
+  });
+  assert.equal(result.activation_advisories.some((warning) => /predates the application/.test(warning)), false);
+});
+
+test("MySQL DATETIME objects flag genuinely earlier first due dates", () => {
+  const result = activationCandidate({
+    ...baseCandidate,
+    created_at: new Date("2026-10-26T12:00:00.000Z"),
+    proposed_first_due_date: "2026-10-24",
+  });
+  assert.equal(result.activation_advisories.some((warning) => /predates the application/.test(warning)), true);
+});
