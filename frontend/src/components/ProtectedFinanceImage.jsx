@@ -53,6 +53,15 @@ export function financeMachineImagePath(machine = {}) {
   return "";
 }
 
+// Only permit Finance API-relative image paths. The Axios interceptor adds
+// the active staff bearer, so external/image-data URLs must never reach it.
+export function normalizeFinanceImageSource(value) {
+  const source = String(value || "").trim();
+  const apiPath = source.startsWith("/api/") ? source.slice(4) : source;
+  if (!/^\/equipment-catalogue\/sales\/[a-zA-Z0-9/?=&._%-]+$/.test(apiPath)) return "";
+  return apiPath;
+}
+
 function responseMimeType(response) {
   const header =
     response?.headers?.get?.("content-type") ||
@@ -70,7 +79,7 @@ export default function ProtectedFinanceImage({
   onClick,
   eager = false,
 }) {
-  const normalizedSource = String(src || "").trim();
+  const normalizedSource = normalizeFinanceImageSource(src);
   const [attempt, setAttempt] = useState(0);
   const [objectUrl, setObjectUrl] = useState("");
   const [state, setState] = useState(normalizedSource ? "loading" : "no-photo");
