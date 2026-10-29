@@ -58,6 +58,10 @@ async function fixture(page, { activation = [candidate], deposits = [reserved(21
       return fulfill(route, { status: "success", machines: [], customers: [] });
     if (path === "/equipment-catalogue/sales/professional/machine-register/locations")
       return fulfill(route, { status: "success", locations: [] });
+    if (path === "/equipment-catalogue/sales/phase-one/bootstrap")
+      return fulfill(route, { status: "success", machines: [], customers: [] });
+    if (path === "/equipment-catalogue/sales/professional/machine-register/locations")
+      return fulfill(route, { status: "success", locations: [] });
     if (path === "/equipment-catalogue/sales/agreement-activations/readiness")
       return fulfill(route, { status: "success", readiness: { ready: true } });
     if (path === "/equipment-catalogue/sales/agreement-activations/candidates")
@@ -191,5 +195,37 @@ for (const width of [375, 1440]) {
     await expect(dialog.getByRole("alert")).toContainText("main excavator photo");
     expect(creationRequests).toBe(0);
     await noHorizontalOverflow(page, dialog);
+  });
+}
+
+
+for (const width of [375, 1440]) {
+  test(`Excavator registration requires explicit verified fields at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 860 });
+    await fixture(page);
+    await page.goto("/equipment-installment-finance/applications?stage=machines");
+    await page.getByRole("button", { name: /Register Excavator/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Register excavator" });
+    await expect(dialog).toBeVisible();
+    for (const name of [
+      "Model year (required)",
+      "Condition (required)",
+      "Ownership (required)",
+      "Sale purpose (required)",
+      "Meter type (required)",
+      "Current meter (required)",
+      "Fuel type (required)",
+    ]) {
+      const control = dialog.getByLabel(name, { exact: true });
+      await expect(control).toHaveCount(1);
+      await expect(control).toHaveAttribute("required");
+    }
+    const condition = dialog.getByLabel("Condition (required)");
+    expect(await condition.inputValue()).toBe("");
+    await expect(dialog.getByLabel("Fuel type (required)")).toHaveValue("");
+    await expect(dialog.getByLabel("Current meter (required)")).toHaveValue("");
+    const overflow = await dialog.evaluate(node => node.scrollWidth - node.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: testInfo.outputPath(`excavator-required-${width}.png`) });
   });
 }
