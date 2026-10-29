@@ -26,7 +26,7 @@ assert.ok(logoutCall > responseGuard, "newer-session guard must run before logou
 assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
 assert.match(
   main,
-  /APP_SHELL_RELEASE = `browser-cache-integrity-v35-\$\{APP_BUILD_ID\}`/
+  /APP_SHELL_RELEASE = `browser-cache-integrity-v\d+-\$\{APP_BUILD_ID\}`/
 );
 assert.match(
   main,
