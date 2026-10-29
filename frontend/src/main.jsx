@@ -6,6 +6,7 @@ import CommandArrivalBanner from "./components/CommandArrivalBanner.jsx";
 import AdvancedAccountingExpenseFundingEvidence from "./components/AdvancedAccountingExpenseFundingEvidence.jsx";
 import OperationalApprovalLauncher from "./components/OperationalApprovalLauncher.jsx";
 import ApprovalCentreLiveAttention from "./components/ApprovalCentreLiveAttention.jsx";
+import ProductDeletionRequestLauncher from "./components/ProductDeletionRequestLauncher.jsx";
 import ProductsPageShellRepair from "./components/ProductsPageShellRepair.jsx";
 import { installCommandGateHistoryTracker } from "./utils/commandGateHistoryTracker.js";
 import { installCriticalFinanceWorkspacePreload } from "./utils/criticalFinanceWorkspacePreload.js";
@@ -35,6 +36,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ProductsPageShellRepair />
     <OperationalApprovalLauncher />
     <ApprovalCentreLiveAttention />
+    <ProductDeletionRequestLauncher />
     <AdvancedAccountingExpenseFundingEvidence />
     <EmergencyCommandOverlay />
     <CommandArrivalBanner />

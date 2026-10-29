@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { CustomerPortrait, CustomerPortraitPicker } from "../components/CustomerPortrait";
+import ProtectedFinanceImage, { financeMachineImagePath } from "../components/ProtectedFinanceImage";
 import "../styles/equipmentFinanceStartInstallment.css";
 
 const API = "/equipment-catalogue/sales/phase-one";
@@ -72,7 +73,25 @@ function dateLabel(value) {
 }
 
 function errorMessage(error, fallback) {
-  return error?.response?.data?.message || error?.message || fallback;
+  const payload = error?.response?.data || {};
+  const status = Number(error?.response?.status || 0);
+  const code = String(payload.code || "");
+  if (status === 503 && (
+    code === "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED" ||
+    code === "FINANCE_APPLICATION_SCHEMA_TABLE_MISSING" ||
+    code === "FINANCE_APPLICATION_SCHEMA_COLUMN_MISSING" ||
+    code === "FINANCE_LOCATION_NULLABILITY_REQUIRED" ||
+    code === "FINANCE_APPLICATION_ENUM_MISMATCH"
+  )) {
+    const detail = String(payload.operator_message || "Finance database verification failed.");
+    const requestId = payload.request_id ? ` Request reference: ${payload.request_id}.` : "";
+    return `${detail}${requestId} No new transaction should be submitted until the verified Finance database repair is completed. Check the Applications register before retrying to prevent duplicates.`;
+  }
+  if (status >= 500) {
+    const requestId = payload.request_id ? ` Reference: ${payload.request_id}.` : "";
+    return `The server could not finish the transaction.${requestId} Check the Applications register before retrying, and contact the administrator if the failure persists.`;
+  }
+  return payload.message || error?.message || fallback;
 }
 
 function readPhotoState(key) {
@@ -140,6 +159,8 @@ export default function EquipmentFinanceStartInstallmentPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [scheduleProblem, setScheduleProblem] = useState("");
   const [profilePhoto, setProfilePhoto] = useState(() => readPhotoState(photoKey));
+  const [duplicateCandidates, setDuplicateCandidates] = useState([]);
+  const [differentPersonConfirmed, setDifferentPersonConfirmed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -228,10 +249,24 @@ export default function EquipmentFinanceStartInstallmentPage() {
     setData((current) => current.offer.selling_price ? current : { ...current, offer: { ...current.offer, selling_price: String(selectedMachine.target_selling_price || "") } });
   }, [selectedMachine]);
 
-  function update(section, field, value) { setData((current) => ({ ...current, [section]: { ...current[section], [field]: value } })); }
+  function update(section, field, value) {
+    if (section === "customer") {
+      setDuplicateCandidates([]);
+      setDifferentPersonConfirmed(false);
+    }
+    setData((current) => ({ ...current, [section]: { ...current[section], [field]: value } }));
+  }
   function chooseCustomer(customer) {
     const customerId = String(customer.id);
-    setData((current) => ({ ...current, customerMode: "existing", customer_id: customerId }));
+    setCustomers((current) => current.some((item) => String(item.id) === customerId) ? current : [customer, ...current]);
+    setDuplicateCandidates([]);
+    setDifferentPersonConfirmed(false);
+    setData((current) => {
+      const changed = current.customerMode !== "existing" || String(current.customer_id) !== customerId;
+      const clearedIdentity = changed ? blankState() : null;
+      return { ...current, customerMode: "existing", customer_id: customerId,
+        ...(changed ? { kyc: clearedIdentity.kyc, affordability: clearedIdentity.affordability } : {}) };
+    });
     // Buyer portraits are private evidence; never attach one buyer's picture to another.
     setProfilePhoto(readPhotoState(photoKeyFor("existing", customerId)));
   }
@@ -252,7 +287,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
     setScheduleProblem("");
   }
   function setPhoto(value) { setProfilePhoto(value || null); writePhotoState(photoKey, value || null); }
-  function clearDraft() { const fresh = blankState(); setData(fresh); setStep(0); setProblem(""); setNotice("The unfinished draft was cleared on this device."); setSchedulePreview(null); setProfilePhoto(null); writePhotoState(photoKey, null); window.localStorage.removeItem(DRAFT_KEY); }
+  function clearDraft() { const fresh = blankState(); setData(fresh); setStep(0); setProblem(""); setDuplicateCandidates([]); setDifferentPersonConfirmed(false); setNotice("The unfinished draft was cleared on this device."); setSchedulePreview(null); setProfilePhoto(null); writePhotoState(photoKey, null); window.localStorage.removeItem(DRAFT_KEY); }
 
   function validate(index) {
     if (!canCreate) return "Your account has view-only Finance access.";
@@ -292,6 +327,8 @@ export default function EquipmentFinanceStartInstallmentPage() {
       const payload = {
         customer_id: data.customerMode === "existing" ? data.customer_id : null,
         customer: data.customerMode === "new" ? data.customer : undefined,
+        ...(data.customerMode === "new" && duplicateCandidates.length && differentPersonConfirmed
+          ? { confirm_duplicate_customer: true } : {}),
         asset_id: data.asset_id,
         offer: data.offer,
         kyc: { ...data.kyc, customer_name_snapshot: selectedCustomer?.customer_name || data.customer.customer_name, customer_phone_snapshot: selectedCustomer?.phone || data.customer.phone, customer_email_snapshot: selectedCustomer?.email || data.customer.email, customer_address_snapshot: customerAddress, residential_address: customerAddress },
@@ -303,7 +340,43 @@ export default function EquipmentFinanceStartInstallmentPage() {
       const applicationNumber = response.data?.application?.application_number || "The installment application";
       setNotice(`${applicationNumber} was created successfully.`);
       window.setTimeout(() => navigate(response.data?.next_path || "/equipment-installment-finance/applications"), 650);
-    } catch (error) { setProblem(errorMessage(error, "Could not start the installment.")); }
+    } catch (error) {
+      if (error?.response?.data?.code === "POSSIBLE_DUPLICATE_FINANCE_CUSTOMER") {
+        setDuplicateCandidates(Array.isArray(error.response.data.duplicates) ? error.response.data.duplicates : []);
+        setDifferentPersonConfirmed(false);
+        setStep(0);
+        setProblem("A possible matching customer already exists. Review the suggestions below before creating another customer record.");
+      } else if (error?.response?.data?.code === "FINANCE_START_SCHEMA_REQUIRED") {
+        const readiness = error.response.data.readiness || {};
+        const missing = [
+          ...(readiness.missing_tables || []),
+          ...(readiness.missing_columns || []),
+          ...(readiness.invalid_nullability || []),
+        ].filter((value) => typeof value === "string").slice(0, 12);
+        setProblem(
+          "Finance cannot save this application until its database migration is verified. No successful creation was confirmed. " +
+          (missing.length ? "Required database repair: " + missing.join(", ") + ". " : "") +
+          "Give these details to the system administrator; your review draft remains available."
+        );
+      } else if (Number(error?.response?.status || 0) >= 500 || !error?.response) {
+        // A failed response is not proof that a non-idempotent create call did
+        // not commit. Keep the draft and ask staff to check the case register
+        // before retrying to avoid duplicate agreements and customer exposure.
+        const code = String(error?.response?.data?.code || "")
+          .replace(/[^A-Z0-9_]/g, "").slice(0, 80);
+        const reference = String(error?.response?.data?.request_id || "")
+          .replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 100);
+        setProblem(
+          "CHALIN03 could not confirm creation of this installment application. " +
+          "Do not submit it again until you check Applications & Approvals for the same customer and excavator. " +
+          "Your unfinished draft is preserved." +
+          (code ? " Error code: " + code + "." : "") +
+          (reference ? " Request reference: " + reference + "." : "")
+        );
+      } else {
+        setProblem(errorMessage(error, "Could not start the installment."));
+      }
+    }
     finally { setSaving(false); }
   }
 
@@ -325,12 +398,35 @@ export default function EquipmentFinanceStartInstallmentPage() {
       {loading ? <div className="c03-start2-loading"><strong>Preparing the transaction workspace…</strong><span>Loading customers, available excavators and the local draft environment.</span></div> : null}
 
       {!loading && step === 0 ? <Card eyebrow="Step 1 · Customer" title="Who is purchasing the excavator?" description="Start with the customer record. Existing customers keep their history connected across Finance.">
-        <div className="c03-start2-mode"><button type="button" className={data.customerMode === "existing" ? "is-active" : ""} onClick={() => { setData((current) => ({ ...current, customerMode: "existing", customer_id: "" })); setProfilePhoto(null); }}>Existing customer</button><button type="button" className={data.customerMode === "new" ? "is-active" : ""} onClick={() => { setData((current) => ({ ...current, customerMode: "new", customer_id: "" })); setProfilePhoto(null); writePhotoState(photoKeyFor("new"), null); }}>Create new customer</button></div>
+        <div className="c03-start2-mode"><button type="button" className={data.customerMode === "existing" ? "is-active" : ""} onClick={() => { setData((current) => ({ ...current, customerMode: "existing", customer_id: "" })); setProfilePhoto(null); setDuplicateCandidates([]); setDifferentPersonConfirmed(false); }}>Existing customer</button><button type="button" className={data.customerMode === "new" ? "is-active" : ""} onClick={() => { setData((current) => ({ ...current, customerMode: "new", customer_id: "" })); setProfilePhoto(null); writePhotoState(photoKeyFor("new"), null); setDuplicateCandidates([]); setDifferentPersonConfirmed(false); }}>Create new customer</button></div>
         {data.customerMode === "existing" ? <><Field label="Search customer" hint={`${filteredCustomers.length} customer${filteredCustomers.length === 1 ? "" : "s"} available`} wide><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name, phone, customer code or email" autoComplete="off" /></Field><div className="c03-start2-customer-grid">{filteredCustomers.map((customer) => <button key={customer.id} type="button" className={String(data.customer_id) === String(customer.id) ? "is-selected" : ""} onClick={() => chooseCustomer(customer)}><CustomerPortrait customerId={customer.id} name={customer.customer_name} size="small" /><div><strong>{customer.customer_name}</strong><small>{customer.phone || "No phone"}</small><em>{customer.customer_code || "No code"}</em></div>{String(data.customer_id) === String(customer.id) ? <b>Selected</b> : null}</button>)}</div></> : <div className="c03-start2-grid c03-start2-grid--2"><Field label="Legal / registered name"><input value={data.customer.customer_name} onChange={(event) => update("customer", "customer_name", event.target.value)} /></Field><Field label="Customer type"><select value={data.customer.customer_type} onChange={(event) => update("customer", "customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Registered company</option><option value="contractor">Contractor / sole business</option><option value="government">Government institution</option></select></Field><Field label="Primary phone"><input inputMode="tel" value={data.customer.phone} onChange={(event) => update("customer", "phone", event.target.value)} /></Field><Field label="WhatsApp / alternative phone"><input inputMode="tel" value={data.customer.whatsapp_phone} onChange={(event) => update("customer", "whatsapp_phone", event.target.value)} /></Field><Field label="Email"><input type="email" value={data.customer.email} onChange={(event) => update("customer", "email", event.target.value)} /></Field><Field label="Authorised representative"><input value={data.customer.contact_person} onChange={(event) => update("customer", "contact_person", event.target.value)} /></Field><Field label="Correspondence address" wide><textarea rows="3" value={data.customer.address} onChange={(event) => update("customer", "address", event.target.value)} /></Field></div>}
         {(selectedCustomer || data.customerMode === "new") ? <div className="c03-start2-photo-card"><div><span>Customer identity photo</span><h3>{selectedCustomer?.customer_name || data.customer.customer_name || "New customer"}</h3><p>Optional. Add a clear portrait only when you have one. It will be attached to this installment's customer document record; it will not appear on unrelated customers or documents.</p></div><div className="c03-start2-photo-editor">{selectedCustomer ? <CustomerPortrait customerId={selectedCustomer.id} name={selectedCustomer.customer_name} src={profilePhoto || ""} size="medium" /> : <CustomerPortrait src={profilePhoto || ""} name={data.customer.customer_name || "Customer"} size="medium" />}<CustomerPortraitPicker value={profilePhoto || ""} name={selectedCustomer?.customer_name || data.customer.customer_name || "Customer"} onChange={setPhoto} compact /></div></div> : <div className="c03-start2-photo-empty"><strong>Select the customer first.</strong><span>The optional customer portrait control will appear here and will be tied to the selected transaction.</span></div>}
+
+        {data.customerMode === "new" && duplicateCandidates.length ? (
+          <section className="c03-start2-duplicate" aria-label="Possible existing customer matches">
+            <h3>Review possible existing customers</h3>
+            <p>CHALIN03 found a similar name or phone. Reuse the correct existing customer to preserve their history. Do not create a second profile for the same person.</p>
+            <div className="c03-start2-duplicate-list">
+              {duplicateCandidates.map((candidate) => (
+                <button key={candidate.id} type="button" disabled={!candidate.is_active}
+                  onClick={() => chooseCustomer(candidate)}>
+                  <strong>{candidate.customer_name}</strong>
+                  <span>{candidate.customer_code || "Existing customer"} · {candidate.phone || "No phone recorded"}</span>
+                  <small>{candidate.is_active ? "Use this existing customer" : "Inactive — ask a manager to reactivate"}</small>
+                </button>
+              ))}
+            </div>
+            <label className="c03-start2-duplicate-confirm">
+              <input type="checkbox" checked={differentPersonConfirmed}
+                onChange={(event) => setDifferentPersonConfirmed(event.target.checked)} />
+              <span>I checked the matching records and confirm that this is a different person who needs a separate Finance customer record.</span>
+            </label>
+            <p>Only after this explicit confirmation will the final Create action request a separate record. All normal credit approvals are still required.</p>
+          </section>
+        ) : null}
       </Card> : null}
 
-      {!loading && step === 1 ? <Card eyebrow="Step 2 · Excavator" title="Which exact excavator is being financed?" description="Only sale-ready machines without an active installment application are offered for selection."><Field label="Search available excavators" hint={`${filteredMachines.length} machine${filteredMachines.length === 1 ? "" : "s"} available`} wide><input value={machineSearch} onChange={(event) => setMachineSearch(event.target.value)} placeholder="Asset code, make, model, serial or chassis number" autoComplete="off" /></Field><div className="c03-start2-machine-grid">{filteredMachines.map((machine) => <article key={machine.id} className={String(data.asset_id) === String(machine.id) ? "is-selected" : ""}><div className="c03-start2-machine-image">{machine.main_image_url ? <img src={machine.main_image_url} alt={machine.asset_name} /> : <span>🚜</span>}</div><div className="c03-start2-machine-body"><small>{machine.asset_code}</small><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ") || "Equipment details not recorded"}</p><div><span>Target price<strong>{money(machine.target_selling_price)}</strong></span><span>Serial<strong>{machine.serial_number || "Not recorded"}</strong></span></div><button type="button" onClick={() => chooseMachine(machine)}>{String(data.asset_id) === String(machine.id) ? "✓ Selected" : "Select excavator"}</button></div></article>)}</div>{!filteredMachines.length ? <div className="c03-start2-empty">No sale-ready excavators match this search.</div> : null}</Card> : null}
+      {!loading && step === 1 ? <Card eyebrow="Step 2 · Excavator" title="Which exact excavator is being financed?" description="Only sale-ready machines without an active installment application are offered for selection."><Field label="Search available excavators" hint={`${filteredMachines.length} machine${filteredMachines.length === 1 ? "" : "s"} available`} wide><input value={machineSearch} onChange={(event) => setMachineSearch(event.target.value)} placeholder="Asset code, make, model, serial or chassis number" autoComplete="off" /></Field><div className="c03-start2-machine-grid">{filteredMachines.map((machine) => <article key={machine.id} className={String(data.asset_id) === String(machine.id) ? "is-selected" : ""}><div className="c03-start2-machine-image"><ProtectedFinanceImage src={financeMachineImagePath(machine)} alt={machine.asset_name} /></div><div className="c03-start2-machine-body"><small>{machine.asset_code}</small><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ") || "Equipment details not recorded"}</p><div><span>Target price<strong>{money(machine.target_selling_price)}</strong></span><span>Serial<strong>{machine.serial_number || "Not recorded"}</strong></span></div><button type="button" onClick={() => chooseMachine(machine)}>{String(data.asset_id) === String(machine.id) ? "✓ Selected" : "Select excavator"}</button></div></article>)}</div>{!filteredMachines.length ? <div className="c03-start2-empty">No sale-ready excavators match this search.</div> : null}</Card> : null}
 
       {!loading && step === 2 ? <Card eyebrow="Step 3 · Payment terms" title="Build the commercial terms" description="These values drive the authoritative schedule calculation for the application."><div className="c03-start2-terms"><div className="c03-start2-grid c03-start2-grid--2"><Field label="Selling price"><input inputMode="decimal" value={data.offer.selling_price} onChange={(event) => update("offer", "selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.offer.selling_price)}</strong></Field><Field label="Opening deposit"><input inputMode="decimal" value={data.offer.deposit} onChange={(event) => update("offer", "deposit", event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.offer.deposit)}</strong></Field><Field label="Payment frequency"><select value={data.offer.payment_frequency} onChange={(event) => update("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly · 7 days</option><option value="fortnightly">Fortnightly · 14 days</option><option value="monthly">Monthly</option><option value="custom">Custom interval</option></select></Field>{data.offer.payment_frequency === "custom" ? <Field label="Days between payments"><input type="number" min="1" max="365" value={data.offer.custom_interval_days} onChange={(event) => update("offer", "custom_interval_days", event.target.value)} /></Field> : null}<Field label="Number of payments"><input type="number" min="1" max="520" value={data.offer.installment_count} onChange={(event) => update("offer", "installment_count", event.target.value)} /></Field><Field label="First payment due date"><input type="date" min={ghanaToday()} value={data.offer.first_due_date} onChange={(event) => update("offer", "first_due_date", event.target.value)} /></Field><Field label="Weekend handling"><select value={data.offer.non_working_day_rule} onChange={(event) => update("offer", "non_working_day_rule", event.target.value)}><option value="exact">Keep exact date</option><option value="next_weekday">Move to next weekday</option><option value="previous_weekday">Move to previous weekday</option></select></Field><Field label="Internal note" wide><textarea rows="3" value={data.offer.notes} onChange={(event) => update("offer", "notes", event.target.value)} /></Field></div><aside className="c03-start2-deal"><span>Deal summary</span><strong>{money(data.offer.selling_price)}</strong><small>Selling price</small><div><b>{money(data.offer.deposit)}</b><span>Opening deposit</span></div><div><b>{money(financedAmount)}</b><span>Financed amount</span></div><div><b>{selectedMachine?.asset_code || "Not selected"}</b><span>Excavator</span></div></aside></div><SchedulePreview preview={schedulePreview} loading={scheduleLoading} problem={scheduleProblem} /></Card> : null}
 

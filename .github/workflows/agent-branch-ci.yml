@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -36,7 +38,8 @@ jobs:
       - working-directory: backend
         run: npm run syntax-check
       - working-directory: backend
-        run: npm run migration-safety
+        # Validate only the agent branch delta against the actual production base.
+        run: npm run migration-safety -- --base origin/production
       - working-directory: backend
         run: npm test
 

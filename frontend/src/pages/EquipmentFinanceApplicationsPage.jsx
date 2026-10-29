@@ -142,10 +142,10 @@ function editPayload(detail) {
   };
 }
 
-function Field({ title, children, wide = false }) {
+function Field({ title, children, wide = false, hint = "" }) {
   return (
     <label className={`finance-simple__field ${wide ? "is-wide" : ""}`}>
-      <span>{title}</span>
+      <span>{title}{hint ? ` (${hint})` : ""}</span>
       {children}
     </label>
   );
@@ -775,9 +775,9 @@ export default function EquipmentFinanceApplicationsPage() {
 
       {decision ? (
         <div className="finance-simple__dialog-backdrop finance-applications-v2__decision-backdrop" role="presentation" onMouseDown={() => !saving && setDecision(null)}>
-          <form className="finance-simple__dialog finance-applications-v2__decision-dialog" onSubmit={confirmDecision} onMouseDown={(event) => event.stopPropagation()}>
+          <form className="finance-simple__dialog finance-applications-v2__decision-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-application-decision-title" onSubmit={confirmDecision} onMouseDown={(event) => event.stopPropagation()}>
             <span className="finance-applications-v2__dialog-eyebrow">Application decision</span>
-            <h2>{decision.title}</h2>
+            <h2 id="finance-application-decision-title">{decision.title}</h2>
             <p>{decision.application?.application_number} · {decision.application?.customer_name}</p>
             {decision.kind === "request_approved_correction" ? (
               <div className="finance-simple__notice is-warning">
@@ -787,7 +787,7 @@ export default function EquipmentFinanceApplicationsPage() {
               </div>
             ) : null}
             {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
-            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
+            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} required={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind)} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
             <div className="finance-applications-v2__decision-footer"><button type="button" onClick={() => setDecision(null)} disabled={saving}>Cancel</button><button className={decision.kind === "approve" ? "is-primary" : decision.kind === "decline" || decision.kind === "cancel" || decision.kind === "withdraw" ? "is-danger" : "is-primary"} type="submit" disabled={saving}>{saving ? "Working…" : "Confirm action"}</button></div>
           </form>
         </div>

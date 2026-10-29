@@ -269,7 +269,12 @@ test("staff sees obvious document categories and can issue the exact approved am
     amendment_id: 880,
   });
 
-  await page.getByText("Immutable document history", { exact: true }).click();
-  await expect(page.getByText("EFAM-DOCUMENT-001")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Print" }).first()).toBeVisible();
+  const history = page.locator("details.finance-docs__history");
+  await expect(history).toBeVisible();
+  if (!(await history.evaluate((node) => node.open))) {
+    await history.locator("summary").click();
+  }
+  await expect(history).toHaveAttribute("open", "");
+  await expect(history.getByRole("heading", { name: "EFAM-DOCUMENT-001" })).toBeVisible();
+  await expect(history.getByRole("button", { name: "Print" }).first()).toBeVisible();
 });

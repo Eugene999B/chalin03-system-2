@@ -9,7 +9,7 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 const layout = read("src", "layouts", "InstallmentFinanceLayout.jsx");
 const routeCss = read("src", "styles", "equipmentFinanceThreePageRouteSignature.css");
-const start = read("src", "pages", "EquipmentFinanceStartWizardPage.jsx");
+const start = read("src", "pages", "EquipmentFinanceStartInstallmentPage.jsx");
 const applications = read("src", "pages", "EquipmentFinanceApplicationsPage.jsx");
 const excavators = read("src", "pages", "EquipmentFinanceExcavatorsPage.jsx");
 
@@ -24,8 +24,8 @@ assert.match(layout, /document\.body\.classList\.remove/);
 assert.match(layout, /document\.body\.classList\.add/);
 
 // Business logic components remain intact; the layout only supplies presentation scope.
-assert.match(start, /finance-simple__steps/);
-assert.match(applications, /placeholder="Search customer, application, offer or excavator"/);
+assert.match(start, /c03-start2-steps/);
+assert.match(applications, /placeholder="Search customer, application or excavator"/);
 assert.match(excavators, /finance-simple__machine-grid/);
 
 for (const pageClass of [

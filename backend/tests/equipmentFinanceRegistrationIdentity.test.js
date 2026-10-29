@@ -61,3 +61,23 @@ test("new installment wizard resets machine-dependent price and isolates photo b
   assert.match(wizard,/photoKeyFor\("existing", customerId\)/);
   assert.match(wizard,/setProfilePhoto\(null\); writePhotoState\(photoKeyFor\("new"\), null\)/);
 });
+
+test("machine registration rejects impossible calendar dates before a database write", () => {
+  for (const [field, date] of [
+    ["acquisition_date", "2026-02-31"],
+    ["insurance_expiry", "2026-02-29"],
+    ["registration_expiry", "2026-04-31"],
+    ["registration_expiry", "2026-13-12"],
+  ]) {
+    const { errors } = normalizeMachine({ ...valid, [field]: date });
+    assert.ok(errors.some((message) => message.includes("valid calendar date")),
+      `${field}=${date}: ${errors.join(" | ")}`);
+  }
+});
+
+test("machine registration accepts genuine leap dates and still permits missing optional dates", () => {
+  assert.deepEqual(normalizeMachine({ ...valid, acquisition_date: "2028-02-29" }).errors, []);
+  assert.deepEqual(normalizeMachine({ ...valid, insurance_expiry: "", registration_expiry: null }).errors, []);
+  const partial = normalizeMachine({ acquisition_date: "2026-02-31" }, { partial: true });
+  assert.ok(partial.errors.some((message) => message.includes("valid calendar date")));
+});

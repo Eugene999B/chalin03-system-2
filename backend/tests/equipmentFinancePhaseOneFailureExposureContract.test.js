@@ -23,6 +23,8 @@ const applications = read(
   "EquipmentFinanceApplicationsPage.jsx"
 );
 const axiosClient = read("frontend", "src", "api", "axiosClient.js");
+const safeStart = read("backend", "routes", "equipmentFinanceImageSafeStartRoutes.js");
+const startWizard = read("frontend", "src", "pages", "EquipmentFinanceStartInstallmentPage.jsx");
 
 test("application query failures are real 503 responses, never fake empty success", () => {
   const failureStart = critical.indexOf(
@@ -93,4 +95,38 @@ test("readiness timeout is no longer converted to ready true", () => {
     /requestPath === FINANCE_READINESS_PATH[\s\S]*Promise\.resolve/
   );
   assert.match(applications, /code: payload\.code \|\| "FINANCE_READINESS_TIMEOUT"/);
+});
+
+
+test("finance installment transaction checks active sale locks without depending on optional lock timestamps", () => {
+  const machineQuery = safeStart.slice(safeStart.indexOf("async function financeMachine("), safeStart.indexOf("function assertMachineAvailable("));
+  assert.match(machineQuery, /active_sale_lock_count/);
+  assert.match(machineQuery, /sale_lock\.released_at IS NULL/);
+  assert.match(machineQuery, /blocking_agreement_number/);
+  assert.doesNotMatch(machineQuery, /sale_lock\.locked_at/);
+});
+
+test("start-installment schema 503 exposes operator-safe diagnosis and releases the connection first", () => {
+  const start = safeStart.indexOf('if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code))');
+  assert.ok(start >= 0);
+  const body = safeStart.slice(start, start + 1700);
+  assert.match(body, /connection\?\.release\(\)/);
+  assert.match(body, /connection = null/);
+  assert.match(body, /await applicationReadiness\(\)/);
+  assert.ok(body.indexOf("connection = null") < body.indexOf("await applicationReadiness()"));
+  assert.match(body, /classifyFinanceDatabaseError/);
+  assert.match(body, /operator_message: failure\.operator_message/);
+  assert.match(body, /request_id: req\.requestId/);
+  assert.match(body, /retryable: false/);
+  assert.doesNotMatch(body, /sqlText|error\\.sql/);
+  assert.match(startWizard, /FINANCE_APPLICATION_SCHEMA_COLUMN_MISSING/);
+  assert.match(startWizard, /Check the Applications register before retrying/);
+});
+
+test("uncertain Finance creation response preserves draft and exposes diagnostic reference", () => {
+  assert.match(startWizard, /Number\(error\?\.response\?\.status \|\| 0\) >= 500/);
+  assert.match(startWizard, /Do not submit it again until you check Applications & Approvals/);
+  assert.match(startWizard, /Your unfinished draft is preserved/);
+  assert.match(startWizard, /error\?\.response\?\.data\?\.request_id/);
+  assert.match(startWizard, /Error code:/);
 });

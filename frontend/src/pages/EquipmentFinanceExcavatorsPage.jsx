@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
+import ProtectedFinanceImage, { financeMachineImagePath } from "../components/ProtectedFinanceImage";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 
@@ -390,13 +391,14 @@ export default function EquipmentFinanceExcavatorsPage() {
         {!loading && !visibleMachines.length ? <div className="finance-simple__empty">No matching excavator records.</div> : null}
         <div className="finance-simple__machine-grid">
           {visibleMachines.map((machine) => {
-            const primary = machine.media?.find((item) => item.is_primary)?.file_url || machine.main_image_url;
+            const primary = financeMachineImagePath(machine);
             const canEdit = Boolean(machine.editability?.editable);
             return (
               <article className="finance-simple__machine" key={machine.id}>
-                <button className="finance-simple__machine-image" type="button" onClick={() => primary && setViewerPhoto({ url: primary, title: machine.asset_name })} aria-label={`View full photo of ${machine.asset_name}`}>
-                  {primary ? <img src={primary} alt={machine.asset_name} /> : <span>🚜</span>}
-                </button>
+                <div className="finance-simple__machine-image">
+                  <ProtectedFinanceImage src={primary} alt={machine.asset_name}
+                    onClick={primary ? () => setViewerPhoto({ url: primary, title: machine.asset_name }) : undefined} />
+                </div>
                 <div className="finance-simple__machine-body">
                   <div className="finance-simple__card-head">
                     <div><span className="finance-simple__pill">{machine.asset_code}</span><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ")}</p></div>
@@ -413,7 +415,7 @@ export default function EquipmentFinanceExcavatorsPage() {
                   {!machine.readiness?.ready ? <div className="finance-simple__notice is-info">Missing: {(machine.readiness?.missing || []).join(", ")}</div> : null}
                   <div className="finance-simple__card-actions">
                     {machine.media?.map((photo) => (
-                      <button type="button" key={photo.id} onClick={() => setViewerPhoto({ url: photo.file_url, title: `${machine.asset_name} — ${label(photo.evidence_type)}` })}>{label(photo.evidence_type)}</button>
+                      <button type="button" key={photo.id} onClick={() => setViewerPhoto({ url: photo.image_path || `/equipment-catalogue/sales/protected-images/assets/${machine.id}/${photo.id}`, title: `${machine.asset_name} — ${label(photo.evidence_type)}` })}>{label(photo.evidence_type)}</button>
                     )).slice(0, 3)}
                     {canManage ? <button type="button" disabled={!canEdit} onClick={() => openEdit(machine)}>{canEdit ? "Edit details" : "Editing locked"}</button> : null}
                     {machine.readiness?.ready && machine.sale_status === "available" && Number(machine.active_application_count || 0) === 0 ? <Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&asset=${machine.id}`}>Start Installment</Link> : null}
@@ -499,7 +501,7 @@ export default function EquipmentFinanceExcavatorsPage() {
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setViewerPhoto(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={viewerPhoto.title} onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Complete uncropped photo</p><h2>{viewerPhoto.title}</h2></div><button type="button" onClick={() => setViewerPhoto(null)}>Close</button></div>
-            <div className="finance-simple__photo-viewer"><img src={viewerPhoto.url} alt={viewerPhoto.title} /></div>
+            <div className="finance-simple__photo-viewer"><ProtectedFinanceImage src={viewerPhoto.url} alt={viewerPhoto.title} eager /></div>
           </section>
         </div>, document.body
       ) : null}

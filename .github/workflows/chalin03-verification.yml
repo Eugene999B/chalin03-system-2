@@ -105,7 +105,8 @@ jobs:
 
   finance-phase-three-browser:
     name: Finance Completion Phase 2, 3 and 4 Chromium journeys
-    runs-on: ubuntu-latest
+    # Playwright 1.55 supports Ubuntu 24.04; ubuntu-latest now selects 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 50
     defaults:
       run:

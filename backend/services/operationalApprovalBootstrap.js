@@ -5,7 +5,11 @@ const dbModule = require("../config/db");
 const {
   operationalApprovalExecutionMiddleware,
 } = require("../middleware/operationalApprovalExecutionMiddleware");
+const {
+  productDeletionGuardMiddleware,
+} = require("../middleware/productDeletionGuardMiddleware");
 const operationalApprovalRoutes = require("../routes/operationalApprovalRoutes");
+const productDeletionApprovalRoutes = require("../routes/productDeletionApprovalRoutes");
 const {
   runOperationalApprovalCentreStartup,
 } = require("../scripts/runOperationalApprovalCentreStartup");
@@ -77,6 +81,7 @@ function buildOperationalApprovalRateLimitRouter() {
       "/operational/return-refund",
       "/operational/sale-edit/:saleId",
       "/operational/sale-void/:saleId",
+      "/operational/product-delete/:productId",
     ],
     approvalRequestLimiter
   );
@@ -153,9 +158,20 @@ function installOperationalApprovalRoutes() {
     return wrapper;
   });
 
+  replaceCachedRouter("../routes/productRoutes", (originalRouter) => {
+    const wrapper = express.Router();
+    wrapper.use(protectedRouteExecutionLimiter, productDeletionGuardMiddleware);
+    wrapper.use(originalRouter);
+    return wrapper;
+  });
+
   replaceCachedRouter("../routes/auditUnlockRequestRoutes", (originalRouter) => {
     const wrapper = express.Router();
     wrapper.use(buildOperationalApprovalRateLimitRouter());
+    // Product deletion handlers are intentionally mounted first so their
+    // System-Administrator-only approve/reject logic wins before the generic
+    // operational approval handlers for every other approval type.
+    wrapper.use(productDeletionApprovalRoutes);
     wrapper.use(operationalApprovalRoutes);
     wrapper.use(originalRouter);
     return wrapper;

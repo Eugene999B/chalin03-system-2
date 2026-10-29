@@ -16,3 +16,20 @@ body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content{p
 @media(max-width:1100px){.c03-start2-customer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.c03-start2-review{grid-template-columns:repeat(2,minmax(0,1fr))}.c03-start2-terms{grid-template-columns:1fr}.c03-start2-deal{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;align-items:center}.c03-start2-deal>strong{margin:0}.c03-start2-deal>div{margin:0;padding:0;border:0}}
 @media(max-width:900px){.c03-start2-hero{grid-template-columns:1fr}.c03-start2-steps{grid-template-columns:repeat(2,minmax(0,1fr))}.c03-start2-machine-grid{grid-template-columns:1fr}.c03-start2-photo-card{grid-template-columns:1fr}.c03-start2-grid--3,.c03-start2-grid--2{grid-template-columns:1fr}.c03-start2-field.is-wide{grid-column:auto}.c03-start2-footer{left:0}.c03-start2-topbar{position:relative}}
 @media(max-width:600px){body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content{padding:8px 10px 16px!important}.c03-start2-shell{padding-bottom:96px}.c03-start2-topbar{align-items:flex-start;flex-direction:column}.c03-start2-topbar nav{width:100%;justify-content:flex-start}.c03-start2-hero{padding:18px}.c03-start2-hero h1{font-size:2rem}.c03-start2-steps{grid-template-columns:1fr}.c03-start2-customer-grid,.c03-start2-review{grid-template-columns:1fr}.c03-start2-photo-editor{grid-template-columns:82px 1fr}.c03-start2-photo-editor>.customer-portrait{width:82px;height:104px}.c03-start2-schedule-facts{grid-template-columns:repeat(2,minmax(0,1fr))}.c03-start2-deal{grid-template-columns:repeat(2,minmax(0,1fr))}.c03-start2-footer{padding:8px 10px}.c03-start2-footer>div:last-child{width:100%}.c03-start2-footer button{flex:1}.c03-start2-footer{align-items:stretch}.c03-start2-footer>div:first-child{display:none}}
+
+/* Authenticated machine images must fill the card without cropping or oversized retry labels. */
+.c03-start2-machine-image .finance-protected-image{width:100%;height:100%;display:grid;place-items:center;min-width:0}
+.c03-start2-machine-image .finance-protected-image img{width:100%;height:100%;object-fit:contain}
+.c03-start2-machine-image .finance-protected-image__status,.c03-start2-machine-image .finance-protected-image__error{font-size:12px;text-align:center}
+.c03-start2-machine-image .finance-protected-image__error button{display:block;margin:8px auto 0}
+
+/* Duplicate identities are reviewed before creating any new customer record. */
+.c03-start2-duplicate{margin-top:16px;padding:14px;border:1px solid #d9b77a;border-radius:14px;background:#fffaf0}
+.c03-start2-duplicate h3{margin:0 0 6px;font-size:16px;color:#5e471b}
+.c03-start2-duplicate p{margin:6px 0 12px;color:#5e513b;font-size:12px;line-height:1.55}
+.c03-start2-duplicate-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:9px}
+.c03-start2-duplicate-list button{display:flex;min-height:80px;flex-direction:column;align-items:flex-start;gap:3px;padding:11px;border:1px solid #d7dfd7;border-radius:11px;background:#fff;text-align:left;color:#1d4533;cursor:pointer}
+.c03-start2-duplicate-list button:disabled{opacity:.58;cursor:not-allowed}
+.c03-start2-duplicate-list button strong{font-size:13px}.c03-start2-duplicate-list button span,.c03-start2-duplicate-list button small{font-size:11px}
+.c03-start2-duplicate-confirm{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:10px;border:1px solid #dfd2b3;border-radius:10px;background:#fff;line-height:1.5;font-size:12px}
+.c03-start2-duplicate-confirm input{flex:none;margin-top:3px}

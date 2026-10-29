@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { execFileSync } = require("node:child_process");
 
 const {
   expectedVerifyPath,
@@ -247,4 +248,42 @@ test("deployment workflows cannot reference database/schema.sql", () => {
       (error) => error.code === "SCHEMA_SQL_PRODUCTION_REFERENCE"
     )
   );
+});
+
+test("existing immutable production migrations are not misclassified as new on main", () => {
+  const repoRoot = createRepository();
+  const migrationPath = "database/migrations/20260904_existing_production.sql";
+  const original = "CREATE TABLE IF NOT EXISTS already_released (id INT PRIMARY KEY);\n";
+  write(repoRoot, migrationPath, original);
+  const git = (...args) => execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  git("init");
+  git("config", "user.email", "migration-test@example.invalid");
+  git("config", "user.name", "Migration Verification Test");
+  git("add", migrationPath);
+  git("commit", "-m", "Existing production migration fixture");
+  git("update-ref", "refs/remotes/origin/production", "HEAD");
+
+  assert.deepEqual(validateChangedEntries({
+    repoRoot,
+    entries: [{ status: "A", oldPath: null, path: migrationPath }],
+  }), []);
+
+  write(repoRoot, migrationPath, original + "DROP TABLE customers;\n");
+  const changedErrors = validateChangedEntries({
+    repoRoot,
+    entries: [{ status: "A", oldPath: null, path: migrationPath }],
+  });
+  assert.ok(changedErrors.some((item) => item.code === "DROP_DATABASE_SCHEMA_TABLE"));
+  assert.ok(changedErrors.some((item) => item.code === "MISSING_BACKUP_MARKER"));
+
+  git("update-ref", "-d", "refs/remotes/origin/production");
+  const missingProductionErrors = validateChangedEntries({
+    repoRoot,
+    entries: [{ status: "A", oldPath: null, path: migrationPath }],
+  });
+  assert.ok(missingProductionErrors.length > 0);
 });
