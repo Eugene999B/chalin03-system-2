@@ -210,10 +210,10 @@ export default function EquipmentFinanceCustomerCentrePage() {
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
       <section className="finance-simple__metrics">
-        <article className="finance-simple__metric"><span>Active customers</span><strong>{customers.length}</strong></article>
-        <article className="finance-simple__metric"><span>Credit applications</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_application_count || 0), 0)}</strong></article>
-        <article className="finance-simple__metric"><span>Installment agreements</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_agreement_count || 0), 0)}</strong></article>
-        <article className="finance-simple__metric"><span>Outstanding portfolio</span><strong>{money(totalOutstanding)}</strong></article>
+        <article className="finance-simple__metric"><span>Customers in current results</span><strong>{customers.length}</strong></article>
+        <article className="finance-simple__metric"><span>Applications in results</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_application_count || 0), 0)}</strong></article>
+        <article className="finance-simple__metric"><span>Agreements in results</span><strong>{customers.reduce((sum, item) => sum + Number(item.finance_agreement_count || 0), 0)}</strong></article>
+        <article className="finance-simple__metric"><span>Outstanding in results</span><strong>{money(totalOutstanding)}</strong></article>
       </section>
 
       <section className="finance-simple__section">
@@ -307,9 +307,9 @@ export default function EquipmentFinanceCustomerCentrePage() {
                 {photoProblem ? <div className="finance-simple__notice is-error" role="alert">{photoProblem}</div> : null}
               </div>
               <div className="finance-simple__grid">
-                <Field title="Full name"><input value={form.customer_name} onChange={(event) => setValue("customer_name", event.target.value)} required /></Field>
+                <Field title="Full name"><input autoComplete="name" value={form.customer_name} onChange={(event) => setValue("customer_name", event.target.value)} required /></Field>
                 <Field title="Customer type"><select value={form.customer_type} onChange={(event) => setValue("customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Company</option><option value="contractor">Contractor</option><option value="government">Government</option></select></Field>
-                <Field title="Phone"><input inputMode="tel" value={form.phone} onChange={(event) => setValue("phone", event.target.value)} required /></Field>
+                <Field title="Phone"><input inputMode="tel" type="tel" autoComplete="tel" value={form.phone} onChange={(event) => setValue("phone", event.target.value)} required /></Field>
                 <Field title="WhatsApp phone"><input inputMode="tel" value={form.whatsapp_phone} onChange={(event) => setValue("whatsapp_phone", event.target.value)} /></Field>
                 <Field title="Email"><input type="email" value={form.email} onChange={(event) => setValue("email", event.target.value)} /></Field>
                 <Field title="Contact person"><input value={form.contact_person} onChange={(event) => setValue("contact_person", event.target.value)} /></Field>
