@@ -4,8 +4,10 @@ const PDFDocument = require("pdfkit");
 const { pool } = require("../config/db");
 const {
   reconcileFinanceAgreement,
+  refreshFinanceAgreementFromEvidence,
 } = require("./equipmentFinanceReconciliationService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
+const { documentScheduleStatus } = require("./equipmentFinanceDocumentScheduleStatus");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 const { DEFAULTS: NOTIFICATION_DEFAULTS, getNotificationPolicy, isNotificationEnabled, updateNotificationPolicy } = require("./equipmentFinanceNotificationPolicyService");
 
@@ -811,6 +813,7 @@ async function loadAgreementSnapshot(agreementId, connection = pool) {
     agreement,
     schedule: schedule.map((row) => ({
       ...row,
+      schedule_status: documentScheduleStatus(row),
       scheduled_amount: Number(row.scheduled_amount || 0),
       amount_paid: Number(row.amount_paid || 0),
       late_charge_amount: Number(row.late_charge_amount || 0),
@@ -829,6 +832,71 @@ async function loadAgreementSnapshot(agreementId, connection = pool) {
     media: media.map((row) => ({ ...row, is_primary: Boolean(row.is_primary) })),
     signatures,
   };
+}
+
+// Issued legal and financial documents must reflect committed receipt/schedule
+// evidence. Correct only stale, derived accounting *cache* fields; never
+// automatically rewrite principal, payment, deposit or signed schedule evidence.
+// Critical or unexplained mismatches remain blocked for manual review.
+const DOCUMENT_SAFE_DERIVED_FIELDS = new Set([
+  "overdue_amount",
+  "next_due_date",
+  "agreement_status",
+]);
+
+async function loadReconciledDocumentSnapshot(agreementId, connection = pool) {
+  const snapshot = await loadAgreementSnapshot(agreementId, connection);
+  if (snapshot.reconciliation?.consistent) return snapshot;
+
+  const mismatches = snapshot.reconciliation?.mismatches || [];
+  if (
+    connection !== pool ||
+    !mismatches.length ||
+    mismatches.some(({ field, severity }) =>
+      severity === "critical" || !DOCUMENT_SAFE_DERIVED_FIELDS.has(field)
+    )
+  ) {
+    throw new ProfessionalFinanceError(
+      409,
+      "The Finance account has an unresolved receipt, schedule or ledger discrepancy. No official document was issued.",
+      "EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED"
+    );
+  }
+
+  // Reconcile under a database transaction using the existing integrity gate,
+  // then re-read the entire snapshot; never mark an inconsistent snapshot valid.
+  const client = await pool.getConnection();
+  try {
+    await client.beginTransaction();
+    const current = await reconcileFinanceAgreement(agreementId, { connection: client });
+    if (!current.mismatches?.every(({ field, severity }) =>
+      severity !== "critical" && DOCUMENT_SAFE_DERIVED_FIELDS.has(field)
+    )) {
+      throw new ProfessionalFinanceError(
+        409,
+        "The Finance evidence changed while preparing this document. Please review the account.",
+        "EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED"
+      );
+    }
+    if (!current.consistent) {
+      await refreshFinanceAgreementFromEvidence(client, agreementId);
+    }
+    await client.commit();
+  } catch (error) {
+    try { await client.rollback(); } catch (_rollbackError) {}
+    throw error;
+  } finally {
+    client.release();
+  }
+  const verified = await loadAgreementSnapshot(agreementId, pool);
+  if (!verified.reconciliation?.consistent) {
+    throw new ProfessionalFinanceError(
+      409,
+      "The Finance account could not be fully reconciled. No official document was issued.",
+      "EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED"
+    );
+  }
+  return verified;
 }
 
 async function documentNumber(type, userId) {
@@ -861,7 +929,7 @@ async function issueDocument({ agreementId, documentType, format, userId, connec
   if (!allowedFormats.has(cleanFormat)) {
     throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON format.");
   }
-  const snapshot = await loadAgreementSnapshot(agreementId, connection);
+  const snapshot = await loadReconciledDocumentSnapshot(agreementId, connection);
   if (documentRevision) {
     // Corrected official copies must receive their own checksum/document number.
     // Previous signatures cannot automatically be represented as consent to
@@ -1572,6 +1640,7 @@ module.exports = {
   listIssuedDocuments,
   listProfessionalMachines,
   loadAgreementSnapshot,
+  loadReconciledDocumentSnapshot,
   professionalSchemaStatus,
   publicSettings,
   renderAgreementPdf,
