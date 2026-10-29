@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import ProtectedFinanceImage from "../components/ProtectedFinanceImage";
 import { financeDateLabel } from "../utils/financeDisplayDate";
 import "../styles/equipmentFinanceAccountsCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
@@ -282,7 +283,7 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                 {customer.latest_application?.application_id ? (
                   <section className="finance-accounts__identity">
                     <div className="finance-accounts__application-image">
-                      <img src={`/equipment-catalogue/sales/credit-applications/${customer.latest_application.application_id}/image`} alt={`Excavator for ${customer.customer_name}`} />
+                      <ProtectedFinanceImage src={`/equipment-catalogue/sales/credit-applications/${customer.latest_application.application_id}/image`} alt={`Excavator for ${customer.customer_name}`} eager />
                     </div>
                     <div>
                       <p>Latest identity and assessment snapshot</p>
