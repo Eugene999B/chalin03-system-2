@@ -566,18 +566,18 @@ test("one fresh installment is created, listed, opened, corrected and approved",
   await expect(page.getByRole("heading", { name: "1 cases" })).toBeVisible();
   const fileDialog = page.getByRole("dialog", { name: "Credit application file" });
   await expect(fileDialog).toBeVisible();
-  await expect(fileDialog.getByText("Draft", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Draft" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Submit for Review" }).click();
   let actionDialog = page.getByRole("dialog", { name: "Submit for manager review" });
   await actionDialog.getByLabel("Reason / note").fill("Ready for independent review.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Submitted" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Start Review" }).click();
   actionDialog = page.getByRole("dialog", { name: "Start manager review" });
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Under Review", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Under Review" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Request Changes" }).click();
   actionDialog = page.getByRole("dialog", { name: "Request changes" });
@@ -585,7 +585,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
     .getByLabel("Reason / note")
     .fill("Attach a clearer serial plate reference before approval.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Changes Requested", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Changes Requested" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Submit for Review" }).click();
   actionDialog = page.getByRole("dialog", { name: "Submit for manager review" });
@@ -593,12 +593,12 @@ test("one fresh installment is created, listed, opened, corrected and approved",
     .getByLabel("Reason / note")
     .fill("Requested serial plate reference has been checked.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Submitted" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Start Review" }).click();
   actionDialog = page.getByRole("dialog", { name: "Start manager review" });
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Under Review", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Under Review" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Approve" }).click();
   actionDialog = page.getByRole("dialog", { name: "Approve credit application" });
@@ -607,7 +607,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
     .fill("Commercial terms, customer information and machine reference approved.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
 
-  await expect(fileDialog.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Approved" })).toBeVisible();
   await expect(fileDialog.getByText("Approved → Approved")).toBeVisible();
   await fileDialog.getByRole("button", { name: "Close" }).click();
   await expect(page.getByText("Approved", { exact: true }).first()).toBeVisible();
