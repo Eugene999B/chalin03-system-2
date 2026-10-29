@@ -33,22 +33,8 @@ PREPARE chalin03_due_date_addition FROM @chalin03_due_date_schema_sql;
 EXECUTE chalin03_due_date_addition;
 DEALLOCATE PREPARE chalin03_due_date_addition;
 
--- Compatibility for the currently deployed, image-safe Finance POST.
--- It inserts the approved quotation first, then the application inside the
--- same transaction. Preserve the exact first due date even on old deployments
--- that do not yet write the new application field. Never change older rows.
--- There were no triggers on this table at the time of the live preflight.
-DROP TRIGGER IF EXISTS chalin03_finance_start_due_date_fill;
-CREATE TRIGGER chalin03_finance_start_due_date_fill
-BEFORE INSERT ON equipment_credit_applications
-FOR EACH ROW
-  SET NEW.proposed_first_due_date = COALESCE(
-    NEW.proposed_first_due_date,
-    (SELECT quotation.proposed_first_due_date
-       FROM equipment_sales_quotations quotation
-      WHERE quotation.id = NEW.quotation_id LIMIT 1)
-  );
-
+-- No trigger replacement: new code explicitly records the first due date.
+-- Existing quotations and applications are unchanged.
 
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
