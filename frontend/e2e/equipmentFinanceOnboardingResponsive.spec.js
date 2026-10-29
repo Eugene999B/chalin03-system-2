@@ -79,7 +79,7 @@ for (const width of [375, 1440]) {
     await machine.getByRole("button", { name: "Save Excavator" }).click();
     await expect(machine.getByRole("alert")).toContainText("serial number or a chassis number");
     expect(state.machines).toHaveLength(0);
-    await machine.getByLabel("Serial number").fill("QA-SERIAL-701");
+    await machine.locator('input[aria-required]').first().fill("QA-SERIAL-701");
     await machine.locator('input[type="file"]').setInputFiles({ name: "qa-main.png", mimeType: "image/png", buffer: image });
     await expect(machine.locator(".finance-simple__photo-preview img")).toHaveCount(1);
     await machine.getByRole("button", { name: "Save Excavator" }).click();
@@ -105,7 +105,7 @@ for (const width of [375, 1440]) {
     expect(state.applications).toHaveLength(0);
     const future = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10);
     await date.fill(future);
-    await expect(page.getByText("Live payment schedule").first()).toBeVisible();
+    await expect(page.locator(".c03-start2-schedule-rows > div")).toHaveCount(6);
     await page.getByRole("button", { name: /Continue to Assessment/ }).click();
     await page.getByRole("button", { name: /Continue to Review/ }).click();
     await page.getByRole("button", { name: /Create installment application/ }).click();
