@@ -18,7 +18,8 @@ const {
   normalizeOffer,
 } = require("./equipmentFinancePhaseOneRoutes");
 const { safeSettings } = require("./equipmentFinanceRuntimeHotfixRoutes");
-const { acquireConnection } = require("./equipmentFinanceCriticalEntryRoutes");
+const { acquireConnection, applicationReadiness } = require("./equipmentFinanceCriticalEntryRoutes");
+const { classifyFinanceDatabaseError } = require("../services/equipmentFinancePhaseOneDiagnosticsService");
 
 const router = express.Router();
 const QUERY_TIMEOUT_MS = 10000;
@@ -644,11 +645,28 @@ router.post(
         });
       }
       if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
+        // Avoid retaining a transaction connection while running the independent
+        // read-only schema readiness probe (the pool is deliberately small).
+        connection?.release();
+        connection = null;
+        const readiness = await applicationReadiness();
+        const failure = classifyFinanceDatabaseError(error, readiness);
+        console.error("Finance installment creation stopped by schema mismatch:", {
+          request_id: req.requestId || null,
+          database_error_code: error.code,
+          diagnostic_code: failure.code,
+          missing_table_count: readiness.missing_tables?.length || 0,
+          missing_column_count: readiness.missing_columns?.length || 0,
+          migration_recorded: readiness.migration?.recorded ?? null,
+        });
         return res.status(503).json({
           status: "error",
-          code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
-          message:
-            "The approved Finance database foundation is incomplete for this transaction.",
+          code: failure.code,
+          message: "A verified Finance database repair is required before creating this installment.",
+          operator_message: failure.operator_message,
+          request_id: req.requestId || null,
+          retryable: false,
+          repair_required: true,
         });
       }
       console.error("Image-safe Finance installment creation failed:", error);
