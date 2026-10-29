@@ -7,6 +7,8 @@ import "../styles/equipmentFinanceStartInstallment.css";
 
 const API = "/equipment-catalogue/sales/phase-one";
 const DRAFT_KEY = "chalin03.finance.start-installment.v2";
+const photoKeyFor = (mode, customerId) =>
+  `chalin03.finance.start-installment.photo.${mode === "existing" ? customerId || "unselected" : "new"}`;
 
 const STEPS = [
   ["customer", "Customer", "Buyer & portrait"],
@@ -118,8 +120,6 @@ export default function EquipmentFinanceStartInstallmentPage() {
   const preselectedAsset = query.get("asset") || "";
   const role = String(user?.role || "").toLowerCase();
   const canCreate = effectivePermissions.includes("fleet.assets.manage") || ["admin", "administrator", "manager", "system_administrator", "super_admin"].includes(role);
-  const photoKey = `chalin03.finance.start-installment.photo.${preselectedCustomer || "new"}`;
-
   const [step, setStep] = useState(0);
   const [data, setData] = useState(() => {
     try {
@@ -127,6 +127,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
       return mergeDraft(saved ? JSON.parse(saved) : {});
     } catch { return blankState(); }
   });
+  const photoKey = photoKeyFor(data.customerMode, data.customer_id);
   const [customers, setCustomers] = useState([]);
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -157,7 +158,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
     if (preselectedCustomer) { next.customerMode = "existing"; next.customer_id = preselectedCustomer; }
     if (preselectedAsset) next.asset_id = preselectedAsset;
     setData(next);
-    setProfilePhoto(readPhotoState(`chalin03.finance.start-installment.photo.${preselectedCustomer || "new"}`));
+    setProfilePhoto(readPhotoState(photoKeyFor(next.customerMode, next.customer_id)));
   }, [preselectedCustomer, preselectedAsset]);
 
   useEffect(() => {
@@ -228,8 +229,28 @@ export default function EquipmentFinanceStartInstallmentPage() {
   }, [selectedMachine]);
 
   function update(section, field, value) { setData((current) => ({ ...current, [section]: { ...current[section], [field]: value } })); }
-  function chooseCustomer(customer) { setData((current) => ({ ...current, customerMode: "existing", customer_id: String(customer.id) })); }
-  function chooseMachine(machine) { setData((current) => ({ ...current, asset_id: String(machine.id), offer: { ...current.offer, selling_price: current.offer.selling_price || String(machine.target_selling_price || "") } })); }
+  function chooseCustomer(customer) {
+    const customerId = String(customer.id);
+    setData((current) => ({ ...current, customerMode: "existing", customer_id: customerId }));
+    // Buyer portraits are private evidence; never attach one buyer's picture to another.
+    setProfilePhoto(readPhotoState(photoKeyFor("existing", customerId)));
+  }
+  function chooseMachine(machine) {
+    setData((current) => {
+      const changed = String(current.asset_id) !== String(machine.id);
+      return {
+        ...current,
+        asset_id: String(machine.id),
+        offer: {
+          ...current.offer,
+          // Never carry the selling price of a different excavator into an agreement.
+          selling_price: changed ? String(machine.target_selling_price || "") : current.offer.selling_price,
+        },
+      };
+    });
+    setSchedulePreview(null);
+    setScheduleProblem("");
+  }
   function setPhoto(value) { setProfilePhoto(value || null); writePhotoState(photoKey, value || null); }
   function clearDraft() { const fresh = blankState(); setData(fresh); setStep(0); setProblem(""); setNotice("The unfinished draft was cleared on this device."); setSchedulePreview(null); setProfilePhoto(null); writePhotoState(photoKey, null); window.localStorage.removeItem(DRAFT_KEY); }
 
@@ -240,6 +261,8 @@ export default function EquipmentFinanceStartInstallmentPage() {
       if (data.customerMode === "new" && (!data.customer.customer_name.trim() || !data.customer.phone.trim())) return "Enter the new customer name and primary phone.";
     }
     if (index === 1 && !selectedMachine) return "Select an available, verified excavator. Refresh the register if your selection is no longer available.";
+    if (index === 1 && Number(selectedMachine?.target_selling_price || 0) <= 0)
+      return "The selected excavator has no valid sale price. Correct its machine record first.";
     if (index === 2) {
       const price = numberValue(data.offer.selling_price);
       const deposit = numberValue(data.offer.deposit);
@@ -302,7 +325,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
       {loading ? <div className="c03-start2-loading"><strong>Preparing the transaction workspace…</strong><span>Loading customers, available excavators and the local draft environment.</span></div> : null}
 
       {!loading && step === 0 ? <Card eyebrow="Step 1 · Customer" title="Who is purchasing the excavator?" description="Start with the customer record. Existing customers keep their history connected across Finance.">
-        <div className="c03-start2-mode"><button type="button" className={data.customerMode === "existing" ? "is-active" : ""} onClick={() => setData((current) => ({ ...current, customerMode: "existing", customer_id: "" }))}>Existing customer</button><button type="button" className={data.customerMode === "new" ? "is-active" : ""} onClick={() => setData((current) => ({ ...current, customerMode: "new", customer_id: "" }))}>Create new customer</button></div>
+        <div className="c03-start2-mode"><button type="button" className={data.customerMode === "existing" ? "is-active" : ""} onClick={() => { setData((current) => ({ ...current, customerMode: "existing", customer_id: "" })); setProfilePhoto(null); }}>Existing customer</button><button type="button" className={data.customerMode === "new" ? "is-active" : ""} onClick={() => { setData((current) => ({ ...current, customerMode: "new", customer_id: "" })); setProfilePhoto(null); writePhotoState(photoKeyFor("new"), null); }}>Create new customer</button></div>
         {data.customerMode === "existing" ? <><Field label="Search customer" hint={`${filteredCustomers.length} customer${filteredCustomers.length === 1 ? "" : "s"} available`} wide><input value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} placeholder="Name, phone, customer code or email" autoComplete="off" /></Field><div className="c03-start2-customer-grid">{filteredCustomers.map((customer) => <button key={customer.id} type="button" className={String(data.customer_id) === String(customer.id) ? "is-selected" : ""} onClick={() => chooseCustomer(customer)}><CustomerPortrait customerId={customer.id} name={customer.customer_name} size="small" /><div><strong>{customer.customer_name}</strong><small>{customer.phone || "No phone"}</small><em>{customer.customer_code || "No code"}</em></div>{String(data.customer_id) === String(customer.id) ? <b>Selected</b> : null}</button>)}</div></> : <div className="c03-start2-grid c03-start2-grid--2"><Field label="Legal / registered name"><input value={data.customer.customer_name} onChange={(event) => update("customer", "customer_name", event.target.value)} /></Field><Field label="Customer type"><select value={data.customer.customer_type} onChange={(event) => update("customer", "customer_type", event.target.value)}><option value="individual">Individual</option><option value="company">Registered company</option><option value="contractor">Contractor / sole business</option><option value="government">Government institution</option></select></Field><Field label="Primary phone"><input inputMode="tel" value={data.customer.phone} onChange={(event) => update("customer", "phone", event.target.value)} /></Field><Field label="WhatsApp / alternative phone"><input inputMode="tel" value={data.customer.whatsapp_phone} onChange={(event) => update("customer", "whatsapp_phone", event.target.value)} /></Field><Field label="Email"><input type="email" value={data.customer.email} onChange={(event) => update("customer", "email", event.target.value)} /></Field><Field label="Authorised representative"><input value={data.customer.contact_person} onChange={(event) => update("customer", "contact_person", event.target.value)} /></Field><Field label="Correspondence address" wide><textarea rows="3" value={data.customer.address} onChange={(event) => update("customer", "address", event.target.value)} /></Field></div>}
         {(selectedCustomer || data.customerMode === "new") ? <div className="c03-start2-photo-card"><div><span>Customer identity photo</span><h3>{selectedCustomer?.customer_name || data.customer.customer_name || "New customer"}</h3><p>Optional. Add a clear portrait only when you have one. It will be attached to this installment's customer document record; it will not appear on unrelated customers or documents.</p></div><div className="c03-start2-photo-editor">{selectedCustomer ? <CustomerPortrait customerId={selectedCustomer.id} name={selectedCustomer.customer_name} src={profilePhoto || ""} size="medium" /> : <CustomerPortrait src={profilePhoto || ""} name={data.customer.customer_name || "Customer"} size="medium" />}<CustomerPortraitPicker value={profilePhoto || ""} name={selectedCustomer?.customer_name || data.customer.customer_name || "Customer"} onChange={setPhoto} compact /></div></div> : <div className="c03-start2-photo-empty"><strong>Select the customer first.</strong><span>The optional customer portrait control will appear here and will be tied to the selected transaction.</span></div>}
       </Card> : null}
