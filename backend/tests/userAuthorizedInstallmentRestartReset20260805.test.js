@@ -105,7 +105,7 @@ test("controlled maintenance runs the completed reset and safe cleanup attempt i
   assert.ok(cleanupRecovery > reset, "safe cleanup recovery must follow the completed reset");
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.doesNotMatch(
     maintenance,

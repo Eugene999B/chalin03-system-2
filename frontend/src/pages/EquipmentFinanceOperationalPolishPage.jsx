@@ -16,6 +16,7 @@ const DOCUMENT_CATEGORIES = [
   ["guarantor_identity", "Guarantor identity evidence"],
   ["guarantor_undertaking", "Guarantor undertaking"],
   ["agreement_attachment", "Agreement attachment"],
+  ["signed_price_amendment", "Customer-signed price amendment"],
   ["other", "Other controlled evidence"],
 ];
 
@@ -233,6 +234,21 @@ export default function EquipmentFinanceOperationalPolishPage() {
   const [scheduleForm, setScheduleForm] = useState(EMPTY_SCHEDULE);
   const [simulation, setSimulation] = useState(null);
   const [amendmentForm, setAmendmentForm] = useState(EMPTY_AMENDMENT);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const price = params.get("price_variation");
+    if (!price || !params.get("case_id") || params.get("tab") !== "amendments") return;
+    if (!Number.isFinite(Number(price)) || Number(price) <= 0) return;
+    setAmendmentForm({
+      amendment_type: "commercial_variation",
+      reason: "",
+      effective_date: "",
+      fields: [
+        { key: "purchase_price", value: price },
+        { key: "customer_acceptance_document_id", value: "" },
+      ],
+    });
+  }, [location.search]);
   const [selectedPaymentId, setSelectedPaymentId] = useState("");
   const [receipt, setReceipt] = useState(null);
   const [shareChannel, setShareChannel] = useState("sms");
@@ -1061,12 +1077,28 @@ export default function EquipmentFinanceOperationalPolishPage() {
           {!caseData ? <div className="finance-ops__empty">Choose a Finance case first.</div> : null}
           {caseData && canManage ? (
             <form className="finance-ops__panel finance-ops__form" onSubmit={submitAmendment}>
-              <div className="finance-ops__section-heading"><div><p>Never erase the original</p><h2>Controlled correction or amendment</h2><span>Contact corrections may update after approval. Money, schedules and payments become numbered variations only.</span></div></div>
+              <div className="finance-ops__section-heading"><div><p>Never erase the original</p><h2>Controlled correction or amendment</h2><span>Ordinary financial variations remain numbered evidence. A purchase-price correction changes the effective agreement total and unpaid balance only after independent approval and a verified customer-signed amendment. The originally signed PDF and past receipts remain untouched.</span></div></div>
+              {amendmentForm.fields.some((field) => field.key === "purchase_price") ? (
+                <Notice tone="warning">
+                  To correct an active agreement's money figures, first upload a customer-signed price amendment under Documents,
+                  and have another authorised user verify it. Then enter its verified Document ID in customer_acceptance_document_id.
+                  A different manager must approve your request. Applying the approved variation adjusts only unpaid schedule principal
+                  and the remaining balance; historical signatures and receipts stay intact.
+                </Notice>
+              ) : null}
               <div className="finance-ops__form-grid">
-                <label><span>Amendment type</span><select value={amendmentForm.amendment_type} onChange={(event) => setAmendmentForm((current) => ({ ...current, amendment_type: event.target.value }))}><option value="case_correction">Case correction</option><option value="customer_details">Customer details</option><option value="guarantor_details">Guarantor details</option><option value="commercial_variation">Commercial variation</option><option value="schedule_variation">Schedule variation</option><option value="payment_correction_request">Payment correction request</option></select></label>
+                <label><span>Amendment type</span><select value={amendmentForm.amendment_type} onChange={(event) => setAmendmentForm((current) => ({ ...current, amendment_type: event.target.value }))}><option value="case_correction">Case correction</option><option value="customer_details">Customer details</option><option value="guarantor_details">Guarantor details</option><option value="commercial_variation">Commercial variation / signed price correction</option><option value="schedule_variation">Schedule variation</option><option value="payment_correction_request">Payment correction request</option></select></label>
                 <label><span>Effective date</span><input type="date" value={amendmentForm.effective_date} onChange={(event) => setAmendmentForm((current) => ({ ...current, effective_date: event.target.value }))} /></label>
                 <label className="is-wide"><span>Reason and evidence</span><textarea required minLength="8" value={amendmentForm.reason} onChange={(event) => setAmendmentForm((current) => ({ ...current, reason: event.target.value }))} /></label>
               </div>
+              {caseData.documents?.some((doc) => doc.document_category === "signed_price_amendment") ? (
+                <div className="finance-ops__panel">
+                  <strong>Customer-signed price amendment documents</strong>
+                  {caseData.documents.filter((doc) => doc.document_category === "signed_price_amendment").map((doc) => (
+                    <p key={doc.id}>Document ID {doc.id} — {doc.document_label} — {label(doc.document_status)}</p>
+                  ))}
+                </div>
+              ) : null}
               <div className="finance-ops__amendment-fields">{amendmentForm.fields.map((field, index) => <div key={`${index}:${field.key}`}><label><span>Field</span><input required value={field.key} onChange={(event) => updateAmendmentField(index, "key", event.target.value)} placeholder="customer_phone or payment_frequency" /></label><label><span>Proposed value</span><input required value={field.value} onChange={(event) => updateAmendmentField(index, "value", event.target.value)} /></label></div>)}</div>
               <div className="finance-ops__form-actions"><button type="button" onClick={addAmendmentField}>+ Add field</button><button type="submit" disabled={busy === "amendment:create"}>Submit for approval</button></div>
             </form>

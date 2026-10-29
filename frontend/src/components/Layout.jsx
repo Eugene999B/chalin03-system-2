@@ -95,6 +95,13 @@ export default function Layout() {
     const mainWorkItems = isAuditor
       ? [
           {
+            title: "Sales History",
+            description: "Read-only review of store sales, receipts, voids and corrections",
+            path: "/sales-history",
+            icon: "🧾",
+            keywords: "audit sales history receipts voided corrected transactions date filters",
+          },
+          {
             title: "Change Password",
             description: "Update your auditor login password",
             path: "/change-password",

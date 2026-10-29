@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import { financeDateLabel, financeDateOnly, earliestUnpaidFinancePeriod } from "../utils/financeDisplayDate";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
@@ -18,11 +19,7 @@ function money(value) {
   return `GHS ${Number(value || 0).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 function label(value) { return String(value || "Not recorded").replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
-function dateLabel(value) {
-  if (!value) return "—";
-  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime()) ? String(value).slice(0, 10) : parsed.toLocaleDateString("en-GH", { year: "numeric", month: "short", day: "2-digit", timeZone: "UTC" });
-}
+function dateLabel(value) { return financeDateLabel(value, "—"); }
 function errorMessage(error, fallback) { return error?.response?.data?.message || error?.message || fallback; }
 function requestKey(agreementId) {
   const uuid = globalThis.crypto?.randomUUID?.();
@@ -44,10 +41,7 @@ function paymentBreakdown(account) {
 function isInstallmentCollectable(account) { return Boolean(account.reserved) && !account.ownership_id && paymentBreakdown(account).installmentOutstanding > 0.01; }
 function hasOpeningDepositOutstanding(account) { return paymentBreakdown(account).openingDepositOutstanding > 0.01; }
 function nextDueFromSchedule(schedule) {
-  const terminal = new Set(["paid", "cancelled", "waived", "rescheduled"]);
-  return [...(Array.isArray(schedule) ? schedule : [])]
-    .filter((row) => row?.due_date && !terminal.has(String(row?.schedule_status || "").toLowerCase()))
-    .sort((a, b) => String(a.due_date).slice(0, 10).localeCompare(String(b.due_date).slice(0, 10)) || Number(a.sequence_number || 0) - Number(b.sequence_number || 0))[0]?.due_date || null;
+  return financeDateOnly(earliestUnpaidFinancePeriod(schedule)?.due_date);
 }
 async function enrichAccountDates(accounts) {
   const rows = Array.isArray(accounts) ? accounts : [];

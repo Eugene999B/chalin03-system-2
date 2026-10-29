@@ -15,6 +15,6 @@ test("identity isolation runs after exact Mickey repair in controlled maintenanc
   assert.ok(isolation > exact);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
 });

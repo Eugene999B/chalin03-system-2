@@ -265,7 +265,7 @@ test("staff can search, select and move through account, customer and payment de
   });
 
   await page.goto("/equipment-installment-finance/applications?stage=accounts");
-  await expect(page.getByRole("heading", { name: "Active Installments" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Installment Account Register" })).toBeVisible();
   await expect(page.getByLabel("Search active installment accounts")).toBeVisible();
   await expect(page.getByText("Ama Account Customer").first()).toBeVisible();
   await expect(page.getByText("GHS 800.00").first()).toBeVisible();
@@ -283,7 +283,9 @@ test("staff can search, select and move through account, customer and payment de
   await expect(page.getByRole("heading", { name: "Ama Account Customer" })).toBeVisible();
   await page.getByText("Show identity, KYC and assessment details", { exact: true }).click();
   await expect(page.getByText("GHA-123456789-0")).toBeVisible();
-  const image = page.locator('img[alt="Excavator for Ama Account Customer"]');
+  const customerPhoto = page.getByTestId("finance-protected-image");
+  await expect(customerPhoto).toHaveAttribute("data-image-state", "ready");
+  const image = customerPhoto.locator('img[alt="Excavator for Ama Account Customer"]');
   await expect(image).toBeVisible();
   await expect.poll(() => image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(0);
   await page.getByText("Show schedule and payment details", { exact: true }).click();

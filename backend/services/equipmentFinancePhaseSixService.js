@@ -28,6 +28,36 @@ const PAYMENT_MESSAGE_INTERVAL_MS = Math.max(
 let phaseSixSchedulersStarted = false;
 let paymentMessageSyncRunning = false;
 
+const TRANSIENT_FINANCE_DB_CODES = new Set([
+  "ECONNREFUSED", "ETIMEDOUT", "ECONNRESET",
+  "EHOSTUNREACH", "EAI_AGAIN", "PROTOCOL_CONNECTION_LOST",
+]);
+
+function isTransientFinanceDatabaseError(error) {
+  if (!error) return false;
+  if (TRANSIENT_FINANCE_DB_CODES.has(String(error.code || ""))) return true;
+  return (Array.isArray(error.errors) && error.errors.some(isTransientFinanceDatabaseError)) ||
+    (error.cause && isTransientFinanceDatabaseError(error.cause)) || false;
+}
+
+async function waitForFinanceSchedulerDatabase() {
+  // MySQL on Railway may be waking from auto-sleep. Only retry a read-only
+  // connectivity probe, never the SMS provider call or a payment mutation.
+  for (const delayMs of [0, 4000, 12000]) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    try {
+      await pool.query("SELECT 1 AS finance_scheduler_database_ready");
+      return true;
+    } catch (error) {
+      if (!isTransientFinanceDatabaseError(error)) throw error;
+    }
+  }
+  console.warn(
+    "Equipment Finance payment SMS sync skipped: database is unavailable; pending receipts remain queued for the next scheduled run."
+  );
+  return false;
+}
+
 class EquipmentFinancePhaseSixError extends Error {
   constructor(statusCode, message, code = "EQUIPMENT_FINANCE_PHASE6_ERROR") {
     super(message);
@@ -225,71 +255,68 @@ async function sendCustomerPaymentReceipt({ paymentId, sentBy = null, retry = fa
     };
   }
 
+  // The unique key claims delivery before any external request. A crash or an
+  // uncertain provider response must never cause an automatic duplicate send.
   if (!cleanText(payment.customer_phone, 40)) {
-    await pool.query(
-      `INSERT INTO equipment_finance_phase6_message_log (
-         message_key, message_type, payment_id, agreement_id, recipient_type,
-         recipient_phone, message_preview, delivery_status, attempt_count,
-         last_error, sent_by
-       ) VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', NULL, ?, 'skipped', 0, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         delivery_status = 'skipped', last_error = VALUES(last_error), updated_at = NOW()`,
-      [messageKey, payment.id, payment.agreement_id, message, "Customer phone is missing.", sentBy]
+    return { ok: false, skipped: true, status: "skipped",
+      reason: "customer_phone_missing", payment_id: payment.id };
+  }
+  const [claim] = await pool.query(
+    `INSERT IGNORE INTO equipment_finance_phase6_message_log
+      (message_key, message_type, payment_id, agreement_id, recipient_type,
+       recipient_phone, message_preview, delivery_status, attempt_count, sent_by)
+     VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', ?, ?, 'pending', 1, ?)`,
+    [messageKey, payment.id, payment.agreement_id, payment.customer_phone, message, sentBy]
+  );
+  let claimed = claim.affectedRows === 1;
+  if (!claimed && retry) {
+    const [reclaim] = await pool.query(
+      `UPDATE equipment_finance_phase6_message_log
+          SET delivery_status = 'pending', claimed_at = NOW(), last_error = NULL,
+              recipient_phone = ?, message_preview = ?, sent_by = ?,
+              attempt_count = attempt_count + 1
+        WHERE message_key = ? AND delivery_status IN ('failed', 'skipped')`,
+      [payment.customer_phone, message, sentBy, messageKey]
     );
-    return {
-      ok: false,
-      skipped: true,
-      status: "skipped",
-      reason: "customer_phone_missing",
-      payment_id: payment.id,
-    };
+    claimed = reclaim.affectedRows === 1;
+  }
+  if (!claimed) {
+    return { ok: false, skipped: true, status: "skipped",
+      reason: "receipt_already_claimed", payment_id: payment.id };
   }
 
-  if (retry) {
+  let result;
+  try {
+    result = await sendSmsAlertToPhone({
+      phone: payment.customer_phone, message, sourceReference: messageKey,
+      smsType: "equipment_finance_payment_alert", sentBy,
+    });
+  } catch (error) {
+    // The provider may have accepted a request before the connection failed.
     await pool.query(
-      `INSERT INTO equipment_finance_phase6_message_log (message_key, message_type, payment_id, agreement_id,
-         recipient_type, recipient_phone, message_preview, delivery_status, attempt_count, last_error, sent_by)
-       VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', ?, ?, 'queued', 0, NULL, ?)
-       ON DUPLICATE KEY UPDATE
-         recipient_phone = VALUES(recipient_phone), message_preview = VALUES(message_preview),
-         delivery_status = 'queued', last_error = NULL, sent_by = VALUES(sent_by), updated_at = NOW()`,
-      [messageKey, payment.id, payment.agreement_id, payment.customer_phone, message, sentBy]
+      `UPDATE equipment_finance_phase6_message_log
+          SET delivery_status = 'delivery_unknown', last_error = ?
+        WHERE message_key = ? AND delivery_status = 'pending'`,
+      [cleanText(error.message), messageKey]
     );
+    throw error;
   }
-  const result = await sendSmsAlertToPhone({
-    phone: payment.customer_phone,
-    message,
-    sourceReference: messageKey,
-    smsType: "equipment_finance_payment_alert",
-  });
-
+  const deliveryStatus = result.status === "delivery_unknown"
+    ? "delivery_unknown" : result.ok ? "submitted" : "failed";
   await pool.query(
-    `INSERT INTO equipment_finance_phase6_message_log (
-       message_key, message_type, payment_id, agreement_id, recipient_type,
-       recipient_phone, message_preview, delivery_status, attempt_count,
-       sent_at, last_error, sent_by
-     ) VALUES (?, 'customer_payment_receipt', ?, ?, 'customer', ?, ?, ?, 1, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       recipient_phone = VALUES(recipient_phone), message_preview = VALUES(message_preview),
-       delivery_status = VALUES(delivery_status), attempt_count = attempt_count + 1,
-       sent_at = VALUES(sent_at), last_error = VALUES(last_error), sent_by = VALUES(sent_by), updated_at = NOW()`,
-    [
-      messageKey,
-      payment.id,
-      payment.agreement_id,
-      payment.customer_phone,
-      message,
-      result.ok ? "submitted" : "failed",
-      result.ok ? new Date() : null,
-      result.ok ? null : result.reason || "SMS provider rejected the request.",
-      sentBy,
-    ]
+    `UPDATE equipment_finance_phase6_message_log
+        SET delivery_status = ?, sent_at = ?, last_error = ?, sms_log_id = ?,
+            updated_at = NOW()
+      WHERE message_key = ? AND delivery_status = 'pending'`,
+    [deliveryStatus, result.ok ? new Date() : null,
+      result.ok ? null : result.reason || result.error || "SMS provider rejected the request.",
+      result.log_id || null, messageKey]
   );
 
   return {
     ok: Boolean(result.ok),
     skipped: false,
-    status: result.ok ? "submitted" : "failed",
+    status: deliveryStatus,
     reason: result.reason || null,
     provider: result.provider || null,
     payment_id: payment.id,
@@ -303,12 +330,15 @@ async function syncCustomerPaymentReceipts({ sentBy = null, limit = 100 } = {}) 
     `SELECT payment.id
        FROM equipment_sale_payments payment
        INNER JOIN equipment_sale_agreements agreement ON agreement.id = payment.agreement_id
+       INNER JOIN equipment_finance_phase6_runtime_state state
+         ON state.state_key = 'customer_receipt_cutover_at'
        LEFT JOIN equipment_finance_phase6_message_log message
          ON message.message_key = CONCAT('finance-payment-receipt:', payment.id)
       WHERE payment.is_voided = FALSE
         AND agreement.sale_type = 'installment'
         AND agreement.activation_source = 'approved_credit_application'
         AND payment.payment_stage = 'installment'
+        AND payment.payment_date >= CAST(state.state_value AS DATETIME)
         AND (message.id IS NULL OR message.delivery_status IN ('failed','skipped'))
       ORDER BY payment.payment_date DESC, payment.id DESC
       LIMIT ?`,
@@ -1021,6 +1051,7 @@ function startEquipmentFinancePhaseSixSchedulers() {
     if (paymentMessageSyncRunning) return;
     paymentMessageSyncRunning = true;
     try {
+      if (!(await waitForFinanceSchedulerDatabase())) return;
       await syncCustomerPaymentReceipts({ limit: 100 });
     } catch (error) {
       console.error("Equipment Finance customer payment SMS scheduler failed:", error);
@@ -1039,6 +1070,7 @@ function startEquipmentFinancePhaseSixSchedulers() {
 
 module.exports = {
   EquipmentFinancePhaseSixError,
+  isTransientFinanceDatabaseError,
   accountingCsv,
   accountingRowsFromPayments,
   assertPhaseSixSchema,

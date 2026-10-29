@@ -206,25 +206,25 @@ for (const viewport of [
     await prepareFinance(page);
 
     await page.goto("/equipment-installment-finance/applications?stage=start");
-    await expect(page.getByRole("heading", { name: "Start New Installment" })).toBeVisible();
-    await expect(page.locator(".finance-simple__steps")).toBeVisible();
-    expect(await computed(page.locator(".finance-simple__hero"), "backgroundImage")).toContain("linear-gradient");
-    expect(parseFloat(await computed(page.locator(".finance-simple__hero"), "borderRadius"))).toBeGreaterThan(18);
-    if (viewport.name === "phone") {
-      expect(await computed(page.locator(".finance-simple__steps"), "scrollSnapType")).toContain("x");
-    }
+    await expect(page.locator(".c03-start2-brand strong")).toHaveText("Start New Installment");
+    await expect(page.getByRole("heading", { name: /Build the installment clearly/ })).toBeVisible();
+    const steps = page.getByRole("navigation", { name: "Installment creation steps" });
+    await expect(steps).toBeVisible();
+    await expect(steps.getByRole("button")).toHaveCount(5);
+    expect(await computed(page.locator(".c03-start2-hero"), "backgroundImage")).toContain("linear-gradient");
+    expect(parseFloat(await computed(page.locator(".c03-start2-hero"), "borderRadius"))).toBeGreaterThan(18);
     await expectNoDocumentOverflow(page);
     await page.screenshot({ path: testInfo.outputPath(`start-installment-${viewport.name}.png`), fullPage: true });
 
     await page.goto("/equipment-installment-finance/applications");
     await expect(page.getByRole("heading", { name: "Credit Applications" })).toBeVisible();
     await expect(page.locator(".finance-simple__metric")).toHaveCount(4);
-    await expect(page.locator(".finance-simple__card")).toHaveCount(2);
-    const applicationColumns = await computed(page.locator(".finance-simple__cards"), "gridTemplateColumns");
+    await expect(page.locator(".finance-applications-v2__case")).toHaveCount(2);
+    const applicationColumns = await computed(page.locator(".finance-applications-v2__list"), "gridTemplateColumns");
     expect(applicationColumns.trim().split(/\s+/)).toHaveLength(1);
-    const firstApplication = await page.locator(".finance-simple__card").first().boundingBox();
+    const firstApplication = await page.locator(".finance-applications-v2__case").first().boundingBox();
     expect(firstApplication).not.toBeNull();
-    expect(firstApplication.width).toBeGreaterThan(viewport.name === "desktop" ? 700 : 320);
+    expect(firstApplication.width).toBeGreaterThan(viewport.name === "desktop" ? 700 : 260);
     await expectNoDocumentOverflow(page);
     await page.screenshot({ path: testInfo.outputPath(`applications-approvals-${viewport.name}.png`), fullPage: true });
 

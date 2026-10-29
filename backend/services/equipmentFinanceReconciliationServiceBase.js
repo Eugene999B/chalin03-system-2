@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { dateOnly } = require("./equipmentFinanceDateOnlyService");
 
 const FINANCE_WORKSPACE = "equipment_installment_finance";
 const ACTIVE_SCHEDULE_STATUSES = Object.freeze(["upcoming", "due", "partial", "overdue"]);
@@ -217,7 +218,7 @@ function mismatch(field, stored, expected, severity = "repairable") {
 }
 
 function dateText(value) {
-  return value ? String(value).slice(0, 10) : null;
+  return dateOnly(value);
 }
 
 function buildReconciliation(agreement, evidenceInput = {}) {

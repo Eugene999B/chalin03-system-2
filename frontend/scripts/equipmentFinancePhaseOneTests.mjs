@@ -71,10 +71,10 @@ assert.match(minimalWorkflow, /official-outstanding-balance/);
 for (const phrase of [
   "Start New Installment",
   "Select the exact excavator",
-  "Set the exact payment interval",
-  "Customer assessment",
-  "Review and create the draft",
-  "Create Draft Installment",
+  "Build the commercial terms",
+  "Add customer assessment details",
+  "Everything is ready to create the draft",
+  "start-installment",
 ]) {
   assert.match(wizard, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 }
@@ -97,9 +97,9 @@ assert.match(excavators, /finance-simple__machine-image/);
 assert.match(excavators, /finance-simple__photo-viewer/);
 assert.doesNotMatch(excavators, /useWorkspaceContext/);
 
-assert.match(applications, /Applications and approvals/i);
-assert.match(applications, /Installment Offer/);
-assert.match(applications, /No Hire-location selection/);
+assert.match(applications, /Applications &amp; approvals/i);
+assert.match(applications, /quotation_number/);
+assert.match(layout, /no Hire-location selection/i);
 assert.doesNotMatch(applications, /selectedContextId|useWorkspaceContext/);
 
 for (const page of [activation, deposit]) {

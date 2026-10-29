@@ -145,7 +145,7 @@ test("cleanup remains best-effort maintenance without ever blocking normal API s
   const maintenance = packageJson.scripts["maintenance:legacy-startup-repairs"];
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.doesNotMatch(
     packageJson.scripts.start,

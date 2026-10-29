@@ -4,9 +4,9 @@
   "description": "Backend API for Chalin 03 Sales and Inventory Management System",
   "main": "server.js",
   "scripts": {
-    "start": "node scripts/runSparePartsUserSettingsAccessControlMigration.js && node scripts/runEquipmentFinanceSmsAlertMigration.js && node scripts/runEquipmentFinanceLateFeePolicyMigration.js && node -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js server.js",
+    "start": "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js",
     "maintenance:legacy-startup-repairs": "node scripts/runEquipmentFinancePhaseOneEmergencyRepair.js && node scripts/runEquipmentFinancePhaseOneSchemaStartup.js && node scripts/runEquipmentFinanceOperationalPolishStartup.js && node scripts/runEquipmentFinanceOpeningDepositFoundationRepair.js && node scripts/runEquipmentFinancePhaseFourStartup.js && node scripts/runEquipmentFinancePhaseFiveAPrivateDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveBDocumentReviewStartup.js && node scripts/runEquipmentFinancePhaseFiveUnifiedDocumentsStartup.js && node scripts/runEquipmentFinancePhaseFiveCDeliveryAuthorizationStartup.js && node scripts/runEquipmentFinancePhaseFiveDDeliveryConfirmationStartup.js && node scripts/runEquipmentFinancePhaseSixStartup.js && node scripts/runEquipmentFinancePhaseSixPerformanceStartup.js && node scripts/runEquipmentFinanceTermsApprovalRepair20260806.js && node scripts/runUserAuthorizedInstallmentRestartResetLockFix20260805.js && node scripts/runInstallmentExcavatorCleanupBestEffortStartup20260805.js && node scripts/runBossApprovedProductQuantityCorrection20260802.js && node scripts/runBossApprovedProductQuantityCorrection20260804.js && node scripts/runKwabenaProductQuantityCorrection20260806.js && node scripts/runCustomerMergeAuditDateSanitizer20260805.js && node scripts/runAutomaticCustomerMergeRollback20260805.js && node scripts/runExactNameReceiptOwnerRecovery20260805.js && node scripts/runMissingCreditDebtBackfill20260805.js && node scripts/runZeroPaymentCreditDebtVisibilityRepair20260805.js && node scripts/runMasterMickeyJuly31ExactDebtRepair20260805.js && node scripts/runUnpaidReceiptIdentityIsolation20260805.js",
-    "dev": "nodemon server.js",
+    "dev": "node --watch server.js",
     "create-admin": "node scripts/createAdmin.js",
     "migrate:production": "node scripts/runProductionMigrations.js",
     "migrate:equipment-finance:production": "node scripts/runEquipmentFinanceProductionMigrations.js",
@@ -41,10 +41,17 @@
     "syntax-check": "node --check server.js && node scripts/checkBackendSyntax.js",
     "migration-safety": "node scripts/verifyMigrationSafety.js",
     "test": "node --test tests/*.test.js",
-    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js"
+    "migrate:payroll-foundation:production": "node scripts/runPayrollFinancialFoundationMigration.js",
+    "maintenance:legacy-predeploy-repairs": "export CHALIN03_EXPECTED_DATABASE=\"${CHALIN03_EXPECTED_DATABASE:-${DB_NAME:-$MYSQLDATABASE}}\" && node scripts/runSparePartsUserSettingsAccessControlMigration.js && node scripts/runCustomerFeatureControlsProductionMigration.js && node scripts/runEquipmentFinanceScheduleCatchupRepairV5.js && node scripts/runEquipmentFinanceScheduleTruthRepairV4.js && node scripts/runEquipmentFinanceDateEvidenceRepairV3.js && node scripts/runEquipmentFinanceRuntimeContractRepairV2.js && node scripts/runEquipmentFinanceProductionPredeployRepair.js && node scripts/finalizeEquipmentFinanceOpeningDepositReservationTrigger.js && node scripts/finalizeEquipmentFinanceCommitmentTrigger.js && node scripts/runEquipmentFinanceSmsAlertMigration.js && node scripts/runEquipmentFinanceLateFeePolicyMigration.js && node scripts/verifyEquipmentFinanceDepositReadiness.js && node scripts/runEquipmentFinanceNotificationPolicyMigration.js"
   },
-  "engines": {"node": ">=20"},
-  "keywords": ["chalin03", "sales", "inventory"],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "chalin03",
+    "sales",
+    "inventory"
+  ],
   "author": "Eugene Amankwah Appiah",
   "license": "ISC",
   "dependencies": {
@@ -62,5 +69,8 @@
     "qrcode": "^1.5.4",
     "sharp": "^0.35.3"
   },
-  "devDependencies": {"nodemon": "^3.0.0"}
+  "devDependencies": {},
+  "overrides": {
+    "body-parser": "1.20.9"
+  }
 }

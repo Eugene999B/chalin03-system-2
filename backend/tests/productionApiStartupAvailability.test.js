@@ -10,7 +10,7 @@ const packageJson = JSON.parse(
 test("production web server starts independently of one-time maintenance jobs", () => {
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
 
   for (const forbidden of [

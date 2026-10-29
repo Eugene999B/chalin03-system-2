@@ -44,8 +44,8 @@ assert.match(
   /if \(!stage \|\| stage === "applications" \|\| stage === "start"\)/
 );
 
-assert.match(inbox, /Action queue only/);
-assert.match(inbox, /This page contains work requiring action/);
+assert.match(inbox, /What needs attention now/);
+assert.match(inbox, /Each row points to the exact customer application or agreement/);
 assert.doesNotMatch(inbox, /Schedule Simulator/);
 assert.doesNotMatch(inbox, /Secure document upload/);
 
@@ -61,7 +61,7 @@ assert.match(applications, /Case Operations/);
 assert.match(applications, /EquipmentFinanceApplicationsOptionalPage/);
 assert.match(applications, /responseType: "blob"/);
 assert.match(applications, /Administrator approval is immediate/);
-assert.match(applications, /No separate manager review is required/);
+assert.match(applications, /no separate manager review is required/i);
 assert.match(applications, /data-admin-direct-approval-note/);
 assert.match(applications, /characterData: true/);
 assert.match(applications, /useAuth/);

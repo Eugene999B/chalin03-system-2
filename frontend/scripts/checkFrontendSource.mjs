@@ -41,8 +41,8 @@ const workerHrLettersCss = read(
   "src/styles/workerHrLetters.css"
 );
 
-assert.match(indexHtml, /Chalin 03 Group Operations Platform/);
-assert.doesNotMatch(indexHtml, /https:\/\/chalin03\.com/);
+assert.match(indexHtml, /Chalin 03 Company Limited/);
+assert.match(indexHtml, /rel="canonical" href="https:\/\/chalin03\.com\/"/);
 assert.match(app, /SystemOperationsPage/);
 assert.match(app, /system-operations/);
 assert.match(app, /PermissionRoute/);

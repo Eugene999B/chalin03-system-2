@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = path.resolve(new URL("..", import.meta.url).pathname, "..");
+const root = fileURLToPath(new URL("..", import.meta.url));
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const page = read("src/pages/EquipmentFinanceTaskInboxPage.jsx");
@@ -14,7 +15,7 @@ assert.match(page, /Data & document issues/);
 assert.match(page, /Open case/);
 assert.match(page, /stage: "case-operations"/);
 assert.match(page, /inbox_page_size: PAGE_SIZE/);
-assert.match(page, /All priorities/);
+assert.match(page, /value === "all" \? "All" : label\(value\)/);
 assert.doesNotMatch(page, /Open case operation/);
 
 assert.match(css, /\.task-inbox__row/);

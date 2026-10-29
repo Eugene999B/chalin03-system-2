@@ -7,6 +7,7 @@ import EquipmentFinanceStartInstallmentPage from "./EquipmentFinanceStartInstall
 const EquipmentFinanceActiveInstallmentsPage = lazy(() => import("./EquipmentFinanceActiveInstallmentsPage"));
 const EquipmentFinanceAgreementActivationPage = lazy(() => import("./EquipmentFinanceAgreementActivationPage"));
 const EquipmentFinanceArrearsPage = lazy(() => import("./EquipmentFinanceArrearsPage"));
+const EquipmentFinanceArrearsControlPage = lazy(() => import("./EquipmentFinanceArrearsControlPage"));
 const EquipmentFinanceCaseOperationsPage = lazy(() => import("./EquipmentFinanceCaseOperationsPage"));
 const EquipmentFinanceCaseWorkspacePage = lazy(() => import("./EquipmentFinanceCaseWorkspacePage"));
 const EquipmentFinanceCollectionsMinimalPage = lazy(() => import("./EquipmentFinanceCollectionsMinimalPage"));
@@ -19,6 +20,7 @@ const EquipmentFinanceExcavatorsPage = lazy(() => import("./EquipmentFinanceExca
 const EquipmentFinanceFinalLifecyclePage = lazy(() => import("./EquipmentFinanceFinalLifecyclePage"));
 const EquipmentFinanceGuidePage = lazy(() => import("./EquipmentFinanceGuidePage"));
 const EquipmentFinanceOperationalPolishPage = lazy(() => import("./EquipmentFinanceOperationalPolishPage"));
+const EquipmentFinancePaymentHistoryPage = lazy(() => import("./EquipmentFinancePaymentHistoryPage"));
 const EquipmentFinancePaymentsCentrePage = lazy(() => import("./EquipmentFinancePaymentsCentrePage"));
 const EquipmentFinanceProfessionalPage = lazy(() => import("./EquipmentFinanceProfessionalPage"));
 const EquipmentFinanceRecoveryGovernancePage = lazy(() => import("./EquipmentFinanceRecoveryGovernancePage"));
@@ -47,13 +49,14 @@ function stagePage(stage) {
   if (stage === "generated-documents") return <EquipmentFinanceDocumentCentrePage />;
   if (stage === "generated-documents-core") return <EquipmentFinanceProfessionalPage mode="documents" />;
   if (PROFESSIONAL_STAGES.has(stage)) return <EquipmentFinanceProfessionalPage mode={stage} />;
-  if (stage === "arrears") return <EquipmentFinanceArrearsPage />;
+  if (stage === "arrears") return <EquipmentFinanceArrearsControlPage />;
   if (stage === "governance") return <EquipmentFinanceRecoveryGovernancePage />;
   if (stage === "corrections") return <EquipmentFinanceCorrectionsPage />;
   if (stage === "activation") return <EquipmentFinanceAgreementActivationPage />;
   if (stage === "deposit") return <EquipmentFinanceDepositReservationPage />;
   if (stage === "accounts") return <EquipmentFinanceActiveInstallmentsPage />;
   if (stage === "collections-core") return <EquipmentFinanceCollectionsMinimalPage />;
+  if (stage === "payment-history") return <EquipmentFinancePaymentHistoryPage />;
   if (stage === "collections") return <EquipmentFinancePaymentsCentrePage />;
   if (FINAL_LIFECYCLE_STAGES.has(stage)) return <EquipmentFinanceFinalLifecyclePage />;
   return <EquipmentFinanceApplicationsCompletionPage />;
@@ -63,6 +66,8 @@ export default function EquipmentSalesWorkspacePage() {
   const location = useLocation();
   const stage = new URLSearchParams(location.search).get("stage");
   const page = stagePage(stage);
-  if (!stage || stage === "applications" || stage === "start") return page;
+  if (!stage || stage === "applications" || stage === "start") {
+    return page;
+  }
   return <Suspense fallback={<FinanceStageFallback />}>{page}</Suspense>;
 }

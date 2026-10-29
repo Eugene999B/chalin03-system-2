@@ -126,19 +126,26 @@ function renderLegalAgreement(doc, document) {
     detailX + 14, heroY + 14,
     { width: detailWidth - 28, lineBreak: false }
   );
+  // A newly issued agreement snapshot must show the currently due periodic
+  // principal after a price correction, not the amount on the first (possibly
+  // already paid) historical row. Previously issued document snapshots keep
+  // their own original schedule and remain unchanged.
+  const nextOpenPeriod = (Array.isArray(document.snapshot?.schedule) ? document.snapshot.schedule : [])
+    .find((row) => ["upcoming", "due", "partial", "overdue"].includes(String(row.schedule_status || "")));
+  const periodicPrincipalDue = nextOpenPeriod
+    ? Math.max(0, Number(nextOpenPeriod.scheduled_amount || 0) - Number(nextOpenPeriod.amount_paid || 0))
+    : (document.snapshot?.price_scenario ? 0 : agreement.periodic_amount) ||
+      (document.snapshot?.price_scenario ? 0 : agreement.installment_amount) ||
+      document.snapshot?.schedule?.[0]?.scheduled_amount;
   const facts = [
     ["Buyer", customerName(document)],
     ["Purchase price", money(agreement.total_amount)],
-    ["Opening deposit", money(agreement.deposit_required || agreement.deposit_received)],
+    ["Deposit received", money(agreement.deposit_received)],
     ["Financed amount", money(agreement.financed_amount)],
     ["Payment plan", `${agreement.installment_count || 0} ${label(agreement.payment_frequency)}`],
     [
       "Periodic payment",
-      money(
-        agreement.periodic_amount ||
-          agreement.installment_amount ||
-          document.snapshot?.schedule?.[0]?.scheduled_amount
-      ),
+      money(periodicPrincipalDue),
     ],
   ];
   facts.forEach(([name, value], index) => {
@@ -194,6 +201,12 @@ function renderLegalAgreement(doc, document) {
 
   addPage(doc, document);
   sectionTitle(doc, document, "Official installment schedule");
+  if (document.snapshot?.document_revision?.reference) {
+    drawFactGrid(doc, document, [
+      ["Document status", "Corrected schedule - fresh signatures required"],
+      ["Previous issued document", document.snapshot.document_revision.original_document_number],
+    ], { columns: 2 });
+  }
   drawScheduleTable(doc, document, document.snapshot?.schedule || []);
 
   addPage(doc, document);
@@ -231,7 +244,7 @@ function renderExecutivePack(doc, document) {
       document.snapshot?.reconciliation?.consistent ? COLORS.forest : COLORS.red,
     ],
     ["Purchase price", money(agreement.total_amount)],
-    ["Official balance", money(agreement.outstanding_balance)],
+    [document.snapshot?.price_scenario ? "Price-version balance" : "Official balance", money(agreement.outstanding_balance)],
   ]);
   drawFactGrid(doc, document, [
     ["Applicant", customerName(document)],

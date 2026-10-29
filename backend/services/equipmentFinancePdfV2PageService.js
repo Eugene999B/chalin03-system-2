@@ -173,19 +173,24 @@ function drawHeader(doc, document) {
   drawGuilloche(doc, template);
 
   const logoDrawn = drawOfficialLogo(doc, left + 2, 20, 72, 72);
-  const brandX = logoDrawn ? left + 86 : left;
-  const brandWidth = 260;
-  doc.fillColor(COLORS.paper).font("Times-Bold").fontSize(18).text(
-    clean(snapshot.company?.name, "CHALIN 03 COMPANY LIMITED"),
-    brandX,
-    28,
+  const brandX = logoDrawn ? left + 84 : left;
+  const metaWidth = 152;
+  const metaX = doc.page.width - doc.page.margins.right - metaWidth;
+  const brandWidth = Math.max(190, metaX - brandX - 16);
+  const brandName = clean(snapshot.company?.name, "CHALIN 03 COMPANY LIMITED").toUpperCase();
+  let brandSize = 17;
+  while (brandSize > 10.5 &&
+    doc.font("Times-Bold").fontSize(brandSize).widthOfString(brandName) > brandWidth) {
+    brandSize -= 0.5;
+  }
+  doc.fillColor(COLORS.paper).font("Times-Bold").fontSize(brandSize).text(
+    brandName, brandX, 28,
     { width: brandWidth, lineBreak: false, ellipsis: true }
   );
-  doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(7.2).text(
-    "EQUIPMENT  •  FINANCE  •  TRUST",
-    brandX,
-    56,
-    { width: brandWidth, characterSpacing: 1.2, lineBreak: false }
+  doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(6.7).text(
+    "EQUIPMENT FINANCE  |  SERVICE  |  TRUST",
+    brandX, 56,
+    { width: brandWidth, characterSpacing: 0.45, lineBreak: false }
   );
   doc.fillColor("#D8E5DE").font("Helvetica").fontSize(6.2).text(
     [snapshot.company?.phone, snapshot.company?.email]
@@ -196,8 +201,6 @@ function drawHeader(doc, document) {
     { width: brandWidth, lineBreak: false, ellipsis: true }
   );
 
-  const metaWidth = 152;
-  const metaX = doc.page.width - doc.page.margins.right - metaWidth;
   doc.roundedRect(metaX, 22, metaWidth, 66, 9)
     .fillAndStroke("#073429", COLORS.gold);
   doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(5.8).text(
@@ -240,11 +243,14 @@ function drawHeader(doc, document) {
     { width, align: "center", characterSpacing: 1.2, lineBreak: false }
   );
 
-  const badgeWidth = Math.min(146, Math.max(92, template.classification.length * 6.1));
+  const badgeText = snapshot.document_revision?.reference
+    ? "CORRECTED COPY - FRESH SIGNATURES REQUIRED"
+    : template.classification;
+  const badgeWidth = Math.min(244, Math.max(92, badgeText.length * 5.2));
   const badgeX = left + (width - badgeWidth) / 2;
   doc.roundedRect(badgeX, titleY + 43, badgeWidth, 17, 8).fill(template.accent);
   doc.fillColor(COLORS.paper).font("Helvetica-Bold").fontSize(5.8).text(
-    template.classification,
+    badgeText,
     badgeX,
     titleY + 49,
     { width: badgeWidth, align: "center", lineBreak: false }
@@ -276,7 +282,9 @@ function drawFooters(doc, document) {
     doc.fillColor(COLORS.goldBright).font("Helvetica-Bold").fontSize(5.5);
     safeAbsoluteText(
       doc,
-      "SECURE • VERIFIED • SYSTEM-GENERATED",
+      document.snapshot?.price_scenario
+        ? "PRICE VERSION • SIGNATURES REQUIRED"
+        : "SECURE • VERIFIED • SYSTEM-GENERATED",
       doc.page.margins.left,
       y + 5,
       { width: 170, align: "left" }

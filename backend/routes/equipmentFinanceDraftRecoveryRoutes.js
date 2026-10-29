@@ -531,6 +531,7 @@ function offerInput(body = {}, application = {}) {
     custom_interval_days: intervalDays,
     installment_count: installmentCount,
     first_due_date: firstDueDate,
+    minimum_first_due_date: require("../middleware/equipmentFinanceActivationIntegrityGuard").ghanaToday(),
     non_working_day_rule: nonWorkingDayRule,
   });
 

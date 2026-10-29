@@ -38,7 +38,8 @@ assert(
   "The Customer Centre must create reusable records and show their Finance portfolio history."
 );
 assert(
-  page.includes("axiosClient.get(API)") &&
+  page.includes("axiosClient.get(API,") &&
+    page.includes("params: { search: query || undefined }") &&
     page.includes("axiosClient.post(API, payload)") &&
     page.includes("axiosClient.put(`${API}/${editing.id}`, payload)") &&
     page.includes("confirm_duplicate"),

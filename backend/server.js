@@ -167,7 +167,10 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`Not allowed by CORS: ${origin}`));
+      const corsError = new Error("The request origin is not authorised for this API.");
+      corsError.statusCode = 403;
+      corsError.code = "CHALIN03_CORS_ORIGIN_NOT_ALLOWED";
+      return callback(corsError);
     },
     credentials: true,
   })

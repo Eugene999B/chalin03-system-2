@@ -203,7 +203,7 @@ test("controlled maintenance runs the correction after prior stock counts and be
   assert.ok(previous >= 0 && current > previous && next > current);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.equal(
     packageJson.scripts["repair:kwabena-main-store-quantities:20260806:production"],

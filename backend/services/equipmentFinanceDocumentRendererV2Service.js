@@ -226,7 +226,9 @@ async function renderCompletionPdf(document, { layout = "a4" } = {}) {
       addPage(doc, document);
       renderBody(doc, document);
       drawIdentityAnnex(doc, document, photo);
-      drawVerificationPanel(doc, document, qrBuffer);
+      // Price variants are prepared for separate acceptance, not in the issued-document registry.
+      // Do not attach an online-verification seal or QR that falsely resolves to an official record.
+      if (!document.snapshot?.price_scenario) drawVerificationPanel(doc, document, qrBuffer);
       drawFooters(doc, document);
       doc.end();
     } catch (error) {

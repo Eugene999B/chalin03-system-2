@@ -89,11 +89,11 @@ test("start installment renders immediately while server recovery runs in backgr
 test("critical start stage is eager and outside Suspense", () => {
   assert.match(
     workspace,
-    /^import EquipmentFinancePhaseThreeStartRedirectPage from "\.\/EquipmentFinancePhaseThreeStartRedirectPage";/m
+    /^import EquipmentFinanceStartInstallmentPage from "\.\/EquipmentFinanceStartInstallmentPage";/m
   );
   assert.doesNotMatch(
     workspace,
-    /const EquipmentFinancePhaseThreeStartRedirectPage = lazy/
+    /const EquipmentFinanceStartInstallmentPage = lazy/
   );
   assert.match(
     workspace,

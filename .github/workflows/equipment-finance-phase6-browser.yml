@@ -3,8 +3,6 @@ name: Equipment Finance Phase 6 Browser
 on:
   pull_request:
     branches: [main, production]
-  push:
-    branches: [main, production]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +10,7 @@ permissions:
 
 jobs:
   phase6-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import axiosClient from "../api/axiosClient";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 
 const USER_KEY = "chalin03_user";
 const TOKEN_KEY = "chalin03_token";
@@ -112,6 +113,7 @@ export default function OperationalApprovalLauncher() {
   const [error, setError] = useState("");
 
   const user = identity.user;
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, user?.branch_id);
   const role = String(user?.role || "").toLowerCase();
   const workspaceCode = String(
     user?.workspace_code || user?.active_workspace?.code || "spare_parts"
@@ -244,6 +246,10 @@ export default function OperationalApprovalLauncher() {
     try {
       const response = await axiosClient.get(`/sales/${saleId}`);
       const sale = response.data.sale || {};
+      if (!canApplyDiscount && Number(sale.discount_amount || 0) > 0) {
+        setError("Discounted sales can only be corrected by the Boss or original System Administrator.");
+        return;
+      }
       setSelectedSale(sale);
       setSaleForm({
         sale_id: String(saleId),
@@ -407,7 +413,7 @@ export default function OperationalApprovalLauncher() {
           customer_phone: saleForm.customer_phone,
           customer_location: saleForm.customer_location,
           payment_type: saleForm.payment_type,
-          discount_amount: Number(saleForm.discount_amount || 0),
+          discount_amount: canApplyDiscount ? Number(saleForm.discount_amount || 0) : 0,
           amount_tendered: paidNow,
           amount_paid: paidNow,
           payment_allocations: saleForm.payment_allocations,
@@ -505,10 +511,10 @@ export default function OperationalApprovalLauncher() {
           right: 18px;
           bottom: 18px;
           z-index: 2450;
-          border: 1px solid #7c5d00;
+          border: 1px solid #7c5d00 !important;
           border-radius: 999px;
-          background: linear-gradient(135deg, #f3cf4f, #d9a90e);
-          color: #07182c;
+          background: linear-gradient(135deg, #f3cf4f, #d9a90e) !important;
+          color: #07182c !important;
           box-shadow: 0 18px 48px rgba(7, 24, 44, .30);
           padding: 12px 17px;
           font-weight: 950;
@@ -799,7 +805,7 @@ export default function OperationalApprovalLauncher() {
                         <label>Customer name<input value={saleForm.customer_name} onChange={(event) => setSaleForm((current) => ({ ...current, customer_name: event.target.value }))} /></label>
                         <label>Customer phone<input value={saleForm.customer_phone} onChange={(event) => setSaleForm((current) => ({ ...current, customer_phone: event.target.value }))} /></label>
                         <label>Payment type<select value={saleForm.payment_type} onChange={(event) => setSaleForm((current) => ({ ...current, payment_type: event.target.value }))}>{["cash","momo","bank","credit","mixed"].map((method) => <option key={method} value={method}>{paymentLabel(method)}</option>)}</select></label>
-                        <label>Discount<input type="number" min="0" step="0.01" value={saleForm.discount_amount} onChange={(event) => setSaleForm((current) => ({ ...current, discount_amount: event.target.value }))} /></label>
+                        {canApplyDiscount && (<label>Discount (Boss / System Administrator)<input type="number" min="0" step="0.01" value={saleForm.discount_amount} onChange={(event) => setSaleForm((current) => ({ ...current, discount_amount: event.target.value }))} /></label>)}
                         {["cash","momo","bank"].includes(saleForm.payment_type) ? (
                           <label>Amount tendered<input type="number" min="0" step="0.01" value={saleForm.amount_tendered} onChange={(event) => setSaleForm((current) => ({ ...current, amount_tendered: event.target.value }))} /></label>
                         ) : null}

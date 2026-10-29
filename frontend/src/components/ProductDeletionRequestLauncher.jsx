@@ -170,7 +170,7 @@ export default function ProductDeletionRequestLauncher() {
     }
 
     const confirmed = window.confirm(
-      `HIGH SECURITY ACTION\n\nRequest deletion of \"${selectedProduct.name}\"?\n\n` +
+      `HIGH SECURITY ACTION\n\nRequest deletion of "${selectedProduct.name}"?\n\n` +
         `The product will NOT be removed now. The original System Administrator must approve the request, ` +
         `and the boss will receive a security alert immediately.`
     );

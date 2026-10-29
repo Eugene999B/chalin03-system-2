@@ -645,9 +645,11 @@ router.post(
       return res.json({
         status: "success",
         message:
-          amendment.apply_mode === "direct_safe_update"
-            ? "Approved safe correction applied with the original snapshot preserved."
-            : "Approved financial variation added to the case file without rewriting original money records.",
+          amendment.effective_purchase_price_updated
+            ? "Customer-signed price variation applied. Agreement total, unpaid instalments and remaining balance were reconciled; original signed evidence and receipts remain preserved."
+            : amendment.apply_mode === "direct_safe_update"
+              ? "Approved safe correction applied with the original snapshot preserved."
+              : "Approved variation added to the case file without rewriting original money records.",
         amendment,
       });
     } catch (error) {

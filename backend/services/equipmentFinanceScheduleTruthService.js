@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const { dateOnly } = require("./equipmentFinanceDateOnlyService");
 
 const TERMINAL_STATUSES = new Set(["paid", "cancelled", "waived", "rescheduled"]);
 
@@ -7,7 +8,7 @@ function amount(value) {
 }
 
 function dateText(value) {
-  return value ? String(value).slice(0, 10) : null;
+  return dateOnly(value);
 }
 
 function remainingExpression(alias = "s") {
@@ -25,7 +26,8 @@ async function getAgreementScheduleTruth(connection = pool, agreementId) {
     `SELECT
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
-           AND COALESCE(s.scheduled_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
+           AND COALESCE(s.scheduled_amount, 0) + COALESCE(s.late_charge_amount, 0)
+               - COALESCE(s.waived_charge_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE
@@ -78,6 +80,8 @@ async function getPortfolioScheduleTruth(connection = pool) {
        MIN(CASE
          WHEN s.schedule_status NOT IN ('cancelled','waived','rescheduled')
            AND COALESCE(s.due_date, '') <> ''
+           AND COALESCE(s.scheduled_amount, 0) + COALESCE(s.late_charge_amount, 0)
+               - COALESCE(s.waived_charge_amount, 0) > COALESCE(s.amount_paid, 0) + 0.009
          THEN s.due_date
        END) AS next_due_date,
        MIN(CASE

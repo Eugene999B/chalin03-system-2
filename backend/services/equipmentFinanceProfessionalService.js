@@ -7,6 +7,7 @@ const {
 } = require("./equipmentFinanceReconciliationService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
+const { DEFAULTS: NOTIFICATION_DEFAULTS, getNotificationPolicy, isNotificationEnabled, updateNotificationPolicy } = require("./equipmentFinanceNotificationPolicyService");
 
 const REQUIRED_TABLES = Object.freeze([
   "equipment_finance_settings",
@@ -332,7 +333,9 @@ async function getProfessionalSettings(connection = pool, { includeSignature = f
       "EQUIPMENT_FINANCE_SETTINGS_MISSING"
     );
   }
-  return includeSignature ? row : publicSettings(row);
+  const output = includeSignature ? row : publicSettings(row);
+  try { output.notification_controls = await getNotificationPolicy(connection); } catch (error) { console.warn("Installment notification controls unavailable; keeping defaults:", error.message); output.notification_controls = NOTIFICATION_DEFAULTS; }
+  return output;
 }
 
 function normalizeSettingsPayload(body, current) {
@@ -485,6 +488,7 @@ function normalizeSettingsPayload(body, current) {
 
 async function updateProfessionalSettings({ body, reason, userId, req }) {
   const cleanReason = cleanText(reason, 500);
+  const notificationInput = body?.notification_controls;
   if (cleanReason.length < 5) {
     throw new ProfessionalFinanceError(400, "Enter a clear settings change reason of at least 5 characters.");
   }
@@ -499,6 +503,9 @@ async function updateProfessionalSettings({ body, reason, userId, req }) {
     const current = rows[0];
     if (!current) throw new ProfessionalFinanceError(503, "Finance settings are missing.");
     const updates = normalizeSettingsPayload(body || {}, current);
+    let notificationControls = NOTIFICATION_DEFAULTS;
+    if (notificationInput !== undefined) notificationControls = (await updateNotificationPolicy(notificationInput)).controls;
+    else { try { notificationControls = await getNotificationPolicy(); } catch (_) {} }
     const keys = Object.keys(updates);
     if (!keys.length) {
       await connection.commit();
@@ -532,7 +539,7 @@ async function updateProfessionalSettings({ body, reason, userId, req }) {
       ]
     );
     await connection.commit();
-    return { changed: true, settings: publicSettings(next) };
+    return { changed: true, settings: { ...publicSettings(next), notification_controls: notificationControls } };
   } catch (error) {
     try {
       await connection.rollback();
@@ -848,13 +855,29 @@ async function documentNumber(type, userId) {
   }
 }
 
-async function issueDocument({ agreementId, documentType, format, userId }) {
+async function issueDocument({ agreementId, documentType, format, userId, connection = pool, documentRevision = null }) {
   const allowedFormats = new Set(["pdf", "word", "print", "json"]);
   const cleanFormat = cleanText(format, 20).toLowerCase();
   if (!allowedFormats.has(cleanFormat)) {
     throw new ProfessionalFinanceError(400, "Choose PDF, Word, print or JSON format.");
   }
-  const snapshot = await loadAgreementSnapshot(agreementId);
+  const snapshot = await loadAgreementSnapshot(agreementId, connection);
+  if (documentRevision) {
+    // Corrected official copies must receive their own checksum/document number.
+    // Previous signatures cannot automatically be represented as consent to
+    // the revised payment dates. A new buyer signature is required.
+    snapshot.document_revision = {
+      reference: String(documentRevision.reference || "").slice(0, 100),
+      original_document_number: String(documentRevision.original_document_number || "").slice(0, 100),
+      corrected_fields: ["first_due_date", "final_due_date", "schedule.due_date"],
+      customer_acceptance: "pending_new_signature",
+      description: "Corrected payment dates; previous issued document remains on file",
+    };
+    snapshot.signatures = (snapshot.signatures || []).map((item) => ({
+      ...item, signature_data_url: null, signed_at: null,
+    }));
+    snapshot.company.authorised_seller_signature_data_url = null;
+  }
   if (!snapshot.reconciliation.consistent) {
     throw new ProfessionalFinanceError(
       409,
@@ -873,7 +896,7 @@ async function issueDocument({ agreementId, documentType, format, userId }) {
   const number = await documentNumber(type, userId);
   const snapshotText = safeJson(snapshot);
   const checksum = crypto.createHash("sha256").update(snapshotText).digest("hex");
-  const [result] = await pool.query(
+  const [result] = await connection.query(
     `INSERT INTO equipment_finance_issued_documents (
        document_number, agreement_id, document_type, document_format,
        template_version, snapshot_json, snapshot_checksum, issued_by
@@ -890,7 +913,7 @@ async function issueDocument({ agreementId, documentType, format, userId }) {
     ]
   );
   if (type === "installment_agreement") {
-    await pool.query(
+    await connection.query(
       `UPDATE equipment_sale_agreements
        SET agreement_document_number = COALESCE(agreement_document_number, ?),
            terms_version = COALESCE(terms_version, ?),
@@ -979,8 +1002,15 @@ function imageHtml(dataUrl, alt, className = "machine-photo") {
   return `<img class="${className}" src="${htmlEscape(dataUrl)}" alt="${htmlEscape(alt)}" />`;
 }
 
+const {
+  nameForRole,
+  signatureImageForRole,
+} = require("./equipmentFinanceDocumentPartyNamesService");
+
 function renderAgreementWord(snapshot, documentNumberValue) {
+  const { financeDepositEvidence, buyerDeclaration } = require("./equipmentFinanceDepositDeclarationService");
   const agreement = snapshot.agreement;
+  const depositEvidence = financeDepositEvidence(snapshot);
   const mainPhoto =
     snapshot.media.find((item) => item.evidence_type === "main")?.file_url ||
     snapshot.media.find((item) => item.is_primary)?.file_url ||
@@ -1008,15 +1038,15 @@ function renderAgreementWord(snapshot, documentNumberValue) {
     .split(/\n\s*\n/)
     .map((paragraph) => `<p>${paragraph.replaceAll("\n", "<br />")}</p>`)
     .join("");
-  const sellerSignature =
-    snapshot.signatures.find((row) => row.signer_role === "seller")?.signature_data_url ||
-    snapshot.company.authorised_seller_signature_data_url;
+  const sellerRecord = snapshot.signatures.find((row) => row.signer_role === "seller");
+  const sellerSignature = signatureImageForRole(snapshot, "seller", sellerRecord);
   const signer = (role, label) => {
     const row = snapshot.signatures.find((item) => item.signer_role === role);
+    const signature = signatureImageForRole(snapshot, role, row);
     return `<div class="signature"><strong>${label}</strong>${
-      row ? imageHtml(row.signature_data_url, label, "signature-image") : ""
-    }<p>Name: ${htmlEscape(row?.signer_name || "")}</p><p>Date: ${htmlEscape(
-      row ? dateLabel(row.signed_at) : ""
+      signature ? imageHtml(signature, label, "signature-image") : ""
+    }<p>Name: ${htmlEscape(nameForRole(snapshot, role, row))}</p><p>Date: ${htmlEscape(
+      signature && row?.signed_at ? dateLabel(row.signed_at) : ""
     )}</p></div>`;
   };
 
@@ -1087,6 +1117,8 @@ function renderAgreementWord(snapshot, documentNumberValue) {
       agreement.deposit_required
     )}</p><p><strong>Deposit received:</strong> ${money(
       agreement.deposit_received
+    )}</p><p><strong>Initial deposit payment date:</strong> ${htmlEscape(
+      depositEvidence.first_paid_date ? dateLabel(depositEvidence.first_paid_date) : "Date not recorded"
     )}</p><p><strong>Financed balance:</strong> ${money(
       agreement.financed_amount
     )}</p><p><strong>Frequency:</strong> ${htmlEscape(
@@ -1105,12 +1137,16 @@ function renderAgreementWord(snapshot, documentNumberValue) {
       <div class="page-break"></div><h3>Installment Payment Schedule</h3><table><thead><tr><th>No.</th><th>Due date</th><th>Scheduled</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>${scheduleRows}</tbody></table>
       <h3>Terms and Conditions</h3>${terms}
       <div class="page-break"></div><h3>Machine Identity and Photo Annexure</h3><div class="photos">${mediaRows}</div>
+      <h3>Buyer's Declaration</h3>
+      <p style="border-left:5px solid #0b5d44;background:#f6fbf8;border-radius:6px;padding:12px 16px;page-break-inside:avoid">
+        ${htmlEscape(buyerDeclaration(snapshot))}
+      </p>
       <h3>Signatures</h3><div class="signatures">${sellerSignature ? `<div class="signature"><strong>Seller's Representative</strong>${imageHtml(
         sellerSignature,
         "Seller signature",
         "signature-image"
       )}<p>Name: ${htmlEscape(
-        snapshot.company.authorised_seller_name || ""
+        nameForRole(snapshot, "seller", sellerRecord)
       )}</p><p>Title: ${htmlEscape(
         snapshot.company.authorised_seller_title || ""
       )}</p></div>` : signer("seller", "Seller's Representative")}${signer(
@@ -1139,9 +1175,10 @@ function addPdfHeader(doc, snapshot, documentNumberValue) {
   );
   doc.moveDown(0.5).lineWidth(3).moveTo(45, doc.y).lineTo(550, doc.y).stroke();
   doc.moveDown(0.8);
-  doc.font("Helvetica-Bold").fontSize(17).text("EXCAVATOR SALE & INSTALLMENT AGREEMENT", {
-    align: "center",
-  });
+  doc.font("Helvetica-Bold").fontSize(17).text(
+    "EXCAVATOR SALE & INSTALLMENT AGREEMENT",
+    { align: "center" }
+  );
   doc
     .font("Helvetica")
     .fontSize(8)
@@ -1196,10 +1233,13 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       doc.font("Helvetica-Bold").fontSize(12).text("Commercial terms");
       y = doc.y + 7;
       pdfField(doc, "Purchase price", money(agreement.total_amount), 45, y);
-      pdfField(doc, "Deposit", money(agreement.deposit_received), 305, y);
+      pdfField(doc, snapshot.price_scenario ? "Deposit required" : "Deposit", money(
+        snapshot.price_scenario ? agreement.deposit_required : agreement.deposit_received
+      ), 305, y);
       y += 18;
       pdfField(doc, "Financed balance", money(agreement.financed_amount), 45, y);
-      pdfField(doc, "Outstanding", money(agreement.outstanding_balance), 305, y);
+      pdfField(doc, snapshot.price_scenario ? "Scenario balance" : "Outstanding",
+        money(agreement.outstanding_balance), 305, y);
       y += 18;
       pdfField(doc, "Frequency", agreement.payment_frequency, 45, y);
       pdfField(doc, "Installments", agreement.installment_count, 305, y);
@@ -1210,7 +1250,10 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       doc.font("Helvetica-Bold").fontSize(12).text("Installment payment schedule");
       doc.moveDown(0.4);
       const columns = [45, 78, 145, 235, 325, 415];
-      ["No.", "Due date", "Scheduled", "Paid", "Balance", "Status"].forEach((heading, index) => {
+      (snapshot.price_scenario
+        ? ["No.", "Due date", "Proposed", "Paid*", "Balance", "Status"]
+        : ["No.", "Due date", "Scheduled", "Paid", "Balance", "Status"]
+      ).forEach((heading, index) => {
         doc.font("Helvetica-Bold").fontSize(7).text(heading, columns[index], doc.y, { width: index === 1 ? 65 : 85 });
       });
       doc.moveDown(1.1);
@@ -1235,6 +1278,11 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
         });
         doc.y = rowY + 17;
         doc.moveTo(45, doc.y - 2).lineTo(550, doc.y - 2).lineWidth(0.3).stroke();
+      }
+
+      if (snapshot.price_scenario) {
+        doc.moveDown(0.5).fontSize(7).font("Helvetica")
+          .text("* Paid amounts shown are actual historical receipts from the unchanged source agreement.");
       }
 
       doc.addPage();
@@ -1284,14 +1332,13 @@ async function renderAgreementPdf(snapshot, documentNumberValue) {
       ];
       for (const [role, title] of roles) {
         const signature = snapshot.signatures.find((item) => item.signer_role === role);
-        const fallbackSignature = role === "seller" ? snapshot.company.authorised_seller_signature_data_url : null;
-        const signatureImage = dataImageBuffer(signature?.signature_data_url || fallbackSignature);
+        const signatureImage = dataImageBuffer(signatureImageForRole(snapshot, role, signature));
         if (doc.y > 710) doc.addPage();
         doc.moveDown(0.8).font("Helvetica-Bold").fontSize(9).text(title);
         if (signatureImage) doc.image(signatureImage, 45, doc.y + 2, { fit: [180, 50] });
         doc.moveDown(3.2).font("Helvetica").fontSize(8).text(
-          `Name: ${signature?.signer_name || (role === "seller" ? snapshot.company.authorised_seller_name || "" : "")}    Date: ${
-            signature ? dateLabel(signature.signed_at) : ""
+          `Name: ${nameForRole(snapshot, role, signature)}    Date: ${
+            signatureImage && signature?.signed_at ? dateLabel(signature.signed_at) : ""
           }`
         );
         doc.moveTo(45, doc.y + 5).lineTo(280, doc.y + 5).stroke();
@@ -1448,8 +1495,9 @@ async function sendBossPaymentAlert({ paymentId, agreementId, userId = null }) {
     };
     const message = replaceTemplate(settings.payment_alert_template, values).slice(0, 480);
     const enabled = Boolean(Number(settings.boss_payment_alert_enabled));
+    const paymentCategoryEnabled = await isNotificationEnabled("payment");
     const phone = cleanText(settings.boss_payment_alert_phone, 40);
-    if (!enabled || !phone) {
+    if (!enabled || !paymentCategoryEnabled || !phone) {
       await pool.query(
         `INSERT INTO equipment_finance_payment_alerts (
            payment_id, agreement_id, boss_phone, alert_message, alert_status,

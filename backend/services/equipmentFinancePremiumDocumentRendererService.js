@@ -1,3 +1,5 @@
+const { nameForRole, signatureImageForRole } =
+  require("./equipmentFinanceDocumentPartyNamesService");
 const PDFDocument = require("pdfkit");
 const QRCode = require("qrcode");
 
@@ -639,15 +641,14 @@ function signaturePanel(doc, document, roles) {
     const rowY = index % 2 === 0 ? doc.y : doc.y - 96;
     const x = left + (index % 2) * (cellWidth + gap);
     const record = document.snapshot?.signatures?.find((item) => item.signer_role === role);
-    const fallback = role === "seller" ? document.snapshot?.company?.authorised_seller_signature_data_url : null;
-    const image = dataImage(record?.signature_data_url || fallback);
+    const image = dataImage(signatureImageForRole(document.snapshot, role, record));
     doc.save().roundedRect(x, rowY, cellWidth, 88, 7).strokeColor(COLORS.line).stroke().restore();
     doc.fillColor(COLORS.greenDark).font("Helvetica-Bold").fontSize(8).text(title, x + 10, rowY + 9, {
       width: cellWidth - 20,
     });
     if (image) doc.image(image, x + 10, rowY + 25, { fit: [130, 30] });
     doc.fillColor(COLORS.ink).font("Helvetica").fontSize(7).text(
-      `Name: ${clean(record?.signer_name || (role === "seller" ? document.snapshot?.company?.authorised_seller_name : ""), "")}`,
+      `Name: ${clean(nameForRole(document.snapshot, role, record), "")}`,
       x + 10,
       rowY + 57,
       { width: cellWidth - 20 }

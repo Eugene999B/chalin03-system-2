@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { requireBossForPositiveDiscount } = require("../middleware/restrictedDiscountMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
   resolveHireLocationScope,
@@ -490,6 +491,8 @@ router.use(async (req, res, next) => {
     return next(error);
   }
 });
+
+router.use(requireBossForPositiveDiscount);
 
 router.get("/summary", requirePermission("fleet.assets.view"), async (req, res) => {
   try {

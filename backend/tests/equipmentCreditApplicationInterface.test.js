@@ -33,7 +33,7 @@ const serviceWorker = read("frontend", "public", "sw.js");
 
 test("Finance applications route through the protected credit foundation", () => {
   assert.match(wrapper, /EquipmentFinanceApplicationsPage/);
-  assert.match(wrapper, /EquipmentFinancePhaseThreeStartRedirectPage/);
+  assert.match(wrapper, /EquipmentFinanceStartInstallmentPage/);
   assert.match(startRedirect, /EquipmentFinanceOperationalStartImmediatePage/);
   assert.match(startRedirect, /START_INSTALLMENT_PATH/);
   assert.match(startRedirect, /navigate\(safeNextPath\(response\)/);
@@ -71,7 +71,7 @@ test("guided start captures the customer, terms, affordability, guarantor and co
   ]) {
     assert.match(wizard, new RegExp(field));
   }
-  assert.match(wizard, /create a draft/i);
+  assert.match(wizard, /create the draft/i);
   assert.match(wizard, /schedule-preview/);
   assert.match(minimalWorkflow, /automatic Installment Offer/);
   assert.match(minimalWorkflow, /Preview schedule/);

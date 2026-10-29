@@ -68,7 +68,7 @@ assert.match(recovery, /url\.pathname\.startsWith\("\/assets\/"\)/);
 assert.match(recovery, /Updating Chalin 03/);
 
 assert.match(mainEntry, /VITE_CHALIN03_BUILD_ID/);
-assert.match(mainEntry, /browser-cache-integrity-v38/);
+assert.match(mainEntry, /browser-cache-integrity-v40/);
 assert.match(mainEntry, /updateViaCache: "none"/);
 assert.match(mainEntry, /CHALIN03_ASSET_MISMATCH/);
 assert.match(mainEntry, /CHALIN03_SKIP_WAITING/);
@@ -93,8 +93,10 @@ const redirectRules = redirects
   .map((line) => line.trim())
   .filter(Boolean);
 
-assert.equal(redirectRules[0], "/assets/* /404.html 404");
-assert.equal(redirectRules.at(-1), "/* /index.html 200");
+assert.ok(redirectRules.includes("/login / 200"));
+assert.ok(redirectRules.includes("/equipment-installment-finance/* / 200"));
+assert.ok(redirectRules.every(rule => !rule.startsWith("/assets/") && !rule.startsWith("/* ")));
+assert.ok(redirectRules.every(rule => / 200$/.test(rule)), "Pages rewrites use supported status 200");
 
 assert.match(
   headers,

@@ -3,6 +3,8 @@ require("dotenv").config();
 
 const MIGRATION_NAME = "20260901_spare_parts_user_settings_access_control";
 const COLUMN_NAME = "user_settings_system_admin_only";
+const DEFAULT_RETRY_ATTEMPTS = 30;
+const DEFAULT_RETRY_DELAY_MS = 2000;
 
 function requiredEnv(primary, fallback) {
   const value = process.env[primary] || process.env[fallback];
@@ -27,7 +29,18 @@ function connectionOptions() {
   };
 }
 
-async function run() {
+function retrySettings() {
+  return {
+    attempts: Math.max(1, Number(process.env.DB_STARTUP_RETRY_ATTEMPTS || DEFAULT_RETRY_ATTEMPTS)),
+    delayMs: Math.max(250, Number(process.env.DB_STARTUP_RETRY_DELAY_MS || DEFAULT_RETRY_DELAY_MS)),
+  };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runOnce() {
   const connection = await mysql.createConnection(connectionOptions());
   try {
     await connection.query(`
@@ -67,21 +80,43 @@ async function run() {
       ]
     );
 
-    console.log(JSON.stringify({
+    return {
       migration: MIGRATION_NAME,
       status: existingMigration ? "verified_and_repaired" : "applied",
       column: COLUMN_NAME,
       column_status: columnStatus,
       default_value: 0,
-    }));
+    };
   } finally {
     await connection.end();
   }
 }
 
+async function run() {
+  const { attempts, delayMs } = retrySettings();
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await runOnce();
+      console.log(JSON.stringify({ ...result, startup_attempt: attempt }));
+      return result;
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      console.warn(`Spare Parts User Settings migration attempt ${attempt}/${attempts} failed: ${message}`);
+      if (attempt < attempts) {
+        await sleep(delayMs);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 if (require.main === module) {
   run().catch((error) => {
-    console.error(`Spare Parts User Settings access-control migration failed: ${error.message}`);
+    console.error(`Spare Parts User Settings access-control migration failed after retries: ${error.message}`);
     process.exit(1);
   });
 }

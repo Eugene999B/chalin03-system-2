@@ -20,7 +20,7 @@ test("React StrictMode cleanup never aborts the initial application reads", () =
   const listEffect = source.slice(listEffectStart, detailStart);
   assert.ok(listEffectStart >= 0 && detailStart > listEffectStart);
   assert.doesNotMatch(listEffect, /listAbortRef\.current\?\.abort\(\)/);
-  assert.match(listEffect, /StrictMode replays effect cleanup/);
+  assert.match(listEffect, /window\.clearTimeout\(timer\)/);
 
   const requestedEffectStart = source.indexOf(
     "if (requestedApplicationId) {\n      void openDetail(requestedApplicationId);"
@@ -29,5 +29,5 @@ test("React StrictMode cleanup never aborts the initial application reads", () =
   const requestedEffect = source.slice(requestedEffectStart, closeDetailStart);
   assert.ok(requestedEffectStart >= 0 && closeDetailStart > requestedEffectStart);
   assert.doesNotMatch(requestedEffect, /detailAbortRef\.current\?\.abort\(\)/);
-  assert.match(requestedEffect, /Do not abort during effect cleanup/);
+  assert.match(requestedEffect, /void openDetail\(requestedApplicationId\)/);
 });

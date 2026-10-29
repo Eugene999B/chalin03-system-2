@@ -18,7 +18,10 @@ const {
   normalizeOffer,
 } = require("./equipmentFinancePhaseOneRoutes");
 const { safeSettings } = require("./equipmentFinanceRuntimeHotfixRoutes");
-const { acquireConnection } = require("./equipmentFinanceCriticalEntryRoutes");
+const { acquireConnection, applicationReadiness } = require("./equipmentFinanceCriticalEntryRoutes");
+const { classifyFinanceDatabaseError } = require("../services/equipmentFinancePhaseOneDiagnosticsService");
+const { pool } = require("../config/db");
+const { assertStartSchema, FinanceStartSchemaError } = require("../services/equipmentFinanceStartReadinessService");
 
 const router = express.Router();
 const QUERY_TIMEOUT_MS = 10000;
@@ -202,7 +205,7 @@ async function financeMachine(connection, assetId) {
                FROM equipment_asset_sale_locks sale_lock
                INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
               WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
-              ORDER BY sale_lock.locked_at DESC LIMIT 1) AS blocking_agreement_number
+              LIMIT 1) AS blocking_agreement_number
        FROM fleet_assets asset
       WHERE asset.id = ? AND asset.is_active = TRUE
       LIMIT 1 FOR UPDATE`,
@@ -379,6 +382,10 @@ router.post(
     let connection;
     let transactionActive = false;
     try {
+      // This is the live route mounted ahead of the legacy Phase-One handler.
+      // Check the full insert contract before obtaining document numbers or
+      // starting a transaction; a missing column must never create half a case.
+      await assertStartSchema(pool);
       const settingsResult = await withDeadline(
         safeSettings(),
         5000,
@@ -512,6 +519,7 @@ router.post(
           proposed_frequency: offer.payment_frequency,
           proposed_interval_days: offer.custom_interval_days,
           proposed_non_working_day_rule: offer.non_working_day_rule,
+          proposed_first_due_date: offer.first_due_date,
           proposed_installment_count: offer.installment_count,
           proposed_installment_amount: monthlyAmount,
           proposed_periodic_amount: offer.periodic_amount,
@@ -627,6 +635,23 @@ router.post(
           // Preserve the original failure.
         }
       }
+      if (error instanceof FinanceStartSchemaError) {
+        console.error("Finance installment creation preflight failed", {
+          request_id: req.requestId || null,
+          missing_tables: error.readiness?.missing_tables || [],
+          missing_columns: error.readiness?.missing_columns || [],
+          invalid_nullability: error.readiness?.invalid_nullability || [],
+        });
+        return res.status(503).json({
+          status: "error",
+          code: error.code,
+          message: error.message,
+          readiness: error.readiness,
+          request_id: req.requestId || null,
+          retryable: false,
+          repair_required: true,
+        });
+      }
       if (error instanceof PhaseOneError || error instanceof FinanceScheduleError) {
         return res.status(Number(error.statusCode || 400)).json({
           status: "error",
@@ -644,11 +669,28 @@ router.post(
         });
       }
       if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
+        // Avoid retaining a transaction connection while running the independent
+        // read-only schema readiness probe (the pool is deliberately small).
+        connection?.release();
+        connection = null;
+        const readiness = await applicationReadiness();
+        const failure = classifyFinanceDatabaseError(error, readiness.ready ? null : readiness);
+        console.error("Finance installment creation stopped by schema mismatch:", {
+          request_id: req.requestId || null,
+          database_error_code: error.code,
+          diagnostic_code: failure.code,
+          missing_table_count: readiness.missing_tables?.length || 0,
+          missing_column_count: readiness.missing_columns?.length || 0,
+          migration_recorded: readiness.migration?.recorded ?? null,
+        });
         return res.status(503).json({
           status: "error",
-          code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
-          message:
-            "The approved Finance database foundation is incomplete for this transaction.",
+          code: failure.code,
+          message: "A verified Finance database repair is required before creating this installment.",
+          operator_message: failure.operator_message,
+          request_id: req.requestId || null,
+          retryable: false,
+          repair_required: true,
         });
       }
       console.error("Image-safe Finance installment creation failed:", error);

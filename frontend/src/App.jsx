@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { WorkspaceContextProvider } from "./context/WorkspaceContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,6 +14,7 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
+import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
 import NewSalePage from "./pages/NewSalePage";
@@ -64,6 +65,9 @@ const EquipmentSalesWorkspacePage = lazy(() =>
 );
 const EquipmentSalesReportsPage = lazy(() =>
   import("./pages/EquipmentSalesReportsPage")
+);
+const ExcavatorPriceDocumentsPage = lazy(() =>
+  import("./pages/ExcavatorPriceDocumentsPage")
 );
 const EquipmentBusinessWorkforcePage = lazy(() =>
   import("./pages/EquipmentBusinessWorkforcePage")
@@ -177,6 +181,21 @@ function SparePartsHomePage() {
   return safe(<DashboardPage />);
 }
 
+function RootWorkspaceEntry() {
+  const location = useLocation();
+  const { isLoggedIn, loading } = useAuth();
+
+  if (!loading && !isLoggedIn && location.pathname === "/") {
+    return safe(<PublicCompanyHomePage />);
+  }
+
+  return (
+    <WorkspaceShell allowedWorkspaces={SPARE_PARTS_WORKSPACE}>
+      <SparePartsLayout />
+    </WorkspaceShell>
+  );
+}
+
 function LegacyWorkspaceRedirect({ target }) {
   const { workspaceCode } = useAuth();
 
@@ -205,11 +224,7 @@ export default function App() {
           {/* Spare Parts keeps the original two-store layout and navigation. */}
           <Route
             path="/"
-            element={
-              <WorkspaceShell allowedWorkspaces={SPARE_PARTS_WORKSPACE}>
-                <SparePartsLayout />
-              </WorkspaceShell>
-            }
+            element={<RootWorkspaceEntry />}
           >
             <Route index element={<SparePartsHomePage />} />
 
@@ -223,7 +238,7 @@ export default function App() {
             />
             <Route
               path="sales-history"
-              element={rolePage(businessWorkRoles, <SalesHistoryPage />)}
+              element={rolePage([...businessWorkRoles, "auditor"], <SalesHistoryPage />)}
             />
             <Route
               path="installments"
@@ -717,6 +732,12 @@ export default function App() {
               element={permissionOnlyPage(
                 "fleet.assets.view",
                 <EquipmentSalesReportsPage />
+              )}
+            />
+            <Route
+              path="price-documents"
+              element={rolePage(adminOnlyRoles,
+                permissionOnlyPage("fleet.assets.view", <ExcavatorPriceDocumentsPage />)
               )}
             />
             <Route

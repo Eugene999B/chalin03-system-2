@@ -3,8 +3,6 @@ name: Equipment Finance Phase 5E Browser
 on:
   pull_request:
     branches: [main, production]
-  push:
-    branches: [main, production]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +10,7 @@ permissions:
 
 jobs:
   phase5e-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
@@ -39,6 +37,12 @@ jobs:
 
       - name: Run Phase 5E four-role journey
         run: npx playwright test e2e/equipmentFinancePhaseFiveE.spec.js
+
+      - name: Verify new agreement and deposit layouts on phone and desktop
+        run: npx playwright test e2e/equipmentFinanceFlowResponsive.spec.js
+
+      - name: Verify excavator registration and buyer/machine identity on phone and desktop
+        run: npx playwright test e2e/equipmentFinanceRegistrationIdentity.spec.js
 
       - name: Upload browser evidence
         if: always()

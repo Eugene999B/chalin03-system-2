@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
+import "../styles/equipmentFinanceFlowResponsive.css";
 
 const API = "/equipment-catalogue/sales/deposit-reservations";
 const DEPOSIT_ROLES = new Set([
@@ -76,6 +77,8 @@ function queueState(candidate) {
 }
 
 export default function EquipmentFinanceDepositReservationPage() {
+  const location = useLocation();
+  const focusAgreementId = new URLSearchParams(location.search).get("agreement");
   const { user, workspaceRole } = useAuth();
   const activeRoles = rolesFor(user, workspaceRole);
   const canCollect =
@@ -88,7 +91,7 @@ export default function EquipmentFinanceDepositReservationPage() {
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
-  const [queueFilter, setQueueFilter] = useState("open");
+  const [queueFilter, setQueueFilter] = useState(focusAgreementId ? "all" : "open");
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState(null);
 
@@ -138,7 +141,11 @@ export default function EquipmentFinanceDepositReservationPage() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [candidates, queueFilter, search]);
+  }, [candidates, queueFilter, search, focusAgreementId]);
+
+  const focusedAgreement = focusAgreementId
+    ? candidates.find((item) => String(item.agreement_id) === String(focusAgreementId))
+    : null;
 
   const summary = {
     awaiting: candidates.filter((item) => queueState(item) === "awaiting").length,
@@ -219,21 +226,24 @@ export default function EquipmentFinanceDepositReservationPage() {
   }
 
   return (
-    <main className="finance-simple finance-simplified">
+    <main className="finance-simple finance-simplified finance-lifecycle finance-lifecycle--deposit">
       <header className="finance-simple__hero">
         <div>
           <p>Search, select, then record</p>
-          <h1>Opening Deposit &amp; Machine Reservation</h1>
-          <span>
-            Find the approved agreement first. Deposit and machine details open only after the
-            correct customer agreement is selected.
-          </span>
+          <h1>Opening Deposits</h1>
+          <span>Choose a prepared agreement, record the verified opening payment and reserve the exact excavator only when its deposit is complete.</span>
         </div>
         <div className="finance-simple__hero-actions">
           <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=activation">Agreement Activation</Link>
           <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=guide">Help</Link>
         </div>
       </header>
+      <nav className="finance-lifecycle__progress" aria-label="Installment stages">
+        <Link to="/equipment-installment-finance/applications">1. Approvals</Link>
+        <Link to="/equipment-installment-finance/applications?stage=activation">2. Agreement</Link>
+        <span className="is-current" aria-current="step">3. Opening Deposit</span>
+        <Link className="is-next" to="/equipment-installment-finance/applications?stage=accounts">4. Accounts</Link>
+      </nav>
 
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
@@ -253,6 +263,16 @@ export default function EquipmentFinanceDepositReservationPage() {
             <article className="finance-simple__metric"><span>Reserved machines</span><strong>{summary.reserved}</strong></article>
             <article className="finance-simple__metric"><span>Deposit still required</span><strong>{money(summary.remaining)}</strong></article>
           </section>
+
+          {focusAgreementId ? (
+            <section className="finance-lifecycle__next">
+              <h2>{focusedAgreement ? "Agreement selected for deposit" : "Check the agreement you selected"}</h2>
+              <p>{focusedAgreement
+                ? `${focusedAgreement.agreement_number} · ${focusedAgreement.reserved ? "Already reserved. No new opening deposit should be recorded." : "Review the remaining opening deposit and machine before recording a payment."}`
+                : "This agreement is not in the current deposit register. Review it in Active Installments or display all agreements."}</p>
+              <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=deposit">Clear selection</Link>
+            </section>
+          ) : null}
 
           <section className="finance-simple__section">
             <div className="finance-simple__toolbar">
@@ -275,12 +295,29 @@ export default function EquipmentFinanceDepositReservationPage() {
               </div>
             </div>
             {loading ? <div className="finance-simple__empty">Loading Finance agreements…</div> : null}
-            {!loading && !visible.length ? <div className="finance-simple__empty">No agreement matches the current search and filter.</div> : null}
+            {!loading && !visible.length ? (
+              <div className="finance-simple__empty" role="status">
+                {queueFilter === "open" && !search.trim() && summary.awaiting + summary.partial === 0 ? (
+                  <>
+                    <strong>No opening deposits currently due.</strong>
+                    <p>{summary.reserved} agreement(s) already have their machines reserved. You can review those existing accounts or show the complete register.</p>
+                    <button type="button" onClick={() => setQueueFilter("all")}>Show all agreements</button>
+                    {" "}
+                    <Link to="/equipment-installment-finance/applications?stage=accounts">Go to Active Installments</Link>
+                  </>
+                ) : (
+                  <>
+                    No agreement matches this search and filter. Try “All agreements” to include completed reservations.
+                    {" "}<button type="button" onClick={() => { setSearch(""); setQueueFilter("all"); }}>Show all agreements</button>
+                  </>
+                )}
+              </div>
+            ) : null}
             <div className="finance-simplified__compact-register">
               {visible.map((candidate) => {
                 const state = queueState(candidate);
                 return (
-                  <article className={`finance-simplified__compact-record ${state === "partial" ? "is-warning" : ""}`} key={candidate.agreement_id}>
+                  <article className={`finance-simplified__compact-record ${state === "partial" ? "is-warning" : ""}`} key={candidate.agreement_id} data-selected={String(candidate.agreement_id) === String(focusAgreementId) ? "true" : undefined}>
                     <div>
                       <small>{candidate.agreement_number}</small>
                       <h3>{candidate.customer_name}</h3>
@@ -294,10 +331,20 @@ export default function EquipmentFinanceDepositReservationPage() {
                       <span>Status</span>
                       <strong>{label(state)}</strong>
                     </div>
+                    {(candidate.blockers || []).length > 0 && !candidate.reserved ? (
+                      <details className="finance-lifecycle__warnings is-blocked">
+                        <summary>Deposit blocked — view reasons</summary>
+                        <ul>{candidate.blockers.map((reason, index) => <li key={index}>{label(reason)}</li>)}</ul>
+                      </details>
+                    ) : null}
                     <div className="finance-simplified__compact-record-actions">
-                      <button className="is-primary" type="button" disabled={candidate.reserved || candidate.ready_for_deposit === false || !canCollect} onClick={() => open(candidate)}>
-                        {candidate.reserved ? "Reserved" : Number(candidate.deposit_received || 0) > 0 ? "Complete Deposit" : "Record Deposit"}
-                      </button>
+                      {candidate.reserved ? (
+                        <Link className="finance-simple__button" to="/equipment-installment-finance/applications?stage=accounts">View Account</Link>
+                      ) : (
+                        <button className="is-primary" type="button" disabled={candidate.ready_for_deposit === false || !canCollect} onClick={() => open(candidate)}>
+                          {candidate.ready_for_deposit === false ? "Resolve blockers first" : Number(candidate.deposit_received || 0) > 0 ? "Complete Deposit" : "Record Deposit"}
+                        </button>
+                      )}
                     </div>
                   </article>
                 );

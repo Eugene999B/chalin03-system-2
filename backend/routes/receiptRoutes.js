@@ -167,6 +167,17 @@ router.get("/sales/:id/pdf", requireAuth, async (req, res) => {
     }
 
     const sale = sales[0];
+    // Auditors must not access another store's receipt by guessing its ID.
+    // The Sales History list/detail APIs are already branch-scoped.
+    if (String(req.user?.role || "").trim().toLowerCase() === "auditor") {
+      const selectedBranchId = Number(req.user?.branch_id || req.user?.default_branch_id || 0);
+      if (!selectedBranchId || Number(sale.branch_id) !== selectedBranchId) {
+        return res.status(404).json({
+          status: "error",
+          message: "Receipt not found in the selected store.",
+        });
+      }
+    }
 
     const [items] = await pool.query(
       `SELECT

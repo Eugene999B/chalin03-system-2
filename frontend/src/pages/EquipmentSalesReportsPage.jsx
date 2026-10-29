@@ -100,7 +100,13 @@ export default function EquipmentSalesReportsPage() {
         results[4].status === "fulfilled" ? results[4].value.data || null : null
       );
     } catch (error) {
-      setProblem(errorMessage(error, "Could not load Equipment Finance Phase 6."));
+      // Do not leave stale balances on screen when the authoritative refresh fails.
+      setPortfolio(null);
+      setArrears(null);
+      setCashFlow(null);
+      setMessages(null);
+      setLegacyManagement(null);
+      setProblem(errorMessage(error, "Could not verify the Finance portfolio. The figures are unavailable until the database responds."));
     } finally {
       setLoading(false);
     }
@@ -211,7 +217,7 @@ export default function EquipmentSalesReportsPage() {
   const legacySummary = legacyManagement?.summary || {};
   const accounts = portfolio?.accounts || [];
   const selectedAccount = useMemo(
-    () => accounts.find((account) => String(account.id) === String(selectedAgreementId)),
+    () => accounts.find((account) => String(account.agreement_id || account.id) === String(selectedAgreementId)),
     [accounts, selectedAgreementId]
   );
   const messageRows = useMemo(() => {
@@ -258,6 +264,12 @@ export default function EquipmentSalesReportsPage() {
       </header>
 
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+      {portfolio?.reconciliation_warning ? (
+        <div className="finance-simple__notice is-error" role="alert">
+          Finance totals are from a read-only fallback and have NOT been independently reconciled.
+          Verify outstanding balances and payment allocations before taking financial action.
+        </div>
+      ) : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
       <section className="finance-simple__section">

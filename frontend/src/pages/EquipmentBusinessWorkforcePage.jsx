@@ -426,6 +426,37 @@ function StaffRegister({ staff, roleTemplates, savingId, onAssign, basePath }) {
   );
 }
 
+function ReadOnlyStaffRegister({ staff, division }) {
+  return (
+    <section className="equipment-workforce__section" aria-label="Division staff directory">
+      <div className="equipment-workforce__section-heading">
+        <p>Authorized staff directory</p>
+        <h2>{staff.length} account(s) in your division</h2>
+        <span>View only. Account creation, password resets and role assignments are managed by the System Administrator.</span>
+      </div>
+      {!staff.length ? (
+        <div className="equipment-workforce__empty">
+          No staff accounts are assigned to your {division === "both" ? "Equipment Business" : division} division.
+        </div>
+      ) : (
+        <div className="equipment-workforce__staff-grid">
+          {staff.map((person) => (
+            <article className="equipment-workforce__staff-card" key={person.id}>
+              <strong>{person.full_name || person.username}</strong>
+              <p>@{person.username}</p>
+              <p>{label(person.workspace_role)} · {label(person.division)}</p>
+              <small>
+                {person.is_active && person.can_access ? "Active account" : "Inactive or access disabled"}
+                {" · "}{person.worker_profile_linked ? "Worker profile linked" : "Worker profile pending"}
+              </small>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function EquipmentBusinessWorkforcePage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -438,6 +469,7 @@ export default function EquipmentBusinessWorkforcePage() {
   const tab = TABS.has(requestedTab) ? requestedTab : "overview";
   const isSystemAdministrator = Boolean(user?.is_original_system_administrator);
   const canViewProfiles = effectivePermissions.includes("workers.view");
+  const canViewStaff = isSystemAdministrator || canViewProfiles;
   const canViewDocuments = effectivePermissions.includes("workers.documents.view");
   const canOverridePermissions = effectivePermissions.includes("users.permissions.manage");
 
@@ -449,18 +481,20 @@ export default function EquipmentBusinessWorkforcePage() {
     policy: {},
   });
   const [form, setForm] = useState(EMPTY_STAFF);
-  const [loading, setLoading] = useState(isSystemAdministrator);
+  const [loading, setLoading] = useState(canViewStaff);
   const [saving, setSaving] = useState(false);
   const [savingId, setSavingId] = useState(null);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
-    if (!isSystemAdministrator) return;
+    if (!canViewStaff) return;
     setLoading(true);
     setProblem("");
     try {
-      const response = await axiosClient.get(`${API}/overview`);
+      const response = await axiosClient.get(
+        isSystemAdministrator ? `${API}/overview` : `${API}/staff/directory`
+      );
       const next = response.data || {};
       setData({
         staff: next.staff || [],
@@ -469,17 +503,19 @@ export default function EquipmentBusinessWorkforcePage() {
         summary: next.summary || {},
         policy: next.policy || {},
       });
-      setForm((current) => ({
-        ...current,
-        workspace_role:
-          current.workspace_role || (financeMode ? "finance_manager" : "hire_officer"),
-      }));
+      if (isSystemAdministrator) {
+        setForm((current) => ({
+          ...current,
+          workspace_role:
+            current.workspace_role || (financeMode ? "finance_manager" : "hire_officer"),
+        }));
+      }
     } catch (error) {
       setProblem(errorMessage(error, "Could not load Equipment Business workforce."));
     } finally {
       setLoading(false);
     }
-  }, [financeMode, isSystemAdministrator]);
+  }, [financeMode, isSystemAdministrator, canViewStaff]);
 
   useEffect(() => {
     load();
@@ -488,13 +524,13 @@ export default function EquipmentBusinessWorkforcePage() {
   const visibleTabs = useMemo(
     () => [
       { code: "overview", label: "Overview", show: true },
-      { code: "staff", label: "Staff Logins", show: isSystemAdministrator },
+      { code: "staff", label: isSystemAdministrator ? "Staff Logins" : "Division Staff", show: canViewStaff },
       { code: "roles", label: "Role Templates", show: isSystemAdministrator },
       { code: "profiles", label: "Worker Profiles & ID Cards", show: canViewProfiles },
       { code: "documents", label: "Employment Documents", show: canViewDocuments },
       { code: "permissions", label: "Permission Overrides", show: canOverridePermissions },
     ].filter((item) => item.show),
-    [canOverridePermissions, canViewDocuments, canViewProfiles, isSystemAdministrator]
+    [canOverridePermissions, canViewDocuments, canViewProfiles, canViewStaff, isSystemAdministrator]
   );
 
   useEffect(() => {
@@ -599,12 +635,12 @@ export default function EquipmentBusinessWorkforcePage() {
 
       {!loading && tab === "overview" ? (
         <>
-          {isSystemAdministrator ? (
+          {canViewStaff ? (
             <section className="equipment-workforce__metrics">
               <Metric label="Staff logins" value={data.summary.staff_logins || 0} note="Equipment Business accounts" />
               <Metric label="Active access" value={data.summary.active_logins || 0} note="Active login and workspace access" />
               <Metric label="Hire / Finance / Dual" value={`${data.summary.hire_staff || 0} / ${data.summary.finance_staff || 0} / ${data.summary.dual_staff || 0}`} note="Exact division assignments" />
-              <Metric label="Worker profiles" value={data.summary.linked_worker_profiles || 0} note={`${data.summary.logins_without_worker_profiles || 0} login(s) still need profiles`} />
+              {isSystemAdministrator ? <Metric label="Worker profiles" value={data.summary.linked_worker_profiles || 0} note={`${data.summary.logins_without_worker_profiles || 0} login(s) still need profiles`} /> : null}
             </section>
           ) : (
             <div className="equipment-workforce__notice is-info">
@@ -672,6 +708,13 @@ export default function EquipmentBusinessWorkforcePage() {
             basePath={basePath}
           />
         </>
+      ) : null}
+
+      {!loading && tab === "staff" && !isSystemAdministrator && canViewStaff ? (
+        <ReadOnlyStaffRegister
+          staff={data.staff}
+          division={data.policy.division || (financeMode ? "finance" : "hire")}
+        />
       ) : null}
 
       {!loading && tab === "roles" && isSystemAdministrator ? (

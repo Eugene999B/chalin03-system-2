@@ -3,6 +3,7 @@ const express = require("express");
 const { getFinanceMachineEditability } = require("../services/equipmentFinanceTemporaryMachineEditPolicy");
 
 const { pool } = require("../config/db");
+const { FinanceStartSchemaError, inspectStartSchema, assertStartSchema } = require("../services/equipmentFinanceStartReadinessService");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
@@ -125,6 +126,14 @@ function userId(req) {
 }
 
 function sendError(res, error, fallback) {
+  if (error instanceof FinanceStartSchemaError) {
+    return res.status(503).json({
+      status: "error",
+      code: error.code,
+      message: error.message,
+      readiness: error.readiness,
+    });
+  }
   if (error instanceof PhaseOneError || error instanceof FinanceScheduleError) {
     return res.status(Number(error.statusCode || 400)).json({
       status: "error",
@@ -140,10 +149,14 @@ function sendError(res, error, fallback) {
     });
   }
   if (["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"].includes(error?.code)) {
+    const match = String(error.sqlMessage || error.message || "").match(/(?:Unknown column|Table) ['\x60]?([a-zA-Z0-9_.]+)['\x60]?/i);
+    console.error("Finance schema mismatch at installment creation", {
+      error_code: error.code, missing_object: match?.[1] || null,
+    });
     return res.status(503).json({
       status: "error",
-      code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
-      message: "The company-wide Finance update is still being prepared. Try again after the deployment completes.",
+      code: "FINANCE_START_SCHEMA_REQUIRED",
+      message: "Installment database fields are incomplete. An administrator must verify and apply the approved additive migration before this application can be saved.",
     });
   }
   console.error(fallback, error);
@@ -419,6 +432,7 @@ function normalizeOffer(body = {}, machine, settings = {}) {
     installment_count: body.installment_count ?? 12,
     first_due_date:
       body.first_due_date || addDays(today(), Number(settings.default_first_due_days || 30)),
+    minimum_first_due_date: today(),
     non_working_day_rule: body.non_working_day_rule || "exact",
   });
 
@@ -543,9 +557,9 @@ async function customerList(search = "") {
   let searchSql = "";
   const term = cleanText(search, 120);
   if (term) {
-    searchSql = "AND (customer.customer_name LIKE ? OR customer.phone LIKE ? OR customer.customer_code LIKE ? OR customer.email LIKE ?)";
+    searchSql = "AND (customer.customer_name LIKE ? OR customer.phone LIKE ? OR customer.customer_code LIKE ? OR customer.email LIKE ? OR customer.address LIKE ? OR customer.contact_person LIKE ?)";
     const like = `%${term}%`;
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like, like);
   }
   const [rows] = await pool.query(
     `SELECT customer.*,
@@ -653,6 +667,23 @@ router.get(
         machinesWithEditability(),
         getProfessionalSettings(),
       ]);
+      // A newly-created customer can be outside the initial 250-record listing.
+      // Resolve only an explicitly selected, active company-wide Finance customer
+      // using the existing customer list query and include it without mutating data.
+      const selectedCustomerId = positiveId(req.query.customer_id);
+      if (selectedCustomerId && !customers.some((customer) => Number(customer.id) === selectedCustomerId)) {
+        const [selectedRows] = await pool.query(
+          "SELECT customer_code FROM hire_customers WHERE id = ? AND is_active = TRUE LIMIT 1",
+          [selectedCustomerId]
+        );
+        if (selectedRows.length) {
+          const selectedMatches = await customerList(selectedRows[0].customer_code);
+          const selectedCustomer = selectedMatches.find(
+            (customer) => Number(customer.id) === selectedCustomerId
+          );
+          if (selectedCustomer) customers.unshift(selectedCustomer);
+        }
+      }
       return res.json({
         status: "success",
         customers,
@@ -813,12 +844,30 @@ router.put(
   }
 );
 
+router.get(
+  "/phase-one/start-installment-readiness",
+  requirePermission("fleet.assets.manage"),
+  async (_req, res) => {
+    try {
+      const readiness = await inspectStartSchema(pool);
+      return res.status(readiness.ready ? 200 : 503).json({
+        status: readiness.ready ? "success" : "error",
+        code: readiness.ready ? undefined : "FINANCE_START_SCHEMA_REQUIRED",
+        readiness,
+      });
+    } catch (error) {
+      return sendError(res, error, "Could not verify the installment database readiness.");
+    }
+  }
+);
+
 router.post(
   "/phase-one/start-installment",
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
       await assertProfessionalSchema();
+      await assertStartSchema(pool);
       const actorId = userId(req);
       const assetId = positiveId(req.body?.asset_id);
       if (!assetId) throw new PhaseOneError(400, "Choose an available excavator.");
@@ -963,6 +1012,7 @@ router.post(
             proposed_frequency: offer.payment_frequency,
             proposed_interval_days: offer.custom_interval_days,
             proposed_non_working_day_rule: offer.non_working_day_rule,
+            proposed_first_due_date: offer.first_due_date,
             proposed_installment_count: offer.installment_count,
             proposed_installment_amount: monthlyAmount,
             proposed_periodic_amount: periodicAmount,
