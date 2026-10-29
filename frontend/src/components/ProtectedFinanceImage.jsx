@@ -3,6 +3,30 @@ import axiosClient from "../api/axiosClient";
 
 const IMAGE_TIMEOUT_MS = 12000;
 
+// Phase-One bootstrap images are signed absolute URLs, not professional
+// register protected-image paths. Rebase only valid signed Finance links to
+// the configured API, so bearer credentials never go to an external host.
+export function signedFinanceImagePath(value, expectedAssetId) {
+  const source = String(value || "").trim();
+  if (!source || !Number.isSafeInteger(expectedAssetId) || expectedAssetId < 1) return "";
+  let url;
+  try {
+    url = new URL(source, "https://chalin03.invalid");
+  } catch {
+    return "";
+  }
+  const match = url.pathname.match(
+    /^\/(?:api\/)?equipment-catalogue\/sales\/phase-one\/machine-image\/([1-9]\d*)\/(legacy|[1-9]\d*)$/
+  );
+  if (!match || Number(match[1]) !== expectedAssetId) return "";
+  const expires = url.searchParams.get("expires") || "";
+  const signature = url.searchParams.get("signature") || "";
+  if (!/^\d{10,12}$/.test(expires) || !/^[0-9a-f]{64}$/i.test(signature)) return "";
+  const photoId = match[2];
+  return "/equipment-catalogue/sales/phase-one/machine-image/" +
+    expectedAssetId + "/" + photoId + "?expires=" + expires + "&signature=" + signature;
+}
+
 export function financeMachineImagePath(machine = {}) {
   if (machine.main_image_path) return machine.main_image_path;
   const media = Array.isArray(machine.media) ? machine.media : [];
@@ -14,6 +38,9 @@ export function financeMachineImagePath(machine = {}) {
 
   const assetId = Number(machine.id);
   if (!Number.isSafeInteger(assetId) || assetId < 1) return "";
+  const signedPrimary = signedFinanceImagePath(machine.main_image_url, assetId);
+  const signedMedia = media.map((item) => signedFinanceImagePath(item.file_url, assetId)).find(Boolean);
+  if (signedPrimary || signedMedia) return signedPrimary || signedMedia;
   const legacyPrimary = media.find((item) => item.is_primary && Number(item.id) > 0);
   const legacyFirst = media.find((item) => Number(item.id) > 0);
   const photoId = Number(legacyPrimary?.id || legacyFirst?.id || 0);
