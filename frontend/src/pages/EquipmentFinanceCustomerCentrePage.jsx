@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
+import { createPortal } from "react-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import { CustomerPortrait, CustomerPortraitPicker } from "../components/CustomerPortrait";
@@ -265,8 +266,8 @@ export default function EquipmentFinanceCustomerCentrePage() {
         </div>
       </section>
 
-      {selectedCustomer ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelectedCustomer(null)}>
+      {selectedCustomer ? createPortal(
+        <div className="finance-simple finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setSelectedCustomer(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label="Finance customer details" onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header">
               <div><p className="finance-simple__eyebrow">Selected customer</p><h2>{selectedCustomer.customer_name}</h2><span className="finance-simple__muted">{selectedCustomer.customer_code} · {selectedCustomer.customer_type || "individual"}</span></div>
@@ -285,11 +286,12 @@ export default function EquipmentFinanceCustomerCentrePage() {
             <div className="finance-simple__section"><h3>Address</h3><p>{selectedCustomer.address || "No address recorded."}</p>{selectedCustomer.risk_notes ? <details><summary>Show internal risk / service note</summary><p>{selectedCustomer.risk_notes}</p></details> : null}</div>
             <div className="finance-simple__sticky-actions"><span>Actions apply only to this selected customer.</span><div>{canManage ? <button type="button" onClick={() => openEdit(selectedCustomer)}>Edit Customer</button> : null}<Link className="finance-simple__button is-primary" to={`/equipment-installment-finance/applications?stage=start&customer=${selectedCustomer.id}`}>Start Installment</Link></div></div>
           </section>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
-      {editing ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>
+      {editing ? createPortal(
+        <div className="finance-simple finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={editing.id ? "Edit Finance customer" : "Add Finance customer"} onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header">
               <div><p className="finance-simple__eyebrow">Customer profile</p><h2>{editing.id ? "Edit Customer" : "Add Customer"}</h2><span className="finance-simple__muted">Search and duplicate protection apply across the whole Equipment Business.</span></div>
@@ -321,7 +323,8 @@ export default function EquipmentFinanceCustomerCentrePage() {
               <div className="finance-simple__sticky-actions"><span>{editing.id ? "Updating existing profile" : "Creating reusable Finance profile"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Customer"}</button></div></div>
             </form>
           </section>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </main>
   );
