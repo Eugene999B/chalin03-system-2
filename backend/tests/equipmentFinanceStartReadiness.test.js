@@ -51,12 +51,14 @@ test("read-only preflight accepts the full Finance application creation contract
 test("preflight pinpoints missing Finance columns and table without a transaction", async () => {
   const schema = fullSchema();
   delete schema.equipment_credit_applications.proposed_non_working_day_rule;
+  delete schema.equipment_credit_applications.proposed_first_due_date;
   delete schema.equipment_credit_application_decisions;
   const connection = connectionFromSchema(schema);
   const readiness = await inspectStartSchema(connection);
   assert.equal(readiness.ready, false);
   assert.ok(readiness.missing_tables.includes("equipment_credit_application_decisions"));
   assert.ok(readiness.missing_columns.includes("equipment_credit_applications.proposed_non_working_day_rule"));
+  assert.ok(readiness.missing_columns.includes("equipment_credit_applications.proposed_first_due_date"));
   await assert.rejects(assertStartSchema(connection), (error) => {
     assert.ok(error instanceof FinanceStartSchemaError);
     assert.equal(error.statusCode, 503);
