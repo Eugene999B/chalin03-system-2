@@ -26,14 +26,19 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Wait for the approved production release
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p smoke-output
+          # A merge commit has two parents. Compare the previous production
+          # commit with the new release; git diff-tree -r alone reports no
+          # paths on merge commits, incorrectly skipping the backend wait.
           backend_release_required=false
-          if git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -qE '^(backend/|database/|railway\.json$)'; then
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -qE '^(backend/|database/|railway\.json$)'; then
             backend_release_required=true
           fi
           echo "backend_release_required=$backend_release_required" | tee smoke-output/release-scope.txt
@@ -79,12 +84,13 @@ jobs:
             --output smoke-output/api-readiness.json \
             https://api.chalin03.com/api/readiness
 
-          jq -e '
+          backend_release_required="$(cut -d= -f2 smoke-output/release-scope.txt)"
+          jq -e --arg backend_release_required "$backend_release_required" '
             .status == "success" and
             .ready == true and
             .version == "3.0.0" and
             .deployment.provider == "railway" and
-            .deployment.commit_sha == env.GITHUB_SHA and
+            ($backend_release_required == "false" or .deployment.commit_sha == env.GITHUB_SHA) and
             .checks.database == "ready" and
             .checks.schema == "ready" and
             .checks.configuration == "ready"
