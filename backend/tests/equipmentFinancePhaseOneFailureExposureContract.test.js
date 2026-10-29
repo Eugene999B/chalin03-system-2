@@ -101,13 +101,13 @@ test("start-installment schema 503 exposes operator-safe diagnosis and releases 
   const start = safeStart.indexOf('if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code))');
   assert.ok(start >= 0);
   const body = safeStart.slice(start, start + 1700);
-  assert.match(body, /connection\\?\\.release\\(\\)/);
+  assert.match(body, /connection\?\.release\(\)/);
   assert.match(body, /connection = null/);
-  assert.match(body, /await applicationReadiness\\(\\)/);
+  assert.match(body, /await applicationReadiness\(\)/);
   assert.ok(body.indexOf("connection = null") < body.indexOf("await applicationReadiness()"));
   assert.match(body, /classifyFinanceDatabaseError/);
-  assert.match(body, /operator_message: failure\\.operator_message/);
-  assert.match(body, /request_id: req\\.requestId/);
+  assert.match(body, /operator_message: failure\.operator_message/);
+  assert.match(body, /request_id: req\.requestId/);
   assert.match(body, /retryable: false/);
   assert.doesNotMatch(body, /sqlText|error\\.sql/);
   assert.match(startWizard, /FINANCE_APPLICATION_SCHEMA_COLUMN_MISSING/);
