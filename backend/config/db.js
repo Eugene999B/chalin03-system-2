@@ -145,6 +145,44 @@ function guardedExecutor(original, receiver) {
   };
 }
 
+// Railway's cost-saving MySQL sleep can reject initial TCP connections while
+// waking. Only standalone, verifiably read-only pool operations are retried.
+// Connection-scoped/transaction operations and all mutations remain untouched.
+const READ_WAKE_DELAYS_MS = [1200, 3200, 6500];
+const TRANSIENT_CONNECT_CODES = new Set([
+  "ECONNREFUSED", "ETIMEDOUT", "ECONNRESET", "EHOSTUNREACH",
+  "EAI_AGAIN", "PROTOCOL_CONNECTION_LOST",
+]);
+
+function isTransientDatabaseConnectError(error) {
+  if (!error) return false;
+  if (TRANSIENT_CONNECT_CODES.has(String(error.code || ""))) return true;
+  return (Array.isArray(error.errors) && error.errors.some(isTransientDatabaseConnectError)) ||
+    (error.cause && isTransientDatabaseConnectError(error.cause)) || false;
+}
+
+function isRetryableStandaloneRead(statement) {
+  const sql = stripSqlComments(queryText(statement));
+  return isSingleStatement(sql) &&
+    /^(SELECT|SHOW|DESCRIBE|EXPLAIN)\b/i.test(sql) &&
+    !/\b(FOR\s+UPDATE|LOCK\s+IN\s+SHARE\s+MODE|INTO\s+(OUTFILE|DUMPFILE))\b/i.test(sql) &&
+    !/\b(GET_LOCK|RELEASE_LOCK|SLEEP|LAST_INSERT_ID)\s*\(/i.test(sql);
+}
+
+function retryStandaloneRead(executor, { delays = READ_WAKE_DELAYS_MS, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  return async function executeWithMySqlWakeRetry(statement, values) {
+    if (!isRetryableStandaloneRead(statement)) return executor(statement, values);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await executor(statement, values);
+      } catch (error) {
+        if (attempt >= delays.length || !isTransientDatabaseConnectError(error)) throw error;
+        await pause(delays[attempt]);
+      }
+    }
+  };
+}
+
 function protectConnection(connection) {
   if (!connection || connection.__chalin03RuntimeDdlGuardInstalled) {
     return connection;
@@ -204,8 +242,8 @@ const originalPoolQuery = pool.query.bind(pool);
 const originalPoolExecute = pool.execute.bind(pool);
 const originalGetConnection = pool.getConnection.bind(pool);
 
-pool.query = guardedExecutor(originalPoolQuery, pool);
-pool.execute = guardedExecutor(originalPoolExecute, pool);
+pool.query = guardedExecutor(retryStandaloneRead(originalPoolQuery), pool);
+pool.execute = guardedExecutor(retryStandaloneRead(originalPoolExecute), pool);
 pool.getConnection = async function getProtectedConnection() {
   return protectConnection(await originalGetConnection());
 };
@@ -252,6 +290,9 @@ module.exports = {
   RUNTIME_DDL_PATTERN,
   getSslConfig,
   isProduction,
+  isRetryableStandaloneRead,
+  isTransientDatabaseConnectError,
+  retryStandaloneRead,
   normalizeEquipmentAssetSaleLockStatement,
   pool,
   protectConnection,
