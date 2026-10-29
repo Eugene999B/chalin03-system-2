@@ -471,7 +471,7 @@ test("administrator completes the minimal installment workflow and sees the back
 
   await expect(page).toHaveURL(/stage=activation/);
   await expect(page.getByText("ECAPP-PHASE3-001")).toBeVisible();
-  await page.getByRole("button", { name: "Create Agreement" }).first().click();
+  await page.getByRole("button", { name: "Review & Create" }).click();
   const activationDialog = page.getByRole("dialog", { name: "Activate Finance agreement" });
   await activationDialog.getByLabel(/Approved terms confirmed/).check();
   await activationDialog.getByRole("button", { name: "Create Agreement" }).click();
