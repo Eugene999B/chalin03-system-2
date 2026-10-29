@@ -3,6 +3,7 @@ const express = require("express");
 const { getFinanceMachineEditability } = require("../services/equipmentFinanceTemporaryMachineEditPolicy");
 
 const { pool } = require("../config/db");
+const { FinanceStartSchemaError, inspectStartSchema, assertStartSchema } = require("../services/equipmentFinanceStartReadinessService");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { nextDocumentNumber } = require("../services/groupConfigurationService");
@@ -125,6 +126,14 @@ function userId(req) {
 }
 
 function sendError(res, error, fallback) {
+  if (error instanceof FinanceStartSchemaError) {
+    return res.status(503).json({
+      status: "error",
+      code: error.code,
+      message: error.message,
+      readiness: error.readiness,
+    });
+  }
   if (error instanceof PhaseOneError || error instanceof FinanceScheduleError) {
     return res.status(Number(error.statusCode || 400)).json({
       status: "error",
@@ -140,10 +149,14 @@ function sendError(res, error, fallback) {
     });
   }
   if (["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"].includes(error?.code)) {
+    const match = String(error.sqlMessage || error.message || "").match(/(?:Unknown column|Table) ['\x60]?([a-zA-Z0-9_.]+)['\x60]?/i);
+    console.error("Finance schema mismatch at installment creation", {
+      error_code: error.code, missing_object: match?.[1] || null,
+    });
     return res.status(503).json({
       status: "error",
-      code: "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED",
-      message: "The company-wide Finance update is still being prepared. Try again after the deployment completes.",
+      code: "FINANCE_START_SCHEMA_REQUIRED",
+      message: "Installment database fields are incomplete. An administrator must verify and apply the approved additive migration before this application can be saved.",
     });
   }
   console.error(fallback, error);
@@ -831,12 +844,30 @@ router.put(
   }
 );
 
+router.get(
+  "/phase-one/start-installment-readiness",
+  requirePermission("fleet.assets.manage"),
+  async (_req, res) => {
+    try {
+      const readiness = await inspectStartSchema(pool);
+      return res.status(readiness.ready ? 200 : 503).json({
+        status: readiness.ready ? "success" : "error",
+        code: readiness.ready ? undefined : "FINANCE_START_SCHEMA_REQUIRED",
+        readiness,
+      });
+    } catch (error) {
+      return sendError(res, error, "Could not verify the installment database readiness.");
+    }
+  }
+);
+
 router.post(
   "/phase-one/start-installment",
   requirePermission("fleet.assets.manage"),
   async (req, res) => {
     try {
       await assertProfessionalSchema();
+      await assertStartSchema(pool);
       const actorId = userId(req);
       const assetId = positiveId(req.body?.asset_id);
       if (!assetId) throw new PhaseOneError(400, "Choose an available excavator.");
