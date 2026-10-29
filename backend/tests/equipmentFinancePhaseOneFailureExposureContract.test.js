@@ -23,6 +23,8 @@ const applications = read(
   "EquipmentFinanceApplicationsPage.jsx"
 );
 const axiosClient = read("frontend", "src", "api", "axiosClient.js");
+const safeStart = read("backend", "routes", "equipmentFinanceImageSafeStartRoutes.js");
+const startWizard = read("frontend", "src", "pages", "EquipmentFinanceStartInstallmentPage.jsx");
 
 test("application query failures are real 503 responses, never fake empty success", () => {
   const failureStart = critical.indexOf(
@@ -93,4 +95,21 @@ test("readiness timeout is no longer converted to ready true", () => {
     /requestPath === FINANCE_READINESS_PATH[\s\S]*Promise\.resolve/
   );
   assert.match(applications, /code: payload\.code \|\| "FINANCE_READINESS_TIMEOUT"/);
+});
+
+test("start-installment schema 503 exposes operator-safe diagnosis and releases the connection first", () => {
+  const start = safeStart.indexOf('if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code))');
+  assert.ok(start >= 0);
+  const body = safeStart.slice(start, start + 1700);
+  assert.match(body, /connection\\?\\.release\\(\\)/);
+  assert.match(body, /connection = null/);
+  assert.match(body, /await applicationReadiness\\(\\)/);
+  assert.ok(body.indexOf("connection = null") < body.indexOf("await applicationReadiness()"));
+  assert.match(body, /classifyFinanceDatabaseError/);
+  assert.match(body, /operator_message: failure\\.operator_message/);
+  assert.match(body, /request_id: req\\.requestId/);
+  assert.match(body, /retryable: false/);
+  assert.doesNotMatch(body, /sqlText|error\\.sql/);
+  assert.match(startWizard, /FINANCE_APPLICATION_SCHEMA_COLUMN_MISSING/);
+  assert.match(startWizard, /Check the Applications register before retrying/);
 });
