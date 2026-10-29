@@ -180,9 +180,7 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
   await page.goto(
     "/equipment-installment-finance/applications?stage=start"
   );
-  await expect(
-    page.getByRole("heading", { name: "Start New Installment" })
-  ).toBeVisible();
+  await expect(page.locator(".c03-start2-brand strong")).toHaveText("Start New Installment");
   await page.getByRole("button", { name: /Ama Protected Picture/ }).click();
 
   const protectedResponsePromise = page.waitForResponse(
@@ -190,9 +188,9 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
       response.url().endsWith(`/api${imagePath}`) &&
       response.request().method() === "GET"
   );
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue to Excavator" }).click();
   await expect(
-    page.getByRole("heading", { name: "Select the exact excavator" })
+    page.getByRole("heading", { name: "Which exact excavator is being financed?" })
   ).toBeVisible();
 
   const protectedResponse = await protectedResponsePromise;
@@ -203,11 +201,13 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
   expect(imageHeaders?.["x-chalin03-division"]).toBe("installment_finance");
   expect(imageHeaders?.["x-chalin03-workspace"]).toBe("equipment_hire");
 
-  const protectedImage = page.locator(
-    'img[alt="Protected Picture Excavator"]'
-  );
+  const protectedPhotoCard = page.locator(".c03-start2-machine-grid article").filter({
+    hasText: "Protected Picture Excavator",
+  });
+  const protectedPhoto = protectedPhotoCard.getByTestId("finance-protected-image");
+  await expect(protectedPhoto).toHaveAttribute("data-image-state", "ready");
+  const protectedImage = protectedPhoto.locator('img[alt="Protected Picture Excavator"]');
   await expect(protectedImage).toBeVisible();
-  await expect(protectedImage).toHaveAttribute("data-image-state", "ready");
   const decoded = await protectedImage.evaluate((image) => ({
     naturalWidth: image.naturalWidth,
     naturalHeight: image.naturalHeight,
@@ -218,8 +218,9 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
   expect(decoded.source.startsWith("blob:")).toBe(true);
 
   const noPhotoCard = page
-    .locator(".finance-simple__card")
+    .locator(".c03-start2-machine-grid article")
     .filter({ hasText: "No Photo Excavator" });
+  await expect(noPhotoCard.getByTestId("finance-protected-image")).toHaveAttribute("data-image-state", "no-photo");
   await expect(noPhotoCard).toContainText("🚜");
   await expect(noPhotoCard.locator("img")).toHaveCount(0);
 });
