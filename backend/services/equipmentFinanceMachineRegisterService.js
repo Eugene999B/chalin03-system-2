@@ -106,7 +106,23 @@ function normalizeMachine(input, { partial = false } = {}) {
   for (const [key, label] of [["acquisition_date", "Acquisition date"],["insurance_expiry", "Insurance expiry"],["registration_expiry", "Registration expiry"]]) {
     if (partial && input[key] === undefined) continue; const value = dateValue(input[key]); if (value === undefined) errors.push(`${label} must use YYYY-MM-DD.`); output[key] = value === undefined ? null : value;
   }
-  if (!partial) { if (!output.serial_number && !output.chassis_number) errors.push("Enter at least a serial number or chassis number."); if (Number(output.target_selling_price || 0) <= 0) errors.push("Target selling price must be greater than zero."); }
+  if (!partial) {
+    if (!output.serial_number && !output.chassis_number) errors.push("Enter at least a serial number or chassis number.");
+    if (Number(output.target_selling_price || 0) <= 0) errors.push("Target selling price must be greater than zero.");
+    if (!output.model_year) errors.push("Model year is required for the excavator registration.");
+    if (!cleanText(input.fuel_type)) errors.push("Select the verified fuel type instead of assuming Diesel.");
+    if (input.current_meter === undefined || input.current_meter === null || String(input.current_meter).trim() === "") {
+      errors.push("Enter the actual current meter reading (0 is valid when verified).");
+    }
+    for (const [field, label] of [
+      ["condition_status", "Machine condition"],
+      ["ownership_type", "Machine ownership"],
+      ["operational_purpose", "Sale purpose"],
+      ["meter_type", "Meter type"],
+    ]) {
+      if (!cleanText(input[field])) errors.push(`Select ${label.toLowerCase()} explicitly before registering the excavator.`);
+    }
+  }
   if (output.minimum_selling_price !== undefined && output.target_selling_price !== undefined && Number(output.minimum_selling_price || 0) > Number(output.target_selling_price || 0)) errors.push("Minimum selling price cannot exceed the target selling price.");
   return { output, errors };
 }
@@ -235,4 +251,4 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
   } catch (error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
 }
 
-module.exports = { createFinanceMachine, machineLocations, updateFinanceMachine };
+module.exports = { createFinanceMachine, machineLocations, updateFinanceMachine, normalizeMachine };
