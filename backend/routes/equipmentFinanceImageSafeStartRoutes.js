@@ -205,7 +205,7 @@ async function financeMachine(connection, assetId) {
                FROM equipment_asset_sale_locks sale_lock
                INNER JOIN equipment_sale_agreements agreement ON agreement.id = sale_lock.agreement_id
               WHERE sale_lock.asset_id = asset.id AND sale_lock.released_at IS NULL
-              ORDER BY sale_lock.locked_at DESC LIMIT 1) AS blocking_agreement_number
+              LIMIT 1) AS blocking_agreement_number
        FROM fleet_assets asset
       WHERE asset.id = ? AND asset.is_active = TRUE
       LIMIT 1 FOR UPDATE`,
