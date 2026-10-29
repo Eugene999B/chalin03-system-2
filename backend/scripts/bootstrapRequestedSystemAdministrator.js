@@ -273,7 +273,7 @@ async function bootstrap() {
     transactionStarted = false;
 
     console.log(
-      `Requested System Administrator bootstrap completed for user ID ${userId} (${username}).`
+      `Requested System Administrator bootstrap completed for user ID ${userId}.`
     );
   } catch (error) {
     if (transactionStarted) {
