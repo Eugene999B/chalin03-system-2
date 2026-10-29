@@ -121,7 +121,7 @@ function safeSheetName(value) {
 }
 
 function safeFilePart(value) {
-  return String(value || "all").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "all";
+  return String(value || "all").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+/, "").replace(/-+$/, "").slice(0, 50) || "all";
 }
 
 function htmlEscape(value) {
