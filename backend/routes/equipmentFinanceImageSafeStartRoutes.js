@@ -20,6 +20,8 @@ const {
 const { safeSettings } = require("./equipmentFinanceRuntimeHotfixRoutes");
 const { acquireConnection, applicationReadiness } = require("./equipmentFinanceCriticalEntryRoutes");
 const { classifyFinanceDatabaseError } = require("../services/equipmentFinancePhaseOneDiagnosticsService");
+const { pool } = require("../config/db");
+const { assertStartSchema, FinanceStartSchemaError } = require("../services/equipmentFinanceStartReadinessService");
 
 const router = express.Router();
 const QUERY_TIMEOUT_MS = 10000;
@@ -380,6 +382,10 @@ router.post(
     let connection;
     let transactionActive = false;
     try {
+      // This is the live route mounted ahead of the legacy Phase-One handler.
+      // Check the full insert contract before obtaining document numbers or
+      // starting a transaction; a missing column must never create half a case.
+      await assertStartSchema(pool);
       const settingsResult = await withDeadline(
         safeSettings(),
         5000,
@@ -627,6 +633,23 @@ router.post(
         } catch {
           // Preserve the original failure.
         }
+      }
+      if (error instanceof FinanceStartSchemaError) {
+        console.error("Finance installment creation preflight failed", {
+          request_id: req.requestId || null,
+          missing_tables: error.readiness?.missing_tables || [],
+          missing_columns: error.readiness?.missing_columns || [],
+          invalid_nullability: error.readiness?.invalid_nullability || [],
+        });
+        return res.status(503).json({
+          status: "error",
+          code: error.code,
+          message: error.message,
+          readiness: error.readiness,
+          request_id: req.requestId || null,
+          retryable: false,
+          repair_required: true,
+        });
       }
       if (error instanceof PhaseOneError || error instanceof FinanceScheduleError) {
         return res.status(Number(error.statusCode || 400)).json({
