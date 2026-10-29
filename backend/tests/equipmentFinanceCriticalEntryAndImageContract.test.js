@@ -44,9 +44,10 @@ test("bootstrap is bounded, partial and contains only signed image references", 
   );
 });
 
-test("excavator register receives actual signed photos instead of only the symbol", () => {
+test("excavator register uses authenticated photos rather than browser-only image URLs", () => {
   assert.match(excavators, /const BOOTSTRAP_API =/);
-  assert.match(excavators, /machine\.main_image_url/);
+  assert.match(excavators, /financeMachineImagePath\(machine\)/);
+  assert.match(excavators, /<ProtectedFinanceImage/);
   assert.match(excavators, /machine\.media/);
   assert.match(critical, /main_image_url:\s*primary\?\.file_url/);
   assert.match(critical, /file_url: signedImageUrl/);
