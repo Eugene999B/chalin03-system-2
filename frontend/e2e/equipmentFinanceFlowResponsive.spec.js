@@ -58,6 +58,10 @@ async function fixture(page, { activation = [candidate], deposits = [reserved(21
       return fulfill(route, { status: "success", machines: [], customers: [] });
     if (path === "/equipment-catalogue/sales/professional/machine-register/locations")
       return fulfill(route, { status: "success", locations: [] });
+    if (path === "/equipment-catalogue/sales/phase-one/bootstrap")
+      return fulfill(route, { status: "success", machines: [], customers: [] });
+    if (path === "/equipment-catalogue/sales/professional/machine-register/locations")
+      return fulfill(route, { status: "success", locations: [] });
     if (path === "/equipment-catalogue/sales/agreement-activations/readiness")
       return fulfill(route, { status: "success", readiness: { ready: true } });
     if (path === "/equipment-catalogue/sales/agreement-activations/candidates")
@@ -184,6 +188,13 @@ for (const width of [375, 1440]) {
     await dialog.getByLabel("Make").fill("Test make");
     await dialog.getByLabel("Model", { exact: true }).fill("Test model");
     await dialog.getByLabel("Target selling price (required)").fill("100000");
+    await dialog.getByLabel("Model year (required)").fill("2024");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Condition \(required\)/ }).locator("select").selectOption("good");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Ownership \(required\)/ }).locator("select").selectOption("company_owned");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Sale purpose \(required\)/ }).locator("select").selectOption("sale_only");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Meter type \(required\)/ }).locator("select").selectOption("hour_meter");
+    await dialog.getByLabel("Current meter (required)").fill("0");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Fuel type \(required\)/ }).locator("select").selectOption("Diesel");
     await dialog.getByRole("button", { name: "Save Excavator" }).click();
     await expect(dialog.getByRole("alert")).toContainText("serial number or chassis number");
     await dialog.getByLabel(/Serial number \(or chassis number required\)/).fill(`SERIAL-TEST-${width}`);
@@ -191,5 +202,38 @@ for (const width of [375, 1440]) {
     await expect(dialog.getByRole("alert")).toContainText("main excavator photo");
     expect(creationRequests).toBe(0);
     await noHorizontalOverflow(page, dialog);
+  });
+}
+
+
+for (const width of [375, 1440]) {
+  test(`Excavator registration requires explicit verified fields at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 860 });
+    await fixture(page);
+    await page.goto("/equipment-installment-finance/applications?stage=machines");
+    await page.getByRole("button", { name: /Register Excavator/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Register excavator" });
+    await expect(dialog).toBeVisible();
+    for (const name of [
+      "Model year (required)",
+      "Condition (required)",
+      "Ownership (required)",
+      "Sale purpose (required)",
+      "Meter type (required)",
+      "Current meter (required)",
+      "Fuel type (required)",
+    ]) {
+      const field = dialog.locator(".finance-simple__field").filter({ has: dialog.getByText(name, { exact: true }) });
+      const control = field.locator("input, select");
+      await expect(control).toHaveCount(1);
+      await expect(control).toHaveAttribute("required");
+    }
+    const getField = (name) => dialog.locator(".finance-simple__field").filter({ has: dialog.getByText(name, { exact: true }) }).locator("input, select");
+    await expect(getField("Condition (required)")).toHaveValue("");
+    await expect(getField("Fuel type (required)")).toHaveValue("");
+    await expect(getField("Current meter (required)")).toHaveValue("");
+    const overflow = await dialog.evaluate(node => node.scrollWidth - node.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(2);
+    await page.screenshot({ path: testInfo.outputPath(`excavator-required-${width}.png`) });
   });
 }

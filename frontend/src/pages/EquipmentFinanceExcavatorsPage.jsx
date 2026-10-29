@@ -22,12 +22,12 @@ const EMPTY_MACHINE = {
   registration_number: "",
   colour: "",
   capacity_description: "",
-  condition_status: "good",
-  ownership_type: "company_owned",
-  operational_purpose: "sale_only",
-  meter_type: "hour_meter",
-  current_meter: "0",
-  fuel_type: "Diesel",
+  condition_status: "",
+  ownership_type: "",
+  operational_purpose: "",
+  meter_type: "",
+  current_meter: "",
+  fuel_type: "",
   acquisition_date: "",
   acquisition_cost: "0",
   target_selling_price: "",
@@ -99,9 +99,19 @@ function validateNewExcavator(machine, photos) {
   if (!Number.isFinite(minimum) || minimum < 0 || minimum > price) {
     return "Minimum approved price must be between GHS 0 and the target selling price.";
   }
-  if (machine.model_year && (!Number.isInteger(Number(machine.model_year)) ||
-    Number(machine.model_year) < 1950 || Number(machine.model_year) > new Date().getUTCFullYear() + 1)) {
-    return "Enter a valid model year.";
+  if (!machine.model_year || !Number.isInteger(Number(machine.model_year)) ||
+    Number(machine.model_year) < 1950 || Number(machine.model_year) > new Date().getUTCFullYear() + 1) {
+    return "Enter the verified model year between 1950 and next year.";
+  }
+  if (machine.current_meter === "" || !Number.isFinite(Number(machine.current_meter)) || Number(machine.current_meter) < 0) {
+    return "Enter the actual current meter reading, using 0 only when verified.";
+  }
+  for (const [key, label] of [
+    ["fuel_type", "fuel type"], ["condition_status", "condition"],
+    ["ownership_type", "ownership"], ["operational_purpose", "sale purpose"],
+    ["meter_type", "meter type"],
+  ]) {
+    if (!String(machine[key] || "").trim()) return `Select the ${label} before saving.`;
   }
   if (!photos.some((photo) => photo.is_primary && photo.data_url)) {
     return "Add one full main excavator photo before saving.";
@@ -426,10 +436,10 @@ export default function EquipmentFinanceExcavatorsPage() {
             {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
             {!editing.id ? (
               <div className="finance-simple__notice" role="note">
-                <strong>Required to register:</strong> equipment code, name, make, model, at least
-                one serial/chassis identifier, positive selling price and one main photo.
-                Details without verified evidence, such as a registration number or insurance expiry,
-                can remain blank until available.
+                <strong>Required to register:</strong> equipment code, name, make, model, model year,
+                serial or chassis number, verified meter reading, fuel type, condition, ownership,
+                sale purpose, meter type, a positive selling price and one main photo.
+                Registration and insurance references can remain blank if not available; do not invent documents.
               </div>
             ) : null}
             <form onSubmit={save}>
@@ -444,17 +454,19 @@ export default function EquipmentFinanceExcavatorsPage() {
                 <Field title="Machine name"><input value={form.asset_name} onChange={(event) => setValue("asset_name", event.target.value)} required /></Field>
                 <Field title="Make"><input value={form.make} onChange={(event) => setValue("make", event.target.value)} required /></Field>
                 <Field title="Model"><input value={form.model} onChange={(event) => setValue("model", event.target.value)} required /></Field>
-                <Field title="Model year"><input type="number" min="1950" value={form.model_year} onChange={(event) => setValue("model_year", event.target.value)} /></Field>
+                <Field title="Model year (required)"><input type="number" min="1950" max={new Date().getUTCFullYear() + 1} value={form.model_year} onChange={(event) => setValue("model_year", event.target.value)} required={!editing.id} /></Field>
                 <Field title="Colour"><input value={form.colour} onChange={(event) => setValue("colour", event.target.value)} /></Field>
                 <Field title="Serial number (or chassis number required)"><input value={form.serial_number} onChange={(event) => setValue("serial_number", event.target.value)} /></Field>
                 <Field title="Chassis number (or serial number required)"><input value={form.chassis_number} onChange={(event) => setValue("chassis_number", event.target.value)} /></Field>
                 <Field title="Engine number"><input value={form.engine_number} onChange={(event) => setValue("engine_number", event.target.value)} /></Field>
                 <Field title="Registration / number plate"><input value={form.registration_number} onChange={(event) => setValue("registration_number", event.target.value)} /></Field>
                 <Field title="Capacity / specification"><input value={form.capacity_description} onChange={(event) => setValue("capacity_description", event.target.value)} /></Field>
-                <Field title="Condition"><select value={form.condition_status} onChange={(event) => setValue("condition_status", event.target.value)}><option value="excellent">Excellent</option><option value="good">Good</option><option value="fair">Fair</option><option value="under_inspection">Under inspection</option><option value="damaged">Damaged</option></select></Field>
-                <Field title="Sale purpose"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.operational_purpose} onChange={(event) => setValue("operational_purpose", event.target.value)}><option value="sale_only">Sale only</option><option value="sale_or_hire">Sale or Hire</option></select></Field>
-                <Field title="Ownership"><select value={form.ownership_type} onChange={(event) => setValue("ownership_type", event.target.value)}><option value="company_owned">Company owned</option><option value="consignment">Consignment</option><option value="leased">Leased</option><option value="customer_owned">Customer owned</option></select></Field>
-                <Field title="Current meter"><input disabled={Boolean(editing?.editability?.temporary_correction)} type="number" min="0" step="0.01" value={form.current_meter} onChange={(event) => setValue("current_meter", event.target.value)} /></Field>
+                <Field title="Condition (required)"><select value={form.condition_status} onChange={(event) => setValue("condition_status", event.target.value)} required={!editing.id}><option value="">Choose verified condition</option><option value="excellent">Excellent</option><option value="good">Good</option><option value="fair">Fair</option><option value="under_inspection">Under inspection</option><option value="damaged">Damaged</option></select></Field>
+                <Field title="Sale purpose (required)"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.operational_purpose} onChange={(event) => setValue("operational_purpose", event.target.value)} required={!editing.id}><option value="">Choose purpose</option><option value="sale_only">Sale only</option><option value="sale_or_hire">Sale or Hire</option></select></Field>
+                <Field title="Ownership (required)"><select value={form.ownership_type} onChange={(event) => setValue("ownership_type", event.target.value)} required={!editing.id}><option value="">Choose ownership</option><option value="company_owned">Company owned</option><option value="consignment">Consignment</option><option value="leased">Leased</option><option value="customer_owned">Customer owned</option></select></Field>
+                <Field title="Meter type (required)"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.meter_type} required={!editing.id} onChange={(event) => setValue("meter_type", event.target.value)}><option value="">Choose meter type</option><option value="hour_meter">Hour meter</option><option value="odometer">Odometer</option></select></Field>
+                <Field title="Current meter (required)" hint="Enter the observed reading. Use 0 only if verified."><input disabled={Boolean(editing?.editability?.temporary_correction)} type="number" min="0" step="0.01" value={form.current_meter} onChange={(event) => setValue("current_meter", event.target.value)} required={!editing.id} /></Field>
+                <Field title="Fuel type (required)"><select value={form.fuel_type} onChange={(event) => setValue("fuel_type", event.target.value)} required={!editing.id}><option value="">Choose verified fuel type</option><option value="Diesel">Diesel</option><option value="Petrol">Petrol</option><option value="Electric">Electric</option><option value="Hybrid">Hybrid</option><option value="Other">Other</option></select></Field>
                 <Field title="Physical yard / storage"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.equipment_origin_location_id} onChange={(event) => setValue("equipment_origin_location_id", event.target.value)}><option value="">Company-wide / not assigned</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
                 <Field title="Target selling price (required)" hint={money(form.target_selling_price)}><input inputMode="decimal" value={form.target_selling_price} onChange={(event) => setValue("target_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} required /></Field>
                 <Field title="Minimum approved price" hint={money(form.minimum_selling_price)}><input inputMode="decimal" value={form.minimum_selling_price} onChange={(event) => setValue("minimum_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
