@@ -86,3 +86,25 @@ test("route checks Finance schema before generating numbers or creating a quotat
   assert.ok(start > 0 && guard > start && number > guard);
   assert.match(source, /"\/phase-one\/start-installment-readiness"/);
 });
+
+test("the image-safe Finance handler mounted first also checks schema before document numbers", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const source = fs.readFileSync(
+    path.join(__dirname, "../routes/equipmentFinanceImageSafeStartRoutes.js"),
+    "utf8"
+  );
+  const start = source.indexOf('"/phase-one/start-installment",');
+  const preflight = source.indexOf("await assertStartSchema(pool);", start);
+  const documentNumbers = source.indexOf('documentNumber("EQUIPMENT_CREDIT_APPLICATION"', start);
+  assert.ok(start > 0 && preflight > start && documentNumbers > preflight);
+  assert.match(source, /error instanceof FinanceStartSchemaError/);
+  const mainRouter = fs.readFileSync(
+    path.join(__dirname, "../routes/equipmentFinanceIndependentRoutes.js"),
+    "utf8"
+  );
+  assert.ok(
+    mainRouter.indexOf("router.use(equipmentFinanceImageSafeStartRoutes);") <
+    mainRouter.indexOf("router.use(equipmentFinancePhaseOneRoutes);")
+  );
+});
