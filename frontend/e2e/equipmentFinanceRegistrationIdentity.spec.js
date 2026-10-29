@@ -87,3 +87,74 @@ for (const width of [375,1440]) {
     await fitsViewport(page);
   });
 }
+
+for (const width of [375, 1440]) {
+  for (const choice of ["reuse", "separate"]) {
+    test(`new buyer duplicate is reviewed, not silently copied (${choice}, ${width}px)`, async ({page}) => {
+      await page.setViewportSize({width,height:900});
+      await fixture(page);
+      const submissions = [];
+      await page.route("http://api.test/api/equipment-catalogue/sales/phase-one/schedule-preview", route => {
+        const due = route.request().postDataJSON()?.offer?.first_due_date || "2026-12-01";
+        return json(route, {status:"success",schedule:{
+          first_due_date:due,final_due_date:due,installment_count:12,periodic_amount:7500,
+          schedule:[{sequence_number:1,due_date:due,scheduled_amount:7500}],
+        }});
+      });
+      await page.route("http://api.test/api/equipment-catalogue/sales/phase-one/start-installment", route => {
+        const payload = route.request().postDataJSON();
+        submissions.push(payload);
+        if (!payload.confirm_duplicate_customer && !payload.customer_id) {
+          return json(route, {status:"error",code:"POSSIBLE_DUPLICATE_FINANCE_CUSTOMER",
+            message:"A customer with this phone number or name already exists.",
+            duplicates:[{...customers[0],is_active:1}]},409);
+        }
+        return json(route,{status:"success",application:{application_number:"ECAPP-QA-DUPLICATE"},
+          next_path:"/equipment-installment-finance/applications"},201);
+      });
+      await page.goto("/equipment-installment-finance/applications?stage=start");
+      await page.getByRole("button",{name:"Create new customer"}).click();
+      await page.getByLabel("Legal / registered name").fill("QA Distinct Buyer");
+      await page.getByLabel("Primary phone").fill("0241111111");
+      await page.getByRole("button",{name:"Continue to Excavator"}).click();
+      await page.locator(".c03-start2-machine-grid article").first()
+        .getByRole("button",{name:"Select excavator"}).click();
+      await page.getByRole("button",{name:"Continue to Terms"}).click();
+      await page.getByLabel("Opening deposit").fill("10000");
+      await expect(page.locator(".c03-start2-schedule-rows")).toBeVisible();
+      await page.getByRole("button",{name:"Continue to Assessment"}).click();
+      await page.getByLabel("ID number").fill("QA-OTHER-PERSON-ID");
+      await page.getByRole("button",{name:"Continue to Review"}).click();
+      await page.getByRole("button",{name:"Create installment application"}).click();
+      const review = page.getByRole("region",{name:"Possible existing customer matches"});
+      await expect(review).toBeVisible();
+      await expect(review.getByRole("checkbox")).not.toBeChecked();
+      expect(submissions).toHaveLength(1);
+      expect(submissions[0].confirm_duplicate_customer).toBeFalsy();
+      if (choice === "reuse") {
+        await review.getByRole("button",{name:/QA Buyer A/}).click();
+        await expect(page.locator(".c03-start2-customer-grid button.is-selected"))
+          .toContainText("QA Buyer A");
+      } else {
+        await review.getByRole("checkbox").check();
+      }
+      await page.getByRole("button",{name:"Continue to Excavator"}).click();
+      await page.getByRole("button",{name:"Continue to Terms"}).click();
+      await expect(page.locator(".c03-start2-schedule-rows")).toBeVisible();
+      await page.getByRole("button",{name:"Continue to Assessment"}).click();
+      if (choice === "reuse") await expect(page.getByLabel("ID number")).toHaveValue("");
+      await page.getByRole("button",{name:"Continue to Review"}).click();
+      await page.getByRole("button",{name:"Create installment application"}).click();
+      await expect.poll(() => submissions.length).toBe(2);
+      if (choice === "reuse") {
+        expect(String(submissions[1].customer_id)).toBe("301");
+        expect(submissions[1].confirm_duplicate_customer).toBeFalsy();
+        expect(submissions[1].kyc.id_number).toBe("");
+      } else {
+        expect(submissions[1].customer_id).toBe(null);
+        expect(submissions[1].confirm_duplicate_customer).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(2);
+    });
+  }
+}
