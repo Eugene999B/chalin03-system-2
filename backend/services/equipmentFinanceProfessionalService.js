@@ -7,6 +7,7 @@ const {
   refreshFinanceAgreementFromEvidence,
 } = require("./equipmentFinanceReconciliationService");
 const { nextDocumentNumber } = require("./groupConfigurationService");
+const { documentScheduleStatus } = require("./equipmentFinanceDocumentScheduleStatus");
 const { sendSmsAlertToPhone } = require("./smsAlertService");
 const { DEFAULTS: NOTIFICATION_DEFAULTS, getNotificationPolicy, isNotificationEnabled, updateNotificationPolicy } = require("./equipmentFinanceNotificationPolicyService");
 
@@ -812,6 +813,7 @@ async function loadAgreementSnapshot(agreementId, connection = pool) {
     agreement,
     schedule: schedule.map((row) => ({
       ...row,
+      schedule_status: documentScheduleStatus(row),
       scheduled_amount: Number(row.scheduled_amount || 0),
       amount_paid: Number(row.amount_paid || 0),
       late_charge_amount: Number(row.late_charge_amount || 0),
