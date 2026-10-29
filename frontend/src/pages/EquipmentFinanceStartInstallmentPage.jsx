@@ -16,9 +16,17 @@ const STEPS = [
   ["review", "Review", "Confirm & create"],
 ];
 
+function ghanaToday() {
+  const date = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type) => date.find((part) => part.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 function todayPlus(days) {
-  const value = new Date();
-  value.setDate(value.getDate() + days);
+  const value = new Date(`${ghanaToday()}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
   return value.toISOString().slice(0, 10);
 }
 
@@ -183,16 +191,35 @@ export default function EquipmentFinanceStartInstallmentPage() {
   ].filter(Boolean), [data, financedAmount, selectedCustomer]);
 
   useEffect(() => {
+    let active = true;
     const offer = data.offer;
-    const valid = numberValue(offer.selling_price) > 0 && numberValue(offer.deposit) <= numberValue(offer.selling_price) && Number(offer.installment_count) > 0 && Boolean(offer.first_due_date) && (offer.payment_frequency !== "custom" || Number(offer.custom_interval_days) > 0);
-    if (!valid) { setSchedulePreview(null); setScheduleProblem(""); return undefined; }
+    const price = numberValue(offer.selling_price);
+    const deposit = numberValue(offer.deposit);
+    const count = Number(offer.installment_count);
+    const days = Number(offer.custom_interval_days);
+    const valid = price > 0 && offer.deposit !== "" && deposit >= 0 && deposit < price &&
+      Number.isInteger(count) && count >= 1 && count <= 520 &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(offer.first_due_date || "")) &&
+      offer.first_due_date >= ghanaToday() &&
+      (offer.payment_frequency !== "custom" || (Number.isInteger(days) && days >= 1 && days <= 365));
+    // A preview for the previous terms must never certify newly edited values.
+    setSchedulePreview(null);
+    setScheduleLoading(valid);
+    setScheduleProblem(!valid && offer.first_due_date && offer.first_due_date < ghanaToday()
+      ? "First payment due date is in the past. Select today or a future date."
+      : "");
+    if (!valid) return undefined;
     const timer = window.setTimeout(async () => {
-      setScheduleLoading(true); setScheduleProblem("");
-      try { const response = await axiosClient.post(`${API}/schedule-preview`, { offer }); setSchedulePreview(response.data?.schedule || null); }
-      catch (error) { setSchedulePreview(null); setScheduleProblem(errorMessage(error, "Could not calculate the exact payment dates.")); }
-      finally { setScheduleLoading(false); }
+      try {
+        const response = await axiosClient.post(`${API}/schedule-preview`, { offer });
+        if (active) setSchedulePreview(response.data?.schedule || null);
+      } catch (error) {
+        if (active) { setSchedulePreview(null); setScheduleProblem(errorMessage(error, "Could not calculate the exact payment dates.")); }
+      } finally {
+        if (active) setScheduleLoading(false);
+      }
     }, 300);
-    return () => window.clearTimeout(timer);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [data.offer]);
 
   useEffect(() => {
@@ -212,14 +239,20 @@ export default function EquipmentFinanceStartInstallmentPage() {
       if (data.customerMode === "existing" && !data.customer_id) return "Select an existing customer or switch to Create new customer.";
       if (data.customerMode === "new" && (!data.customer.customer_name.trim() || !data.customer.phone.trim())) return "Enter the new customer name and primary phone.";
     }
-    if (index === 1 && !data.asset_id) return "Select the exact excavator.";
+    if (index === 1 && !selectedMachine) return "Select an available, verified excavator. Refresh the register if your selection is no longer available.";
     if (index === 2) {
-      if (numberValue(data.offer.selling_price) <= 0) return "Enter the selling price.";
-      if (numberValue(data.offer.deposit) > numberValue(data.offer.selling_price)) return "The deposit cannot exceed the selling price.";
-      if (Number(data.offer.installment_count) < 1) return "Enter at least one installment payment.";
-      if (!data.offer.first_due_date) return "Choose the first payment due date.";
-      if (data.offer.payment_frequency === "custom" && Number(data.offer.custom_interval_days) < 1) return "Enter the number of days between payments.";
-      if (!schedulePreview) return scheduleProblem || "Wait for the exact schedule preview.";
+      const price = numberValue(data.offer.selling_price);
+      const deposit = numberValue(data.offer.deposit);
+      const payments = Number(data.offer.installment_count);
+      const days = Number(data.offer.custom_interval_days);
+      if (price <= 0) return "Enter a positive selling price.";
+      if (data.offer.deposit === "" || deposit < 0) return "Enter a valid opening deposit, using 0 only when an approved zero-deposit offer applies.";
+      if (deposit >= price) return "The deposit must be less than the selling price for an installment sale.";
+      if (!Number.isInteger(payments) || payments < 1 || payments > 520) return "Enter between 1 and 520 installment payments.";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.offer.first_due_date || ""))) return "Choose a valid first payment due date.";
+      if (data.offer.first_due_date < ghanaToday()) return "First payment due date cannot be in the past. Select today or a future date.";
+      if (data.offer.payment_frequency === "custom" && (!Number.isInteger(days) || days < 1 || days > 365)) return "Set a custom payment interval of 1 to 365 days.";
+      if (scheduleLoading || !schedulePreview) return scheduleProblem || "Wait for the exact schedule preview for these terms.";
     }
     return "";
   }
@@ -276,7 +309,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
 
       {!loading && step === 1 ? <Card eyebrow="Step 2 · Excavator" title="Which exact excavator is being financed?" description="Only sale-ready machines without an active installment application are offered for selection."><Field label="Search available excavators" hint={`${filteredMachines.length} machine${filteredMachines.length === 1 ? "" : "s"} available`} wide><input value={machineSearch} onChange={(event) => setMachineSearch(event.target.value)} placeholder="Asset code, make, model, serial or chassis number" autoComplete="off" /></Field><div className="c03-start2-machine-grid">{filteredMachines.map((machine) => <article key={machine.id} className={String(data.asset_id) === String(machine.id) ? "is-selected" : ""}><div className="c03-start2-machine-image">{machine.main_image_url ? <img src={machine.main_image_url} alt={machine.asset_name} /> : <span>🚜</span>}</div><div className="c03-start2-machine-body"><small>{machine.asset_code}</small><h3>{machine.asset_name}</h3><p>{[machine.make, machine.model, machine.model_year].filter(Boolean).join(" · ") || "Equipment details not recorded"}</p><div><span>Target price<strong>{money(machine.target_selling_price)}</strong></span><span>Serial<strong>{machine.serial_number || "Not recorded"}</strong></span></div><button type="button" onClick={() => chooseMachine(machine)}>{String(data.asset_id) === String(machine.id) ? "✓ Selected" : "Select excavator"}</button></div></article>)}</div>{!filteredMachines.length ? <div className="c03-start2-empty">No sale-ready excavators match this search.</div> : null}</Card> : null}
 
-      {!loading && step === 2 ? <Card eyebrow="Step 3 · Payment terms" title="Build the commercial terms" description="These values drive the authoritative schedule calculation for the application."><div className="c03-start2-terms"><div className="c03-start2-grid c03-start2-grid--2"><Field label="Selling price"><input inputMode="decimal" value={data.offer.selling_price} onChange={(event) => update("offer", "selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.offer.selling_price)}</strong></Field><Field label="Opening deposit"><input inputMode="decimal" value={data.offer.deposit} onChange={(event) => update("offer", "deposit", event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.offer.deposit)}</strong></Field><Field label="Payment frequency"><select value={data.offer.payment_frequency} onChange={(event) => update("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly · 7 days</option><option value="fortnightly">Fortnightly · 14 days</option><option value="monthly">Monthly</option><option value="custom">Custom interval</option></select></Field>{data.offer.payment_frequency === "custom" ? <Field label="Days between payments"><input type="number" min="1" max="365" value={data.offer.custom_interval_days} onChange={(event) => update("offer", "custom_interval_days", event.target.value)} /></Field> : null}<Field label="Number of payments"><input type="number" min="1" max="520" value={data.offer.installment_count} onChange={(event) => update("offer", "installment_count", event.target.value)} /></Field><Field label="First payment due date"><input type="date" value={data.offer.first_due_date} onChange={(event) => update("offer", "first_due_date", event.target.value)} /></Field><Field label="Weekend handling"><select value={data.offer.non_working_day_rule} onChange={(event) => update("offer", "non_working_day_rule", event.target.value)}><option value="exact">Keep exact date</option><option value="next_weekday">Move to next weekday</option><option value="previous_weekday">Move to previous weekday</option></select></Field><Field label="Internal note" wide><textarea rows="3" value={data.offer.notes} onChange={(event) => update("offer", "notes", event.target.value)} /></Field></div><aside className="c03-start2-deal"><span>Deal summary</span><strong>{money(data.offer.selling_price)}</strong><small>Selling price</small><div><b>{money(data.offer.deposit)}</b><span>Opening deposit</span></div><div><b>{money(financedAmount)}</b><span>Financed amount</span></div><div><b>{selectedMachine?.asset_code || "Not selected"}</b><span>Excavator</span></div></aside></div><SchedulePreview preview={schedulePreview} loading={scheduleLoading} problem={scheduleProblem} /></Card> : null}
+      {!loading && step === 2 ? <Card eyebrow="Step 3 · Payment terms" title="Build the commercial terms" description="These values drive the authoritative schedule calculation for the application."><div className="c03-start2-terms"><div className="c03-start2-grid c03-start2-grid--2"><Field label="Selling price"><input inputMode="decimal" value={data.offer.selling_price} onChange={(event) => update("offer", "selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.offer.selling_price)}</strong></Field><Field label="Opening deposit"><input inputMode="decimal" value={data.offer.deposit} onChange={(event) => update("offer", "deposit", event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.offer.deposit)}</strong></Field><Field label="Payment frequency"><select value={data.offer.payment_frequency} onChange={(event) => update("offer", "payment_frequency", event.target.value)}><option value="weekly">Weekly · 7 days</option><option value="fortnightly">Fortnightly · 14 days</option><option value="monthly">Monthly</option><option value="custom">Custom interval</option></select></Field>{data.offer.payment_frequency === "custom" ? <Field label="Days between payments"><input type="number" min="1" max="365" value={data.offer.custom_interval_days} onChange={(event) => update("offer", "custom_interval_days", event.target.value)} /></Field> : null}<Field label="Number of payments"><input type="number" min="1" max="520" value={data.offer.installment_count} onChange={(event) => update("offer", "installment_count", event.target.value)} /></Field><Field label="First payment due date"><input type="date" min={ghanaToday()} value={data.offer.first_due_date} onChange={(event) => update("offer", "first_due_date", event.target.value)} /></Field><Field label="Weekend handling"><select value={data.offer.non_working_day_rule} onChange={(event) => update("offer", "non_working_day_rule", event.target.value)}><option value="exact">Keep exact date</option><option value="next_weekday">Move to next weekday</option><option value="previous_weekday">Move to previous weekday</option></select></Field><Field label="Internal note" wide><textarea rows="3" value={data.offer.notes} onChange={(event) => update("offer", "notes", event.target.value)} /></Field></div><aside className="c03-start2-deal"><span>Deal summary</span><strong>{money(data.offer.selling_price)}</strong><small>Selling price</small><div><b>{money(data.offer.deposit)}</b><span>Opening deposit</span></div><div><b>{money(financedAmount)}</b><span>Financed amount</span></div><div><b>{selectedMachine?.asset_code || "Not selected"}</b><span>Excavator</span></div></aside></div><SchedulePreview preview={schedulePreview} loading={scheduleLoading} problem={scheduleProblem} /></Card> : null}
 
       {!loading && step === 3 ? <Card eyebrow="Step 4 · Optional assessment" title="Complete useful customer assessment details" description="These fields can be filled now or completed later on the application before submission and approval."><div className="c03-start2-optional"><strong>{optionalMissing.length} optional items still open</strong><span>{optionalMissing.length ? optionalMissing.join(" · ") : "The assessment is well populated."}</span></div><h3>Identity, residence and work</h3><div className="c03-start2-grid c03-start2-grid--2"><Field label="ID type"><select value={data.kyc.id_type} onChange={(event) => update("kyc", "id_type", event.target.value)}><option>Ghana Card</option><option>Non-Citizen Ghana Card</option><option>Passport</option><option>Driver Licence</option><option>Other</option></select></Field><Field label="ID number"><input value={data.kyc.id_number} onChange={(event) => update("kyc", "id_number", event.target.value)} /></Field><Field label="Date of birth"><input type="date" value={data.kyc.date_of_birth} onChange={(event) => update("kyc", "date_of_birth", event.target.value)} /></Field><Field label="Nationality"><input value={data.kyc.nationality} onChange={(event) => update("kyc", "nationality", event.target.value)} /></Field><Field label="Employment / business type"><select value={data.kyc.employment_type} onChange={(event) => update("kyc", "employment_type", event.target.value)}><option value="">Not recorded yet</option><option value="salaried">Salaried</option><option value="self_employed">Self-employed</option><option value="contractor">Contractor</option><option value="pensioner">Pensioner</option><option value="farmer">Farmer</option><option value="other">Other</option></select></Field><Field label="Occupation / main activity"><input value={data.kyc.occupation} onChange={(event) => update("kyc", "occupation", event.target.value)} /></Field><Field label="Employer / business name"><input value={data.kyc.employer_business_name} onChange={(event) => update("kyc", "employer_business_name", event.target.value)} /></Field><Field label="Business registration number"><input value={data.kyc.business_registration_number} onChange={(event) => update("kyc", "business_registration_number", event.target.value)} /></Field><Field label="Residential address" wide><textarea rows="3" value={data.kyc.residential_address} onChange={(event) => update("kyc", "residential_address", event.target.value)} /></Field><Field label="Work / business address" wide><textarea rows="3" value={data.kyc.work_address} onChange={(event) => update("kyc", "work_address", event.target.value)} /></Field></div><h3>Affordability</h3><div className="c03-start2-grid c03-start2-grid--3">{[["Monthly salary income","monthly_salary_income"],["Monthly business income","monthly_business_income"],["Other monthly income","monthly_other_income"],["Business operating costs","monthly_business_costs"],["Household expenses","monthly_household_expenses"],["Existing monthly debt","existing_monthly_debt"]].map(([label, field]) => <Field key={field} label={label}><input inputMode="decimal" value={data.affordability[field]} onChange={(event) => update("affordability", field, event.target.value.replace(/[^0-9.,]/g, ""))} /><strong className="c03-start2-money">{money(data.affordability[field])}</strong></Field>)}<Field label="Assessment notes" wide><textarea rows="3" value={data.affordability.assessment_notes} onChange={(event) => update("affordability", "assessment_notes", event.target.value)} /></Field></div><h3>Emergency contact & guarantor</h3><div className="c03-start2-grid c03-start2-grid--2"><Field label="Emergency contact name"><input value={data.kyc.emergency_contact_name} onChange={(event) => update("kyc", "emergency_contact_name", event.target.value)} /></Field><Field label="Emergency contact phone"><input inputMode="tel" value={data.kyc.emergency_contact_phone} onChange={(event) => update("kyc", "emergency_contact_phone", event.target.value)} /></Field><Field label="Relationship"><input value={data.kyc.emergency_contact_relationship} onChange={(event) => update("kyc", "emergency_contact_relationship", event.target.value)} /></Field><Field label="Guarantor name"><input value={data.kyc.guarantor_name} onChange={(event) => update("kyc", "guarantor_name", event.target.value)} /></Field><Field label="Guarantor phone"><input inputMode="tel" value={data.kyc.guarantor_phone} onChange={(event) => update("kyc", "guarantor_phone", event.target.value)} /></Field><Field label="Guarantor ID number"><input value={data.kyc.guarantor_id_number} onChange={(event) => update("kyc", "guarantor_id_number", event.target.value)} /></Field><Field label="Guarantor address" wide><textarea rows="2" value={data.kyc.guarantor_address} onChange={(event) => update("kyc", "guarantor_address", event.target.value)} /></Field></div><div className="c03-start2-checks"><label><input type="checkbox" checked={data.kyc.customer_consent_confirmed} onChange={(event) => update("kyc", "customer_consent_confirmed", event.target.checked)} /><span><strong>Customer information consent confirmed</strong><small>Permission to collect and use information for the installment application.</small></span></label><label><input type="checkbox" checked={data.kyc.credit_assessment_consent_confirmed} onChange={(event) => update("kyc", "credit_assessment_consent_confirmed", event.target.checked)} /><span><strong>Credit assessment consent confirmed</strong><small>Permission to assess the proposed installment.</small></span></label></div></Card> : null}
 

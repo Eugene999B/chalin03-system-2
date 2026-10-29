@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -80,6 +81,32 @@ function errorMessage(error, fallback) {
 
 function dateInput(value) {
   return value ? String(value).slice(0, 10) : "";
+}
+
+function validateNewExcavator(machine, photos) {
+  for (const [field, label] of [
+    ["asset_code", "Equipment code"], ["asset_name", "Machine name"],
+    ["make", "Make"], ["model", "Model"],
+  ]) {
+    if (!String(machine[field] || "").trim()) return `Enter the ${label.toLowerCase()} before saving.`;
+  }
+  if (!String(machine.serial_number || "").trim() && !String(machine.chassis_number || "").trim()) {
+    return "Enter at least one unique identifier: serial number or chassis number.";
+  }
+  const price = Number(String(machine.target_selling_price || "").replaceAll(",", ""));
+  const minimum = Number(String(machine.minimum_selling_price || "0").replaceAll(",", ""));
+  if (!Number.isFinite(price) || price <= 0) return "Enter a valid target selling price above GHS 0.";
+  if (!Number.isFinite(minimum) || minimum < 0 || minimum > price) {
+    return "Minimum approved price must be between GHS 0 and the target selling price.";
+  }
+  if (machine.model_year && (!Number.isInteger(Number(machine.model_year)) ||
+    Number(machine.model_year) < 1950 || Number(machine.model_year) > new Date().getUTCFullYear() + 1)) {
+    return "Enter a valid model year.";
+  }
+  if (!photos.some((photo) => photo.is_primary && photo.data_url)) {
+    return "Add one full main excavator photo before saving.";
+  }
+  return "";
 }
 
 function Field({ title, children, wide = false, hint = "" }) {
@@ -284,9 +311,12 @@ export default function EquipmentFinanceExcavatorsPage() {
 
   async function save(event) {
     event.preventDefault();
-    if (!editing?.id && !photos.some((photo) => photo.is_primary)) {
-      setProblem("Add one full main excavator photo before saving.");
-      return;
+    if (!editing?.id) {
+      const error = validateNewExcavator(form, photos);
+      if (error) {
+        setProblem(error);
+        return;
+      }
     }
     setSaving(true);
     setProblem("");
@@ -386,13 +416,22 @@ export default function EquipmentFinanceExcavatorsPage() {
         </div>
       </section>
 
-      {editing ? (
+      {editing ? createPortal(
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={editing.id ? "Edit excavator" : "Register excavator"} onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header">
               <div><p className="finance-simple__eyebrow">Protected machine file</p><h2>{editing.id ? "Edit Excavator" : "Register Excavator"}</h2><span className="finance-simple__muted">All values remain visible on phones. Full photos are contained, not cropped.</span></div>
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
+            {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
+            {!editing.id ? (
+              <div className="finance-simple__notice" role="note">
+                <strong>Required to register:</strong> equipment code, name, make, model, at least
+                one serial/chassis identifier, positive selling price and one main photo.
+                Details without verified evidence, such as a registration number or insurance expiry,
+                can remain blank until available.
+              </div>
+            ) : null}
             <form onSubmit={save}>
               {editing?.editability?.temporary_correction ? (
                 <div className="finance-simple__notice" role="note">
@@ -407,8 +446,8 @@ export default function EquipmentFinanceExcavatorsPage() {
                 <Field title="Model"><input value={form.model} onChange={(event) => setValue("model", event.target.value)} required /></Field>
                 <Field title="Model year"><input type="number" min="1950" value={form.model_year} onChange={(event) => setValue("model_year", event.target.value)} /></Field>
                 <Field title="Colour"><input value={form.colour} onChange={(event) => setValue("colour", event.target.value)} /></Field>
-                <Field title="Serial number"><input value={form.serial_number} onChange={(event) => setValue("serial_number", event.target.value)} /></Field>
-                <Field title="Chassis number"><input value={form.chassis_number} onChange={(event) => setValue("chassis_number", event.target.value)} /></Field>
+                <Field title="Serial number (or chassis number required)"><input value={form.serial_number} onChange={(event) => setValue("serial_number", event.target.value)} /></Field>
+                <Field title="Chassis number (or serial number required)"><input value={form.chassis_number} onChange={(event) => setValue("chassis_number", event.target.value)} /></Field>
                 <Field title="Engine number"><input value={form.engine_number} onChange={(event) => setValue("engine_number", event.target.value)} /></Field>
                 <Field title="Registration / number plate"><input value={form.registration_number} onChange={(event) => setValue("registration_number", event.target.value)} /></Field>
                 <Field title="Capacity / specification"><input value={form.capacity_description} onChange={(event) => setValue("capacity_description", event.target.value)} /></Field>
@@ -417,7 +456,7 @@ export default function EquipmentFinanceExcavatorsPage() {
                 <Field title="Ownership"><select value={form.ownership_type} onChange={(event) => setValue("ownership_type", event.target.value)}><option value="company_owned">Company owned</option><option value="consignment">Consignment</option><option value="leased">Leased</option><option value="customer_owned">Customer owned</option></select></Field>
                 <Field title="Current meter"><input disabled={Boolean(editing?.editability?.temporary_correction)} type="number" min="0" step="0.01" value={form.current_meter} onChange={(event) => setValue("current_meter", event.target.value)} /></Field>
                 <Field title="Physical yard / storage"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.equipment_origin_location_id} onChange={(event) => setValue("equipment_origin_location_id", event.target.value)}><option value="">Company-wide / not assigned</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
-                <Field title="Target selling price" hint={money(form.target_selling_price)}><input inputMode="decimal" value={form.target_selling_price} onChange={(event) => setValue("target_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} required /></Field>
+                <Field title="Target selling price (required)" hint={money(form.target_selling_price)}><input inputMode="decimal" value={form.target_selling_price} onChange={(event) => setValue("target_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} required /></Field>
                 <Field title="Minimum approved price" hint={money(form.minimum_selling_price)}><input inputMode="decimal" value={form.minimum_selling_price} onChange={(event) => setValue("minimum_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
                 <Field title="Acquisition cost" hint={money(form.acquisition_cost)}><input inputMode="decimal" value={form.acquisition_cost} onChange={(event) => setValue("acquisition_cost", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
                 <Field title="Acquisition date"><input type="date" value={form.acquisition_date} onChange={(event) => setValue("acquisition_date", event.target.value)} /></Field>
@@ -427,7 +466,7 @@ export default function EquipmentFinanceExcavatorsPage() {
                 <Field title="Title document reference"><input value={form.title_document_reference} onChange={(event) => setValue("title_document_reference", event.target.value)} /></Field>
                 <Field title="Insurance reference"><input value={form.insurance_reference} onChange={(event) => setValue("insurance_reference", event.target.value)} /></Field>
                 <Field title="Notes" wide><textarea value={form.notes} onChange={(event) => setValue("notes", event.target.value)} /></Field>
-                <Field title={editing.id ? "Add more photos" : "Full machine photos"} wide hint={editing.id ? "Existing photos stay in the protected record. New photos are appended." : "A main full-machine photo is required."}><input type="file" accept="image/*" capture="environment" multiple onChange={addPhotos} /></Field>
+                <Field title={editing.id ? "Add more photos" : "Full machine photo (required)"} wide hint={editing.id ? "Existing photos stay in the protected record. New photos are appended." : "A main full-machine photo is required."}><input type="file" accept="image/*" capture="environment" multiple onChange={addPhotos} /></Field>
               </div>
               <div className="finance-simple__photo-grid">
                 {photos.map((photo, index) => (
@@ -442,16 +481,16 @@ export default function EquipmentFinanceExcavatorsPage() {
               <div className="finance-simple__sticky-actions"><span>{editing.id ? (editing.editability?.temporary_correction ? "Instant price & balance sync • original signed PDFs and receipts preserved" : "Editable because no installment has started") : "New protected excavator file"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></div>
             </form>
           </section>
-        </div>
+        </div>, document.body
       ) : null}
 
-      {viewerPhoto ? (
+      {viewerPhoto ? createPortal(
         <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setViewerPhoto(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={viewerPhoto.title} onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Complete uncropped photo</p><h2>{viewerPhoto.title}</h2></div><button type="button" onClick={() => setViewerPhoto(null)}>Close</button></div>
             <div className="finance-simple__photo-viewer"><img src={viewerPhoto.url} alt={viewerPhoto.title} /></div>
           </section>
-        </div>
+        </div>, document.body
       ) : null}
     </main>
   );

@@ -54,6 +54,10 @@ async function fixture(page, { activation = [candidate], deposits = [reserved(21
     if (path === "/auth/me") return fulfill(route, { status: "success", user: financeUser, workspace: financeUser.active_workspace });
     if (path === "/workspace-context/options") return fulfill(route, { status: "success", contexts: [], automatic_access: true });
     if (path === "/auth/discount-permission") return fulfill(route, { status: "success", allowed: false });
+    if (path === "/equipment-catalogue/sales/phase-one/bootstrap")
+      return fulfill(route, { status: "success", machines: [], customers: [] });
+    if (path === "/equipment-catalogue/sales/professional/machine-register/locations")
+      return fulfill(route, { status: "success", locations: [] });
     if (path === "/equipment-catalogue/sales/agreement-activations/readiness")
       return fulfill(route, { status: "success", readiness: { ready: true } });
     if (path === "/equipment-catalogue/sales/agreement-activations/candidates")
@@ -159,3 +163,33 @@ test("Past approved due dates cannot be opened for agreement creation", async ({
     .toHaveAttribute("href", /stage=applications-core&application=28/);
   await noHorizontalOverflow(page, blocked);
 });
+
+for (const width of [375, 1440]) {
+  test(`Excavator registration validates identity and image inside dialog at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 850 });
+    let creationRequests = 0;
+    await fixture(page);
+    await page.route("http://api.test/api/equipment-catalogue/sales/professional/machine-register", async (route) => {
+      if (route.request().method() === "POST") creationRequests += 1;
+      return fulfill(route, { status: "error", message: "Unexpected unverified create" }, 400);
+    });
+    await page.goto("/equipment-installment-finance/applications?stage=machines");
+    await expect(page.getByRole("heading", { name: "Excavators" })).toBeVisible();
+    await page.getByRole("button", { name: /Register Excavator/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Register excavator" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText(/Required to register:/)).toBeVisible();
+    await dialog.getByLabel("Equipment code").fill(`TEST-${width}`);
+    await dialog.getByLabel("Machine name").fill("Acceptance test excavator");
+    await dialog.getByLabel("Make").fill("Test make");
+    await dialog.getByLabel("Model", { exact: true }).fill("Test model");
+    await dialog.getByLabel("Target selling price (required)").fill("100000");
+    await dialog.getByRole("button", { name: "Save Excavator" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("serial number or chassis number");
+    await dialog.getByLabel(/Serial number \(or chassis number required\)/).fill(`SERIAL-TEST-${width}`);
+    await dialog.getByRole("button", { name: "Save Excavator" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("main excavator photo");
+    expect(creationRequests).toBe(0);
+    await noHorizontalOverflow(page, dialog);
+  });
+}
