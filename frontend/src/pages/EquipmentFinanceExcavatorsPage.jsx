@@ -87,17 +87,27 @@ function validateNewExcavator(machine, photos) {
   for (const [field, label] of [
     ["asset_code", "Equipment code"], ["asset_name", "Machine name"],
     ["make", "Make"], ["model", "Model"],
+    ["engine_number", "Engine number"], ["colour", "Colour"],
   ]) {
     if (!String(machine[field] || "").trim()) return `Enter the ${label.toLowerCase()} before saving.`;
   }
   if (!String(machine.serial_number || "").trim() && !String(machine.chassis_number || "").trim()) {
     return "Enter at least one unique identifier: serial number or chassis number.";
   }
+  const year = Number(machine.model_year);
+  if (!String(machine.model_year || "").trim() || !Number.isInteger(year) || year < 1950 ||
+      year > new Date().getUTCFullYear() + 1) {
+    return "Enter the excavator's valid model year.";
+  }
+  if (!Number.isSafeInteger(Number(machine.equipment_origin_location_id)) ||
+      Number(machine.equipment_origin_location_id) <= 0) {
+    return "Select the actual physical equipment yard. Configure a Finance yard if none is available.";
+  }
   const price = Number(String(machine.target_selling_price || "").replaceAll(",", ""));
   const minimum = Number(String(machine.minimum_selling_price || "0").replaceAll(",", ""));
   if (!Number.isFinite(price) || price <= 0) return "Enter a valid target selling price above GHS 0.";
-  if (!Number.isFinite(minimum) || minimum < 0 || minimum > price) {
-    return "Minimum approved price must be between GHS 0 and the target selling price.";
+  if (!Number.isFinite(minimum) || minimum <= 0 || minimum > price) {
+    return "Enter a minimum approved price greater than GHS 0 and no higher than the target selling price.";
   }
   if (machine.model_year && (!Number.isInteger(Number(machine.model_year)) ||
     Number(machine.model_year) < 1950 || Number(machine.model_year) > new Date().getUTCFullYear() + 1)) {
@@ -426,10 +436,11 @@ export default function EquipmentFinanceExcavatorsPage() {
             {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
             {!editing.id ? (
               <div className="finance-simple__notice" role="note">
-                <strong>Required to register:</strong> equipment code, name, make, model, at least
-                one serial/chassis identifier, positive selling price and one main photo.
-                Details without verified evidence, such as a registration number or insurance expiry,
-                can remain blank until available.
+                <strong>Required to register:</strong> equipment code, name, make, model, model year,
+                colour, engine number, at least one serial/chassis identifier, physical equipment yard,
+                target price, positive minimum approved price and one main photo.
+                Registration/insurance references can remain blank when not applicable, but do not
+                enter guessed details.
               </div>
             ) : null}
             <form onSubmit={save}>
@@ -444,20 +455,20 @@ export default function EquipmentFinanceExcavatorsPage() {
                 <Field title="Machine name"><input value={form.asset_name} onChange={(event) => setValue("asset_name", event.target.value)} required /></Field>
                 <Field title="Make"><input value={form.make} onChange={(event) => setValue("make", event.target.value)} required /></Field>
                 <Field title="Model"><input value={form.model} onChange={(event) => setValue("model", event.target.value)} required /></Field>
-                <Field title="Model year"><input type="number" min="1950" value={form.model_year} onChange={(event) => setValue("model_year", event.target.value)} /></Field>
-                <Field title="Colour"><input value={form.colour} onChange={(event) => setValue("colour", event.target.value)} /></Field>
+                <Field title="Model year (required)"><input type="number" min="1950" max={new Date().getUTCFullYear() + 1} value={form.model_year} onChange={(event) => setValue("model_year", event.target.value)} required={!editing.id} /></Field>
+                <Field title="Colour (required)"><input value={form.colour} onChange={(event) => setValue("colour", event.target.value)} required={!editing.id} /></Field>
                 <Field title="Serial number (or chassis number required)"><input value={form.serial_number} onChange={(event) => setValue("serial_number", event.target.value)} /></Field>
                 <Field title="Chassis number (or serial number required)"><input value={form.chassis_number} onChange={(event) => setValue("chassis_number", event.target.value)} /></Field>
-                <Field title="Engine number"><input value={form.engine_number} onChange={(event) => setValue("engine_number", event.target.value)} /></Field>
+                <Field title="Engine number (required)"><input value={form.engine_number} onChange={(event) => setValue("engine_number", event.target.value)} required={!editing.id} /></Field>
                 <Field title="Registration / number plate"><input value={form.registration_number} onChange={(event) => setValue("registration_number", event.target.value)} /></Field>
                 <Field title="Capacity / specification"><input value={form.capacity_description} onChange={(event) => setValue("capacity_description", event.target.value)} /></Field>
                 <Field title="Condition"><select value={form.condition_status} onChange={(event) => setValue("condition_status", event.target.value)}><option value="excellent">Excellent</option><option value="good">Good</option><option value="fair">Fair</option><option value="under_inspection">Under inspection</option><option value="damaged">Damaged</option></select></Field>
                 <Field title="Sale purpose"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.operational_purpose} onChange={(event) => setValue("operational_purpose", event.target.value)}><option value="sale_only">Sale only</option><option value="sale_or_hire">Sale or Hire</option></select></Field>
                 <Field title="Ownership"><select value={form.ownership_type} onChange={(event) => setValue("ownership_type", event.target.value)}><option value="company_owned">Company owned</option><option value="consignment">Consignment</option><option value="leased">Leased</option><option value="customer_owned">Customer owned</option></select></Field>
                 <Field title="Current meter"><input disabled={Boolean(editing?.editability?.temporary_correction)} type="number" min="0" step="0.01" value={form.current_meter} onChange={(event) => setValue("current_meter", event.target.value)} /></Field>
-                <Field title="Physical yard / storage"><select disabled={Boolean(editing?.editability?.temporary_correction)} value={form.equipment_origin_location_id} onChange={(event) => setValue("equipment_origin_location_id", event.target.value)}><option value="">Company-wide / not assigned</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
+                <Field title={editing.id ? "Physical yard / storage" : "Physical yard / storage (required)"}><select required={!editing.id} disabled={Boolean(editing?.editability?.temporary_correction)} value={form.equipment_origin_location_id} onChange={(event) => setValue("equipment_origin_location_id", event.target.value)}><option value="">{editing.id ? "Company-wide / not assigned" : "Select the actual physical yard"}</option>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
                 <Field title="Target selling price (required)" hint={money(form.target_selling_price)}><input inputMode="decimal" value={form.target_selling_price} onChange={(event) => setValue("target_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} required /></Field>
-                <Field title="Minimum approved price" hint={money(form.minimum_selling_price)}><input inputMode="decimal" value={form.minimum_selling_price} onChange={(event) => setValue("minimum_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
+                <Field title={editing.id ? "Minimum approved price" : "Minimum approved price (required)"} hint={money(form.minimum_selling_price)}><input required={!editing.id} inputMode="decimal" value={form.minimum_selling_price} onChange={(event) => setValue("minimum_selling_price", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
                 <Field title="Acquisition cost" hint={money(form.acquisition_cost)}><input inputMode="decimal" value={form.acquisition_cost} onChange={(event) => setValue("acquisition_cost", event.target.value.replace(/[^0-9.,]/g, ""))} /></Field>
                 <Field title="Acquisition date"><input type="date" value={form.acquisition_date} onChange={(event) => setValue("acquisition_date", event.target.value)} /></Field>
                 <Field title="Supplier"><input value={form.supplier_name} onChange={(event) => setValue("supplier_name", event.target.value)} /></Field>
