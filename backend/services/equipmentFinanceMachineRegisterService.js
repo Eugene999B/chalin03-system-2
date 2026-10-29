@@ -90,10 +90,11 @@ function normalizeMachine(input, { partial = false } = {}) {
     if (partial && input[key] === undefined) continue;
     const value = key === "asset_code" ? cleanText(input[key], maxLength).toUpperCase() : nullableText(input[key], maxLength);
     output[key] = value;
-    if (!partial && ["asset_code", "asset_name", "asset_type", "make", "model"].includes(key) && !value) errors.push(`${label} is required.`);
+    if (!partial && ["asset_code", "asset_name", "asset_type", "make", "model", "engine_number", "colour"].includes(key) && !value) errors.push(`${label} is required.`);
   }
   if (!partial || input.model_year !== undefined) {
     const year = nonNegativeInteger(input.model_year, null); const maxYear = new Date().getUTCFullYear() + 1;
+    if (!partial && year === null) errors.push("Model year is required for an excavator offered through Finance.");
     if (year !== null && (year === undefined || year < 1950 || year > maxYear)) errors.push(`Model year must be between 1950 and ${maxYear}.`);
     output.model_year = year === undefined ? null : year;
   }
@@ -106,7 +107,7 @@ function normalizeMachine(input, { partial = false } = {}) {
   for (const [key, label] of [["acquisition_date", "Acquisition date"],["insurance_expiry", "Insurance expiry"],["registration_expiry", "Registration expiry"]]) {
     if (partial && input[key] === undefined) continue; const value = dateValue(input[key]); if (value === undefined) errors.push(`${label} must use YYYY-MM-DD.`); output[key] = value === undefined ? null : value;
   }
-  if (!partial) { if (!output.serial_number && !output.chassis_number) errors.push("Enter at least a serial number or chassis number."); if (Number(output.target_selling_price || 0) <= 0) errors.push("Target selling price must be greater than zero."); }
+  if (!partial) { if (!output.serial_number && !output.chassis_number) errors.push("Enter at least a serial number or chassis number."); if (Number(output.target_selling_price || 0) <= 0) errors.push("Target selling price must be greater than zero."); if (Number(output.minimum_selling_price || 0) <= 0) errors.push("Enter a positive minimum approved selling price for this excavator."); }
   if (output.minimum_selling_price !== undefined && output.target_selling_price !== undefined && Number(output.minimum_selling_price || 0) > Number(output.target_selling_price || 0)) errors.push("Minimum selling price cannot exceed the target selling price.");
   return { output, errors };
 }
@@ -142,6 +143,7 @@ async function createFinanceMachine({ input, userId, req }) {
   if (!photos.some((photo) => photo.is_primary)) errors.push("Capture a full main excavator photo before saving the machine.");
   if (errors.length) throw new ProfessionalFinanceError(400, errors.join(" "));
   const locationId = positiveId(input?.equipment_origin_location_id || input?.hire_location_id);
+  if (!locationId) throw new ProfessionalFinanceError(400, "Select the actual physical equipment yard before registration. Configure an Equipment Business yard first if none is listed.");
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction(); const location = await locationRecord(connection, locationId); await assertUnique(connection, null, machine);
@@ -235,4 +237,4 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
   } catch (error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
 }
 
-module.exports = { createFinanceMachine, machineLocations, updateFinanceMachine };
+module.exports = { createFinanceMachine, machineLocations, normalizeMachine, updateFinanceMachine };

@@ -169,6 +169,9 @@ for (const width of [375, 1440]) {
     await page.setViewportSize({ width, height: 850 });
     let creationRequests = 0;
     await fixture(page);
+    await page.route("http://api.test/api/equipment-catalogue/sales/professional/machine-register/locations", async (route) => {
+      return fulfill(route, { status: "success", locations: [{ id: 9, name: "QA Equipment Yard" }] });
+    });
     await page.route("http://api.test/api/equipment-catalogue/sales/professional/machine-register", async (route) => {
       if (route.request().method() === "POST") creationRequests += 1;
       return fulfill(route, { status: "error", message: "Unexpected unverified create" }, 400);
@@ -183,6 +186,11 @@ for (const width of [375, 1440]) {
     await dialog.getByLabel("Machine name").fill("Acceptance test excavator");
     await dialog.getByLabel("Make").fill("Test make");
     await dialog.getByLabel("Model", { exact: true }).fill("Test model");
+    await dialog.getByLabel("Model year (required)").fill("2024");
+    await dialog.getByLabel("Colour (required)").fill("Yellow");
+    await dialog.getByLabel("Engine number (required)").fill(`ENGINE-TEST-${width}`);
+    await dialog.getByLabel("Physical yard / storage (required)").selectOption("9");
+    await dialog.getByLabel("Minimum approved price (required)").fill("90000");
     await dialog.getByLabel("Target selling price (required)").fill("100000");
     await dialog.getByRole("button", { name: "Save Excavator" }).click();
     await expect(dialog.getByRole("alert")).toContainText("serial number or chassis number");
