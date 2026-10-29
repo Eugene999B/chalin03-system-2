@@ -122,3 +122,11 @@ test("start-installment schema 503 exposes operator-safe diagnosis and releases 
   assert.match(startWizard, /FINANCE_APPLICATION_SCHEMA_COLUMN_MISSING/);
   assert.match(startWizard, /Check the Applications register before retrying/);
 });
+
+test("uncertain Finance creation response preserves draft and exposes diagnostic reference", () => {
+  assert.match(startWizard, /Number\(error\?\.response\?\.status \|\| 0\) >= 500/);
+  assert.match(startWizard, /Do not submit it again until you check Applications & Approvals/);
+  assert.match(startWizard, /Your unfinished draft is preserved/);
+  assert.match(startWizard, /error\?\.response\?\.data\?\.request_id/);
+  assert.match(startWizard, /Error code:/);
+});
