@@ -563,7 +563,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
 
   await expect(page).toHaveURL(/application=501/);
   await expect(page.getByText("ECAPP-PH3-501").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "1 record(s)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1 cases" })).toBeVisible();
   const fileDialog = page.getByRole("dialog", { name: "Credit application file" });
   await expect(fileDialog).toBeVisible();
   await expect(fileDialog.getByText("Draft", { exact: true })).toBeVisible();
