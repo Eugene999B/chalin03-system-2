@@ -120,11 +120,11 @@ assert.match(
 assert.match(equipmentPortal, /<EquipmentDivisionGatewayPage \/>/);
 assert.doesNotMatch(equipmentPortal, /EquipmentBusinessLandingPage/);
 
-assert.match(loginPage, /const TOKEN_KEY = "chalin03_token"/);
-assert.match(loginPage, /clearStoredSession\(\)/);
-assert.match(loginPage, /void logout\(\)/);
-assert.match(loginPage, /window\.location\.replace/);
-assert.match(loginPage, /Closing the previous session and opening Login/);
+// The sign-in route must preserve restored sessions; only explicit logout revokes them.
+assert.match(loginPage, /if \(loading\)/);
+assert.match(loginPage, /if \(isLoggedIn\)/);
+assert.match(loginPage, /getWorkspaceHomeRoute\(workspaceCode\)/);
+assert.doesNotMatch(loginPage, /clearStoredSession|void logout\(|window\.location\.replace/);
 assert.match(workspaces, /code: "mining"[\s\S]*route: "\/login\?workspace=mining"/);
 assert.match(
   workspaces,
