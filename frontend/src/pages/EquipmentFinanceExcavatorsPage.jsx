@@ -406,6 +406,7 @@ export default function EquipmentFinanceExcavatorsPage() {
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
             <form onSubmit={save}>
+              {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
               {editing?.editability?.temporary_correction ? (
                 <div className="finance-simple__notice" role="note">
                   <strong>Immediate instalment price correction.</strong> Save your corrected selling price and enter a reason. If this excavator has an active instalment, CHALIN03 updates its current agreement price, remaining balance and unpaid instalment schedule together. Previously signed documents and actual receipts are preserved. Corrections that conflict with received payments will be rejected. For example, GHS 120 over eight unpaid instalments means GHS 15 per period; if some instalments were already paid, the unpaid principal is divided equally across the remaining periods. If you edited the price earlier, save the same price again to synchronise and rebalance that agreement.
