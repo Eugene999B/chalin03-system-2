@@ -61,7 +61,7 @@ for (const width of [375,1440]) {
     await dialog.getByLabel("Machine name").fill("QA Incomplete Excavator");
     await dialog.getByLabel("Make").fill("CAT");
     await dialog.getByLabel("Model", {exact:true}).fill("320");
-    await dialog.getByLabel("Serial number").fill("QA-SERIAL-NEW");
+    await dialog.getByLabel("Serial number (or chassis number required)").fill("QA-SERIAL-NEW");
     await dialog.getByLabel("Target selling price").fill("120000");
     await dialog.getByRole("button",{name:"Save Excavator"}).click();
     expect(posted()).toBe(0);
@@ -72,7 +72,7 @@ for (const width of [375,1440]) {
     await page.setViewportSize({width,height:900});
     await fixture(page);
     await page.goto("/equipment-installment-finance/applications?stage=start");
-    await expect(page.getByRole("heading",{name:"Start New Installment"})).toBeVisible();
+    await expect(page.locator(".c03-start2-brand strong")).toBeVisible();
     await page.getByRole("button",{name:/QA Buyer A/}).click();
     await page.getByRole("button",{name:"Continue to Excavator"}).click();
     await page.locator(".c03-start2-machine-grid article").nth(0).getByRole("button",{name:"Select excavator"}).click();
