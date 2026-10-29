@@ -650,7 +650,7 @@ router.post(
         connection?.release();
         connection = null;
         const readiness = await applicationReadiness();
-        const failure = classifyFinanceDatabaseError(error, readiness);
+        const failure = classifyFinanceDatabaseError(error, readiness.ready ? null : readiness);
         console.error("Finance installment creation stopped by schema mismatch:", {
           request_id: req.requestId || null,
           database_error_code: error.code,
