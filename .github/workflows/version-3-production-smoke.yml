@@ -38,12 +38,12 @@ jobs:
           # commit with the new release; git diff-tree -r alone reports no
           # paths on merge commits, incorrectly skipping the backend wait.
           backend_release_required=false
-          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -qE '^(backend/|database/|railway\.json$)'; then
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -E '^(backend/|database/|railway\.json$)' >/dev/null; then
             backend_release_required=true
           fi
           echo "backend_release_required=$backend_release_required" | tee smoke-output/release-scope.txt
           frontend_release_required=false
-          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -qE '^(frontend/)'; then
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -E '^(frontend/)' >/dev/null; then
             frontend_release_required=true
           fi
           echo "frontend_release_required=$frontend_release_required" | tee -a smoke-output/release-scope.txt
