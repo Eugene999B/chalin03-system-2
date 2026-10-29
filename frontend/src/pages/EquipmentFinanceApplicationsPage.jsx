@@ -775,9 +775,9 @@ export default function EquipmentFinanceApplicationsPage() {
 
       {decision ? (
         <div className="finance-simple__dialog-backdrop finance-applications-v2__decision-backdrop" role="presentation" onMouseDown={() => !saving && setDecision(null)}>
-          <form className="finance-simple__dialog finance-applications-v2__decision-dialog" onSubmit={confirmDecision} onMouseDown={(event) => event.stopPropagation()}>
+          <form className="finance-simple__dialog finance-applications-v2__decision-dialog" role="dialog" aria-modal="true" aria-labelledby="finance-application-decision-title" onSubmit={confirmDecision} onMouseDown={(event) => event.stopPropagation()}>
             <span className="finance-applications-v2__dialog-eyebrow">Application decision</span>
-            <h2>{decision.title}</h2>
+            <h2 id="finance-application-decision-title">{decision.title}</h2>
             <p>{decision.application?.application_number} · {decision.application?.customer_name}</p>
             {decision.kind === "request_approved_correction" ? (
               <div className="finance-simple__notice is-warning">
