@@ -307,12 +307,13 @@ function buildAudienceMessage(intelligence, audience) {
   const financeSentence = `${finance.active_accounts} active Finance agreement(s) currently carry ${money(finance.outstanding_amount)} outstanding; ${money(finance.overdue_amount)} is overdue across ${finance.overdue_accounts} account(s), with ${financeRiskCount} high/critical-risk account(s).`;
   const lines = [
     `${audienceName}: ${range.from} to ${range.to}.`,
+    "Scope: Spare Parts + Installment Finance.",
     `Sales evidence: ${money(spare.revenue)} across ${spare.sales_count} completed sale(s); ${money(spare.payments_received)} collected (${spare.collection_rate.toFixed(1)}%), leaving ${money(collectionGap)} uncollected. ${expenseSentence}`,
     `Operating evidence: ${stockSentence} ${spare.voided_sales_count} voided sale(s) account for ${money(spare.voided_sales_value)} recorded value (${spare.voided_sales_value_rate.toFixed(1)}% of completed sales).`,
     `Finance evidence: ${financeSentence} ${money(finance.due_next_7_days)} is due within 7 days (${finance.due_next_7_days_share.toFixed(1)}% of current outstanding).`,
   ];
   if (audience === "auditor") {
-    lines.push(`Control interpretation: ${finance.reversals_in_period} Finance reversal/refund record(s) occurred in the selected period, and voids/stock pressure are review indicators requiring traceable evidence.`);
+    lines.push(`Control interpretation: ${finance.reversals_in_period} Finance reversal/refund record(s) occurred in the selected period, and voids/stock pressure are review indicators, not accusations; they require traceable evidence.`);
     lines.push(`Audit priority: ${urgent.length ? urgent.slice(0, 3).map((item) => `${item.title} — ${item.action}`).join(" ") : "No urgent control exception is currently surfaced."}`);
     lines.push("Conclusion standard: confirm transaction evidence, approval history, cut-off and supporting documents before reaching a conclusion.");
   } else if (audience === "manager") {

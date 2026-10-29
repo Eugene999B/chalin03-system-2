@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { requirePermission } = require("../middleware/permissionMiddleware");
+const { ghanaToday } = require("../middleware/equipmentFinanceActivationIntegrityGuard");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const {
   advisoryAssessment,
@@ -41,6 +42,11 @@ const REVIEW_TRANSITIONS = Object.freeze({
     to: "changes_requested",
     action: "changes_requested",
   },
+  request_approved_correction: {
+    from: new Set(["approved"]),
+    to: "changes_requested",
+    action: "approved_correction_requested",
+  },
   approve: {
     from: new Set(["submitted", "under_review"]),
     to: "approved",
@@ -71,6 +77,8 @@ const REQUIRED_SCHEMA = Object.freeze({
     "proposed_frequency",
     "proposed_interval_days",
     "proposed_non_working_day_rule",
+    "proposed_first_due_date",
+    "agreement_id",
     "proposed_installment_count",
     "proposed_installment_amount",
     "proposed_periodic_amount",
@@ -185,6 +193,26 @@ function dateOnly(value, label) {
     );
   }
   return text;
+}
+
+function calendarDate(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+  }
+  const match = /^\d{4}-\d{2}-\d{2}(?=$|[T\s])/.exec(String(value ?? "").trim());
+  return match ? match[0] : null;
+}
+
+function assertNewScheduleDate(application, today = ghanaToday()) {
+  const firstDue = calendarDate(application.proposed_first_due_date);
+  const created = calendarDate(application.created_at || application.application_date);
+  if (!firstDue || firstDue < today || (created && firstDue < created)) {
+    throw new FinanceWorkflowError(
+      409,
+      `The first installment date ${firstDue || "(missing)"} cannot be approved because it is before ${today} or predates the application. Correct the schedule and resubmit it for manager review.`,
+      "EQUIPMENT_FINANCE_APPROVAL_FIRST_DUE_INVALID"
+    );
+  }
 }
 
 function query(connection, sql, params = [], timeout = QUERY_TIMEOUT_MS) {
@@ -469,6 +497,8 @@ async function loadApplicationRecord(connection, applicationId, lock = false) {
             application.proposed_interval_days,
             application.proposed_non_working_day_rule,
             application.proposed_installment_count,
+            application.proposed_first_due_date,
+            application.agreement_id,
             application.proposed_installment_amount,
             application.proposed_periodic_amount,
             application.monthly_salary_income,
@@ -977,7 +1007,7 @@ router.post(
       if (!transition) {
         throw new FinanceWorkflowError(400, "Choose a valid installment review action.", "INVALID_FINANCE_REVIEW_ACTION");
       }
-      if (["request_changes", "decline"].includes(action) && !reason) {
+      if (["request_changes", "request_approved_correction", "decline"].includes(action) && !reason) {
         throw new FinanceWorkflowError(400, "Enter the exact reason for this review decision.", "FINANCE_REVIEW_REASON_REQUIRED");
       }
       const userId = actorId(req);
@@ -1001,7 +1031,23 @@ router.post(
         });
       }
       assertKnownVersion(req.body, application);
-      if (["approved", "declined", "withdrawn"].includes(application.application_status)) {
+      if (action === "request_approved_correction") {
+        // Reopening an approved application is a documented reversal of the
+        // approval state, never an edit to an existing agreement.
+        const [existingAgreements] = await query(
+          connection,
+          "SELECT id FROM equipment_sale_agreements WHERE credit_application_id = ? LIMIT 1 FOR UPDATE",
+          [application.id]
+        );
+        if (application.agreement_id || existingAgreements.length) {
+          throw new FinanceWorkflowError(
+            409,
+            "This application already has an agreement. An approved agreement cannot be reopened or its payment terms changed here.",
+            "EQUIPMENT_FINANCE_APPROVED_CORRECTION_AGREEMENT_EXISTS"
+          );
+        }
+      }
+      if (["approved", "declined", "withdrawn"].includes(application.application_status) && action !== "request_approved_correction") {
         throw new FinanceWorkflowError(
           409,
           "This application already has a final decision.",
@@ -1015,6 +1061,7 @@ router.post(
           "EQUIPMENT_CREDIT_INVALID_REVIEW_TRANSITION"
         );
       }
+      if (action === "approve") assertNewScheduleDate(application);
       const kyc = await loadKyc(connection, application.id, true);
       const assessment = advisoryAssessment(application, kyc || {});
       await persistAssessment(connection, application, assessment, userId);
@@ -1037,7 +1084,14 @@ router.post(
         assessment,
         reason || (action === "approve" ? "Approved by an authorised manager." : "Manager review started."),
         userId,
-        { review_action: action }
+        { review_action: action,
+          ...(action === "request_approved_correction" ? {
+            prior_approved_first_due_date: calendarDate(application.proposed_first_due_date),
+            correction_reason: reason,
+            requires_fresh_manager_approval: true,
+            customer_schedule_confirmation_required: true,
+          } : {})
+        }
       );
       await connection.commit();
       transactionActive = false;
@@ -1053,7 +1107,9 @@ router.post(
         message:
           transition.to === "approved"
             ? "Installment application approved by the authorised manager."
-            : `Installment application recorded as ${transition.to.replaceAll("_", " ")}.`,
+            : action === "request_approved_correction"
+              ? "The prior approval has been withdrawn for schedule correction. Edit the first due date, verify customer consent, resubmit and obtain a new manager approval."
+              : `Installment application recorded as ${transition.to.replaceAll("_", " ")}.`,
         request_id: req.requestId || null,
         application,
         next_action: nextAction(transition.to),
@@ -1073,6 +1129,7 @@ router.post(
 module.exports = router;
 module.exports.FinanceWorkflowError = FinanceWorkflowError;
 module.exports.REVIEW_TRANSITIONS = REVIEW_TRANSITIONS;
+module.exports.assertNewScheduleDate = assertNewScheduleDate;
 module.exports.classifyFinanceWorkflowError = classifyFinanceWorkflowError;
 module.exports.inspectWorkflowSchema = inspectWorkflowSchema;
 module.exports.listFilters = listFilters;

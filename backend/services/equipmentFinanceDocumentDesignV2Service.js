@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const { dateOnly } = require("./equipmentFinanceDateOnlyService");
 const path = require("node:path");
 const {
   verificationUrl,
@@ -97,16 +98,19 @@ function money(value) {
 }
 
 function dateLabel(value) {
-  if (!value) return "Not recorded";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("en-GH", { year: "numeric", month: "short", day: "2-digit", timeZone: "Africa/Accra" });
+  // DATE fields represent a contractual calendar date: never timezone-shift
+  // midnight or print a JavaScript object to the issued document.
+  const exact = dateOnly(value);
+  if (!exact) return "Not recorded";
+  return new Date(`${exact}T00:00:00Z`).toLocaleDateString("en-GH", {
+    year: "numeric", month: "short", day: "2-digit", timeZone: "UTC",
+  });
 }
 
 function dateTimeLabel(value) {
   if (!value) return "Not recorded";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
   return date.toLocaleString("en-GH", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Accra" });
 }
 

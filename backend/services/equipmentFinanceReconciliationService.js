@@ -1,30 +1,20 @@
 const base = require("./equipmentFinanceReconciliationServiceBase");
 const { pool } = require("../config/db");
+const { dateOnly } = require("./equipmentFinanceDateOnlyService");
 const {
   getAgreementScheduleTruth,
   getPortfolioScheduleTruth,
 } = require("./equipmentFinanceScheduleTruthService");
 
-const FALLBACK_DAYS = 30;
-
 function toDateText(value) {
-  const text = value ? String(value).slice(0, 10) : "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || text.startsWith("0000-")) return null;
-  const date = new Date(`${text}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text ? null : text;
+  return dateOnly(value);
 }
 
-function plusDays(value, days) {
-  const date = new Date(`${value}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + Number(days || 0));
-  return date.toISOString().slice(0, 10);
-}
-
-function firstValidDate(candidates, createdDate) {
-  return (
-    candidates.map(toDateText).find((value) => value && (!createdDate || value >= createdDate)) ||
-    (createdDate ? plusDays(createdDate, FALLBACK_DAYS) : null)
-  );
+// Finance due dates must come from actual schedule or agreement evidence.
+// Inventing a due date 30 days after creation can misstate collections,
+// trigger reminders, and conceal incomplete installment schedules.
+function firstValidDate(candidates) {
+  return candidates.map(toDateText).find(Boolean) || null;
 }
 
 async function getDirectScheduleNextDue(connection, agreementId) {
@@ -34,6 +24,12 @@ async function getDirectScheduleNextDue(connection, agreementId) {
       WHERE s.agreement_id = ?
         AND s.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')
         AND COALESCE(s.due_date, '') <> ''
+        AND GREATEST(
+          COALESCE(s.scheduled_amount, 0)
+          + COALESCE(s.late_charge_amount, 0)
+          - COALESCE(s.waived_charge_amount, 0)
+          - COALESCE(s.amount_paid, 0), 0
+        ) > 0.009
       ORDER BY s.due_date, s.sequence_number
       LIMIT 1`,
     [Number(agreementId)]
@@ -43,31 +39,33 @@ async function getDirectScheduleNextDue(connection, agreementId) {
 
 function operationalize(result, truth = {}, directNextDue = null) {
   const agreement = result?.agreement || {};
-  const createdDate = toDateText(agreement.created_at);
   const firstDue = firstValidDate([
     truth.first_due_date,
     result?.calculated?.first_schedule_due_date,
     result?.evidence?.first_schedule_due_date,
     agreement.first_due_date,
-  ], createdDate);
-  const nextDue = firstValidDate([
-    directNextDue,
-    truth.next_due_date,
-    result?.calculated?.next_due_date,
-    result?.evidence?.next_due_date,
-    agreement.next_due_date,
-  ], createdDate);
+  ]);
   const finalDue = firstValidDate([
     truth.final_due_date,
     result?.calculated?.final_schedule_due_date,
     result?.evidence?.final_schedule_due_date,
     agreement.final_due_date,
-  ], createdDate);
+  ]);
+  const terminal = ["completed", "cancelled", "defaulted"].includes(
+    String(result?.calculated?.agreement_status || agreement.agreement_status || "")
+  );
+  const nextDue = terminal ? null : firstValidDate([
+    directNextDue,
+    truth.next_due_date,
+    result?.calculated?.next_due_date,
+    result?.evidence?.next_due_date,
+    agreement.next_due_date,
+  ]);
 
   return {
     ...result,
-    consistent: true,
-    collection_operational: true,
+    consistent: Boolean(result?.consistent),
+    collection_operational: Boolean(result?.consistent),
     next_due_date: nextDue,
     next_installment_due_date: nextDue,
     first_due_date: firstDue,
@@ -100,11 +98,25 @@ async function reconcileFinancePortfolio(options = {}) {
 }
 
 async function assertFinanceMutationSafe(agreementId, options = {}) {
+  // The base guard rejects critical evidence mismatches before any mutation
+  // and repairs only recoverable fields under the existing transaction.
+  // Never treat a merely readable account as safe for payment or delivery.
+  await base.assertFinanceMutationSafe(agreementId, options);
   return reconcileFinanceAgreement(agreementId, options);
 }
 
 async function refreshFinanceAgreementFromEvidence(connection, agreementId) {
   const reconciliation = await reconcileFinanceAgreement(agreementId, { connection, lock: true });
+  const critical = (reconciliation.mismatches || [])
+    .filter((item) => item.severity === "critical");
+  if (critical.length) {
+    throw new base.EquipmentFinanceReconciliationError(
+      409,
+      "This Finance agreement has critical schedule, allocation or ledger inconsistencies. No balance was changed.",
+      "EQUIPMENT_FINANCE_RECONCILIATION_REQUIRED",
+      { agreement_id: reconciliation.agreement_id, mismatches: critical }
+    );
+  }
   const values = reconciliation.calculated || {};
   await connection.query(
     `UPDATE equipment_sale_agreements
@@ -136,11 +148,21 @@ async function refreshFinanceAgreementFromEvidence(connection, agreementId) {
       reconciliation.agreement_id,
     ]
   );
-  return reconcileFinanceAgreement(agreementId, { connection, lock: false });
+  const after = await reconcileFinanceAgreement(agreementId, { connection, lock: false });
+  if (!after.consistent) {
+    throw new base.EquipmentFinanceReconciliationError(
+      409,
+      "The Finance account could not be reconciled. The transaction must be rolled back.",
+      "EQUIPMENT_FINANCE_POST_UPDATE_RECONCILIATION_FAILED",
+      { agreement_id: after.agreement_id, mismatches: after.mismatches }
+    );
+  }
+  return after;
 }
 
 module.exports = {
   ...base,
+  operationalize,
   assertFinanceMutationSafe,
   reconcileFinanceAgreement,
   reconcileFinancePortfolio,

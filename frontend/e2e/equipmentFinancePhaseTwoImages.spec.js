@@ -34,6 +34,10 @@ function json(route, body, status = 200) {
 
 test("Finance excavator photos require authenticated Axios blobs and decode to real pixels", async ({ page }) => {
   let imageHeaders = null;
+  let signedHeaders = null;
+  const signedSignature = "a".repeat(64);
+  const signedPath = "/equipment-catalogue/sales/phase-one/machine-image/303/903";
+  const signedQuery = "?expires=1799999999&signature=" + signedSignature;
   const imagePath =
     "/equipment-catalogue/sales/protected-images/assets/301/901";
   const customer = {
@@ -75,6 +79,28 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
       editability: { editable: true },
     },
     {
+      id: 303,
+      asset_code: "EXC-PH2-003",
+      asset_name: "Signed Phase One Picture Excavator",
+      make: "SANY",
+      model: "SY215",
+      serial_number: "PHASE2-SERIAL-003",
+      target_selling_price: 150000,
+      sale_status: "available",
+      current_status: "available",
+      active_application_count: 0,
+      active_sale_lock_count: 0,
+      has_image: true,
+      photo_count: 1,
+      main_image_url: "https://api.chalin03.com/api" + signedPath + signedQuery,
+      media: [{
+        id: 903, is_primary: true, evidence_type: "main",
+        file_url: "https://api.chalin03.com/api" + signedPath + signedQuery,
+      }],
+      readiness: { ready: true, missing: [], photo_count: 1 },
+      editability: { editable: true },
+    },
+    {
       id: 302,
       asset_code: "EXC-PH2-002",
       asset_name: "No Photo Excavator",
@@ -108,6 +134,14 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
     const path = url.pathname.replace(/^\/api/, "");
     const method = request.method();
 
+    if (path === signedPath && url.search === signedQuery && method === "GET") {
+      signedHeaders = request.headers();
+      return route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+        body: pngBytes,
+      });
+    }
     if (path === imagePath && method === "GET") {
       imageHeaders = request.headers();
       return route.fulfill({
@@ -180,19 +214,21 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
   await page.goto(
     "/equipment-installment-finance/applications?stage=start"
   );
-  await expect(
-    page.getByRole("heading", { name: "Start New Installment" })
-  ).toBeVisible();
+  await expect(page.locator(".c03-start2-brand strong")).toHaveText("Start New Installment");
   await page.getByRole("button", { name: /Ama Protected Picture/ }).click();
 
+  const signedResponsePromise = page.waitForResponse(
+    response => response.url().includes(signedPath + signedQuery)
+      && response.request().method() === "GET"
+  );
   const protectedResponsePromise = page.waitForResponse(
     (response) =>
       response.url().endsWith(`/api${imagePath}`) &&
       response.request().method() === "GET"
   );
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue to Excavator" }).click();
   await expect(
-    page.getByRole("heading", { name: "Select the exact excavator" })
+    page.getByRole("heading", { name: "Which exact excavator is being financed?" })
   ).toBeVisible();
 
   const protectedResponse = await protectedResponsePromise;
@@ -203,11 +239,13 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
   expect(imageHeaders?.["x-chalin03-division"]).toBe("installment_finance");
   expect(imageHeaders?.["x-chalin03-workspace"]).toBe("equipment_hire");
 
-  const protectedImage = page.locator(
-    'img[alt="Protected Picture Excavator"]'
-  );
+  const protectedPhotoCard = page.locator(".c03-start2-machine-grid article").filter({
+    hasText: "Protected Picture Excavator",
+  });
+  const protectedPhoto = protectedPhotoCard.getByTestId("finance-protected-image");
+  await expect(protectedPhoto).toHaveAttribute("data-image-state", "ready");
+  const protectedImage = protectedPhoto.locator('img[alt="Protected Picture Excavator"]');
   await expect(protectedImage).toBeVisible();
-  await expect(protectedImage).toHaveAttribute("data-image-state", "ready");
   const decoded = await protectedImage.evaluate((image) => ({
     naturalWidth: image.naturalWidth,
     naturalHeight: image.naturalHeight,
@@ -217,9 +255,19 @@ test("Finance excavator photos require authenticated Axios blobs and decode to r
   expect(decoded.naturalHeight).toBeGreaterThan(0);
   expect(decoded.source.startsWith("blob:")).toBe(true);
 
+  const signedResponse = await signedResponsePromise;
+  expect(signedResponse.url()).toContain("http://api.test/api" + signedPath);
+  expect(signedResponse.status()).toBe(200);
+  expect(signedHeaders?.authorization).toBe("Bearer phase2-admin-token");
+  const signedPhotoCard = page.locator(".c03-start2-machine-grid article")
+    .filter({ hasText: "Signed Phase One Picture Excavator" });
+  await expect(signedPhotoCard.getByTestId("finance-protected-image"))
+    .toHaveAttribute("data-image-state", "ready");
+
   const noPhotoCard = page
-    .locator(".finance-simple__card")
+    .locator(".c03-start2-machine-grid article")
     .filter({ hasText: "No Photo Excavator" });
+  await expect(noPhotoCard.getByTestId("finance-protected-image")).toHaveAttribute("data-image-state", "no-photo");
   await expect(noPhotoCard).toContainText("🚜");
   await expect(noPhotoCard.locator("img")).toHaveCount(0);
 });

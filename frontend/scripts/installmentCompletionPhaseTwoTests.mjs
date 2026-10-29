@@ -44,12 +44,12 @@ assert.match(home, /Customer Profiles/);
 assert.match(home, /Active Installments/);
 assert.match(home, /Payments & Collections/);
 
-assert.match(accounts, /Search active installment accounts/);
+assert.match(accounts, /Agreement, customer, phone or excavator/);
 assert.match(accounts, /Open Account/);
 assert.match(accounts, /Record Payment/);
 assert.match(accounts, /Customer Profile/);
 assert.match(accounts, /reconciliation/);
-assert.match(accounts, /finance-simplified__compact-register/);
+assert.match(accounts, /finance-accounts__grid/);
 assert.doesNotMatch(accounts, /axiosClient\.post/);
 
 assert.match(profiles, /Search first, open only what you need/);

@@ -34,24 +34,21 @@ const executive = read("src/components/ExecutiveBusinessIntelligenceSettingsPane
 for (const ruleCode of ["group.executive.weekly_business_intelligence", "group.executive.monthly_business_intelligence"]) {
   if (!executive.includes(ruleCode)) throw new Error(`Executive settings are missing ${ruleCode}.`);
 }
-for (const token of ["role=\"dialog\"", "Open settings", "role=\"switch\""]) {
+for (const token of ["role=\"dialog\"", "Open Intelligence Centre", "role=\"switch\""]) {
   if (!executive.includes(token)) throw new Error(`Executive settings dialog is missing ${token}.`);
 }
 
 const vite = read("vite.config.js");
 if (vite.includes("restoreSparePartsSmsIntelligence")) throw new Error("Users & Settings still depends on the importer-specific Vite substitution.");
 
-const darkMode = read("src/styles/darkMode.css");
-for (const requiredToken of ["--c03-dm-bg", ".c03-dark-mode main", ".c03-dark-mode [class*=\"card\"]", ".c03-dark-mode nav", ".c03-dark-mode input", ".c03-dark-mode table", ".c03-dark-mode [class*=\"approval\"]", ".c03-dark-mode .gate4.biometric-login .gate4__submit"]) {
-  if (!darkMode.includes(requiredToken)) throw new Error(`Dark mode is missing permanent coverage for ${requiredToken}.`);
-}
-
-const darkModeScript = read("public/darkMode.js");
-if (!darkModeScript.includes('localStorage.setItem(STORAGE_KEY')) throw new Error("Dark mode preference is not persisted per browser.");
-if (!darkModeScript.includes("c03-theme-toggle")) throw new Error("Global dark mode toggle is not mounted.");
-
+const theme = read("src/utils/chalinTheme.js");
+const entry = read("src/main.jsx");
 const index = read("index.html");
-if (!index.includes('href="/src/styles/darkMode.css"')) throw new Error("Dark mode stylesheet is not mounted from the application shell.");
-if (!index.includes('src="/darkMode.js"')) throw new Error("Dark mode controller is not mounted from the application shell.");
-
+for (const token of ["localStorage.setItem(STORAGE_KEY", "prefers-color-scheme: dark", "chalin03-theme-change"]) {
+  if (!theme.includes(token)) throw new Error("Theme controller is missing " + token);
+}
+for (const file of ["systemTheme.css", "themeHardening.css", "chalinDarkModeV4.css", "chalinDarkModeV4Compat.css"]) {
+  if (!entry.includes(file)) throw new Error("Theme stylesheet is not mounted: " + file);
+}
+if (index.includes('src="/darkMode.js"')) throw new Error("The retired theme controller must not conflict with the current theme.");
 console.log("Feature-integrity regression contracts passed.");

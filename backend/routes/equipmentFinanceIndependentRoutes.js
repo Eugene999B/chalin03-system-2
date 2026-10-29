@@ -33,6 +33,7 @@ const equipmentFinanceOpeningDepositCandidateCompatibilityRoutes = require("./eq
 const equipmentFinanceDepositReservationRoutes = require("./equipmentFinanceDepositReservationRoutes");
 const equipmentFinanceDocumentCompletionRoutes = require("./equipmentFinanceDocumentCompletionRoutes");
 const equipmentFinanceProfessionalRoutes = require("./equipmentFinanceProfessionalRoutes");
+const equipmentFinancePriceScenarioRoutes = require("./equipmentFinancePriceScenarioRoutes");
 const equipmentFinanceOperationalPolishRoutes = require("./equipmentFinanceOperationalPolishRoutes");
 const equipmentFinanceCorrectionRoutes = require("./equipmentFinanceCorrectionRoutes");
 const equipmentFinancePrivateDocumentsRoutes = require("./equipmentFinancePrivateDocumentsRoutes");
@@ -40,6 +41,7 @@ const equipmentFinanceDocumentReviewRoutes = require("./equipmentFinanceDocument
 const equipmentFinanceDeliveryAuthorizationRoutes = require("./equipmentFinanceDeliveryAuthorizationRoutes");
 const equipmentFinanceDeliveryConfirmationRoutes = require("./equipmentFinanceDeliveryConfirmationRoutes");
 const equipmentFinancePhaseSixRoutes = require("./equipmentFinancePhaseSixRoutes");
+const equipmentFinancePaymentHistoryRoutes = require("./equipmentFinancePaymentHistoryRoutes");
 const installmentCompletionPhaseFourRoutes = require("./installmentCompletionPhaseFourRoutes");
 const {
   router: equipmentFinanceExportPeriodRoutes,
@@ -157,9 +159,11 @@ router.use(equipmentFinancePhaseOneRoutes);
 
 router.use(equipmentFinanceDocumentCompletionRoutes);
 router.use(equipmentFinanceProfessionalRoutes);
+router.use(equipmentFinancePriceScenarioRoutes);
 router.use(equipmentFinanceOperationalPolishRoutes);
 router.use(equipmentFinanceExportPeriodRoutes);
 router.use(equipmentFinancePhaseSixRoutes);
+router.use(equipmentFinancePaymentHistoryRoutes);
 router.use(installmentCompletionPhaseFourRoutes);
 
 router.use("/finance-lifecycle", equipmentFinanceDeliveryConfirmationRoutes);

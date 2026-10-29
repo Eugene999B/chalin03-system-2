@@ -42,8 +42,9 @@ assert.match(documentCentre, /accountSearch/);
 assert.match(documentCentre, /Search Finance document accounts/);
 assert.match(documentCentre, /No agreement selected/);
 assert.match(documentCentre, /src="\/chalin03-logo\.png"/);
-assert.match(documentCentre, /setSelectedPaymentId\(""\)/);
-assert.doesNotMatch(documentCentre, /nextAccounts\[0\]/);
+assert.match(documentCentre, /const validPayments =/);
+assert.match(documentCentre, /setSelectedPaymentId\(\(current\) =>/);
+assert.match(documentCentre, /latest valid committed payment is selected automatically/i);
 assert.doesNotMatch(documentCentre, /payments\?\.at\(-1\)/);
 assert.doesNotMatch(documentCentre, />C03<\/div>/);
 
@@ -59,10 +60,10 @@ assert.match(activation, /Create Agreement/);
 assert.match(activation, /finance-simplified__compact-register/);
 assert.match(activation, /Selected application/);
 
-assert.match(accounts, /Search active installment accounts/);
-assert.match(accounts, /finance-simplified__compact-register/);
-assert.match(accounts, /Selected account/);
-assert.doesNotMatch(accounts, /finance-accounts__grid/);
+assert.match(accounts, /Agreement, customer, phone or excavator/);
+assert.match(accounts, /finance-accounts__grid/);
+assert.match(accounts, /aria-label="Installment account file"/);
+assert.match(accounts, /role="dialog" aria-modal="true"/);
 
 for (const contract of [
   ".finance-simplified__selection-panel",

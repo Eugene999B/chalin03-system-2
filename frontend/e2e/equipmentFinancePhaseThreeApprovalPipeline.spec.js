@@ -30,10 +30,10 @@ function json(route, body, status = 200, headers = {}) {
 
 function scheduleRows() {
   return [
-    { sequence_number: 1, due_date: "2026-09-01", scheduled_amount: 200 },
-    { sequence_number: 2, due_date: "2026-10-01", scheduled_amount: 200 },
-    { sequence_number: 3, due_date: "2026-11-01", scheduled_amount: 200 },
-    { sequence_number: 4, due_date: "2026-12-01", scheduled_amount: 200 },
+    { sequence_number: 1, due_date: "2026-12-01", scheduled_amount: 200 },
+    { sequence_number: 2, due_date: "2027-01-01", scheduled_amount: 200 },
+    { sequence_number: 3, due_date: "2027-02-01", scheduled_amount: 200 },
+    { sequence_number: 4, due_date: "2027-03-01", scheduled_amount: 200 },
   ];
 }
 
@@ -149,7 +149,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
       proposed_installment_count: 4,
       proposed_installment_amount: 200,
       proposed_periodic_amount: 200,
-      proposed_first_due_date: "2026-09-01",
+      proposed_first_due_date: "2026-12-01",
       monthly_salary_income: 3000,
       monthly_business_income: 0,
       monthly_other_income: 0,
@@ -363,8 +363,8 @@ test("one fresh installment is created, listed, opened, corrected and approved",
           installment_count: 4,
           payment_frequency: "monthly",
           custom_interval_days: 30,
-          first_due_date: "2026-09-01",
-          final_due_date: "2026-12-01",
+          first_due_date: "2026-12-01",
+          final_due_date: "2027-03-01",
           periodic_amount: 200,
           final_payment_amount: 200,
           non_working_day_rule: "exact",
@@ -530,56 +530,54 @@ test("one fresh installment is created, listed, opened, corrected and approved",
   await page.goto(
     "/equipment-installment-finance/applications?stage=start&asset=301"
   );
-  await expect(page.getByRole("heading", { name: "Start New Installment" })).toBeVisible();
+  await expect(page.locator(".c03-start2-brand strong")).toHaveText("Start New Installment");
 
   await page.getByRole("button", { name: /Ama Phase Three Approval/ }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Select the exact excavator" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue to Excavator" }).click();
+  await expect(page.getByRole("heading", { name: "Which exact excavator is being financed?" })).toBeVisible();
   await expect(page.getByText("EXC-PH3-301")).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue to Terms" }).click();
 
-  await expect(page.getByRole("heading", { name: "Set the exact payment interval" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build the commercial terms" })).toBeVisible();
   await page.getByLabel("Opening deposit").fill("200");
   await page.getByLabel("Number of payments").fill("4");
-  await page.getByLabel("First payment date").fill("2026-09-01");
-  await expect(page.getByText("4 payment date(s)")).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("First payment due date").fill("2026-12-01");
+  await expect(page.locator(".c03-start2-schedule-rows")).toBeVisible();
+  await page.getByRole("button", { name: "Continue to Assessment" }).click();
 
-  await expect(page.getByRole("heading", { name: "Customer assessment" })).toBeVisible();
-  await page
-    .getByRole("textbox", { name: "ID number Optional", exact: true })
-    .fill("GHA-123456789-0");
-  await page.getByLabel("Employment or business type").selectOption("salaried");
-  await page.getByLabel("Occupation").fill("Site Supervisor");
+  await expect(page.getByRole("heading", { name: "Complete useful customer assessment details" })).toBeVisible();
+  await page.getByLabel("ID number", { exact: true }).fill("GHA-123456789-0");
+  await page.getByLabel("Employment / business type").selectOption("salaried");
+  await page.getByLabel("Occupation / main activity").fill("Site Supervisor");
   await page.getByLabel("Residential address").fill(customer.address);
-  await page.getByLabel("Salary income").fill("3000");
+  await page.getByLabel("Monthly salary income").fill("3000");
   await page.getByLabel("Household expenses").fill("600");
-  await page.getByLabel("Customer consent confirmed").check();
+  await page.getByLabel("Customer information consent confirmed").check();
   await page.getByLabel("Credit assessment consent confirmed").check();
   await page.getByLabel("Guarantor name").fill("Kofi Guarantor");
   await page.getByLabel("Guarantor phone").fill("0240000099");
-  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue to Review" }).click();
 
-  await expect(page.getByRole("heading", { name: "Review and create the draft" })).toBeVisible();
-  await page.getByRole("button", { name: "Create Draft Installment" }).click();
+  await expect(page.getByRole("heading", { name: "Confirm the deal before creating the application" })).toBeVisible();
+  await page.getByRole("button", { name: "Create installment application" }).click();
 
   await expect(page).toHaveURL(/application=501/);
   await expect(page.getByText("ECAPP-PH3-501").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "1 record(s)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1 cases" })).toBeVisible();
   const fileDialog = page.getByRole("dialog", { name: "Credit application file" });
   await expect(fileDialog).toBeVisible();
-  await expect(fileDialog.getByText("Draft", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Draft" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Submit for Review" }).click();
   let actionDialog = page.getByRole("dialog", { name: "Submit for manager review" });
   await actionDialog.getByLabel("Reason / note").fill("Ready for independent review.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Submitted" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Start Review" }).click();
   actionDialog = page.getByRole("dialog", { name: "Start manager review" });
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Under Review", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Under Review" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Request Changes" }).click();
   actionDialog = page.getByRole("dialog", { name: "Request changes" });
@@ -587,7 +585,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
     .getByLabel("Reason / note")
     .fill("Attach a clearer serial plate reference before approval.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Changes Requested", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Changes Requested" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Submit for Review" }).click();
   actionDialog = page.getByRole("dialog", { name: "Submit for manager review" });
@@ -595,12 +593,12 @@ test("one fresh installment is created, listed, opened, corrected and approved",
     .getByLabel("Reason / note")
     .fill("Requested serial plate reference has been checked.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Submitted", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Submitted" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Start Review" }).click();
   actionDialog = page.getByRole("dialog", { name: "Start manager review" });
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
-  await expect(fileDialog.getByText("Under Review", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Under Review" })).toBeVisible();
 
   await fileDialog.getByRole("button", { name: "Approve" }).click();
   actionDialog = page.getByRole("dialog", { name: "Approve credit application" });
@@ -609,7 +607,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
     .fill("Commercial terms, customer information and machine reference approved.");
   await actionDialog.getByRole("button", { name: "Confirm Action" }).click();
 
-  await expect(fileDialog.getByText("Approved", { exact: true })).toBeVisible();
+  await expect(fileDialog.locator(".finance-applications-v2__dialog-head .finance-simple__pill").filter({ hasText: "Approved" })).toBeVisible();
   await expect(fileDialog.getByText("Approved → Approved")).toBeVisible();
   await fileDialog.getByRole("button", { name: "Close" }).click();
   await expect(page.getByText("Approved", { exact: true }).first()).toBeVisible();

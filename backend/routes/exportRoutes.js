@@ -6,6 +6,9 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 
+const { isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems, isExplicitQuantityHeader } =
+  require("../services/discountAuditHelpers");
+
 const router = express.Router();
 
 function getBranchId(req) {
@@ -728,7 +731,12 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
         };
       }
 
-      if (isCurrencyHeader(header) && typeof cell.value === "number") {
+      // A column containing "Total Item Quantity" or "Units Bought" is a
+      // count, even if a generic currency heuristic sees "total".
+      if (isExplicitQuantityHeader(header) && typeof cell.value === "number") {
+        cell.numFmt = "#,##0.##";
+        cell.alignment = { vertical: "top", horizontal: "right" };
+      } else if (isCurrencyHeader(header) && typeof cell.value === "number") {
         cell.numFmt = '"GHS" #,##0.00;[Red]-"GHS" #,##0.00';
         cell.alignment = { vertical: "top", horizontal: "right" };
       } else if (isQuantityHeader(header) && typeof cell.value === "number") {
@@ -766,6 +774,81 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
 
     column.width = Math.min(Math.max(maxLength, minimumWidth), 42);
   });
+
+  // A compact management review sheet: readable rows, clear financial
+  // amounts, no currency symbols in units, counts, staff IDs or summary counts.
+  if (baseName === "discount-audit") {
+    const widths = {
+      "Receipt Number": 25,
+      "Sale Date": 22,
+      "Staff Member": 23,
+      "Products Bought (Summary)": 64,
+      "Units Bought": 14,
+      "Discount Amount (GHS)": 23,
+      "Original Amount (GHS)": 24,
+      "Final Sale Amount (GHS)": 24,
+      "Customer": 27,
+      "Payment Type": 17,
+      "Amount Paid (GHS)": 22,
+      "Outstanding (GHS)": 21,
+      "Sale Status": 17,
+      "Voided?": 13,
+      "Product Bought": 37,
+      "Quantity": 13,
+      "Unit Price (GHS)": 21,
+      "Line Amount (GHS)": 21,
+      "Sale ID": 14,
+      "Branch ID": 14,
+      "Staff ID": 14,
+      "Product Lines": 14,
+      "Customer Phone": 20,
+      "Void Reason": 34,
+      "Voided By": 22,
+      "Voided At": 22,
+      "Metric": 56,
+      "Value": 43,
+      "Active Sales Count": 21,
+      "Voided Sales Count": 23,
+      "Total Discount Amount (GHS)": 28,
+      "Largest Single Discount (GHS)": 30,
+    };
+    worksheet.columns.forEach((column, index) => {
+      const name = analysis.headers[index] || "";
+      if (widths[name]) column.width = widths[name];
+    });
+
+    if (worksheet.name === "Discounted Sales") {
+      worksheet.views = [{ state: "frozen", xSplit: 2, ySplit: headerRowIndex }];
+    }
+    for (let i = startDataRow; i <= endDataRow; i += 1) {
+      const row = worksheet.getRow(i);
+      row.height = worksheet.name === "Discounted Sales" ? 46 : 26;
+      if (worksheet.name === "Investigation Summary") {
+        const metric = String(row.getCell(1).value || "");
+        const valueCell = row.getCell(2);
+        if (typeof valueCell.value === "number") {
+          valueCell.numFmt = metric.includes("(GHS)")
+            ? '"GHS" #,##0.00;[Red]-"GHS" #,##0.00'
+            : "#,##0.##";
+        }
+        if (/discount amount|largest single discount/i.test(metric)) {
+          valueCell.font = { bold: true, color: { argb: "FF754300" } };
+        }
+      }
+      if (["Discounted Sales", "Staff Breakdown"].includes(worksheet.name)) {
+        const discountColumn = analysis.headers.findIndex((name) =>
+          name === "Discount Amount (GHS)" ||
+          name === "Total Discount Amount (GHS)"
+        );
+        if (discountColumn >= 0) {
+          const cell = row.getCell(discountColumn + 1);
+          cell.font = { bold: true, color: { argb: "FF754300" } };
+          cell.fill = { type: "pattern", pattern: "solid",
+            fgColor: { argb: "FFFFF3CC" } };
+        }
+      }
+    }
+  }
 
   worksheet.pageSetup = {
     orientation: analysis.columnCount > 7 ? "landscape" : "portrait",
@@ -2890,6 +2973,259 @@ router.get(
         message:
           error.message ||
           "Something went wrong while exporting customer statement.",
+      });
+    }
+  }
+);
+
+// GET /api/exports/discount-audit — administrator-only report of positive
+// sale-level discounts. This only reads the original sales and item snapshots.
+router.get(
+  "/discount-audit",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      // The shared requireRole middleware permits auditors for other exports.
+      // This sensitive investigation must explicitly remain administrator-only.
+      if (!isAdminAuthorized(req.user)) {
+        return res.status(403).json({
+          status: "error",
+          message: "Administrator authorization required.",
+        });
+      }
+
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+      if (!isValidDateRange(from, to)) {
+        return res.status(400).json({ message: "Invalid reporting date range." });
+      }
+
+      const params = [branchId];
+      const dateFilter = buildDateFilter("s", "created_at", from, to, params);
+      const [sales] = await pool.query(
+        `SELECT s.id, s.branch_id, s.receipt_number, s.created_at,
+                s.customer_name, s.customer_phone, s.staff_id,
+                u.full_name AS staff_name, s.subtotal, s.discount_amount,
+                s.tax_amount, s.total, s.payment_type, s.amount_paid,
+                s.balance, s.sale_status, s.is_voided, s.void_reason,
+                s.voided_at, vu.full_name AS voided_by_name
+           FROM sales s
+           LEFT JOIN users u ON u.id = s.staff_id
+           LEFT JOIN users vu ON vu.id = s.voided_by
+          WHERE s.branch_id = ? AND s.discount_amount > 0
+          ${dateFilter}
+          ORDER BY s.created_at DESC, s.id DESC`,
+        params
+      );
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+      const safe = escapeExcelText;
+
+      // The first worksheet is intentionally compact and investigation-focused.
+      // Currency appears ONLY in financial columns, never quantity or IDs.
+      const overview = workbook.addWorksheet("Discounted Sales");
+      overview.columns = [
+        { header: "Receipt Number", key: "receipt" },
+        { header: "Sale Date", key: "date" },
+        { header: "Staff Member", key: "staff" },
+        { header: "Products Bought (Summary)", key: "products" },
+        { header: "Units Bought", key: "units" },
+        { header: "Discount Amount (GHS)", key: "discount" },
+        { header: "Original Amount (GHS)", key: "subtotal" },
+        { header: "Final Sale Amount (GHS)", key: "total" },
+        { header: "Customer", key: "customer" },
+        { header: "Payment Type", key: "payment" },
+        { header: "Amount Paid (GHS)", key: "paid" },
+        { header: "Outstanding (GHS)", key: "balance" },
+        { header: "Sale Status", key: "status" },
+        { header: "Voided?", key: "voided" },
+      ];
+
+      // One row per purchased product; the complete item record is never
+      // truncated. The sale discount is NOT copied onto each product line,
+      // because it is only stored at the sale level.
+      const itemsSheet = workbook.addWorksheet("Purchased Items");
+      itemsSheet.columns = [
+        { header: "Receipt Number", key: "receipt" },
+        { header: "Sale Date", key: "date" },
+        { header: "Staff Member", key: "staff" },
+        { header: "Customer", key: "customer" },
+        { header: "Product Bought", key: "product" },
+        { header: "Quantity", key: "quantity" },
+        { header: "Unit Price (GHS)", key: "price" },
+        { header: "Line Amount (GHS)", key: "line_total" },
+        { header: "Sale ID", key: "sale_id" },
+      ];
+
+      const saleItemsById = new Map();
+      for (let offset = 0; offset < sales.length; offset += 300) {
+        const batch = sales.slice(offset, offset + 300);
+        const placeholders = batch.map(() => "?").join(",");
+        const [items] = await pool.query(
+          `SELECT si.sale_id, si.product_name, si.quantity, si.unit_price, si.line_total
+             FROM sale_items si
+            WHERE si.sale_id IN (${placeholders})
+            ORDER BY si.sale_id, si.id`,
+          batch.map((sale) => sale.id)
+        );
+        const parentById = new Map(batch.map((sale) => [Number(sale.id), sale]));
+        for (const item of items) {
+          const parent = parentById.get(Number(item.sale_id));
+          if (!parent) continue;
+          const id = Number(item.sale_id);
+          const saleItems = saleItemsById.get(id) || [];
+          saleItems.push(item);
+          saleItemsById.set(id, saleItems);
+          itemsSheet.addRow({
+            receipt: safe(parent.receipt_number),
+            date: formatDateTime(parent.created_at),
+            staff: safe(parent.staff_name),
+            customer: safe(parent.customer_name),
+            product: safe(item.product_name),
+            quantity: Number(item.quantity || 0),
+            price: Number(item.unit_price || 0),
+            line_total: Number(item.line_total || 0),
+            sale_id: id,
+          });
+        }
+      }
+
+      // Keep extra investigative information without crowding the main page.
+      const auditSheet = workbook.addWorksheet("Audit References");
+      auditSheet.columns = [
+        { header: "Receipt Number", key: "receipt" },
+        { header: "Sale ID", key: "id" },
+        { header: "Branch ID", key: "branch" },
+        { header: "Staff ID", key: "staff_id" },
+        { header: "Customer Phone", key: "phone" },
+        { header: "Product Lines", key: "item_lines" },
+        { header: "Tax (GHS)", key: "tax" },
+        { header: "Sale Status", key: "status" },
+        { header: "Voided?", key: "voided" },
+        { header: "Void Reason", key: "reason" },
+        { header: "Voided By", key: "voided_by" },
+        { header: "Voided At", key: "voided_at" },
+      ];
+
+      const byStaff = new Map();
+      let activeDiscount = 0;
+      let voidedDiscount = 0;
+      let activeGross = 0;
+      let activeCount = 0;
+      let voidedCount = 0;
+      let largestActiveDiscount = 0;
+
+      for (const sale of sales) {
+        const items = saleItemsById.get(Number(sale.id)) || [];
+        const discount = Number(sale.discount_amount || 0);
+        const subtotal = Number(sale.subtotal || 0);
+        const voided = isVoidedSale(sale);
+        if (voided) {
+          voidedDiscount += discount;
+          voidedCount += 1;
+        } else {
+          activeCount += 1;
+          activeDiscount += discount;
+          activeGross += subtotal;
+          largestActiveDiscount = Math.max(largestActiveDiscount, discount);
+        }
+
+        const staffKey = sale.staff_id || "Unknown";
+        const member = byStaff.get(staffKey) || {
+          name: sale.staff_name || "Unknown", count: 0,
+          discount: 0, maxDiscount: 0, voidedCount: 0,
+        };
+        if (voided) {
+          member.voidedCount += 1;
+        } else {
+          member.count += 1;
+          member.discount += discount;
+          member.maxDiscount = Math.max(member.maxDiscount, discount);
+        }
+        byStaff.set(staffKey, member);
+
+        overview.addRow({
+          receipt: safe(sale.receipt_number),
+          date: formatDateTime(sale.created_at),
+          staff: safe(sale.staff_name),
+          products: describeSaleItems(items),
+          units: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+          discount,
+          subtotal,
+          total: Number(sale.total || 0),
+          customer: safe(sale.customer_name),
+          payment: safe(sale.payment_type),
+          paid: Number(sale.amount_paid || 0),
+          balance: Number(sale.balance || 0),
+          status: safe(sale.sale_status),
+          voided: voided ? "YES" : "NO",
+        });
+        auditSheet.addRow({
+          receipt: safe(sale.receipt_number),
+          id: sale.id,
+          branch: sale.branch_id,
+          staff_id: sale.staff_id,
+          phone: safe(sale.customer_phone),
+          item_lines: items.length,
+          tax: Number(sale.tax_amount || 0),
+          status: safe(sale.sale_status),
+          voided: voided ? "YES" : "NO",
+          reason: safe(sale.void_reason),
+          voided_by: safe(sale.voided_by_name),
+          voided_at: formatDateTime(sale.voided_at),
+        });
+      }
+
+      const summary = workbook.addWorksheet("Investigation Summary");
+      summary.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+      [
+        ["Selected Branch ID", branchId],
+        ["From", from || "All available history"],
+        ["To", to || "All available history"],
+        ["All discounted sales (including voided)", sales.length],
+        ["Active discounted sales", activeCount],
+        ["Voided or cancelled discounted sales", voidedCount],
+        ["Original amount of active discounted sales (GHS)", activeGross],
+        ["Total active discount amount (GHS)", activeDiscount],
+        ["Largest single active discount (GHS)", largestActiveDiscount],
+        ["Voided or cancelled discount amount (GHS) - excluded from active", voidedDiscount],
+        ["Price interpretation", "Sale-level discount; historical item prices are before discount."],
+        ["Item review", "Every purchased product is listed on the Purchased Items worksheet."],
+      ].forEach(([metric, value]) => summary.addRow({ metric, value }));
+
+      const staffSheet = workbook.addWorksheet("Staff Breakdown");
+      staffSheet.columns = [
+        { header: "Staff ID", key: "id" },
+        { header: "Staff Member", key: "name" },
+        { header: "Active Sales Count", key: "count" },
+        { header: "Total Discount Amount (GHS)", key: "discount" },
+        { header: "Largest Single Discount (GHS)", key: "maxDiscount" },
+        { header: "Voided Sales Count", key: "voidedCount" },
+      ];
+      for (const [id, member] of byStaff) {
+        staffSheet.addRow({ id, ...member, name: safe(member.name) });
+      }
+
+      for (const sheet of [overview, itemsSheet, auditSheet, summary, staffSheet]) {
+        styleWorksheet(sheet);
+      }
+
+      console.info("Discount audit export", {
+        userId: req.user?.id, branchId, from, to, count: sales.length,
+      });
+      return sendStoreWorkbook(req, res, workbook, "discount-audit");
+    } catch (error) {
+      console.error("Discount audit export failed:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Could not prepare discount audit export.",
       });
     }
   }

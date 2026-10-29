@@ -81,9 +81,9 @@ test("application list is paginated, searchable and never contains image bytes",
 test("created application query opens the exact record and drafts resume in place", () => {
   assert.match(applicationsPage, /query\.get\("application"\)/);
   assert.match(applicationsPage, /requestedApplicationId/);
-  assert.match(applicationsPage, /Resume Draft/);
-  assert.match(applicationsPage, /Edit Draft/);
-  assert.match(applicationsPage, /Save Draft/);
+  assert.match(applicationsPage, /Resume draft/i);
+  assert.match(applicationsPage, /Edit draft/i);
+  assert.match(applicationsPage, /saveEdit\(\{ manual: true \}\)/);
   assert.match(applicationsPage, /known_version/);
   assert.match(recoveryRoute, /FINANCE_APPLICATION_VERSION_CONFLICT/);
   assert.match(recoveryRoute, /action_type, from_status, to_status/);

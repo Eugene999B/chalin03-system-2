@@ -166,7 +166,7 @@ test("controlled maintenance runs Phase 5A after Phase 4 while API startup stays
   assert.ok(phaseFour >= 0 && phaseFiveA > phaseFour);
   assert.equal(
     packageJson.scripts.start,
-    "node -r ./services/exportWorkbookSafetyBootstrap.js server.js"
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.equal(
     packageJson.scripts["migrate:equipment-finance:phase5a:production"],

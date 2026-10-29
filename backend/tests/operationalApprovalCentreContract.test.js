@@ -19,9 +19,9 @@ test("approval centre uses the already reviewed Railway preload gate", () => {
     "backend/services/operationalApprovalBootstrap.js"
   );
 
-  assert.match(
+  assert.equal(
     packageJson.scripts.start,
-    /node -r \.\/services\/exportWorkbookSafetyBootstrap\.js server\.js$/
+    "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js"
   );
   assert.doesNotMatch(
     packageJson.scripts.start,
@@ -111,6 +111,6 @@ test("the floating centre supports sale edit, sale void, approve and reject", ()
   assert.match(launcher, /Your administrator password/);
   assert.match(main, /OperationalApprovalLauncher/);
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
-  assert.match(main, /browser-cache-integrity-v38/);
+  assert.match(main, /browser-cache-integrity-v40/);
   assert.match(main, /CHALIN03_ASSET_MISMATCH/);
 });

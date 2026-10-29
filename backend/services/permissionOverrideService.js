@@ -12,6 +12,9 @@ const {
 const {
   isOriginalSystemAdministrator,
 } = require("../security/systemAdminIdentity");
+const {
+  hasDelegatedCapability,
+} = require("./delegatedAdministrationService");
 
 const WORKSPACE_CODES = new Set([
   "spare_parts",
@@ -162,6 +165,17 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
     );
   }
 
+  const connection = options.connection || pool;
+  if (
+    String(session?.role || "").trim().toLowerCase() === "admin" &&
+    (await hasDelegatedCapability(session, "enabled", connection))
+  ) {
+    // Owner-approved Delegated System Administrators receive the complete
+    // operational permission catalog. Original-owner-only recovery/destructive
+    // actions remain protected by their separate identity gates.
+    return uniquePermissions(ALL_PERMISSIONS);
+  }
+
   const basePermissions = roleDefaultPermissions({
     ...session,
     workspace_code: workspaceCode,
@@ -169,7 +183,7 @@ async function resolveEffectivePermissions(session = {}, options = {}) {
   const overrides = await loadActivePermissionOverrides({
     userId: session.id,
     workspaceCode,
-    connection: options.connection || pool,
+    connection,
   });
 
   return applyPermissionOverrides(basePermissions, overrides);

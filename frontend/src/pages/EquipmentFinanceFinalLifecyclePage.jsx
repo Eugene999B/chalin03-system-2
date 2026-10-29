@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import { financeDateLabel } from "../utils/financeDisplayDate";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinanceFinalLifecycle.css";
 
@@ -39,16 +40,7 @@ const label = (value) =>
     .replaceAll("_", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
 
-const dateLabel = (value) => {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
-  return parsed.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
+const dateLabel = (value) => financeDateLabel(value, "—");
 
 const errorMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;

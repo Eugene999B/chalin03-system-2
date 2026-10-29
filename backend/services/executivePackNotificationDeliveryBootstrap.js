@@ -191,7 +191,7 @@ async function deliverExecutivePackSmsBatch({ from, to, recipientId }) {
         branchId: 1,
         phone: recipient.phone,
         message: messages[index],
-        smsType: "executive_intelligence_pack",
+        smsType: "other",
         sourceReference: `${smsSourceReference}:${index + 1}`,
       });
     }

@@ -28,13 +28,14 @@ function install() {
 
     const originalGetPortfolioDashboard = loaded.getPortfolioDashboard;
 
-    async function safeQuery(pool, label, sql, params = [], fallback = []) {
+    async function safeQuery(pool, label, sql, params = []) {
       try {
         const [rows] = await pool.query(sql, params);
         return rows;
       } catch (error) {
+        // Never replace missing Finance records with fabricated empty/zero data.
         console.error(`Finance portfolio fallback query failed [${label}]:`, error);
-        return fallback;
+        throw error;
       }
     }
 
@@ -231,32 +232,13 @@ function install() {
           };
         } catch (fallbackError) {
           console.error("Finance portfolio fallback failed unexpectedly:", fallbackError);
-          return {
-            period: {
-              date_from: validDate(options.dateFrom) || null,
-              date_to: validDate(options.dateTo) || null,
-            },
-            summary: {
-              agreement_count: 0,
-              active_count: 0,
-              completed_count: 0,
-              overdue_count: 0,
-              portfolio_value: 0,
-              deposits_received: 0,
-              lifetime_collections: 0,
-              outstanding_balance: 0,
-              overdue_amount: 0,
-              collection_count: 0,
-              collected_amount: 0,
-            },
-            accounts: [],
-            recent_payments: [],
-            upcoming: [],
-            aging: { current: 0, overdue: 0 },
-            reconciliation_warning: true,
-            reconciliation_error_code: error?.code || "EQUIPMENT_FINANCE_RECONCILIATION_ERROR",
-            fallback_error_code: fallbackError?.code || "EQUIPMENT_FINANCE_PORTFOLIO_FALLBACK_ERROR",
-          };
+          const unavailable = new Error(
+            "The Finance portfolio could not be verified against the database. Retry when MySQL is available. No zero balances or empty accounts are being reported as real."
+          );
+          unavailable.statusCode = 503;
+          unavailable.code = "FINANCE_PORTFOLIO_UNAVAILABLE";
+          unavailable.cause = fallbackError;
+          throw unavailable;
         }
       }
     };

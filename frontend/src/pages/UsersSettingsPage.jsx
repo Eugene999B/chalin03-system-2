@@ -181,6 +181,9 @@ export default function UsersSettingsPage() {
     worker_id_card_validity_months: 24,
     worker_employee_number_prefix: "CH03",
   });
+  const [systemAdminLoginPhone, setSystemAdminLoginPhone] = useState("");
+  const [savingSystemAdminLoginPhone, setSavingSystemAdminLoginPhone] =
+    useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -303,6 +306,17 @@ export default function UsersSettingsPage() {
     setSettings(response.data.settings || {});
   }
 
+  async function loadSystemAdminLoginPhone() {
+    if (!isOriginalSystemAdministrator(currentUser)) return;
+
+    const response = await axiosClient.get(
+      "/settings/system-admin-login-phone"
+    );
+    setSystemAdminLoginPhone(
+      response.data.system_admin_login_phone || ""
+    );
+  }
+
   async function loadPageData() {
     setError("");
     setMessage("");
@@ -334,6 +348,17 @@ export default function UsersSettingsPage() {
         error.response?.data?.message ||
           "Failed to load selected-store settings."
       );
+    }
+
+    if (isOriginalSystemAdministrator(currentUser)) {
+      try {
+        await loadSystemAdminLoginPhone();
+      } catch (error) {
+        loadErrors.push(
+          error.response?.data?.message ||
+            "Failed to load the System Administrator login phone."
+        );
+      }
     }
 
     if (loadErrors.length > 0) {
@@ -654,6 +679,38 @@ This disables login, revokes all active sessions and assigned access, and preser
       setError(error.response?.data?.message || "Failed to reset password.");
     } finally {
       setResettingPassword(false);
+    }
+  }
+
+  async function saveSystemAdminLoginPhone() {
+    setMessage("");
+    setError("");
+
+    if (!systemAdminLoginPhone.trim()) {
+      setError("Enter the System Administrator login phone.");
+      return;
+    }
+
+    setSavingSystemAdminLoginPhone(true);
+    try {
+      const response = await axiosClient.patch(
+        "/settings/system-admin-login-phone",
+        { system_admin_login_phone: systemAdminLoginPhone.trim() }
+      );
+      setSystemAdminLoginPhone(
+        response.data.system_admin_login_phone || systemAdminLoginPhone.trim()
+      );
+      setMessage(
+        response.data.message ||
+          "System Administrator login phone updated successfully."
+      );
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Failed to update the System Administrator login phone."
+      );
+    } finally {
+      setSavingSystemAdminLoginPhone(false);
     }
   }
 
@@ -1737,6 +1794,54 @@ This disables login, revokes all active sessions and assigned access, and preser
                 </div>
 
                 <div className="users-card-body">
+                  {isOriginalSystemAdministrator(currentUser) && (
+                    <div className="users-settings-section">
+                      <h3>Protected System Administrator Login</h3>
+                      <p
+                        style={{
+                          marginTop: 0,
+                          color: "#64748b",
+                          fontWeight: 750,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        This number is used only to sign in to the protected
+                        System Administrator account. It is separate from the
+                        Owner Security Alert Phone and the Business Phone /
+                        Receipt MoMo Number below.
+                      </p>
+                      <div className="users-form-grid">
+                        <div className="users-field">
+                          <label>System Administrator Login Phone</label>
+                          <input
+                            value={systemAdminLoginPhone}
+                            onChange={(event) =>
+                              setSystemAdminLoginPhone(event.target.value)
+                            }
+                            placeholder="Example: 0240000000"
+                            inputMode="tel"
+                            autoComplete="tel"
+                          />
+                        </div>
+                        <div
+                          className="users-field"
+                          style={{ alignSelf: "end" }}
+                        >
+                          <button
+                            type="button"
+                            className="users-primary-action"
+                            onClick={saveSystemAdminLoginPhone}
+                            disabled={savingSystemAdminLoginPhone}
+                          >
+                            {savingSystemAdminLoginPhone
+                              ? "Saving Login Phone…"
+                              : "Save Login Phone"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="users-settings-section">
                     <h3>Business Information</h3>
                     <div className="users-form-grid">

@@ -66,6 +66,17 @@ const REPORTS = [
     featured: true,
   },
   {
+    key: "discount-audit",
+    title: "Discount Downloads — Staff Investigation",
+    category: "Sales",
+    icon: "🔍",
+    endpoint: "/exports/discount-audit",
+    description: "Clear Excel investigation report with purchased products, quantities, staff, customer, and actual discount amounts in Ghana cedis. Separate worksheets show full purchased-item prices, staff totals and audit references. Clear dates for all history.",
+    dateFilter: true,
+    featured: true,
+    adminOnly: true,
+  },
+  {
     key: "sales",
     title: "Sales Transactions",
     category: "Sales",
@@ -192,6 +203,7 @@ export default function ExportsPage() {
     const query = search.trim().toLowerCase();
 
     return REPORTS.filter((report) => {
+      if (report.adminOnly && role !== "admin") return false;
       const matchesCategory = category === "All" || report.category === category;
       const matchesSearch =
         !query ||
@@ -201,7 +213,7 @@ export default function ExportsPage() {
 
       return matchesCategory && matchesSearch;
     });
-  }, [category, search]);
+  }, [category, search, role]);
 
   function makeSafeFileName(value) {
     return String(value || "store")

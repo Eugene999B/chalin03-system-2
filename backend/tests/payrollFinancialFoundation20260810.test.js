@@ -108,7 +108,7 @@ test("payroll API is explicit and production startup remains API-only", () => {
   assert.match(server, /const payrollFoundationRoutes = require\("\.\/routes\/payrollFoundationRoutes"\)/);
   assert.match(server, /app\.use\("\/api\/payroll"/);
   assert.match(server, /app\.use\("\/api\/payroll", sensitiveAdminLimiter\)/);
-  assert.equal(packageJson.scripts.start, "node -r ./services/exportWorkbookSafetyBootstrap.js server.js");
+  assert.equal(packageJson.scripts.start, "node -r ./services/runtimeCostControlBootstrap.js -r ./services/exportWorkbookSafetyBootstrap.js -r ./services/equipmentFinanceBossAlertDeliveryBootstrap.js -r ./services/equipmentFinancePortfolioResilience.js -r ./services/equipmentMediaVaultBootstrap.js server.js");
   assert.equal(
     packageJson.scripts["migrate:payroll-foundation:production"],
     "node scripts/runPayrollFinancialFoundationMigration.js"

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router";
 import axiosClient from "../api/axiosClient";
+import ProtectedFinanceImage from "../components/ProtectedFinanceImage";
+import { financeDateLabel } from "../utils/financeDisplayDate";
 import "../styles/equipmentFinanceAccountsCompletion.css";
 import "../styles/equipmentFinanceSimplifiedWorkspace.css";
 
@@ -19,17 +21,7 @@ function label(value) {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-function dateLabel(value) {
-  if (!value) return "Not recorded";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value).slice(0, 10)
-    : parsed.toLocaleDateString("en-GH", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      });
-}
+function dateLabel(value) { return financeDateLabel(value, "Not recorded"); }
 
 function errorMessage(error, fallback) {
   return error?.response?.data?.message || error?.message || fallback;
@@ -291,7 +283,7 @@ export default function EquipmentFinanceCustomerPortfolioPage() {
                 {customer.latest_application?.application_id ? (
                   <section className="finance-accounts__identity">
                     <div className="finance-accounts__application-image">
-                      <img src={`/equipment-catalogue/sales/credit-applications/${customer.latest_application.application_id}/image`} alt={`Excavator for ${customer.customer_name}`} />
+                      <ProtectedFinanceImage src={`/equipment-catalogue/sales/credit-applications/${customer.latest_application.application_id}/image`} alt={`Excavator for ${customer.customer_name}`} eager />
                     </div>
                     <div>
                       <p>Latest identity and assessment snapshot</p>

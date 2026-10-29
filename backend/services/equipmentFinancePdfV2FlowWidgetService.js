@@ -21,6 +21,8 @@ const {
   sectionTitle,
 } = require("./equipmentFinancePdfV2BasicWidgetService");
 
+const { documentBlocks } = require("./equipmentFinanceDocumentTypographyService");
+
 function writeRawFlow(doc, document, text, options) {
   const width = options.width || pageWidth(doc);
   const x = options.x || doc.page.margins.left;
@@ -67,18 +69,35 @@ function writeRawFlow(doc, document, text, options) {
 function writeFlowText(doc, document, value, options = {}) {
   const text = clean(value, "");
   if (!text) return;
-  const paragraphs = text.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
+  const paragraphs = documentBlocks(text);
   const template = templateFor(document);
   const width = options.width || pageWidth(doc);
   const x = options.x || doc.page.margins.left;
   const size = options.size || 8.5;
   const lineGap = options.lineGap ?? 2;
 
-  paragraphs.forEach((paragraph, paragraphIndex) => {
+  paragraphs.forEach((block, paragraphIndex) => {
+    const paragraph = block.text;
+    if (block.kind === "heading") {
+      const titleSize = 9.1;
+      const titleHeight = doc.font("Helvetica-Bold").fontSize(titleSize)
+        .heightOfString(paragraph, { width: width - 23, lineGap: 1.4 });
+      ensureSpace(doc, document, titleHeight + 24);
+      const titleY = doc.y;
+      doc.roundedRect(x, titleY, width, titleHeight + 17, 6)
+        .fillAndStroke(template.accentSoft, COLORS.line);
+      doc.rect(x, titleY, 4, titleHeight + 17).fill(template.accent);
+      doc.fillColor(template.accent).font("Helvetica-Bold").fontSize(titleSize).text(
+        paragraph, x + 12, titleY + 8,
+        { width: width - 23, lineGap: 1.4 }
+      );
+      doc.y = titleY + titleHeight + 25;
+      return;
+    }
     const height = doc.font(options.bold ? "Helvetica-Bold" : options.font || "Helvetica")
       .fontSize(size)
       .heightOfString(paragraph, {
-        width: width - 34,
+        width: width - 46,
         lineGap,
         align: options.align || "justify",
       });
@@ -113,14 +132,42 @@ function writeFlowText(doc, document, value, options = {}) {
   });
 }
 
+const {
+  nameForRole,
+  signatureImageForRole,
+} = require("./equipmentFinanceDocumentPartyNamesService");
+
 function drawSignatureBlocks(doc, document, roles) {
-  sectionTitle(doc, document, "Execution and signatures");
   const snapshot = document.snapshot || {};
+  // Keep the declaration and four existing signature boxes together on
+  // a clean page if there is insufficient space; never overlap a box or
+  // the immutable verification panel.
+  ensureSpace(doc, document, 364);
+  sectionTitle(doc, document, "Execution and signatures");
   const template = templateFor(document);
   const left = doc.page.margins.left;
   const width = pageWidth(doc);
   const gap = 12;
   const columnWidth = (width - gap) / 2;
+  const { buyerDeclaration } = require("./equipmentFinanceDepositDeclarationService");
+  const statement = buyerDeclaration(snapshot);
+  const declarationHeight = Math.max(57, doc.font("Helvetica").fontSize(7.3)
+    .heightOfString(statement, { width: width - 39, lineGap: 2 }) + 28);
+  ensureSpace(doc, document, declarationHeight + 226);
+  const declarationTop = doc.y;
+  doc.roundedRect(left, declarationTop, width, declarationHeight, 8)
+    .fillAndStroke(COLORS.paper, COLORS.line);
+  doc.rect(left, declarationTop, 5, declarationHeight).fill(template.accent);
+  doc.circle(left + 18, declarationTop + 18, 7).fill(COLORS.gold);
+  doc.fillColor(template.accent).font("Helvetica-Bold").fontSize(8.1).text(
+    "BUYER'S DECLARATION", left + 32, declarationTop + 10,
+    { width: width - 45, lineBreak: false }
+  );
+  doc.fillColor(COLORS.ink).font("Helvetica").fontSize(7.3).text(
+    statement, left + 16, declarationTop + 26,
+    { width: width - 32, lineGap: 2, align: "left" }
+  );
+  doc.y = declarationTop + declarationHeight + 11;
 
   for (let index = 0; index < roles.length; index += 2) {
     ensureSpace(doc, document, 112);
@@ -128,8 +175,8 @@ function drawSignatureBlocks(doc, document, roles) {
     roles.slice(index, index + 2).forEach(([role, title], columnIndex) => {
       const x = left + columnIndex * (columnWidth + gap);
       const record = snapshot.signatures?.find((item) => item.signer_role === role);
-      const fallback = role === "seller" ? snapshot.company?.authorised_seller_signature_data_url : null;
-      const signature = imageBuffer(record?.signature_data_url || fallback);
+      const signature = imageBuffer(signatureImageForRole(snapshot, role, record));
+      const printedName = nameForRole(snapshot, role, record);
       doc.roundedRect(x, y, columnWidth, 98, 9).fillAndStroke(COLORS.paper, COLORS.line);
       doc.roundedRect(x, y, columnWidth, 23, 9).fill(template.accent);
       doc.rect(x, y + 11, columnWidth, 12).fill(template.accent);
@@ -150,17 +197,15 @@ function drawSignatureBlocks(doc, document, roles) {
       doc.moveTo(x + 14, y + 70).lineTo(x + columnWidth - 14, y + 70)
         .lineWidth(0.65).strokeColor(COLORS.goldDark).stroke();
       doc.fillColor(COLORS.ink).font("Helvetica-Bold").fontSize(6.8).text(
-        clean(
-          record?.signer_name ||
-            (role === "seller" ? snapshot.company?.authorised_seller_name : ""),
-          "Name / signature"
-        ),
+        clean(printedName, "Name / signature"),
         x + 10,
         y + 78,
         { width: columnWidth - 20, align: "center", lineBreak: false, ellipsis: true }
       );
       doc.fillColor(COLORS.muted).font("Helvetica").fontSize(5.5).text(
-        record?.signed_at ? dateTimeLabel(record.signed_at) : "Date / time",
+        record?.signed_at && signature
+          ? dateTimeLabel(record.signed_at)
+          : "Date / time",
         x + 10,
         y + 89,
         { width: columnWidth - 20, align: "center", lineBreak: false }

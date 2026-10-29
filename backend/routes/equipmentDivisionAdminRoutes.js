@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
+const { requirePermission } = require("../middleware/permissionMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { revokeUserSessions } = require("../services/categoryIsolationService");
 const { normalizedPhoneForStorage } = require("../services/loginIdentityService");
@@ -349,6 +350,69 @@ function sendError(res, error, fallback) {
   console.error(fallback, error);
   return res.status(500).json({ status: "error", message: fallback });
 }
+
+// Read-only workforce discovery for authorized Equipment Business staff.
+// Admin mutations remain protected by requireSystemAdministrator below.
+router.get("/staff/directory", requirePermission("workers.view"), async (req, res) => {
+  try {
+    const unit = await equipmentBusinessUnit();
+    const [assignments] = await pool.query(
+      `SELECT uba.access_role
+         FROM user_business_access uba
+         INNER JOIN users actor ON actor.id = uba.user_id
+        WHERE uba.user_id = ?
+          AND uba.business_unit_id = ?
+          AND uba.can_access = TRUE
+          AND actor.is_active = TRUE
+          AND actor.primary_workspace_code = 'equipment_hire'
+          AND actor.category_assignment_status = 'assigned'
+        LIMIT 1`,
+      [req.user.id, unit.id]
+    );
+    const viewerRole = normalizeRole(assignments[0]?.access_role);
+    const viewerTemplate = roleTemplate(viewerRole);
+    if (!viewerTemplate || !viewerTemplate.permissions.includes("workers.view")) {
+      return res.status(403).json({
+        status: "error",
+        code: "EQUIPMENT_WORKFORCE_SCOPE_DENIED",
+        message: "An active Equipment Business staff assignment is required.",
+      });
+    }
+
+    const division = viewerTemplate.division;
+    const staff = (await loadStaff())
+      .filter((person) =>
+        division === EQUIPMENT_DIVISIONS.BOTH ||
+        person.division === division ||
+        person.division === EQUIPMENT_DIVISIONS.BOTH
+      )
+      .map((person) => ({
+        id: person.id,
+        full_name: person.full_name,
+        username: person.username,
+        workspace_role: person.workspace_role,
+        division: person.division,
+        is_active: person.is_active,
+        can_access: person.can_access,
+        worker_profile_linked: person.worker_profile_linked,
+      }));
+
+    return res.json({
+      status: "success",
+      staff,
+      summary: {
+        staff_logins: staff.length,
+        active_logins: staff.filter((person) => person.is_active && person.can_access).length,
+        hire_staff: staff.filter((person) => person.division === EQUIPMENT_DIVISIONS.HIRE).length,
+        finance_staff: staff.filter((person) => person.division === EQUIPMENT_DIVISIONS.FINANCE).length,
+        dual_staff: staff.filter((person) => person.division === EQUIPMENT_DIVISIONS.BOTH).length,
+      },
+      policy: { read_only: true, division, mutations: "system_administrator_only" },
+    });
+  } catch (error) {
+    return sendError(res, error, "Could not load your division staff directory.");
+  }
+});
 
 router.use(requireSystemAdministrator);
 
