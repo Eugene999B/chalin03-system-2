@@ -40,6 +40,7 @@ export default function Layout() {
     branchName,
     branchLocation,
     canAccessAllBranches,
+    hasPermission,
   } = useAuth();
 
   const navigate = useNavigate();
@@ -93,6 +94,13 @@ export default function Layout() {
   const navigationSections = useMemo(() => {
     const mainWorkItems = isAuditor
       ? [
+          {
+            title: "Sales History",
+            description: "Read-only review of store sales, receipts, voids and corrections",
+            path: "/sales-history",
+            icon: "🧾",
+            keywords: "audit sales history receipts voided corrected transactions date filters",
+          },
           {
             title: "Change Password",
             description: "Update your auditor login password",
@@ -160,6 +168,17 @@ export default function Layout() {
             icon: "📞",
             keywords: "debt debts credit balance payment reminder whatsapp owing",
           },
+          ...(hasPermission("payroll.view")
+            ? [
+                {
+                  title: "Payroll Processing",
+                  description: "Validate, approve, pay and reconcile protected salary cycles",
+                  path: "/payroll",
+                  icon: "💵",
+                  keywords: "payroll salary wages approval payment reconciliation workforce",
+                },
+              ]
+            : []),
           {
             title: "Change Password",
             description: "Update your staff login password",
@@ -428,7 +447,7 @@ export default function Layout() {
     }
 
     return sections;
-  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator]);
+  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission]);
 
   const commandItems = useMemo(() => {
     return navigationSections.flatMap((section) =>

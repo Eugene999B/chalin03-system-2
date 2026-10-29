@@ -6,6 +6,9 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 
+const { isAdminAuthorized, isValidDateRange, escapeExcelText, discountPercent, describeSaleItems, isExplicitQuantityHeader } =
+  require("../services/discountAuditHelpers");
+
 const router = express.Router();
 
 function getBranchId(req) {
@@ -227,12 +230,129 @@ function getReportTitle(baseName) {
     .join(" ");
 }
 
-function getDateRangeLabel(from, to) {
-  if (from && to) return `${from} to ${to}`;
-  if (from) return `From ${from}`;
-  if (to) return `Up to ${to}`;
+function parseReportDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
 
-  return "All available records";
+  const text = cleanText(value);
+  if (!text) return null;
+
+  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (isoMatch) {
+    const date = new Date(
+      Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]), 12)
+    );
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatReportDate(value) {
+  const date = parseReportDate(value);
+  if (!date) return "";
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "Africa/Accra",
+  })
+    .format(date)
+    .toUpperCase();
+}
+
+function formatReportDateKey(value) {
+  const date = parseReportDate(value);
+  if (!date) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Africa/Accra",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function isLikelyReportDateHeader(value) {
+  return /(^|[\s_-])(date|created|updated|sale|sold|paid|payment|purchase|return|closing|adjustment|transfer|issued|received|recorded)([\s_-]|$)/i.test(
+    String(value || "")
+  );
+}
+
+function deriveWorkbookDateBounds(analysis) {
+  let earliest = null;
+  let latest = null;
+
+  analysis.forEach((sheet) => {
+    const dateIndexes = sheet.headers
+      .map((header, index) => (isLikelyReportDateHeader(header) ? index : -1))
+      .filter((index) => index >= 0);
+
+    sheet.rows.forEach((row) => {
+      dateIndexes.forEach((index) => {
+        const date = parseReportDate(row[index]);
+        if (!date) return;
+        if (!earliest || date < earliest) earliest = date;
+        if (!latest || date > latest) latest = date;
+      });
+    });
+  });
+
+  return { earliest, latest };
+}
+
+function getDateRangeMeta(from, to, analysis) {
+  const bounds = deriveWorkbookDateBounds(analysis);
+  const fromDate = parseReportDate(from) || bounds.earliest;
+  const toDate = parseReportDate(to) || bounds.latest;
+  const fromLabel = formatReportDate(fromDate);
+  const toLabel = formatReportDate(toDate);
+  const fromKey = formatReportDateKey(fromDate);
+  const toKey = formatReportDateKey(toDate);
+
+  if (fromLabel && toLabel) {
+    return {
+      fromLabel,
+      toLabel,
+      periodLabel: `${fromLabel} TO ${toLabel}`,
+      periodBanner: `REPORTING PERIOD: FROM ${fromLabel} TO ${toLabel}`,
+      filenamePart: `${fromKey}-to-${toKey}`,
+    };
+  }
+
+  if (fromLabel) {
+    return {
+      fromLabel,
+      toLabel: "LATEST AVAILABLE RECORD",
+      periodLabel: `FROM ${fromLabel} TO LATEST AVAILABLE RECORD`,
+      periodBanner: `REPORTING PERIOD: FROM ${fromLabel} TO LATEST AVAILABLE RECORD`,
+      filenamePart: `from-${fromKey}`,
+    };
+  }
+
+  if (toLabel) {
+    return {
+      fromLabel: "EARLIEST AVAILABLE RECORD",
+      toLabel,
+      periodLabel: `FROM EARLIEST AVAILABLE RECORD TO ${toLabel}`,
+      periodBanner: `REPORTING PERIOD: FROM EARLIEST AVAILABLE RECORD TO ${toLabel}`,
+      filenamePart: `to-${toKey}`,
+    };
+  }
+
+  return {
+    fromLabel: "NOT AVAILABLE",
+    toLabel: "NOT AVAILABLE",
+    periodLabel: "NO DATED RECORDS AVAILABLE",
+    periodBanner: "REPORTING PERIOD: NO DATED RECORDS AVAILABLE",
+    filenamePart: "no-dated-records",
+  };
 }
 
 async function getBranchDetails(branchId) {
@@ -494,21 +614,23 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
   let headerRowIndex = analysis.headerRowIndex;
 
   if (simpleHeader && baseName !== "daily-closings") {
-    worksheet.insertRows(1, [[], [], [], [], []]);
-    headerRowIndex = 6;
+    worksheet.insertRows(1, [[], [], [], [], [], []]);
+    headerRowIndex = 7;
 
     const lastColumn = Math.max(analysis.columnCount, 1);
     worksheet.mergeCells(1, 1, 1, lastColumn);
     worksheet.mergeCells(2, 1, 2, lastColumn);
     worksheet.mergeCells(3, 1, 3, lastColumn);
     worksheet.mergeCells(4, 1, 4, lastColumn);
+    worksheet.mergeCells(5, 1, 5, lastColumn);
 
     worksheet.getCell(1, 1).value = "CHALIN 03 COMPANY LIMITED";
     worksheet.getCell(2, 1).value = meta.reportTitle;
     worksheet.getCell(3, 1).value = `${meta.branch.code} - ${meta.branch.name}${
       meta.branch.location ? ` | ${meta.branch.location}` : ""
     }`;
-    worksheet.getCell(4, 1).value = `Period: ${meta.periodLabel} | Generated: ${meta.generatedLabel} | By: ${meta.generatedBy}`;
+    worksheet.getCell(4, 1).value = meta.periodBanner;
+    worksheet.getCell(5, 1).value = `Generated: ${meta.generatedLabel} | By: ${meta.generatedBy}`;
 
     worksheet.getCell(1, 1).font = {
       bold: true,
@@ -534,14 +656,40 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
     worksheet.getCell(2, 1).alignment = { horizontal: "center" };
     worksheet.getRow(2).height = 25;
 
-    [3, 4].forEach((rowNumber) => {
-      worksheet.getCell(rowNumber, 1).font = {
-        bold: rowNumber === 3,
-        size: 10,
-        color: { argb: "FF334155" },
-      };
-      worksheet.getCell(rowNumber, 1).alignment = { horizontal: "center" };
-    });
+    worksheet.getCell(3, 1).font = {
+      bold: true,
+      size: 10,
+      color: { argb: "FF334155" },
+    };
+    worksheet.getCell(3, 1).alignment = { horizontal: "center" };
+
+    worksheet.getCell(4, 1).font = {
+      bold: true,
+      size: 13,
+      color: { argb: "FF071529" },
+    };
+    worksheet.getCell(4, 1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE6B91E" },
+    };
+    worksheet.getCell(4, 1).alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
+    };
+    worksheet.getCell(4, 1).border = {
+      top: { style: "medium", color: { argb: "FF071529" } },
+      bottom: { style: "medium", color: { argb: "FF071529" } },
+    };
+    worksheet.getRow(4).height = 28;
+
+    worksheet.getCell(5, 1).font = {
+      size: 9,
+      color: { argb: "FF475569" },
+    };
+    worksheet.getCell(5, 1).alignment = { horizontal: "center" };
+    worksheet.getRow(6).height = 8;
   }
 
   const headerRow = worksheet.getRow(headerRowIndex);
@@ -583,7 +731,12 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
         };
       }
 
-      if (isCurrencyHeader(header) && typeof cell.value === "number") {
+      // A column containing "Total Item Quantity" or "Units Bought" is a
+      // count, even if a generic currency heuristic sees "total".
+      if (isExplicitQuantityHeader(header) && typeof cell.value === "number") {
+        cell.numFmt = "#,##0.##";
+        cell.alignment = { vertical: "top", horizontal: "right" };
+      } else if (isCurrencyHeader(header) && typeof cell.value === "number") {
         cell.numFmt = '"GHS" #,##0.00;[Red]-"GHS" #,##0.00';
         cell.alignment = { vertical: "top", horizontal: "right" };
       } else if (isQuantityHeader(header) && typeof cell.value === "number") {
@@ -622,6 +775,81 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
     column.width = Math.min(Math.max(maxLength, minimumWidth), 42);
   });
 
+  // A compact management review sheet: readable rows, clear financial
+  // amounts, no currency symbols in units, counts, staff IDs or summary counts.
+  if (baseName === "discount-audit") {
+    const widths = {
+      "Receipt Number": 25,
+      "Sale Date": 22,
+      "Staff Member": 23,
+      "Products Bought (Summary)": 64,
+      "Units Bought": 14,
+      "Discount Amount (GHS)": 23,
+      "Original Amount (GHS)": 24,
+      "Final Sale Amount (GHS)": 24,
+      "Customer": 27,
+      "Payment Type": 17,
+      "Amount Paid (GHS)": 22,
+      "Outstanding (GHS)": 21,
+      "Sale Status": 17,
+      "Voided?": 13,
+      "Product Bought": 37,
+      "Quantity": 13,
+      "Unit Price (GHS)": 21,
+      "Line Amount (GHS)": 21,
+      "Sale ID": 14,
+      "Branch ID": 14,
+      "Staff ID": 14,
+      "Product Lines": 14,
+      "Customer Phone": 20,
+      "Void Reason": 34,
+      "Voided By": 22,
+      "Voided At": 22,
+      "Metric": 56,
+      "Value": 43,
+      "Active Sales Count": 21,
+      "Voided Sales Count": 23,
+      "Total Discount Amount (GHS)": 28,
+      "Largest Single Discount (GHS)": 30,
+    };
+    worksheet.columns.forEach((column, index) => {
+      const name = analysis.headers[index] || "";
+      if (widths[name]) column.width = widths[name];
+    });
+
+    if (worksheet.name === "Discounted Sales") {
+      worksheet.views = [{ state: "frozen", xSplit: 2, ySplit: headerRowIndex }];
+    }
+    for (let i = startDataRow; i <= endDataRow; i += 1) {
+      const row = worksheet.getRow(i);
+      row.height = worksheet.name === "Discounted Sales" ? 46 : 26;
+      if (worksheet.name === "Investigation Summary") {
+        const metric = String(row.getCell(1).value || "");
+        const valueCell = row.getCell(2);
+        if (typeof valueCell.value === "number") {
+          valueCell.numFmt = metric.includes("(GHS)")
+            ? '"GHS" #,##0.00;[Red]-"GHS" #,##0.00'
+            : "#,##0.##";
+        }
+        if (/discount amount|largest single discount/i.test(metric)) {
+          valueCell.font = { bold: true, color: { argb: "FF754300" } };
+        }
+      }
+      if (["Discounted Sales", "Staff Breakdown"].includes(worksheet.name)) {
+        const discountColumn = analysis.headers.findIndex((name) =>
+          name === "Discount Amount (GHS)" ||
+          name === "Total Discount Amount (GHS)"
+        );
+        if (discountColumn >= 0) {
+          const cell = row.getCell(discountColumn + 1);
+          cell.font = { bold: true, color: { argb: "FF754300" } };
+          cell.fill = { type: "pattern", pattern: "solid",
+            fgColor: { argb: "FFFFF3CC" } };
+        }
+      }
+    }
+  }
+
   worksheet.pageSetup = {
     orientation: analysis.columnCount > 7 ? "landscape" : "portrait",
     paperSize: 9,
@@ -637,9 +865,10 @@ function applyDataSheetPresentation(worksheet, meta, analysis, baseName) {
       header: 0.2,
       footer: 0.2,
     },
-    printTitlesRow: simpleHeader && baseName !== "daily-closings" ? "1:6" : `${headerRowIndex}:${headerRowIndex}`,
+    printTitlesRow: simpleHeader && baseName !== "daily-closings" ? "1:7" : `${headerRowIndex}:${headerRowIndex}`,
   };
 
+  worksheet.headerFooter.oddHeader = `&C&B${meta.periodBanner}`;
   worksheet.headerFooter.oddFooter =
     `&LChalin 03 - ${meta.branch.code}&C${meta.reportTitle}&RPage &P of &N`;
 }
@@ -683,6 +912,25 @@ function addExecutiveSummarySheet(workbook, meta, analysis) {
   };
   summary.getCell("A2").alignment = { horizontal: "center" };
 
+  summary.mergeCells("A3:C3");
+  summary.getCell("A3").value = meta.periodBanner;
+  summary.getCell("A3").font = {
+    bold: true,
+    size: 13,
+    color: { argb: "FF071529" },
+  };
+  summary.getCell("A3").fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE6B91E" },
+  };
+  summary.getCell("A3").alignment = {
+    horizontal: "center",
+    vertical: "middle",
+    wrapText: true,
+  };
+  summary.getRow(3).height = 28;
+
   const information = [
     ["Selected Store", `${meta.branch.code} - ${meta.branch.name}`, meta.branch.location],
     ["Report Period", meta.periodLabel, "Date filters apply according to the selected report."],
@@ -695,7 +943,7 @@ function addExecutiveSummarySheet(workbook, meta, analysis) {
     ],
   ];
 
-  let rowNumber = 4;
+  let rowNumber = 5;
   information.forEach(([label, value, notes]) => {
     summary.getCell(rowNumber, 1).value = label;
     summary.getCell(rowNumber, 2).value = value;
@@ -760,7 +1008,7 @@ function addExecutiveSummarySheet(workbook, meta, analysis) {
     }
   });
 
-  summary.views = [{ state: "frozen", ySplit: 2 }];
+  summary.views = [{ state: "frozen", ySplit: 3 }];
   summary.pageSetup = {
     orientation: "landscape",
     paperSize: 9,
@@ -868,14 +1116,27 @@ function drawPdfDocumentHeader(doc, meta, sectionTitle, subtitle = "") {
   doc.y = 96;
   doc.fillColor("#173b68").font("Helvetica-Bold").fontSize(15);
   doc.text(pdfSafeText(sectionTitle), { align: "center" });
+  doc.moveDown(0.35);
+
+  const periodY = doc.y;
+  doc.save();
+  doc.roundedRect(left, periodY, width, 30, 4).fill("#e6b91e");
+  doc.fillColor("#071529").font("Helvetica-Bold").fontSize(10);
+  doc.text(pdfSafeText(meta.periodBanner), left + 8, periodY + 9, {
+    width: width - 16,
+    align: "center",
+    lineBreak: false,
+  });
+  doc.restore();
+  doc.y = periodY + 36;
 
   if (subtitle) {
-    doc.moveDown(0.25);
     doc.fillColor("#475569").font("Helvetica").fontSize(8);
     doc.text(pdfSafeText(subtitle), { align: "center" });
+    doc.moveDown(0.25);
   }
 
-  doc.moveDown(0.6);
+  doc.moveDown(0.35);
 }
 
 function drawPdfTable(doc, sheet, columnIndexes) {
@@ -968,7 +1229,7 @@ function sendProfessionalPdf(res, analysis, meta, filename) {
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   doc.pipe(res);
 
-  drawPdfDocumentHeader(doc, meta, meta.reportTitle, `Period: ${meta.periodLabel}`);
+  drawPdfDocumentHeader(doc, meta, meta.reportTitle, "Controlled auditor export");
 
   doc.fillColor("#172033").font("Helvetica").fontSize(10);
   doc.text(
@@ -1016,7 +1277,7 @@ function sendProfessionalPdf(res, analysis, meta, filename) {
         doc,
         meta,
         `${sheet.name}${bandLabel}`,
-        `${sheet.recordCount} detail row(s) | Period: ${meta.periodLabel}`
+        `${sheet.recordCount} detail row(s)`
       );
       drawPdfTable(doc, sheet, columnIndexes);
     });
@@ -1084,8 +1345,9 @@ function sendProfessionalWord(res, analysis, meta, filename) {
         <section class="report-section page-break">
           <div class="brand">CHALIN 03 COMPANY LIMITED</div>
           <h2>${escapeHtml(sheet.name + bandLabel)}</h2>
+          <div class="period-banner">${escapeHtml(meta.periodBanner)}</div>
           <p class="section-meta">${escapeHtml(
-            `${meta.branch.code} - ${meta.branch.name} | ${sheet.recordCount} detail row(s) | ${meta.periodLabel}`
+            `${meta.branch.code} - ${meta.branch.name} | ${sheet.recordCount} detail row(s)`
           )}</p>
           ${buildWordTable(sheet, columnIndexes)}
         </section>
@@ -1117,6 +1379,7 @@ function sendProfessionalWord(res, analysis, meta, filename) {
   h1 { color: #173b68; font-size: 21pt; margin: 24px 0 8px; }
   h2 { color: #173b68; font-size: 15pt; text-align: center; margin: 12px 0 4px; }
   .subtitle, .section-meta { color: #475569; text-align: center; }
+  .period-banner { margin: 12px auto; padding: 10px 12px; background: #e6b91e; color: #071529; border: 2px solid #071529; font-size: 12pt; font-weight: 700; text-align: center; }
   .meta { width: 78%; margin: 25px auto; border-collapse: collapse; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; }
   th { background: #173b68; color: #fff; font-weight: 700; padding: 5px; border: 1px solid #9fb0c3; font-size: 8pt; }
@@ -1132,6 +1395,7 @@ function sendProfessionalWord(res, analysis, meta, filename) {
   <section class="cover">
     <div class="brand">CHALIN 03 COMPANY LIMITED</div>
     <h1>${escapeHtml(meta.reportTitle)}</h1>
+    <div class="period-banner">${escapeHtml(meta.periodBanner)}</div>
     <p class="subtitle">Professional Microsoft Word Export</p>
     <table class="meta">
       <tr><td>Selected Store</td><td>${escapeHtml(`${meta.branch.code} - ${meta.branch.name}`)}</td></tr>
@@ -1181,22 +1445,30 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
   const analysis = analyseWorkbook(workbook);
   const generatedBy =
     req.user?.full_name || req.user?.name || req.user?.username || "Authorized user";
+  const period = getDateRangeMeta(
+    cleanText(req.query.from),
+    cleanText(req.query.to),
+    analysis
+  );
   const meta = {
     branch,
     reportTitle,
-    periodLabel: getDateRangeLabel(cleanText(req.query.from), cleanText(req.query.to)),
-    generatedLabel: new Date().toLocaleString("en-GB"),
+    ...period,
+    generatedLabel: new Date().toLocaleString("en-GB", {
+      timeZone: "Africa/Accra",
+    }),
     generatedBy,
   };
   const safeBranch = safeFilenamePart(branch.code || branch.name);
   const safeBase = safeFilenamePart(baseName);
+  const periodFilename = meta.filenamePart ? `-${meta.filenamePart}` : "";
 
   if (format === "pdf") {
     return sendProfessionalPdf(
       res,
       analysis,
       meta,
-      `chalin03-${safeBranch}-${safeBase}.pdf`
+      `chalin03-${safeBranch}-${safeBase}${periodFilename}.pdf`
     );
   }
 
@@ -1205,7 +1477,7 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
       res,
       analysis,
       meta,
-      `chalin03-${safeBranch}-${safeBase}.doc`
+      `chalin03-${safeBranch}-${safeBase}${periodFilename}.doc`
     );
   }
 
@@ -1214,7 +1486,7 @@ async function sendStoreWorkbook(req, res, workbook, baseName) {
   return sendWorkbook(
     res,
     workbook,
-    `chalin03-${safeBranch}-${safeBase}.xlsx`
+    `chalin03-${safeBranch}-${safeBase}${periodFilename}.xlsx`
   );
 }
 
@@ -2701,6 +2973,259 @@ router.get(
         message:
           error.message ||
           "Something went wrong while exporting customer statement.",
+      });
+    }
+  }
+);
+
+// GET /api/exports/discount-audit — administrator-only report of positive
+// sale-level discounts. This only reads the original sales and item snapshots.
+router.get(
+  "/discount-audit",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      // The shared requireRole middleware permits auditors for other exports.
+      // This sensitive investigation must explicitly remain administrator-only.
+      if (!isAdminAuthorized(req.user)) {
+        return res.status(403).json({
+          status: "error",
+          message: "Administrator authorization required.",
+        });
+      }
+
+      const branchId = getBranchId(req);
+      const from = cleanText(req.query.from);
+      const to = cleanText(req.query.to);
+      if (!isValidDateRange(from, to)) {
+        return res.status(400).json({ message: "Invalid reporting date range." });
+      }
+
+      const params = [branchId];
+      const dateFilter = buildDateFilter("s", "created_at", from, to, params);
+      const [sales] = await pool.query(
+        `SELECT s.id, s.branch_id, s.receipt_number, s.created_at,
+                s.customer_name, s.customer_phone, s.staff_id,
+                u.full_name AS staff_name, s.subtotal, s.discount_amount,
+                s.tax_amount, s.total, s.payment_type, s.amount_paid,
+                s.balance, s.sale_status, s.is_voided, s.void_reason,
+                s.voided_at, vu.full_name AS voided_by_name
+           FROM sales s
+           LEFT JOIN users u ON u.id = s.staff_id
+           LEFT JOIN users vu ON vu.id = s.voided_by
+          WHERE s.branch_id = ? AND s.discount_amount > 0
+          ${dateFilter}
+          ORDER BY s.created_at DESC, s.id DESC`,
+        params
+      );
+
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = "Chalin 03 System";
+      workbook.created = new Date();
+      const safe = escapeExcelText;
+
+      // The first worksheet is intentionally compact and investigation-focused.
+      // Currency appears ONLY in financial columns, never quantity or IDs.
+      const overview = workbook.addWorksheet("Discounted Sales");
+      overview.columns = [
+        { header: "Receipt Number", key: "receipt" },
+        { header: "Sale Date", key: "date" },
+        { header: "Staff Member", key: "staff" },
+        { header: "Products Bought (Summary)", key: "products" },
+        { header: "Units Bought", key: "units" },
+        { header: "Discount Amount (GHS)", key: "discount" },
+        { header: "Original Amount (GHS)", key: "subtotal" },
+        { header: "Final Sale Amount (GHS)", key: "total" },
+        { header: "Customer", key: "customer" },
+        { header: "Payment Type", key: "payment" },
+        { header: "Amount Paid (GHS)", key: "paid" },
+        { header: "Outstanding (GHS)", key: "balance" },
+        { header: "Sale Status", key: "status" },
+        { header: "Voided?", key: "voided" },
+      ];
+
+      // One row per purchased product; the complete item record is never
+      // truncated. The sale discount is NOT copied onto each product line,
+      // because it is only stored at the sale level.
+      const itemsSheet = workbook.addWorksheet("Purchased Items");
+      itemsSheet.columns = [
+        { header: "Receipt Number", key: "receipt" },
+        { header: "Sale Date", key: "date" },
+        { header: "Staff Member", key: "staff" },
+        { header: "Customer", key: "customer" },
+        { header: "Product Bought", key: "product" },
+        { header: "Quantity", key: "quantity" },
+        { header: "Unit Price (GHS)", key: "price" },
+        { header: "Line Amount (GHS)", key: "line_total" },
+        { header: "Sale ID", key: "sale_id" },
+      ];
+
+      const saleItemsById = new Map();
+      for (let offset = 0; offset < sales.length; offset += 300) {
+        const batch = sales.slice(offset, offset + 300);
+        const placeholders = batch.map(() => "?").join(",");
+        const [items] = await pool.query(
+          `SELECT si.sale_id, si.product_name, si.quantity, si.unit_price, si.line_total
+             FROM sale_items si
+            WHERE si.sale_id IN (${placeholders})
+            ORDER BY si.sale_id, si.id`,
+          batch.map((sale) => sale.id)
+        );
+        const parentById = new Map(batch.map((sale) => [Number(sale.id), sale]));
+        for (const item of items) {
+          const parent = parentById.get(Number(item.sale_id));
+          if (!parent) continue;
+          const id = Number(item.sale_id);
+          const saleItems = saleItemsById.get(id) || [];
+          saleItems.push(item);
+          saleItemsById.set(id, saleItems);
+          itemsSheet.addRow({
+            receipt: safe(parent.receipt_number),
+            date: formatDateTime(parent.created_at),
+            staff: safe(parent.staff_name),
+            customer: safe(parent.customer_name),
+            product: safe(item.product_name),
+            quantity: Number(item.quantity || 0),
+            price: Number(item.unit_price || 0),
+            line_total: Number(item.line_total || 0),
+            sale_id: id,
+          });
+        }
+      }
+
+      // Keep extra investigative information without crowding the main page.
+      const auditSheet = workbook.addWorksheet("Audit References");
+      auditSheet.columns = [
+        { header: "Receipt Number", key: "receipt" },
+        { header: "Sale ID", key: "id" },
+        { header: "Branch ID", key: "branch" },
+        { header: "Staff ID", key: "staff_id" },
+        { header: "Customer Phone", key: "phone" },
+        { header: "Product Lines", key: "item_lines" },
+        { header: "Tax (GHS)", key: "tax" },
+        { header: "Sale Status", key: "status" },
+        { header: "Voided?", key: "voided" },
+        { header: "Void Reason", key: "reason" },
+        { header: "Voided By", key: "voided_by" },
+        { header: "Voided At", key: "voided_at" },
+      ];
+
+      const byStaff = new Map();
+      let activeDiscount = 0;
+      let voidedDiscount = 0;
+      let activeGross = 0;
+      let activeCount = 0;
+      let voidedCount = 0;
+      let largestActiveDiscount = 0;
+
+      for (const sale of sales) {
+        const items = saleItemsById.get(Number(sale.id)) || [];
+        const discount = Number(sale.discount_amount || 0);
+        const subtotal = Number(sale.subtotal || 0);
+        const voided = isVoidedSale(sale);
+        if (voided) {
+          voidedDiscount += discount;
+          voidedCount += 1;
+        } else {
+          activeCount += 1;
+          activeDiscount += discount;
+          activeGross += subtotal;
+          largestActiveDiscount = Math.max(largestActiveDiscount, discount);
+        }
+
+        const staffKey = sale.staff_id || "Unknown";
+        const member = byStaff.get(staffKey) || {
+          name: sale.staff_name || "Unknown", count: 0,
+          discount: 0, maxDiscount: 0, voidedCount: 0,
+        };
+        if (voided) {
+          member.voidedCount += 1;
+        } else {
+          member.count += 1;
+          member.discount += discount;
+          member.maxDiscount = Math.max(member.maxDiscount, discount);
+        }
+        byStaff.set(staffKey, member);
+
+        overview.addRow({
+          receipt: safe(sale.receipt_number),
+          date: formatDateTime(sale.created_at),
+          staff: safe(sale.staff_name),
+          products: describeSaleItems(items),
+          units: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+          discount,
+          subtotal,
+          total: Number(sale.total || 0),
+          customer: safe(sale.customer_name),
+          payment: safe(sale.payment_type),
+          paid: Number(sale.amount_paid || 0),
+          balance: Number(sale.balance || 0),
+          status: safe(sale.sale_status),
+          voided: voided ? "YES" : "NO",
+        });
+        auditSheet.addRow({
+          receipt: safe(sale.receipt_number),
+          id: sale.id,
+          branch: sale.branch_id,
+          staff_id: sale.staff_id,
+          phone: safe(sale.customer_phone),
+          item_lines: items.length,
+          tax: Number(sale.tax_amount || 0),
+          status: safe(sale.sale_status),
+          voided: voided ? "YES" : "NO",
+          reason: safe(sale.void_reason),
+          voided_by: safe(sale.voided_by_name),
+          voided_at: formatDateTime(sale.voided_at),
+        });
+      }
+
+      const summary = workbook.addWorksheet("Investigation Summary");
+      summary.columns = [
+        { header: "Metric", key: "metric" },
+        { header: "Value", key: "value" },
+      ];
+      [
+        ["Selected Branch ID", branchId],
+        ["From", from || "All available history"],
+        ["To", to || "All available history"],
+        ["All discounted sales (including voided)", sales.length],
+        ["Active discounted sales", activeCount],
+        ["Voided or cancelled discounted sales", voidedCount],
+        ["Original amount of active discounted sales (GHS)", activeGross],
+        ["Total active discount amount (GHS)", activeDiscount],
+        ["Largest single active discount (GHS)", largestActiveDiscount],
+        ["Voided or cancelled discount amount (GHS) - excluded from active", voidedDiscount],
+        ["Price interpretation", "Sale-level discount; historical item prices are before discount."],
+        ["Item review", "Every purchased product is listed on the Purchased Items worksheet."],
+      ].forEach(([metric, value]) => summary.addRow({ metric, value }));
+
+      const staffSheet = workbook.addWorksheet("Staff Breakdown");
+      staffSheet.columns = [
+        { header: "Staff ID", key: "id" },
+        { header: "Staff Member", key: "name" },
+        { header: "Active Sales Count", key: "count" },
+        { header: "Total Discount Amount (GHS)", key: "discount" },
+        { header: "Largest Single Discount (GHS)", key: "maxDiscount" },
+        { header: "Voided Sales Count", key: "voidedCount" },
+      ];
+      for (const [id, member] of byStaff) {
+        staffSheet.addRow({ id, ...member, name: safe(member.name) });
+      }
+
+      for (const sheet of [overview, itemsSheet, auditSheet, summary, staffSheet]) {
+        styleWorksheet(sheet);
+      }
+
+      console.info("Discount audit export", {
+        userId: req.user?.id, branchId, from, to, count: sales.length,
+      });
+      return sendStoreWorkbook(req, res, workbook, "discount-audit");
+    } catch (error) {
+      console.error("Discount audit export failed:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Could not prepare discount audit export.",
       });
     }
   }

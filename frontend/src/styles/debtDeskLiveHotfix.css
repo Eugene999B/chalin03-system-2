@@ -1,0 +1,183 @@
+.debt-desk__hero-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.debt-desk__hero-actions .debt-desk__refresh,
+.debt-desk__hero-actions .debt-desk__resolve-duplicates {
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-weight: 850;
+}
+
+.debt-desk__hero-actions .debt-desk__resolve-duplicates {
+  border: 1px solid #f3d56c;
+  background: linear-gradient(135deg, #ffeaa0, #e7b92f);
+  color: #10213b;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.debt-desk__identity-centre-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin: 16px 0 18px;
+  padding: 20px 22px;
+  border: 1px solid #d2dceb;
+  border-left: 5px solid #e3b52f;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(227, 181, 47, 0.16), transparent 28%),
+    linear-gradient(135deg, #ffffff, #f7faff);
+  box-shadow: 0 12px 30px rgba(16, 33, 59, 0.08);
+}
+
+.debt-desk__identity-centre-icon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #10213b, #246bfe);
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.debt-desk__identity-centre-callout span {
+  color: #1852c7;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.debt-desk__identity-centre-callout h2 {
+  margin: 4px 0 7px;
+  color: #10213b;
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+}
+
+.debt-desk__identity-centre-callout p {
+  max-width: 850px;
+  margin: 0;
+  color: #667085;
+  line-height: 1.58;
+}
+
+.debt-desk__identity-centre-callout > button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #10213b;
+  border-radius: 12px;
+  background: #10213b;
+  color: #ffffff;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.debt-desk__identity-tools {
+  scroll-margin-top: 18px;
+}
+
+.debt-desk__identity-tools > button > span > strong {
+  color: #10213b;
+}
+
+.debt-desk__identity-tools > button > span > small {
+  line-height: 1.45;
+}
+
+.debt-desk__identity-tools .customer-debt-merge-panel {
+  border: 1px solid #cfd9e8;
+  border-top: 5px solid #e3b52f;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 16px 34px rgba(16, 33, 59, 0.1);
+}
+
+.debt-desk__identity-tools .customer-debt-merge-search-grid {
+  align-items: end;
+}
+
+.debt-desk__identity-tools .customer-debt-merge-list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+@media (max-width: 980px) {
+  .debt-desk__hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .debt-desk__identity-centre-callout {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .debt-desk__identity-centre-callout > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 700px) {
+  .debt-desk__hero-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .debt-desk__hero-actions .debt-desk__refresh,
+  .debt-desk__hero-actions .debt-desk__resolve-duplicates {
+    width: 100%;
+  }
+
+  .debt-desk__identity-centre-callout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 17px;
+  }
+
+  .debt-desk__identity-centre-icon {
+    width: 46px;
+    height: 46px;
+  }
+
+  .debt-desk__identity-tools .customer-debt-merge-search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .debt-desk__identity-tools .customer-debt-merge-list-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .debt-desk__identity-tools .customer-debt-merge-panel > button[type="submit"] {
+    position: sticky;
+    bottom: 10px;
+    width: 100%;
+    min-height: 48px;
+    box-shadow: 0 12px 26px rgba(16, 33, 59, 0.18);
+  }
+}
+
+@media (max-width: 420px) {
+  .debt-desk__identity-centre-callout {
+    margin-inline: 0;
+    border-radius: 16px;
+  }
+
+  .debt-desk__identity-centre-callout p {
+    font-size: 0.84rem;
+  }
+
+  .debt-desk__identity-tools .customer-debt-merge-list label {
+    align-items: flex-start;
+  }
+}

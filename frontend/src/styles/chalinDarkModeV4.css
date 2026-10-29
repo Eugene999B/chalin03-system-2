@@ -1,0 +1,385 @@
+/* Chalin 03 Dark Mode V4
+   Component-first dark theme coverage. Light mode is intentionally untouched.
+   Uses semantic surfaces and explicit descendant text overrides so legacy hard-coded
+   white backgrounds and dark text cannot punch through the dark theme. */
+
+html[data-chalin-theme="dark"] {
+  --c03d-bg: #08110d;
+  --c03d-bg-2: #0d1813;
+  --c03d-surface: #111c17;
+  --c03d-surface-2: #17241e;
+  --c03d-surface-3: #1d2d25;
+  --c03d-control: #0d1713;
+  --c03d-text: #f4f8f6;
+  --c03d-text-strong: #ffffff;
+  --c03d-text-muted: #a8b8b0;
+  --c03d-text-subtle: #82958b;
+  --c03d-border: #2b4036;
+  --c03d-border-strong: #40584b;
+  --c03d-green: #5bd083;
+  --c03d-green-strong: #8be5a6;
+  --c03d-gold: #e0bf62;
+  --c03d-link: #81e6a0;
+  --c03d-focus: #67d9f4;
+  --c03d-shadow: rgba(0,0,0,.32);
+  color-scheme: dark;
+}
+
+/* Canvas and major shell surfaces */
+html[data-chalin-theme="dark"],
+html[data-chalin-theme="dark"] body,
+html[data-chalin-theme="dark"] #root,
+html[data-chalin-theme="dark"] .bwl-main,
+html[data-chalin-theme="dark"] .bwl-content {
+  background: var(--c03d-bg) !important;
+  color: var(--c03d-text) !important;
+}
+
+/* The Finance workspace keeps its green identity without becoming flat black. */
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature,
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-main,
+html[data-chalin-theme="dark"] .bwl-shell.bwl-theme-finance-signature .bwl-content {
+  background:
+    radial-gradient(circle at 88% 2%, rgba(224,191,98,.09), transparent 22rem),
+    radial-gradient(circle at 18% 92%, rgba(91,208,131,.06), transparent 28rem),
+    var(--c03d-bg) !important;
+  color: var(--c03d-text) !important;
+}
+
+/* Comprehensive card/panel families. */
+html[data-chalin-theme="dark"] .bwl-content .card,
+html[data-chalin-theme="dark"] .bwl-content .panel,
+html[data-chalin-theme="dark"] .bwl-content .surface,
+html[data-chalin-theme="dark"] .bwl-content .section-card,
+html[data-chalin-theme="dark"] .bwl-content .stat-card,
+html[data-chalin-theme="dark"] .bwl-content .table-card,
+html[data-chalin-theme="dark"] .bwl-content .form-card,
+html[data-chalin-theme="dark"] .bwl-content .settings-card,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"],
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"],
+html[data-chalin-theme="dark"] .bwl-content [class*="surface"],
+html[data-chalin-theme="dark"] .bwl-content [class*="tile"],
+html[data-chalin-theme="dark"] .bwl-content [class*="metric"],
+html[data-chalin-theme="dark"] .bwl-content [class*="stat"],
+html[data-chalin-theme="dark"] .bwl-content [class*="summary"],
+html[data-chalin-theme="dark"] .bwl-content [class*="popover"],
+html[data-chalin-theme="dark"] .bwl-content [class*="drawer"],
+html[data-chalin-theme="dark"] .bwl-content [class*="modal"],
+html[data-chalin-theme="dark"] .bwl-content [class*="dialog"] {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border) !important;
+  box-shadow: 0 16px 42px var(--c03d-shadow) !important;
+}
+
+/* Explicit descendant typography fixes the black-text-on-dark-card problem. */
+html[data-chalin-theme="dark"] .bwl-content .card,
+html[data-chalin-theme="dark"] .bwl-content .panel,
+html[data-chalin-theme="dark"] .bwl-content .surface,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"],
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"],
+html[data-chalin-theme="dark"] .bwl-content [class*="surface"],
+html[data-chalin-theme="dark"] .bwl-content [class*="tile"],
+html[data-chalin-theme="dark"] .bwl-content [class*="metric"],
+html[data-chalin-theme="dark"] .bwl-content [class*="stat"],
+html[data-chalin-theme="dark"] .bwl-content [class*="summary"] {
+  & h1, & h2, & h3, & h4, & h5, & h6,
+  & p, & span, & small, & strong, & b,
+  & label, & legend, & li, & dt, & dd,
+  & td, & th {
+    color: var(--c03d-text) !important;
+  }
+}
+
+/* Plain CSS fallback for browsers that do not support nesting: these selectors are kept
+   explicit because many legacy components specify their own black text colors. */
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h1,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h2,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h3,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h4,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h5,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h6,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card p,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card small,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card strong,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card b,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card label,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card td,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card th,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section h1,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section h2,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section h3,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section p,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section strong,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric strong,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__summary span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__summary strong {
+  color: var(--c03d-text) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h1,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h2,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h3,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h4,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h5,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card h6,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section h1,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section h2,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section h3 {
+  color: var(--c03d-text-strong) !important;
+}
+
+/* Exact Finance surfaces that are known to use legacy light colors. */
+html[data-chalin-theme="dark"] .finance-simple,
+html[data-chalin-theme="dark"] .finance-simple__section,
+html[data-chalin-theme="dark"] .finance-simple__card,
+html[data-chalin-theme="dark"] .finance-simple__metric,
+html[data-chalin-theme="dark"] .finance-simple__summary article,
+html[data-chalin-theme="dark"] .finance-simple__facts div,
+html[data-chalin-theme="dark"] .finance-simple__field,
+html[data-chalin-theme="dark"] .finance-simple__customer,
+html[data-chalin-theme="dark"] .finance-simple__guide-card,
+html[data-chalin-theme="dark"] .finance-simple__sticky-actions {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border) !important;
+}
+
+html[data-chalin-theme="dark"] .finance-simple__facts div,
+html[data-chalin-theme="dark"] .finance-simple__metric,
+html[data-chalin-theme="dark"] .finance-simple__summary article {
+  background: var(--c03d-surface-2) !important;
+}
+
+html[data-chalin-theme="dark"] .finance-simple__facts div span,
+html[data-chalin-theme="dark"] .finance-simple__facts div strong,
+html[data-chalin-theme="dark"] .finance-simple__metric span,
+html[data-chalin-theme="dark"] .finance-simple__metric strong {
+  color: var(--c03d-text) !important;
+}
+
+/* Workspace content headings and copy. */
+html[data-chalin-theme="dark"] .bwl-content h1,
+html[data-chalin-theme="dark"] .bwl-content h2,
+html[data-chalin-theme="dark"] .bwl-content h3,
+html[data-chalin-theme="dark"] .bwl-content h4,
+html[data-chalin-theme="dark"] .bwl-content h5,
+html[data-chalin-theme="dark"] .bwl-content h6 {
+  color: var(--c03d-text-strong) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content p,
+html[data-chalin-theme="dark"] .bwl-content li,
+html[data-chalin-theme="dark"] .bwl-content dt,
+html[data-chalin-theme="dark"] .bwl-content dd {
+  color: var(--c03d-text-muted) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content small,
+html[data-chalin-theme="dark"] .bwl-content [class*="muted"],
+html[data-chalin-theme="dark"] .bwl-content [class*="hint"],
+html[data-chalin-theme="dark"] .bwl-content [class*="description"],
+html[data-chalin-theme="dark"] .bwl-content [class*="helper"],
+html[data-chalin-theme="dark"] .bwl-content [class*="subtitle"] {
+  color: var(--c03d-text-subtle) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content a:not(.bwl-nav-item) {
+  color: var(--c03d-link) !important;
+}
+
+/* Form controls, including legacy button classes. */
+html[data-chalin-theme="dark"] .bwl-content input,
+html[data-chalin-theme="dark"] .bwl-content select,
+html[data-chalin-theme="dark"] .bwl-content textarea,
+html[data-chalin-theme="dark"] .bwl-content [contenteditable="true"] {
+  background: var(--c03d-control) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border-strong) !important;
+  -webkit-text-fill-color: var(--c03d-text) !important;
+  caret-color: var(--c03d-text) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content input::placeholder,
+html[data-chalin-theme="dark"] .bwl-content textarea::placeholder {
+  color: var(--c03d-text-subtle) !important;
+  opacity: 1 !important;
+}
+
+html[data-chalin-theme="dark"] option,
+html[data-chalin-theme="dark"] optgroup {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content button:not(.is-primary):not([class*="primary"]):not(.danger-button):not([class*="danger"]):not([class*="success"]) {
+  background: var(--c03d-surface-2) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border-strong) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content button.is-primary,
+html[data-chalin-theme="dark"] .bwl-content [class*="primary"] {
+  background: linear-gradient(135deg, #1c7a4a, #0f4c32) !important;
+  color: #ffffff !important;
+  border-color: #3ba56c !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content button:focus-visible,
+html[data-chalin-theme="dark"] .bwl-content input:focus,
+html[data-chalin-theme="dark"] .bwl-content select:focus,
+html[data-chalin-theme="dark"] .bwl-content textarea:focus {
+  outline: none !important;
+  border-color: var(--c03d-focus) !important;
+  box-shadow: 0 0 0 3px rgba(103,217,244,.15) !important;
+}
+
+/* Tables */
+html[data-chalin-theme="dark"] .bwl-content table,
+html[data-chalin-theme="dark"] .bwl-content thead,
+html[data-chalin-theme="dark"] .bwl-content tbody {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content th {
+  background: var(--c03d-surface-3) !important;
+  color: var(--c03d-text-strong) !important;
+  border-color: var(--c03d-border) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content td {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border) !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content tbody tr:nth-child(even) td {
+  background: var(--c03d-surface-2) !important;
+}
+
+/* Badges/statuses keep meaning but use dark-friendly surfaces. */
+html[data-chalin-theme="dark"] .bwl-content [class*="success"],
+html[data-chalin-theme="dark"] .bwl-content .status-active,
+html[data-chalin-theme="dark"] .bwl-content .is-approved {
+  color: #a9f0bd !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content [class*="warning"],
+html[data-chalin-theme="dark"] .bwl-content .warning-box {
+  color: #f5d889 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content [class*="error"],
+html[data-chalin-theme="dark"] .bwl-content .danger-text,
+html[data-chalin-theme="dark"] .bwl-content .error-box {
+  color: #ffc2ca !important;
+}
+
+/* Image/photo frames: dark neutral frame, untouched pixels. */
+html[data-chalin-theme="dark"] .finance-simple__machine-image,
+html[data-chalin-theme="dark"] .finance-simple__photo-preview,
+html[data-chalin-theme="dark"] .installment-completion__machine-image,
+html[data-chalin-theme="dark"] .equipment-image,
+html[data-chalin-theme="dark"] [class*="image-frame"],
+html[data-chalin-theme="dark"] [class*="photo-frame"] {
+  background: #17231e !important;
+  border-color: var(--c03d-border) !important;
+}
+
+html[data-chalin-theme="dark"] .finance-simple__machine-image img,
+html[data-chalin-theme="dark"] .finance-simple__photo-preview img,
+html[data-chalin-theme="dark"] .installment-completion__machine-image img,
+html[data-chalin-theme="dark"] .equipment-image img {
+  filter: none !important;
+  mix-blend-mode: normal !important;
+}
+
+/* Dialogs */
+html[data-chalin-theme="dark"] .modal-backdrop,
+html[data-chalin-theme="dark"] .finance-simple__dialog-backdrop,
+html[data-chalin-theme="dark"] .dialog-backdrop {
+  background: rgba(2, 8, 5, .78) !important;
+}
+
+html[data-chalin-theme="dark"] .finance-simple__dialog,
+html[data-chalin-theme="dark"] [role="dialog"],
+html[data-chalin-theme="dark"] .modal,
+html[data-chalin-theme="dark"] .drawer,
+html[data-chalin-theme="dark"] .dialog {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border-strong) !important;
+  box-shadow: 0 28px 90px rgba(0,0,0,.52) !important;
+}
+
+/* Legacy literal white/light surfaces. */
+html[data-chalin-theme="dark"] .bg-white,
+html[data-chalin-theme="dark"] .background-white,
+html[data-chalin-theme="dark"] .bg-light,
+html[data-chalin-theme="dark"] .bg-muted,
+html[data-chalin-theme="dark"] [class*="white-bg"],
+html[data-chalin-theme="dark"] [class*="light-bg"] {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+}
+
+/* High-specificity legacy text repairs. */
+html[data-chalin-theme="dark"] .bwl-content [style*="color: black"],
+html[data-chalin-theme="dark"] .bwl-content [style*="color:#000"],
+html[data-chalin-theme="dark"] .bwl-content [style*="color: #000"],
+html[data-chalin-theme="dark"] .bwl-content [style*="color:rgb(0, 0, 0)"],
+html[data-chalin-theme="dark"] .bwl-content [style*="color: rgb(0, 0, 0)"] {
+  color: var(--c03d-text) !important;
+  -webkit-text-fill-color: var(--c03d-text) !important;
+}
+
+/* Finance application board */
+html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__card,
+html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__section,
+html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__metric,
+html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__summary article {
+  background: var(--c03d-surface) !important;
+  color: var(--c03d-text) !important;
+  border-color: var(--c03d-border) !important;
+}
+
+html[data-chalin-theme="dark"] .finance-applications-refined .finance-simple__facts div {
+  background: var(--c03d-surface-2) !important;
+  color: var(--c03d-text) !important;
+}
+
+/* Scrollbars */
+html[data-chalin-theme="dark"] * {
+  scrollbar-color: #486354 #0c1712;
+}
+
+html[data-chalin-theme="dark"] ::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+html[data-chalin-theme="dark"] ::-webkit-scrollbar-track {
+  background: #0c1712;
+}
+
+html[data-chalin-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #486354;
+  border: 3px solid #0c1712;
+  border-radius: 999px;
+}
+
+html[data-chalin-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #5d7e69;
+}
+
+/* Do not recolor images, SVGs or explicitly branded dark areas. */
+html[data-chalin-theme="dark"] img,
+html[data-chalin-theme="dark"] svg,
+html[data-chalin-theme="dark"] canvas,
+html[data-chalin-theme="dark"] video {
+  filter: none !important;
+}

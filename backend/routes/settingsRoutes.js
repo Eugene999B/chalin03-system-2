@@ -8,6 +8,18 @@ const {
   normalizeEmployeePrefix,
   normalizeValidityMonths,
 } = require("../services/workerIdentityService");
+const {
+  branchIdForUser,
+  getUserSettingsSystemAdminOnly,
+  isOriginalSystemAdministrator,
+} = require("../services/sparePartsUserSettingsAccessService");
+const {
+  normalizedPhoneForStorage,
+} = require("../services/loginIdentityService");
+const {
+  SYSTEM_ADMIN_ID,
+  SYSTEM_ADMIN_USERNAME,
+} = require("../security/systemAdminIdentity");
 
 const router = express.Router();
 
@@ -27,6 +39,10 @@ function cleanText(value) {
   }
 
   return String(value).trim();
+}
+
+function cleanBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
 }
 
 function nullableText(value) {
@@ -179,6 +195,225 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
     });
   }
 });
+
+// GET /api/settings/user-settings-access
+router.get(
+  "/user-settings-access",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      const branchId = branchIdForUser(req.user);
+      const settings = await getSettingsForBranch(branchId);
+      const systemAdminOnly = await getUserSettingsSystemAdminOnly(branchId);
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        user_settings_system_admin_only: systemAdminOnly,
+        can_manage_access_control: isOriginalSystemAdministrator(req.user),
+        can_access_user_settings:
+          isOriginalSystemAdministrator(req.user) || !systemAdminOnly,
+        settings_id: Number(settings?.id || 0) || null,
+      });
+    } catch (error) {
+      console.error("Get User Settings access control error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "User Settings access control could not be loaded.",
+      });
+    }
+  }
+);
+
+// PATCH /api/settings/user-settings-access
+router.patch(
+  "/user-settings-access",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      if (!isOriginalSystemAdministrator(req.user)) {
+        return res.status(403).json({
+          status: "error",
+          code: "SPARE_PARTS_USER_SETTINGS_ACCESS_CONTROL_SYSTEM_ADMIN_ONLY",
+          message:
+            "Only the System Administrator can change this User Settings access control.",
+        });
+      }
+
+      const branchId = branchIdForUser(req.user);
+      const settings = await getSettingsForBranch(branchId);
+      const enabled = cleanBoolean(req.body?.user_settings_system_admin_only);
+
+      await pool.query(
+        `UPDATE settings
+            SET user_settings_system_admin_only = ?
+          WHERE id = ?
+            AND branch_id = ?`,
+        [enabled ? 1 : 0, Number(settings.id), branchId]
+      );
+
+      await logActivity(
+        req.user.id,
+        branchId,
+        "UPDATE_SPARE_PARTS_USER_SETTINGS_ACCESS_CONTROL",
+        enabled
+          ? "Restricted Spare Parts User Settings access to the System Administrator."
+          : "Restored Spare Parts User Settings access to other administrators."
+      );
+
+      return res.json({
+        status: "success",
+        branch_id: branchId,
+        user_settings_system_admin_only: enabled,
+        message: enabled
+          ? "User Settings are now restricted to the System Administrator."
+          : "User Settings are now available to other administrators.",
+      });
+    } catch (error) {
+      console.error("Update User Settings access control error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "User Settings access control could not be updated.",
+      });
+    }
+  }
+);
+
+// GET /api/settings/system-admin-login-phone
+router.get(
+  "/system-admin-login-phone",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      if (!isOriginalSystemAdministrator(req.user)) {
+        return res.status(403).json({
+          status: "error",
+          code: "ORIGINAL_SYSTEM_ADMINISTRATOR_REQUIRED",
+          message:
+            "Only the original System Administrator can view or change the protected System Administrator login phone.",
+        });
+      }
+
+      const [rows] = await pool.query(
+        `SELECT id, full_name, username, phone, login_phone_normalized
+         FROM users
+         WHERE id = ?
+           AND LOWER(username) = LOWER(?)
+         LIMIT 1`,
+        [SYSTEM_ADMIN_ID, SYSTEM_ADMIN_USERNAME]
+      );
+      const administrator = rows[0];
+
+      if (!administrator) {
+        return res.status(404).json({
+          status: "error",
+          message: "The protected System Administrator account was not found.",
+        });
+      }
+
+      return res.json({
+        status: "success",
+        system_admin_login_phone: administrator.phone || "",
+        login_phone_normalized: administrator.login_phone_normalized || null,
+      });
+    } catch (error) {
+      console.error("Get System Administrator login phone error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "System Administrator login phone could not be loaded.",
+      });
+    }
+  }
+);
+
+// PATCH /api/settings/system-admin-login-phone
+router.patch(
+  "/system-admin-login-phone",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
+    try {
+      if (!isOriginalSystemAdministrator(req.user)) {
+        return res.status(403).json({
+          status: "error",
+          code: "ORIGINAL_SYSTEM_ADMINISTRATOR_REQUIRED",
+          message:
+            "Only the original System Administrator can change the protected System Administrator login phone.",
+        });
+      }
+
+      const phone = cleanText(req.body?.system_admin_login_phone);
+      const normalizedPhone = normalizedPhoneForStorage(phone);
+
+      if (!phone || !normalizedPhone) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "Enter a valid Ghana phone number such as 0241234567 or +233241234567.",
+        });
+      }
+
+      const [duplicateRows] = await pool.query(
+        `SELECT id, username
+         FROM users
+         WHERE login_phone_normalized = ?
+           AND id <> ?
+         LIMIT 1`,
+        [normalizedPhone, SYSTEM_ADMIN_ID]
+      );
+
+      if (duplicateRows.length > 0) {
+        return res.status(409).json({
+          status: "error",
+          message:
+            "That phone number is already attached to another Chalin03 login account.",
+        });
+      }
+
+      await pool.query(
+        `UPDATE users
+         SET phone = ?,
+             login_phone_normalized = ?
+         WHERE id = ?
+           AND LOWER(username) = LOWER(?)`,
+        [phone, normalizedPhone, SYSTEM_ADMIN_ID, SYSTEM_ADMIN_USERNAME]
+      );
+
+      await logActivity(
+        req.user.id,
+        branchIdForUser(req.user),
+        "UPDATE_SYSTEM_ADMIN_LOGIN_PHONE",
+        "Updated the protected System Administrator login phone. Owner security alert and receipt phone settings were not changed."
+      );
+
+      return res.json({
+        status: "success",
+        system_admin_login_phone: phone,
+        login_phone_normalized: normalizedPhone,
+        message:
+          "System Administrator login phone updated. It is separate from the Owner Security Alert Phone and Business Phone / Receipt MoMo Number.",
+      });
+    } catch (error) {
+      console.error("Update System Administrator login phone error:", error);
+
+      if (error.code === "ER_DUP_ENTRY") {
+        return res.status(409).json({
+          status: "error",
+          message:
+            "That phone number is already attached to another Chalin03 login account.",
+        });
+      }
+
+      return res.status(500).json({
+        status: "error",
+        message: "System Administrator login phone could not be updated.",
+      });
+    }
+  }
+);
 
 // PUT /api/settings
 router.put("/", requireAuth, requireRole("admin"), async (req, res) => {

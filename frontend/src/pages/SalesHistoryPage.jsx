@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 
 export default function SalesHistoryPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
   const isAdmin = role === "admin";
+  const isAuditor = role === "auditor";
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, branchId);
 
   const currentStoreCode =
     branchCode ||
@@ -323,6 +326,10 @@ export default function SalesHistoryPage() {
         setError("Deleted or voided sales cannot be edited.");
         return;
       }
+      if (!canApplyDiscount && Number(sale.discount_amount || 0) > 0) {
+        setError("Only the Boss or original System Administrator may modify a discounted sale.");
+        return;
+      }
 
       const availableProducts = productsResponse.data.products || [];
 
@@ -427,6 +434,10 @@ export default function SalesHistoryPage() {
     setError("");
 
     if (!editingSale) return;
+    if (!canApplyDiscount && Number(editingSale.discount_amount || 0) > 0) {
+      setError("Only the Boss or original System Administrator may modify a discounted sale.");
+      return;
+    }
 
     if (!editForm.edit_reason.trim()) {
       setError("Edit reason is required.");
@@ -458,7 +469,7 @@ export default function SalesHistoryPage() {
         customer_name: editForm.customer_name,
         customer_phone: editForm.customer_phone,
         payment_type: editForm.payment_type,
-        discount_amount: Number(editForm.discount_amount || 0),
+        discount_amount: canApplyDiscount ? Number(editForm.discount_amount || 0) : 0,
         amount_tendered: effectivePaid,
         amount_paid: effectivePaid,
         payment_allocations: editForm.payment_allocations,
@@ -1014,8 +1025,10 @@ export default function SalesHistoryPage() {
               </h1>
 
               <p style={styles.heroSubtitle}>
-                View past sales, reprint receipts, download PDF receipts and
-                void wrong sales for <strong>{currentStoreName}</strong>
+                {isAuditor
+                  ? "Read-only access to past sales, sale corrections, void history and downloadable receipts for "
+                  : "View past sales, reprint receipts, download PDF receipts and void wrong sales for "}
+                <strong>{currentStoreName}</strong>
                 {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
                 Every record shown here belongs to the selected store.
               </p>
@@ -1042,8 +1055,9 @@ export default function SalesHistoryPage() {
             {currentStoreCode} — {currentStoreName}
           </strong>
           <p>
-            Sales history, receipt preview, PDF download and void actions are
-            filtered to this selected store only.
+            {isAuditor
+              ? "Auditor read-only view: inspect and download selected-store sales and receipts. Creating, editing and voiding sales are not permitted."
+              : "Sales history, receipt preview, PDF download and void actions are filtered to this selected store only."}
           </p>
         </div>
       </div>
@@ -1278,13 +1292,15 @@ export default function SalesHistoryPage() {
 
                     {isAdmin && !voided && (
                       <>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => startEditSale(sale.id)}
-                        >
-                          Edit Sale
-                        </button>
+                        {(canApplyDiscount || Number(sale.discount_amount || 0) === 0) && (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => startEditSale(sale.id)}
+                          >
+                            Edit Sale
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="small-danger"
@@ -1673,21 +1689,23 @@ export default function SalesHistoryPage() {
                   </select>
                 </label>
 
-                <label>
-                  Discount
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={editForm.discount_amount}
-                    onChange={(event) =>
-                      setEditForm((current) => ({
-                        ...current,
-                        discount_amount: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                {canApplyDiscount && (
+                  <label>
+                    Discount (Boss / System Administrator)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.discount_amount}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          discount_amount: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                )}
 
                 {["cash", "momo", "bank"].includes(editForm.payment_type) ? (
                   <label>

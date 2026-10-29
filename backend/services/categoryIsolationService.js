@@ -4,6 +4,9 @@ const {
 } = require("../middleware/sparePartsBranchContextMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const {
+  hasDelegatedCapability,
+} = require("./delegatedAdministrationService");
+const {
   hasEquipmentDivisionAccess,
   requiredEquipmentDivisionForRequest,
   applyEquipmentDivisionCompatibilityPermissions,
@@ -43,6 +46,14 @@ function categoryLabel(value) {
   return CATEGORY_LABELS[normalizeCategory(value)] || "business category";
 }
 
+async function isDelegatedSystemAdministrator(user, connection = pool) {
+  if (String(user?.role || "").trim().toLowerCase() !== "admin") {
+    return false;
+  }
+
+  return hasDelegatedCapability(user, "enabled", connection);
+}
+
 async function loadUserCategoryState(user, connection = pool) {
   if (!user?.id) {
     return {
@@ -53,7 +64,10 @@ async function loadUserCategoryState(user, connection = pool) {
     };
   }
 
-  if (isOriginalSystemAdministrator(user)) {
+  if (
+    isOriginalSystemAdministrator(user) ||
+    (await isDelegatedSystemAdministrator(user, connection))
+  ) {
     return {
       primary_workspace_code: "*",
       category_assignment_status: "system_admin",
@@ -234,7 +248,10 @@ function requireWorkspaceCategory(...allowedWorkspaceCodes) {
   return async function categoryBoundary(req, res, next) {
     const requiresStoreContext = needsSparePartsStoreContext(req, allowed);
 
-    if (isOriginalSystemAdministrator(req.user)) {
+    if (
+      isOriginalSystemAdministrator(req.user) ||
+      (await isDelegatedSystemAdministrator(req.user))
+    ) {
       return requiresStoreContext
         ? requireSparePartsBranchContext(req, res, next)
         : next();
@@ -303,6 +320,7 @@ module.exports = {
   SPARE_PARTS_CONTEXT_EXEMPT_BASE_URLS,
   categoryLabel,
   getBusinessUnitId,
+  isDelegatedSystemAdministrator,
   loadUserCategoryState,
   needsSparePartsStoreContext,
   normalizeCategory,

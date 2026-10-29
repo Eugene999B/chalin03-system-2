@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, Navigate } from "react-router";
 import EquipmentDivisionStaffManager from "../components/EquipmentDivisionStaffManager";
 import { useAuth } from "../context/AuthContext";
@@ -5,59 +6,47 @@ import {
   EQUIPMENT_DIVISIONS,
   canAccessEquipmentDivision,
 } from "../security/equipmentDivisionAccess";
-import "../styles/equipmentDivisionGateway.css";
-import "../styles/equipmentDivisionGateway.mobile.css";
+import "../styles/equipmentBusinessExperience.css";
 
 const hireFeatures = [
-  "Hire customer enquiries and availability",
-  "Hire quotations and Hire contracts",
-  "Dispatch, job cards and Hire work logs",
-  "Hire invoices, payments and balances",
-  "Return inspection and Hire utilisation reports",
+  "Hire enquiries, quotations and availability",
+  "Contracts, dispatch and job cards",
+  "Hire invoices, payments and returns",
+  "Fleet, maintenance and utilisation reports",
 ];
 
 const financeFeatures = [
   "Credit applications, KYC and affordability",
-  "Finance approval and installment agreements",
-  "Scheduled installment payments and accounts",
-  "Finance collections, reminders and risk control",
-  "Finance delivery completion and ownership transfer",
+  "Approval, agreements and deposits",
+  "Installment collections and account control",
+  "Delivery completion and ownership transfer",
 ];
-
-function AccessBadge({ allowed }) {
-  return (
-    <span
-      className={`equipment-gateway__access ${allowed ? "is-allowed" : "is-restricted"}`}
-    >
-      {allowed ? "Assigned division" : "Different staff division"}
-    </span>
-  );
-}
 
 function DivisionCard({
   tone,
-  eyebrow,
   icon,
+  label,
   title,
   description,
   features,
   route,
-  action,
   allowed,
 }) {
   const content = (
     <>
-      <div className="equipment-gateway__card-top">
-        <span className="equipment-gateway__division-icon" aria-hidden="true">
+      <div className="equipment-command__card-heading">
+        <span className="equipment-command__card-icon" aria-hidden="true">
           {icon}
         </span>
-        <AccessBadge allowed={allowed} />
+        <span className={`equipment-command__access ${allowed ? "is-allowed" : "is-restricted"}`}>
+          {allowed ? "Available to this account" : "Not assigned to this account"}
+        </span>
       </div>
 
-      <div className="equipment-gateway__card-copy">
-        <p>{eyebrow}</p>
+      <div className="equipment-command__card-copy">
+        <small>{label}</small>
         <h2>{title}</h2>
-        <span>{description}</span>
+        <p>{description}</p>
       </div>
 
       <ul>
@@ -69,8 +58,8 @@ function DivisionCard({
         ))}
       </ul>
 
-      <div className="equipment-gateway__card-action">
-        <strong>{allowed ? action : "This account belongs to the other division"}</strong>
+      <div className="equipment-command__card-action">
+        <strong>{allowed ? `Open ${title}` : "This role belongs to the other division"}</strong>
         <span aria-hidden="true">→</span>
       </div>
     </>
@@ -79,7 +68,7 @@ function DivisionCard({
   if (!allowed) {
     return (
       <article
-        className={`equipment-gateway__division-card is-${tone} is-disabled`}
+        className={`equipment-command__card is-${tone} is-disabled`}
         aria-disabled="true"
       >
         {content}
@@ -88,14 +77,17 @@ function DivisionCard({
   }
 
   return (
-    <Link className={`equipment-gateway__division-card is-${tone}`} to={route}>
+    <Link className={`equipment-command__card is-${tone}`} to={route}>
       {content}
     </Link>
   );
 }
 
 export default function EquipmentDivisionGatewayPage() {
-  const { isLoggedIn, workspaceCode, user } = useAuth();
+  const auth = useAuth();
+  const { isLoggedIn, workspaceCode, user, logout } = auth;
+  const [leaving, setLeaving] = useState(false);
+  const [navigationError, setNavigationError] = useState("");
 
   if (!isLoggedIn) {
     return <Navigate to="/login?workspace=equipment_hire" replace />;
@@ -111,114 +103,113 @@ export default function EquipmentDivisionGatewayPage() {
     EQUIPMENT_DIVISIONS.FINANCE
   );
   const displayName = user?.full_name || user?.username || "Authorised staff";
+  const roleName = String(user?.workspace_role || user?.role || "staff")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+
+  async function backToLogin() {
+    if (leaving) return;
+    setLeaving(true);
+    setNavigationError("");
+
+    try {
+      await logout();
+      window.location.replace("/login?workspace=equipment_hire");
+    } catch {
+      setNavigationError("The session could not be closed cleanly. Please try again.");
+      setLeaving(false);
+    }
+  }
 
   return (
-    <main className="equipment-gateway">
-      <div className="equipment-gateway__ambient" aria-hidden="true" />
-
-      <header className="equipment-gateway__topbar">
-        <a className="equipment-gateway__brand" href="/company/">
-          <span className="equipment-gateway__logo">
-            <img src="/chalin03-logo.png" alt="" />
-            <strong>C03</strong>
-          </span>
+    <main className="equipment-command">
+      <header className="equipment-command__topbar">
+        <div className="equipment-command__brand">
+          <img src="/chalin03-logo.png" alt="Chalin 03 Company Limited" />
           <span>
             <small>Chalin 03 Company Limited</small>
             <strong>Equipment Business</strong>
           </span>
-        </a>
+        </div>
 
-        <div className="equipment-gateway__identity">
-          <span className="equipment-gateway__status-dot" />
-          <div>
-            <small>Secure staff session</small>
-            <strong>{displayName}</strong>
+        <div className="equipment-command__top-actions">
+          <div className="equipment-command__identity">
+            <span className="equipment-command__status-dot" aria-hidden="true" />
+            <span>
+              <small>Secure staff session</small>
+              <strong>{displayName}</strong>
+              <em>{roleName}</em>
+            </span>
           </div>
+
           <EquipmentDivisionStaffManager user={user} />
+
+          <button
+            type="button"
+            className="equipment-command__logout"
+            onClick={backToLogin}
+            disabled={leaving}
+          >
+            {leaving ? "Closing session…" : "Back to Login"}
+          </button>
         </div>
       </header>
 
-      <section className="equipment-gateway__hero">
-        <div className="equipment-gateway__hero-copy">
-          <div className="equipment-gateway__badges">
-            <span>Two independent staff divisions</span>
-            <span>Role-isolated work queues</span>
-            <span>Reference-only equipment register</span>
-          </div>
-          <p className="equipment-gateway__eyebrow">Open your assigned division</p>
-          <h1>
-            Equipment Hire <em>or</em> Installment Finance
-          </h1>
+      <section className="equipment-command__intro">
+        <div>
+          <p className="equipment-command__eyebrow">Equipment Business gateway</p>
+          <h1>Choose the division you are opening.</h1>
           <p>
-            Each ordinary staff account belongs to one division. Hire jobs remain in
-            Equipment Hire Operations, while credit, installment and ownership work
-            remains in Equipment Installment Finance.
+            Hire and Finance are independent businesses. Your staff role decides which
+            workspace you may enter, while the System Administrator can supervise both.
           </p>
         </div>
 
-        <aside className="equipment-gateway__principle">
+        <aside>
           <span aria-hidden="true">🛡️</span>
-          <div>
-            <small>Hard division boundary</small>
-            <strong>No staff workflow crossover</strong>
-            <p>
-              Hire contracts never become finance accounts, finance applications never
-              become Hire jobs, and a Hire employee cannot open Finance work merely
-              because the employee can view a machine.
-            </p>
-          </div>
+          <p>
+            <strong>Protected division boundary</strong>
+            Hire jobs never become Finance accounts, and Finance accounts never become
+            Hire operations.
+          </p>
         </aside>
       </section>
 
-      <section className="equipment-gateway__division-grid" aria-label="Equipment divisions">
+      {navigationError ? (
+        <div className="equipment-command__notice" role="alert">
+          {navigationError}
+        </div>
+      ) : null}
+
+      <section className="equipment-command__grid" aria-label="Equipment Business divisions">
         <DivisionCard
           tone="hire"
-          eyebrow="Hire staff division"
           icon="🏗️"
+          label="Hire staff division"
           title="Equipment Hire Operations"
-          description="Temporary equipment use, customer Hire jobs, dispatch, Hire billing and returns."
+          description="Temporary equipment use, customer Hire work, dispatch, billing, returns and fleet control."
           features={hireFeatures}
           route="/equipment-hire-operations?division=hire"
-          action="Open assigned Hire work"
           allowed={canOpenHire}
         />
 
         <DivisionCard
           tone="finance"
-          eyebrow="Finance staff division"
           icon="🏦"
+          label="Finance staff division"
           title="Equipment Installment Finance"
-          description="Equipment purchase credit, installment accounts, collections and ownership."
+          description="Credit purchase applications, installment accounts, collections, delivery and ownership."
           features={financeFeatures}
           route="/equipment-installment-finance"
-          action="Open assigned Finance work"
           allowed={canOpenFinance}
         />
       </section>
 
-      <section className="equipment-gateway__shared-strip">
-        <div>
-          <span aria-hidden="true">🚜</span>
-          <p><strong>Reference-only machine identity</strong><small>Both divisions may identify the same physical machine without sharing a job, contract or account.</small></p>
-        </div>
-        <div>
-          <span aria-hidden="true">👥</span>
-          <p><strong>Independent customer transactions</strong><small>A customer identity may be recognised, but Hire and Finance commercial records remain separate.</small></p>
-        </div>
-        <div>
-          <span aria-hidden="true">👔</span>
-          <p><strong>Division-specific staff roles</strong><small>Hire employees cannot enter Finance work, and Finance employees cannot enter Hire operations.</small></p>
-        </div>
-        <div>
-          <span aria-hidden="true">📊</span>
-          <p><strong>Separate evidence and reports</strong><small>Each division keeps its own documents, balances, audit actions and operating reports.</small></p>
-        </div>
+      <section className="equipment-command__footer-actions">
+        <button type="button" onClick={backToLogin} disabled={leaving}>
+          Back to Equipment Login
+        </button>
       </section>
-
-      <footer className="equipment-gateway__footer">
-        <span>Equipment Hire &amp; Installment Finance</span>
-        <span>Dunkwa Police Barrier, Ghana</span>
-      </footer>
     </main>
   );
 }

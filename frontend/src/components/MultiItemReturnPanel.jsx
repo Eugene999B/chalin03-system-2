@@ -17,6 +17,11 @@ function makeLine(item) {
     remaining_quantity: Number(
       item.remaining_quantity || 0
     ),
+    pending_return_quantity: Number(item.pending_return_quantity || 0),
+    active_refund_request_count: Number(item.active_refund_request_count || 0),
+    active_refund_request_codes: Array.isArray(item.active_refund_request_codes)
+      ? item.active_refund_request_codes
+      : [],
     unit_price: Number(item.unit_price || 0),
     selected: false,
     quantity: "",
@@ -24,12 +29,10 @@ function makeLine(item) {
   };
 }
 
-function initialApproval() {
+function initialRefundDetails() {
   return {
     refund_method: "none",
     refund_reference: "",
-    approver_username: "",
-    approver_password: "",
   };
 }
 
@@ -45,8 +48,8 @@ export default function MultiItemReturnPanel({
   const [outcome, setOutcome] =
     useState("stock_only");
 
-  const [approval, setApproval] =
-    useState(initialApproval);
+  const [refundDetails, setRefundDetails] =
+    useState(initialRefundDetails);
 
   const [saving, setSaving] =
     useState(false);
@@ -58,7 +61,7 @@ export default function MultiItemReturnPanel({
     setLines((saleItems || []).map(makeLine));
     setReason("");
     setOutcome("stock_only");
-    setApproval(initialApproval());
+    setRefundDetails(initialRefundDetails());
     setError("");
   }, [saleId, saleItems]);
 
@@ -186,12 +189,12 @@ export default function MultiItemReturnPanel({
     );
 
     if (value === "stock_only") {
-      setApproval(initialApproval());
+      setRefundDetails(initialRefundDetails());
     }
   }
 
-  function changeApproval(event) {
-    setApproval((current) => ({
+  function changeRefundDetails(event) {
+    setRefundDetails((current) => ({
       ...current,
       [event.target.name]:
         event.target.value,
@@ -264,7 +267,7 @@ export default function MultiItemReturnPanel({
           "bank",
           "other",
         ].includes(
-          approval.refund_method
+          refundDetails.refund_method
         )
       ) {
         return "Choose the refund channel.";
@@ -276,18 +279,11 @@ export default function MultiItemReturnPanel({
           "bank",
           "other",
         ].includes(
-          approval.refund_method
+          refundDetails.refund_method
         ) &&
-        !approval.refund_reference.trim()
+        !refundDetails.refund_reference.trim()
       ) {
         return "Enter the refund transaction/reference number.";
-      }
-
-      if (
-        !approval.approver_username.trim() ||
-        !approval.approver_password
-      ) {
-        return "A different manager or administrator must approve the refund.";
       }
     }
 
@@ -311,60 +307,48 @@ export default function MultiItemReturnPanel({
 
     try {
       for (const line of selectedLines) {
-        await axiosClient.post(
-          "/returns",
-          {
-            sale_id: Number(saleId),
-            product_id:
-              line.product_id,
+        const payload = {
+          sale_id: Number(saleId),
+          product_id: line.product_id,
+          quantity: Number(line.quantity),
+          reason: reason.trim(),
+          return_type: outcome,
+          refund_amount:
+            outcome === "refund"
+              ? Number(line.refund_amount || 0)
+              : 0,
+          refund_method:
+            outcome === "refund"
+              ? refundDetails.refund_method
+              : "none",
+          refund_reference:
+            outcome === "refund"
+              ? refundDetails.refund_reference
+              : "",
+        };
 
-            quantity: Number(
-              line.quantity
-            ),
-
-            reason: reason.trim(),
-
-            return_type: outcome,
-
-            refund_amount:
-              outcome === "refund"
-                ? Number(
-                    line.refund_amount ||
-                      0
-                  )
-                : 0,
-
-            refund_method:
-              outcome === "refund"
-                ? approval.refund_method
-                : "none",
-
-            refund_reference:
-              outcome === "refund"
-                ? approval.refund_reference
-                : "",
-
-            approver_username:
-              outcome === "refund"
-                ? approval.approver_username
-                : "",
-
-            approver_password:
-              outcome === "refund"
-                ? approval.approver_password
-                : "",
-          }
-        );
+        if (outcome === "refund") {
+          await axiosClient.post(
+            "/audit-unlock-requests/operational/return-refund",
+            payload
+          );
+        } else {
+          await axiosClient.post(
+            "/returns",
+            payload
+          );
+        }
 
         completed += 1;
       }
 
       await onResult({
         message:
-          `${completed} returned product${
-            completed === 1 ? "" : "s"
-          } recorded successfully.`,
+          outcome === "refund"
+            ? `${completed} refund request${completed === 1 ? "" : "s"} sent to administrators. No stock or refund records change until approval.`
+            : `${completed} returned product${completed === 1 ? "" : "s"} recorded successfully.`,
         error: "",
+        pendingApproval: outcome === "refund",
       });
     } catch (requestError) {
       const detail =
@@ -381,7 +365,7 @@ export default function MultiItemReturnPanel({
                 completed === 1
                   ? ""
                   : "s"
-              } saved before another item failed. ${detail}`
+              } submitted before another item failed. ${detail}`
             : detail,
       });
     } finally {
@@ -440,7 +424,7 @@ export default function MultiItemReturnPanel({
       <div className="returns-batch-lines">
         {lines.map((line) => {
           const unavailable =
-            line.remaining_quantity <= 0;
+            line.remaining_quantity <= 0 || line.active_refund_request_count > 0;
 
           return (
             <article
@@ -470,15 +454,15 @@ export default function MultiItemReturnPanel({
                   </strong>
 
                   <small>
-                    Remaining:{" "}
-                    {
-                      line.remaining_quantity
-                    }
+                    Remaining available: {line.remaining_quantity}
+                    {line.pending_return_quantity > 0
+                      ? ` · Pending approval: ${line.pending_return_quantity}`
+                      : ""}
                     {" · "}
-                    {formatMoney(
-                      line.unit_price
-                    )}{" "}
-                    each
+                    {formatMoney(line.unit_price)} each
+                    {line.active_refund_request_codes.length > 0
+                      ? ` · ${line.active_refund_request_codes.join(", ")}`
+                      : ""}
                   </small>
                 </span>
               </label>
@@ -567,7 +551,7 @@ export default function MultiItemReturnPanel({
             </option>
 
             <option value="refund">
-              Financial refund
+              Financial refund — send to admin
             </option>
           </select>
         </label>
@@ -576,8 +560,13 @@ export default function MultiItemReturnPanel({
       {outcome === "refund" ? (
         <section className="returns-batch-approval">
           <h3>
-            Independent refund approval
+            Remote administrator approval
           </h3>
+          <p>
+            The refund request will appear in every authorized administrator's
+            Approval Centre. No administrator password is entered on this device,
+            and no stock or money record changes until approval.
+          </p>
 
           <div className="returns-control-grid">
             <label>
@@ -585,10 +574,10 @@ export default function MultiItemReturnPanel({
               <select
                 name="refund_method"
                 value={
-                  approval.refund_method
+                  refundDetails.refund_method
                 }
                 onChange={
-                  changeApproval
+                  changeRefundDetails
                 }
               >
                 <option value="none">
@@ -614,40 +603,12 @@ export default function MultiItemReturnPanel({
               <input
                 name="refund_reference"
                 value={
-                  approval.refund_reference
+                  refundDetails.refund_reference
                 }
                 onChange={
-                  changeApproval
+                  changeRefundDetails
                 }
-              />
-            </label>
-
-            <label>
-              Approver username
-              <input
-                name="approver_username"
-                value={
-                  approval.approver_username
-                }
-                onChange={
-                  changeApproval
-                }
-                autoComplete="off"
-              />
-            </label>
-
-            <label>
-              Approver password
-              <input
-                type="password"
-                name="approver_password"
-                value={
-                  approval.approver_password
-                }
-                onChange={
-                  changeApproval
-                }
-                autoComplete="new-password"
+                placeholder="MoMo, bank or written reference"
               />
             </label>
           </div>
@@ -691,14 +652,12 @@ export default function MultiItemReturnPanel({
         }
       >
         {saving
-          ? "Saving Selected Returns…"
-          : `Save ${
-              selectedLines.length || ""
-            } Selected Return${
-              selectedLines.length === 1
-                ? ""
-                : "s"
-            }`}
+          ? outcome === "refund"
+            ? "Sending Approval Requests…"
+            : "Saving Selected Returns…"
+          : outcome === "refund"
+          ? `Send ${selectedLines.length || ""} Refund Request${selectedLines.length === 1 ? "" : "s"} to Admin`
+          : `Save ${selectedLines.length || ""} Selected Return${selectedLines.length === 1 ? "" : "s"}`}
       </button>
     </form>
   );

@@ -2,6 +2,7 @@ const express = require("express");
 const PDFDocument = require("pdfkit");
 
 const { pool } = require("../config/db");
+const { requireBossForPositiveDiscount } = require("../middleware/restrictedDiscountMiddleware");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
@@ -251,6 +252,7 @@ function sendPdf(res, filename, title, metadata, sections) {
 }
 
 router.use(requireAuth);
+router.use(requireBossForPositiveDiscount);
 router.use(async (req, res, next) => {
   try {
     req.hireLocationScope = await resolveHireLocationScope(req, { requireSelection: true });
