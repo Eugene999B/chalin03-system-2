@@ -158,3 +158,33 @@ for (const width of [375, 1440]) {
     });
   }
 }
+
+
+test("visiting login retains a valid saved Finance session instead of revoking it", async ({ page }) => {
+  let revocations = 0;
+  await page.addInitScript((user) => {
+    localStorage.setItem("chalin03_token", "test-saved-session");
+    localStorage.setItem("chalin03_user", JSON.stringify(user));
+  }, manager);
+  await page.route("http://api.test/api/**", route => {
+    const pathname = new URL(route.request().url()).pathname.replace(/^\/api/, "");
+    if (pathname === "/auth/me") {
+      return json(route, { status: "success", user: manager, workspace: manager.active_workspace });
+    }
+    if (pathname === "/auth/logout") {
+      revocations += 1;
+      return json(route, { status: "success" });
+    }
+    return json(route, { status: "success" });
+  });
+
+  await page.goto("/login?workspace=equipment_hire");
+  await expect(page).toHaveURL(/\/equipment-hire$/);
+  await expect(page.getByRole("heading", { name: "Choose the division you are opening." })).toBeVisible();
+  expect(revocations).toBe(0);
+
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/equipment-hire$/);
+  await expect(page.getByRole("heading", { name: "Choose the division you are opening." })).toBeVisible();
+  expect(revocations).toBe(0);
+});
