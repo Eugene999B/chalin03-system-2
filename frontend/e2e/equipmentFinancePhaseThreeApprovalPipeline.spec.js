@@ -546,7 +546,7 @@ test("one fresh installment is created, listed, opened, corrected and approved",
   await page.getByRole("button", { name: "Continue to Assessment" }).click();
 
   await expect(page.getByRole("heading", { name: "Complete useful customer assessment details" })).toBeVisible();
-  await page.getByLabel("ID number").fill("GHA-123456789-0");
+  await page.getByLabel("ID number", { exact: true }).fill("GHA-123456789-0");
   await page.getByLabel("Employment / business type").selectOption("salaried");
   await page.getByLabel("Occupation / main activity").fill("Site Supervisor");
   await page.getByLabel("Residential address").fill(customer.address);
