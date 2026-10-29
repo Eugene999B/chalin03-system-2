@@ -89,7 +89,7 @@ jobs:
             --output smoke-output/api-readiness.json \
             https://api.chalin03.com/api/readiness
 
-          backend_release_required="$(cut -d= -f2 smoke-output/release-scope.txt)"
+          backend_release_required="$(grep '^backend_release_required=' smoke-output/release-scope.txt | cut -d= -f2)"
           jq -e --arg backend_release_required "$backend_release_required" '
             .status == "success" and
             .ready == true and
