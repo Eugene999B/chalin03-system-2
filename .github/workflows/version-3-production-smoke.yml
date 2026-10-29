@@ -26,17 +26,27 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Wait for the approved production release
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p smoke-output
+          # A merge commit has two parents. Compare the previous production
+          # commit with the new release; git diff-tree -r alone reports no
+          # paths on merge commits, incorrectly skipping the backend wait.
           backend_release_required=false
-          if git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -qE '^(backend/|database/|railway\.json$)'; then
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -E '^(backend/|database/|railway\.json$)' >/dev/null; then
             backend_release_required=true
           fi
           echo "backend_release_required=$backend_release_required" | tee smoke-output/release-scope.txt
+          frontend_release_required=false
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -E '^(frontend/)' >/dev/null; then
+            frontend_release_required=true
+          fi
+          echo "frontend_release_required=$frontend_release_required" | tee -a smoke-output/release-scope.txt
 
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --location \
@@ -79,12 +89,13 @@ jobs:
             --output smoke-output/api-readiness.json \
             https://api.chalin03.com/api/readiness
 
-          jq -e '
+          backend_release_required="$(cut -d= -f2 smoke-output/release-scope.txt)"
+          jq -e --arg backend_release_required "$backend_release_required" '
             .status == "success" and
             .ready == true and
             .version == "3.0.0" and
             .deployment.provider == "railway" and
-            .deployment.commit_sha == env.GITHUB_SHA and
+            ($backend_release_required == "false" or .deployment.commit_sha == env.GITHUB_SHA) and
             .checks.database == "ready" and
             .checks.schema == "ready" and
             .checks.configuration == "ready"
@@ -103,6 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           # Backend and Pages deploy independently; wait for the matching bundle.
+          frontend_release_required="$(grep '^frontend_release_required=' smoke-output/release-scope.txt | cut -d= -f2)"
           frontend_ready=false
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error \
@@ -112,7 +124,7 @@ jobs:
               if [ -n "$bundle_path" ] &&
                  curl --fail --silent --show-error \
                    --output smoke-output/application-bundle.js "https://chalin03.com$bundle_path" &&
-                 grep -q "$GITHUB_SHA" smoke-output/application-bundle.js; then
+                 { [ "$frontend_release_required" != "true" ] || grep -q "$GITHUB_SHA" smoke-output/application-bundle.js; }; then
                 frontend_ready=true
                 break
               fi
@@ -131,7 +143,9 @@ jobs:
           curl --fail --silent --show-error --location \
             --output smoke-output/application-bundle.js \
             "https://chalin03.com${bundle_path}"
-          grep -q "$GITHUB_SHA" smoke-output/application-bundle.js
+          if [ "$frontend_release_required" = "true" ]; then
+            grep -q "$GITHUB_SHA" smoke-output/application-bundle.js
+          fi
 
           curl --fail --silent --show-error --location \
             --output smoke-output/service-worker.js \
