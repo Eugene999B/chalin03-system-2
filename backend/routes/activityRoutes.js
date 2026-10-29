@@ -121,7 +121,12 @@ function safeSheetName(value) {
 }
 
 function safeFilePart(value) {
-  return String(value || "all").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+/, "").replace(/-+$/, "").slice(0, 50) || "all";
+  const sanitized = String(value || "all").replace(/[^a-zA-Z0-9_-]+/g, "-");
+  let start = 0;
+  let end = sanitized.length;
+  while (start < end && sanitized[start] === "-") start += 1;
+  while (end > start && sanitized[end - 1] === "-") end -= 1;
+  return sanitized.slice(start, Math.min(end, start + 50)) || "all";
 }
 
 function htmlEscape(value) {
