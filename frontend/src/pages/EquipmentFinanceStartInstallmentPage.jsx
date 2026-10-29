@@ -328,6 +328,18 @@ export default function EquipmentFinanceStartInstallmentPage() {
         setDifferentPersonConfirmed(false);
         setStep(0);
         setProblem("A possible matching customer already exists. Review the suggestions below before creating another customer record.");
+      } else if (error?.response?.data?.code === "FINANCE_START_SCHEMA_REQUIRED") {
+        const readiness = error.response.data.readiness || {};
+        const missing = [
+          ...(readiness.missing_tables || []),
+          ...(readiness.missing_columns || []),
+          ...(readiness.invalid_nullability || []),
+        ].filter((value) => typeof value === "string").slice(0, 12);
+        setProblem(
+          "Finance cannot save this application until its database migration is verified. No successful creation was confirmed. " +
+          (missing.length ? "Required database repair: " + missing.join(", ") + ". " : "") +
+          "Give these details to the system administrator; your review draft remains available."
+        );
       } else {
         setProblem(errorMessage(error, "Could not start the installment."));
       }
