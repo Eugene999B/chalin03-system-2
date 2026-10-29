@@ -97,6 +97,15 @@ test("readiness timeout is no longer converted to ready true", () => {
   assert.match(applications, /code: payload\.code \|\| "FINANCE_READINESS_TIMEOUT"/);
 });
 
+
+test("finance installment transaction checks active sale locks without depending on optional lock timestamps", () => {
+  const machineQuery = safeStart.slice(safeStart.indexOf("async function financeMachine("), safeStart.indexOf("function assertMachineAvailable("));
+  assert.match(machineQuery, /active_sale_lock_count/);
+  assert.match(machineQuery, /sale_lock\.released_at IS NULL/);
+  assert.match(machineQuery, /blocking_agreement_number/);
+  assert.doesNotMatch(machineQuery, /sale_lock\.locked_at/);
+});
+
 test("start-installment schema 503 exposes operator-safe diagnosis and releases the connection first", () => {
   const start = safeStart.indexOf('if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code))');
   assert.ok(start >= 0);
