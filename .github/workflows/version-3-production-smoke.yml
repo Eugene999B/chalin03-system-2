@@ -42,6 +42,11 @@ jobs:
             backend_release_required=true
           fi
           echo "backend_release_required=$backend_release_required" | tee smoke-output/release-scope.txt
+          frontend_release_required=false
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -qE '^(frontend/)'; then
+            frontend_release_required=true
+          fi
+          echo "frontend_release_required=$frontend_release_required" | tee -a smoke-output/release-scope.txt
 
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --location \
@@ -109,6 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           # Backend and Pages deploy independently; wait for the matching bundle.
+          frontend_release_required="$(grep '^frontend_release_required=' smoke-output/release-scope.txt | cut -d= -f2)"
           frontend_ready=false
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error \
@@ -118,7 +124,7 @@ jobs:
               if [ -n "$bundle_path" ] &&
                  curl --fail --silent --show-error \
                    --output smoke-output/application-bundle.js "https://chalin03.com$bundle_path" &&
-                 grep -q "$GITHUB_SHA" smoke-output/application-bundle.js; then
+                 { [ "$frontend_release_required" != "true" ] || grep -q "$GITHUB_SHA" smoke-output/application-bundle.js; }; then
                 frontend_ready=true
                 break
               fi
@@ -137,7 +143,9 @@ jobs:
           curl --fail --silent --show-error --location \
             --output smoke-output/application-bundle.js \
             "https://chalin03.com${bundle_path}"
-          grep -q "$GITHUB_SHA" smoke-output/application-bundle.js
+          if [ "$frontend_release_required" = "true" ]; then
+            grep -q "$GITHUB_SHA" smoke-output/application-bundle.js
+          fi
 
           curl --fail --silent --show-error --location \
             --output smoke-output/service-worker.js \
