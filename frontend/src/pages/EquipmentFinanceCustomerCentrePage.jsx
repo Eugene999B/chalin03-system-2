@@ -296,6 +296,7 @@ export default function EquipmentFinanceCustomerCentrePage() {
               <button type="button" onClick={() => setEditing(null)}>Close</button>
             </div>
             <form onSubmit={save}>
+              {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
               <div className="customer-centre__photo-row">
                 <CustomerPortraitPicker
                   value={form.profile_photo_data_url}
