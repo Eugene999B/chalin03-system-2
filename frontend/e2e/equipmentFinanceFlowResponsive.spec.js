@@ -188,6 +188,13 @@ for (const width of [375, 1440]) {
     await dialog.getByLabel("Make").fill("Test make");
     await dialog.getByLabel("Model", { exact: true }).fill("Test model");
     await dialog.getByLabel("Target selling price (required)").fill("100000");
+    await dialog.getByLabel("Model year (required)").fill("2024");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Condition \(required\)/ }).locator("select").selectOption("good");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Ownership \(required\)/ }).locator("select").selectOption("company_owned");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Sale purpose \(required\)/ }).locator("select").selectOption("sale_only");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Meter type \(required\)/ }).locator("select").selectOption("hour_meter");
+    await dialog.getByLabel("Current meter (required)").fill("0");
+    await dialog.locator(".finance-simple__field").filter({ hasText: /^Fuel type \(required\)/ }).locator("select").selectOption("Diesel");
     await dialog.getByRole("button", { name: "Save Excavator" }).click();
     await expect(dialog.getByRole("alert")).toContainText("serial number or chassis number");
     await dialog.getByLabel(/Serial number \(or chassis number required\)/).fill(`SERIAL-TEST-${width}`);
@@ -216,14 +223,15 @@ for (const width of [375, 1440]) {
       "Current meter (required)",
       "Fuel type (required)",
     ]) {
-      const control = dialog.getByLabel(name, { exact: true });
+      const field = dialog.locator(".finance-simple__field").filter({ has: dialog.getByText(name, { exact: true }) });
+      const control = field.locator("input, select");
       await expect(control).toHaveCount(1);
       await expect(control).toHaveAttribute("required");
     }
-    const condition = dialog.getByLabel("Condition (required)");
-    expect(await condition.inputValue()).toBe("");
-    await expect(dialog.getByLabel("Fuel type (required)")).toHaveValue("");
-    await expect(dialog.getByLabel("Current meter (required)")).toHaveValue("");
+    const getField = (name) => dialog.locator(".finance-simple__field").filter({ has: dialog.getByText(name, { exact: true }) }).locator("input, select");
+    await expect(getField("Condition (required)")).toHaveValue("");
+    await expect(getField("Fuel type (required)")).toHaveValue("");
+    await expect(getField("Current meter (required)")).toHaveValue("");
     const overflow = await dialog.evaluate(node => node.scrollWidth - node.clientWidth);
     expect(overflow).toBeLessThanOrEqual(2);
     await page.screenshot({ path: testInfo.outputPath(`excavator-required-${width}.png`) });
