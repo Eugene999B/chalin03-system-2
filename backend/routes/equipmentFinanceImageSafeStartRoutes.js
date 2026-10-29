@@ -519,6 +519,7 @@ router.post(
           proposed_frequency: offer.payment_frequency,
           proposed_interval_days: offer.custom_interval_days,
           proposed_non_working_day_rule: offer.non_working_day_rule,
+          proposed_first_due_date: offer.first_due_date,
           proposed_installment_count: offer.installment_count,
           proposed_installment_amount: monthlyAmount,
           proposed_periodic_amount: offer.periodic_amount,
