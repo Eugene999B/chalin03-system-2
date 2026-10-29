@@ -13,24 +13,25 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   INDEX idx_schema_migration_name (migration_name)
 );
 
-DELIMITER $$
-DROP PROCEDURE IF EXISTS chalin03_finance_add_start_due_date $$
-CREATE PROCEDURE chalin03_finance_add_start_due_date()
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE()
-      AND TABLE_NAME = 'equipment_credit_applications'
-      AND COLUMN_NAME = 'proposed_first_due_date'
-  ) THEN
-    ALTER TABLE equipment_credit_applications
-      ADD COLUMN proposed_first_due_date DATE NULL AFTER proposed_non_working_day_rule;
-  END IF;
-END $$
-DELIMITER ;
+-- Build one controlled, additive statement. This preserves idempotency
+-- without helper procedures or any DROP operation across migration boundaries.
+SET @chalin03_due_date_schema_sql = (
+  SELECT IF(
+    EXISTS(
+      SELECT 1
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'equipment_credit_applications'
+        AND COLUMN_NAME = 'proposed_first_due_date'
+    ),
+    'SELECT 1',
+    'ALTER TABLE equipment_credit_applications ADD COLUMN proposed_first_due_date DATE NULL AFTER proposed_non_working_day_rule'
+  )
+);
 
-CALL chalin03_finance_add_start_due_date();
-DROP PROCEDURE IF EXISTS chalin03_finance_add_start_due_date;
+PREPARE chalin03_due_date_addition FROM @chalin03_due_date_schema_sql;
+EXECUTE chalin03_due_date_addition;
+DEALLOCATE PREPARE chalin03_due_date_addition;
 
 INSERT INTO schema_migrations (migration_name, description)
 VALUES (
