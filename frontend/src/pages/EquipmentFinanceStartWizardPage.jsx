@@ -351,7 +351,7 @@ export default function EquipmentFinanceStartWizardPage() {
   }
 
   function chooseMachine(machine) {
-    setData((current) => ({ ...current, asset_id: String(machine.id), offer: { ...current.offer, selling_price: current.offer.selling_price || String(machine.target_selling_price || "") } }));
+    setData((current) => ({ ...current, asset_id: String(machine.id), offer: { ...current.offer, selling_price: String(machine.target_selling_price || "") } }));
   }
 
   function validate(index) {
