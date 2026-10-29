@@ -222,7 +222,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
 
   function update(section, field, value) { setData((current) => ({ ...current, [section]: { ...current[section], [field]: value } })); }
   function chooseCustomer(customer) { setData((current) => ({ ...current, customerMode: "existing", customer_id: String(customer.id) })); }
-  function chooseMachine(machine) { setData((current) => ({ ...current, asset_id: String(machine.id), offer: { ...current.offer, selling_price: current.offer.selling_price || String(machine.target_selling_price || "") } })); }
+  function chooseMachine(machine) { setData((current) => ({ ...current, asset_id: String(machine.id), offer: { ...current.offer, selling_price: String(machine.target_selling_price || "") } })); }
   function setPhoto(value) { setProfilePhoto(value || null); writePhotoState(photoKey, value || null); }
   function clearDraft() { const fresh = blankState(); setData(fresh); setStep(0); setProblem(""); setNotice("The unfinished draft was cleared on this device."); setSchedulePreview(null); setProfilePhoto(null); writePhotoState(photoKey, null); window.localStorage.removeItem(DRAFT_KEY); }
 
