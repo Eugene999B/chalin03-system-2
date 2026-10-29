@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
+import { createPortal } from "react-dom";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
@@ -398,8 +399,8 @@ export default function EquipmentFinanceExcavatorsPage() {
         </div>
       </section>
 
-      {editing ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>
+      {editing ? createPortal(
+        <div className="finance-simple finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setEditing(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={editing.id ? "Edit excavator" : "Register excavator"} onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header">
               <div><p className="finance-simple__eyebrow">Protected machine file</p><h2>{editing.id ? "Edit Excavator" : "Register Excavator"}</h2><span className="finance-simple__muted">All values remain visible on phones. Full photos are contained, not cropped.</span></div>
@@ -462,16 +463,18 @@ export default function EquipmentFinanceExcavatorsPage() {
               <div className="finance-simple__sticky-actions"><span>{editing.id ? (editing.editability?.temporary_correction ? "Instant price & balance sync • original signed PDFs and receipts preserved" : "Editable because no installment has started") : "New protected excavator file"}</span><div><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="is-primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Excavator"}</button></div></div>
             </form>
           </section>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
-      {viewerPhoto ? (
-        <div className="finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setViewerPhoto(null)}>
+      {viewerPhoto ? createPortal(
+        <div className="finance-simple finance-simple__dialog-backdrop" role="presentation" onMouseDown={() => setViewerPhoto(null)}>
           <section className="finance-simple__dialog" role="dialog" aria-modal="true" aria-label={viewerPhoto.title} onMouseDown={(event) => event.stopPropagation()}>
             <div className="finance-simple__section-header"><div><p className="finance-simple__eyebrow">Complete uncropped photo</p><h2>{viewerPhoto.title}</h2></div><button type="button" onClick={() => setViewerPhoto(null)}>Close</button></div>
             <div className="finance-simple__photo-viewer"><img src={viewerPhoto.url} alt={viewerPhoto.title} /></div>
           </section>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </main>
   );
