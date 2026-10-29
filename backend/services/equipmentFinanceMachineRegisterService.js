@@ -50,7 +50,16 @@ function enumValue(value, allowed, fallback = null) {
 function dateValue(value, fallback = null) {
   if (value === undefined || value === null || value === "") return fallback;
   const text = cleanText(value, 20);
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1000) return undefined;
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day ? text : undefined;
 }
 function decodePhoto(dataUrl) {
   const match = String(dataUrl || "").match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/i);
@@ -105,7 +114,7 @@ function normalizeMachine(input, { partial = false } = {}) {
     if (partial && input[key] === undefined) continue; const value = nonNegativeNumber(input[key], fallback); if (value === undefined) errors.push(`${label} must be zero or greater.`); output[key] = value === undefined ? null : value;
   }
   for (const [key, label] of [["acquisition_date", "Acquisition date"],["insurance_expiry", "Insurance expiry"],["registration_expiry", "Registration expiry"]]) {
-    if (partial && input[key] === undefined) continue; const value = dateValue(input[key]); if (value === undefined) errors.push(`${label} must use YYYY-MM-DD.`); output[key] = value === undefined ? null : value;
+    if (partial && input[key] === undefined) continue; const value = dateValue(input[key]); if (value === undefined) errors.push(`${label} must be a valid calendar date in YYYY-MM-DD format.`); output[key] = value === undefined ? null : value;
   }
   if (!partial) { if (!output.serial_number && !output.chassis_number) errors.push("Enter at least a serial number or chassis number."); if (Number(output.target_selling_price || 0) <= 0) errors.push("Target selling price must be greater than zero."); if (Number(output.minimum_selling_price || 0) <= 0) errors.push("Enter a positive minimum approved selling price for this excavator."); }
   if (output.minimum_selling_price !== undefined && output.target_selling_price !== undefined && Number(output.minimum_selling_price || 0) > Number(output.target_selling_price || 0)) errors.push("Minimum selling price cannot exceed the target selling price.");
