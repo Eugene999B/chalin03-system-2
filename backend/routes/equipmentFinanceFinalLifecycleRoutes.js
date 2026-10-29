@@ -774,13 +774,37 @@ router.post(
       });
       await connection.commit();
 
-      // The payment is already durable before any external SMS request begins.
-      const bossAlert = await sendBossPaymentAlert({
-        paymentId: result.insertId,
-        agreementId: account.id,
-        userId: userId(req),
-      });
-      const finalAccount = await getAccount(pool, account.id);
+      // The payment has COMMITTED. Non-financial follow-up work may fail, but
+      // must never turn a durable collection into an HTTP error that prompts
+      // a cashier to enter the same payment again.
+      let bossAlert = { ok: false, status: "unavailable" };
+      try {
+        const alertResult = await sendBossPaymentAlert({
+          paymentId: result.insertId,
+          agreementId: account.id,
+          userId: userId(req),
+        });
+        if (alertResult && typeof alertResult === "object") bossAlert = alertResult;
+      } catch (alertError) {
+        console.error("Finance payment committed; boss alert delivery failed:", alertError);
+      }
+
+      // Return the committed ledger totals even when a subsequent read has a
+      // transient connection error. Never report a successfully committed
+      // receipt as a failed collection.
+      let finalAccount = {
+        ...account,
+        amount_paid: refreshed.paid,
+        outstanding_balance: refreshed.balance,
+        overdue_amount: refreshed.overdue,
+        agreement_status: refreshed.status,
+        next_due_date: refreshed.next_due_date,
+      };
+      try {
+        finalAccount = (await getAccount(pool, account.id)) || finalAccount;
+      } catch (readError) {
+        console.error("Finance payment committed; post-commit account refresh failed:", readError);
+      }
       return res.status(201).json({
         status: "success",
         message: settlement

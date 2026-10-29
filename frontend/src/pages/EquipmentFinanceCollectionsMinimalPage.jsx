@@ -43,19 +43,11 @@ function hasOpeningDepositOutstanding(account) { return paymentBreakdown(account
 function nextDueFromSchedule(schedule) {
   return financeDateOnly(earliestUnpaidFinancePeriod(schedule)?.due_date);
 }
-async function enrichAccountDates(accounts) {
-  const rows = Array.isArray(accounts) ? accounts : [];
-  const resolved = await Promise.all(rows.map(async (account) => {
-    if (!account?.agreement_id) return account;
-    try {
-      const response = await axiosClient.get(`${API}/accounts/${account.agreement_id}`, { __skipFinanceNextDue: true });
-      const nextDue = nextDueFromSchedule(response.data?.schedule);
-      return nextDue ? { ...account, next_due_date: nextDue, next_installment_due_date: nextDue } : account;
-    } catch {
-      return account;
-    }
-  }));
-  return resolved;
+function enrichAccountDates(accounts) {
+  // The accounts endpoint already supplies schedule-derived next due dates.
+  // Fetching every agreement again in parallel overloaded MySQL and caused
+  // intermittent HTTP 500s in the collections workspace.
+  return Array.isArray(accounts) ? accounts : [];
 }
 
 export default function EquipmentFinanceCollectionsMinimalPage({ embedded = false }) {
