@@ -123,7 +123,7 @@ for (const width of [375, 1440]) {
       await page.getByLabel("Opening deposit").fill("10000");
       await expect(page.locator(".c03-start2-schedule-rows")).toBeVisible();
       await page.getByRole("button",{name:"Continue to Assessment"}).click();
-      await page.getByLabel("ID number").fill("QA-OTHER-PERSON-ID");
+      await page.getByLabel("ID number", { exact: true }).fill("QA-OTHER-PERSON-ID");
       await page.getByRole("button",{name:"Continue to Review"}).click();
       await page.getByRole("button",{name:"Create installment application"}).click();
       const review = page.getByRole("region",{name:"Possible existing customer matches"});
@@ -142,7 +142,7 @@ for (const width of [375, 1440]) {
       await page.getByRole("button",{name:"Continue to Terms"}).click();
       await expect(page.locator(".c03-start2-schedule-rows")).toBeVisible();
       await page.getByRole("button",{name:"Continue to Assessment"}).click();
-      if (choice === "reuse") await expect(page.getByLabel("ID number")).toHaveValue("");
+      if (choice === "reuse") await expect(page.getByLabel("ID number", { exact: true })).toHaveValue("");
       await page.getByRole("button",{name:"Continue to Review"}).click();
       await page.getByRole("button",{name:"Create installment application"}).click();
       await expect.poll(() => submissions.length).toBe(2);
