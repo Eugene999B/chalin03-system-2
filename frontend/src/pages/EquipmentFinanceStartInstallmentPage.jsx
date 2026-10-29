@@ -243,7 +243,12 @@ export default function EquipmentFinanceStartInstallmentPage() {
     setCustomers((current) => current.some((item) => String(item.id) === customerId) ? current : [customer, ...current]);
     setDuplicateCandidates([]);
     setDifferentPersonConfirmed(false);
-    setData((current) => ({ ...current, customerMode: "existing", customer_id: customerId }));
+    setData((current) => {
+      const changed = current.customerMode !== "existing" || String(current.customer_id) !== customerId;
+      const clearedIdentity = changed ? blankState() : null;
+      return { ...current, customerMode: "existing", customer_id: customerId,
+        ...(changed ? { kyc: clearedIdentity.kyc, affordability: clearedIdentity.affordability } : {}) };
+    });
     // Buyer portraits are private evidence; never attach one buyer's picture to another.
     setProfilePhoto(readPhotoState(photoKeyFor("existing", customerId)));
   }
