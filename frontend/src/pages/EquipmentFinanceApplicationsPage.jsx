@@ -142,10 +142,10 @@ function editPayload(detail) {
   };
 }
 
-function Field({ title, children, wide = false }) {
+function Field({ title, children, wide = false, hint = "" }) {
   return (
     <label className={`finance-simple__field ${wide ? "is-wide" : ""}`}>
-      <span>{title}</span>
+      <span>{title}{hint ? ` (${hint})` : ""}</span>
       {children}
     </label>
   );
@@ -787,7 +787,7 @@ export default function EquipmentFinanceApplicationsPage() {
               </div>
             ) : null}
             {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
-            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
+            {decision.kind !== "verify" && decision.kind !== "assess" ? <Field title="Reason / note" hint={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind) ? "Required" : "Optional"}><textarea value={decision.reason} required={["reject_kyc", "request_changes", "request_approved_correction", "decline", "withdraw", "cancel"].includes(decision.kind)} onChange={(event) => setDecision((current) => ({ ...current, reason: event.target.value }))} autoFocus /></Field> : null}
             <div className="finance-applications-v2__decision-footer"><button type="button" onClick={() => setDecision(null)} disabled={saving}>Cancel</button><button className={decision.kind === "approve" ? "is-primary" : decision.kind === "decline" || decision.kind === "cancel" || decision.kind === "withdraw" ? "is-danger" : "is-primary"} type="submit" disabled={saving}>{saving ? "Working…" : "Confirm action"}</button></div>
           </form>
         </div>
