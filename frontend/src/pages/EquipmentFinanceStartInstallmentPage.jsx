@@ -141,6 +141,8 @@ export default function EquipmentFinanceStartInstallmentPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [scheduleProblem, setScheduleProblem] = useState("");
   const [profilePhoto, setProfilePhoto] = useState(() => readPhotoState(photoKey));
+  const [duplicateCandidates, setDuplicateCandidates] = useState([]);
+  const [differentPersonConfirmed, setDifferentPersonConfirmed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -229,9 +231,18 @@ export default function EquipmentFinanceStartInstallmentPage() {
     setData((current) => current.offer.selling_price ? current : { ...current, offer: { ...current.offer, selling_price: String(selectedMachine.target_selling_price || "") } });
   }, [selectedMachine]);
 
-  function update(section, field, value) { setData((current) => ({ ...current, [section]: { ...current[section], [field]: value } })); }
+  function update(section, field, value) {
+    if (section === "customer") {
+      setDuplicateCandidates([]);
+      setDifferentPersonConfirmed(false);
+    }
+    setData((current) => ({ ...current, [section]: { ...current[section], [field]: value } }));
+  }
   function chooseCustomer(customer) {
     const customerId = String(customer.id);
+    setCustomers((current) => current.some((item) => String(item.id) === customerId) ? current : [customer, ...current]);
+    setDuplicateCandidates([]);
+    setDifferentPersonConfirmed(false);
     setData((current) => ({ ...current, customerMode: "existing", customer_id: customerId }));
     // Buyer portraits are private evidence; never attach one buyer's picture to another.
     setProfilePhoto(readPhotoState(photoKeyFor("existing", customerId)));
@@ -253,7 +264,7 @@ export default function EquipmentFinanceStartInstallmentPage() {
     setScheduleProblem("");
   }
   function setPhoto(value) { setProfilePhoto(value || null); writePhotoState(photoKey, value || null); }
-  function clearDraft() { const fresh = blankState(); setData(fresh); setStep(0); setProblem(""); setNotice("The unfinished draft was cleared on this device."); setSchedulePreview(null); setProfilePhoto(null); writePhotoState(photoKey, null); window.localStorage.removeItem(DRAFT_KEY); }
+  function clearDraft() { const fresh = blankState(); setData(fresh); setStep(0); setProblem(""); setDuplicateCandidates([]); setDifferentPersonConfirmed(false); setNotice("The unfinished draft was cleared on this device."); setSchedulePreview(null); setProfilePhoto(null); writePhotoState(photoKey, null); window.localStorage.removeItem(DRAFT_KEY); }
 
   function validate(index) {
     if (!canCreate) return "Your account has view-only Finance access.";
@@ -293,6 +304,8 @@ export default function EquipmentFinanceStartInstallmentPage() {
       const payload = {
         customer_id: data.customerMode === "existing" ? data.customer_id : null,
         customer: data.customerMode === "new" ? data.customer : undefined,
+        ...(data.customerMode === "new" && duplicateCandidates.length && differentPersonConfirmed
+          ? { confirm_duplicate_customer: true } : {}),
         asset_id: data.asset_id,
         offer: data.offer,
         kyc: { ...data.kyc, customer_name_snapshot: selectedCustomer?.customer_name || data.customer.customer_name, customer_phone_snapshot: selectedCustomer?.phone || data.customer.phone, customer_email_snapshot: selectedCustomer?.email || data.customer.email, customer_address_snapshot: customerAddress, residential_address: customerAddress },
@@ -304,7 +317,16 @@ export default function EquipmentFinanceStartInstallmentPage() {
       const applicationNumber = response.data?.application?.application_number || "The installment application";
       setNotice(`${applicationNumber} was created successfully.`);
       window.setTimeout(() => navigate(response.data?.next_path || "/equipment-installment-finance/applications"), 650);
-    } catch (error) { setProblem(errorMessage(error, "Could not start the installment.")); }
+    } catch (error) {
+      if (error?.response?.data?.code === "POSSIBLE_DUPLICATE_FINANCE_CUSTOMER") {
+        setDuplicateCandidates(Array.isArray(error.response.data.duplicates) ? error.response.data.duplicates : []);
+        setDifferentPersonConfirmed(false);
+        setStep(0);
+        setProblem("A possible matching customer already exists. Review the suggestions below before creating another customer record.");
+      } else {
+        setProblem(errorMessage(error, "Could not start the installment."));
+      }
+    }
     finally { setSaving(false); }
   }
 
