@@ -429,10 +429,14 @@ test("administrator completes the minimal installment workflow and sees the back
   await dialog.getByLabel("Machine name").fill("Phase 3 Excavator");
   await dialog.getByLabel("Make").fill("Caterpillar");
   await dialog.getByLabel("Model", { exact: true }).fill("320 GC");
-  await dialog.getByLabel("Serial number").fill("PHASE3-SERIAL-001");
-  await dialog.getByLabel("Target selling price").fill("1000");
-  await dialog.getByLabel("Minimum approved price").fill("900");
-  await dialog.getByLabel("Full machine photos").setInputFiles({
+  await dialog.getByLabel("Model year (required)").fill("2024");
+  await dialog.getByLabel("Colour (required)").fill("Yellow");
+  await dialog.getByLabel("Engine number (required)").fill("PHASE3-ENGINE-001");
+  await dialog.getByLabel("Physical yard / storage (required)").selectOption("31");
+  await dialog.getByLabel("Serial number (or chassis number required)").fill("PHASE3-SERIAL-001");
+  await dialog.getByLabel("Target selling price (required)").fill("1000");
+  await dialog.getByLabel("Minimum approved price (required)").fill("900");
+  await dialog.getByLabel("Full machine photo (required)").setInputFiles({
     name: "phase3-excavator.png",
     mimeType: "image/png",
     buffer: Buffer.from(
