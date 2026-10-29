@@ -223,12 +223,12 @@ for (const width of [375, 1440]) {
       "Current meter (required)",
       "Fuel type (required)",
     ]) {
-      const field = dialog.locator(".finance-simple__field").filter({ has: dialog.getByText(name, { exact: true }) });
+      const field = dialog.locator(".finance-simple__field").filter({ hasText: name });
       const control = field.locator("input, select");
       await expect(control).toHaveCount(1);
       await expect(control).toHaveAttribute("required");
     }
-    const getField = (name) => dialog.locator(".finance-simple__field").filter({ has: dialog.getByText(name, { exact: true }) }).locator("input, select");
+    const getField = (name) => dialog.locator(".finance-simple__field").filter({ hasText: name }).locator("input, select");
     await expect(getField("Condition (required)")).toHaveValue("");
     await expect(getField("Fuel type (required)")).toHaveValue("");
     await expect(getField("Current meter (required)")).toHaveValue("");
