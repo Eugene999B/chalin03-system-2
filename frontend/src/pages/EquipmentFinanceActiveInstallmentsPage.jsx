@@ -197,6 +197,7 @@ export default function EquipmentFinanceActiveInstallmentsPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              aria-label="Search active installment accounts"
               placeholder="Agreement, customer, phone or excavator"
             />
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
