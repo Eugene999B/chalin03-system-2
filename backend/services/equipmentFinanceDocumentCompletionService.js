@@ -8,7 +8,7 @@ const { nextDocumentNumber } = require("./groupConfigurationService");
 const {
   ProfessionalFinanceError,
   getIssuedDocument,
-  loadAgreementSnapshot,
+  loadReconciledDocumentSnapshot,
 } = require("./equipmentFinanceProfessionalService");
 
 const DOCUMENT_DEFINITIONS = Object.freeze({
@@ -355,7 +355,7 @@ async function issueCompletionDocument({
   const definition = DOCUMENT_DEFINITIONS[type];
   if (!definition) throw new ProfessionalFinanceError(400, "Choose a supported Finance document type.");
   const storedFormat = format === "word" ? "word" : "pdf";
-  const baseSnapshot = await loadAgreementSnapshot(agreementId);
+  const baseSnapshot = await loadReconciledDocumentSnapshot(agreementId);
   const snapshot = await enrichSnapshot(baseSnapshot, { paymentId, amendmentId });
   assertIssueAllowed(type, snapshot);
   snapshot.document_context.document_type = type;
