@@ -358,6 +358,21 @@ export default function EquipmentFinanceStartInstallmentPage() {
           (missing.length ? "Required database repair: " + missing.join(", ") + ". " : "") +
           "Give these details to the system administrator; your review draft remains available."
         );
+      } else if (Number(error?.response?.status || 0) >= 500 || !error?.response) {
+        // A failed response is not proof that a non-idempotent create call did
+        // not commit. Keep the draft and ask staff to check the case register
+        // before retrying to avoid duplicate agreements and customer exposure.
+        const code = String(error?.response?.data?.code || "")
+          .replace(/[^A-Z0-9_]/g, "").slice(0, 80);
+        const reference = String(error?.response?.data?.request_id || "")
+          .replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 100);
+        setProblem(
+          "CHALIN03 could not confirm creation of this installment application. " +
+          "Do not submit it again until you check Applications & Approvals for the same customer and excavator. " +
+          "Your unfinished draft is preserved." +
+          (code ? " Error code: " + code + "." : "") +
+          (reference ? " Request reference: " + reference + "." : "")
+        );
       } else {
         setProblem(errorMessage(error, "Could not start the installment."));
       }
