@@ -29,10 +29,10 @@ function json(route, body, status = 200) {
 
 function scheduleRows() {
   return [
-    { id: 1, sequence_number: 1, due_date: "2026-09-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
-    { id: 2, sequence_number: 2, due_date: "2026-10-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
-    { id: 3, sequence_number: 3, due_date: "2026-11-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
-    { id: 4, sequence_number: 4, due_date: "2026-12-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
+    { id: 1, sequence_number: 1, due_date: "2026-12-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
+    { id: 2, sequence_number: 2, due_date: "2027-01-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
+    { id: 3, sequence_number: 3, due_date: "2027-02-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
+    { id: 4, sequence_number: 4, due_date: "2027-03-01", scheduled_amount: 200, amount_paid: 0, schedule_status: "pending" },
   ];
 }
 
@@ -89,10 +89,10 @@ test("administrator completes the minimal installment workflow and sees the back
         payment_interval_days: null,
         non_working_day_rule: "exact",
         installment_count: 4,
-        proposed_first_due_date: "2026-09-01",
+        proposed_first_due_date: "2026-12-01",
         periodic_amount: 200,
         final_payment_amount: 200,
-        final_due_date: "2026-12-01",
+        final_due_date: "2027-03-01",
         agreement_id: state.activated ? 601 : null,
         activation_ready: !state.activated,
         activation_blockers: [],
@@ -125,9 +125,9 @@ test("administrator completes the minimal installment workflow and sees the back
       overdue_amount: 0,
       payment_frequency: "monthly",
       installment_count: 4,
-      first_due_date: "2026-09-01",
-      next_due_date: "2026-09-01",
-      final_due_date: "2026-12-01",
+      first_due_date: "2026-12-01",
+      next_due_date: "2026-12-01",
+      final_due_date: "2027-03-01",
       last_payment_date: state.payments.at(-1)?.payment_date || null,
       equipment_commitment_status: "reserved",
       reserved: true,
@@ -226,8 +226,8 @@ test("administrator completes the minimal installment workflow and sees the back
           installment_count: 4,
           payment_frequency: "monthly",
           custom_interval_days: null,
-          first_due_date: "2026-09-01",
-          final_due_date: "2026-12-01",
+          first_due_date: "2026-12-01",
+          final_due_date: "2027-03-01",
           periodic_amount: 200,
           final_payment_amount: 200,
           non_working_day_rule: "exact",
@@ -448,25 +448,26 @@ test("administrator completes the minimal installment workflow and sees the back
   await dialog.getByRole("button", { name: "Save Excavator" }).click();
 
   await expect(page.getByText("EXC-PH3-001")).toBeVisible();
-  await page.getByRole("link", { name: "Start Installment" }).click();
-
-  await expect(page.getByRole("heading", { name: "Start New Installment" })).toBeVisible();
+  await page.goto("/equipment-installment-finance/applications?stage=start");
+  await expect(page.locator(".c03-start2-brand strong")).toHaveText("Start New Installment");
   await page.getByRole("button", { name: /Ama Phase Three/ }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Select the exact excavator" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-
-  await expect(page.getByRole("heading", { name: "Set the exact payment interval" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue to Excavator" }).click();
+  await expect(page.getByRole("heading", { name: "Which exact excavator is being financed?" })).toBeVisible();
+  await expect(page.getByText("EXC-PH3-001").first()).toBeVisible();
+  await page.locator(".c03-start2-machine-grid article").filter({ hasText: "Phase 3 Excavator" })
+    .getByRole("button", { name: "Select excavator" }).click();
+  await page.getByRole("button", { name: "Continue to Terms" }).click();
+  await expect(page.getByRole("heading", { name: "Build the commercial terms" })).toBeVisible();
   await page.getByLabel("Opening deposit").fill("200");
   await page.getByLabel("Number of payments").fill("4");
-  await page.getByLabel("First payment date").fill("2026-09-01");
-  await expect(page.getByText("4 payment date(s)")).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-
-  await expect(page.getByRole("heading", { name: "Customer assessment" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Review and create the draft" })).toBeVisible();
-  await page.getByRole("button", { name: "Create Draft Installment" }).click();
+  await page.getByLabel("First payment due date").fill("2026-12-01");
+  await expect(page.locator(".c03-start2-schedule-rows")).toBeVisible();
+  await page.getByRole("button", { name: "Continue to Assessment" }).click();
+  await expect(page.getByRole("heading", { name: "Complete useful customer assessment details" })).toBeVisible();
+  await page.getByLabel("ID number", { exact: true }).fill("GHA-123456789-0");
+  await page.getByRole("button", { name: "Continue to Review" }).click();
+  await expect(page.getByRole("heading", { name: "Confirm the deal before creating the application" })).toBeVisible();
+  await page.getByRole("button", { name: "Create installment application" }).click();
 
   await expect(page).toHaveURL(/stage=activation/);
   await expect(page.getByText("ECAPP-PHASE3-001")).toBeVisible();
