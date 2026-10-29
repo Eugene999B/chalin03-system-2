@@ -235,4 +235,4 @@ async function updateFinanceMachine({ assetId, input, userId, req }) {
   } catch (error) { try { await connection.rollback(); } catch {} throw error; } finally { connection.release(); }
 }
 
-module.exports = { createFinanceMachine, machineLocations, updateFinanceMachine };
+module.exports = { createFinanceMachine, machineLocations, updateFinanceMachine, normalizeMachine };

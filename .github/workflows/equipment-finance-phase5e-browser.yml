@@ -41,6 +41,9 @@ jobs:
       - name: Verify new agreement and deposit layouts on phone and desktop
         run: npx playwright test e2e/equipmentFinanceFlowResponsive.spec.js
 
+      - name: Verify excavator, customer and new-installment creation on phone and desktop
+        run: npx playwright test e2e/equipmentFinanceOnboardingResponsive.spec.js
+
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
