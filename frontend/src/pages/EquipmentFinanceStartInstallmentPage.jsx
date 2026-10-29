@@ -73,7 +73,25 @@ function dateLabel(value) {
 }
 
 function errorMessage(error, fallback) {
-  return error?.response?.data?.message || error?.message || fallback;
+  const payload = error?.response?.data || {};
+  const status = Number(error?.response?.status || 0);
+  const code = String(payload.code || "");
+  if (status === 503 && (
+    code === "EQUIPMENT_FINANCE_STABILIZATION_REQUIRED" ||
+    code === "FINANCE_APPLICATION_SCHEMA_TABLE_MISSING" ||
+    code === "FINANCE_APPLICATION_SCHEMA_COLUMN_MISSING" ||
+    code === "FINANCE_LOCATION_NULLABILITY_REQUIRED" ||
+    code === "FINANCE_APPLICATION_ENUM_MISMATCH"
+  )) {
+    const detail = String(payload.operator_message || "Finance database verification failed.");
+    const requestId = payload.request_id ? ` Request reference: ${payload.request_id}.` : "";
+    return `${detail}${requestId} No new transaction should be submitted until the verified Finance database repair is completed. Check the Applications register before retrying to prevent duplicates.`;
+  }
+  if (status >= 500) {
+    const requestId = payload.request_id ? ` Reference: ${payload.request_id}.` : "";
+    return `The server could not finish the transaction.${requestId} Check the Applications register before retrying, and contact the administrator if the failure persists.`;
+  }
+  return payload.message || error?.message || fallback;
 }
 
 function readPhotoState(key) {
