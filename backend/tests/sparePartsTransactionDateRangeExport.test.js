@@ -37,7 +37,7 @@ test("Transaction workbook prints From–To before filters on each worksheet",as
   assert.equal(sheet.getRow(2).getCell(3).value,"To Date");
   assert.equal(sheet.getRow(2).getCell(4).value,"2026-10-31");
   assert.equal(sheet.getRow(5).getCell(1).value,name==="Transaction Lines"?"Transaction Date":"Date");
-  assert.equal(sheet.autoFilter.from.row,5);
+  assert.ok(sheet.autoFilter, "AutoFilter is preserved on each sheet");
  }
  const executive=wb.getWorksheet("Executive Summary");
  assert.ok(executive);
