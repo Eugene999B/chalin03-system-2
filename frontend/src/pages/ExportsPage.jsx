@@ -409,7 +409,7 @@ export default function ExportsPage() {
       {error && <div className="error-box ec-message">{error}</div>}
       {notice && <div className="success-box ec-message">{notice}</div>}
 
-      <section className="ec-controls-card">
+      <section className="ec-controls-card" id="ec-report-period">
         <div className="ec-control-heading">
           <div>
             <span className="ec-eyebrow">REPORT PERIOD</span>
@@ -499,6 +499,18 @@ export default function ExportsPage() {
 
             <h3>{report.title}</h3>
             <p>{report.description}</p>
+
+            {report.key === "transaction-history" && (
+              <div className="ec-transaction-period" aria-label="Selected transaction history date range">
+                <div className="ec-transaction-period-label">TRANSACTION PERIOD IN DOWNLOAD</div>
+                <div className="ec-transaction-period-dates">
+                  <span><small>From Date</small><strong>{from || "Earliest available"}</strong></span>
+                  <span aria-hidden="true">→</span>
+                  <span><small>To Date</small><strong>{to || "Latest available"}</strong></span>
+                </div>
+                <a href="#ec-report-period">Change reporting dates</a>
+              </div>
+            )}
 
             <div className="ec-report-meta">
               <span>
