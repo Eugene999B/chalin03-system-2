@@ -1,6 +1,6 @@
 "use strict";
 
-/** Pure, production-safe helpers for the owner discount investigation export. */
+/** Pure, production-safe helpers for the controlled discount investigation export. */
 function isAdminAuthorized(user) {
   return String(user?.role || "").trim().toLowerCase() === "admin";
 }
