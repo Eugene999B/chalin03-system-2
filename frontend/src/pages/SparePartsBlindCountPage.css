@@ -54,3 +54,26 @@
 .blind-empty{font-size:13px;line-height:1.6;color:#5e786b}
 @media(max-width:1000px){.blind-workspace{grid-template-columns:minmax(0,1fr)}.blind-aside{position:static;max-height:none}.blind-sessions{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}.blind-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.blind-page{padding:12px}.blind-hero{flex-direction:column;align-items:stretch;border-radius:17px;padding:24px 18px}.blind-store{max-width:none;min-width:0}.blind-aside,.blind-content{padding:15px;border-radius:15px}.blind-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.blind-stat{padding:12px;min-height:92px}.blind-section-head{flex-direction:column;gap:2px}.blind-toolbar{align-items:stretch}.blind-filter{flex:1 1 120px}.blind-results{width:100%;padding-bottom:6px}.blind-table{min-width:0;display:block}.blind-table thead{display:none}.blind-table tbody{display:grid;gap:11px;padding:9px}.blind-table tr{display:grid;border:1px solid #dce9e2;border-radius:13px;padding:12px;gap:9px;background:#fff!important}.blind-table td{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border:0}.blind-table td:before{content:attr(data-label);font-size:10px;color:#6b8075;font-weight:750;flex:0 0 86px}.blind-table td[data-label="Product"]:before{display:none}.blind-table td[data-label="Product"]{display:block;border-bottom:1px solid #e6efea;padding-bottom:10px}.blind-table td[data-label="Physical quantity"],.blind-table td[data-label="Count notes"]{align-items:stretch}.blind-table input{min-width:0;width:min(100%,240px)}.blind-actions button{flex:1 1 135px}.blind-download-buttons{width:100%}.blind-download-buttons button{flex:1 1 70px}.blind-hero h1{font-size:31px}}
+
+/* Quantity-only counting: less visual noise, more room for fast mobile input. */
+.blind-simple .blind-hero{padding:clamp(20px,3vw,34px)}
+.blind-simple .blind-hero p{max-width:620px}
+.blind-simple .blind-start{padding:8px;margin:12px 0}
+.blind-simple .blind-table{min-width:620px}
+.blind-simple .blind-table td[data-label="Quantity"] input{
+  width:132px;min-width:0;min-height:46px;font-weight:800;font-size:17px;
+  text-align:center;border:2px solid #b8d7c9;
+}
+.blind-simple .blind-table td[data-label="Quantity"] input:focus{
+  border-color:#0a9075;box-shadow:0 0 0 3px #13ad8723;
+}
+.blind-simple .blind-actions .primary{min-width:220px}
+.blind-simple .blind-actions{position:sticky;bottom:6px;z-index:2;
+  background:#ffffffed;border:1px solid #d5e9df;padding:12px;border-radius:15px;
+  box-shadow:0 -4px 24px #123b2b16;backdrop-filter:blur(8px)}
+@media(max-width:620px){
+  .blind-simple .blind-table{min-width:0}
+  .blind-simple .blind-table td[data-label="Quantity"] input{width:160px;max-width:100%}
+  .blind-simple .blind-actions{bottom:2px}
+  .blind-simple .blind-actions .primary{min-width:0;flex:1 1 100%}
+}
