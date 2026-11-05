@@ -63,6 +63,8 @@ const expenseRoutes = require("./routes/expenseRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
 const returnRoutes = require("./routes/returnRoutes");
 const exportRoutes = require("./routes/exportRoutes");
+const sparePartsTransactionExportRoutes = require("./routes/sparePartsTransactionExportRoutes");
+const sparePartsBlindCountRoutes = require("./routes/sparePartsBlindCountRoutes");
 const activityRoutes = require("./routes/activityRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
 const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
@@ -349,6 +351,8 @@ app.use(
 );
 app.use("/api/purchases", requireAuth, sparePartsBoundary, purchaseRoutes);
 app.use("/api/returns", requireAuth, sparePartsBoundary, returnRoutes);
+app.use("/api/exports", requireAuth, sparePartsBoundary, sparePartsTransactionExportRoutes);
+app.use("/api/spare-parts/stock-counts", requireAuth, sparePartsBoundary, sparePartsBlindCountRoutes);
 app.use("/api/exports", exportRoutes);
 app.use(
   "/api/activity-log",

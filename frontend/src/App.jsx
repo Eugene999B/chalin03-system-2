@@ -28,6 +28,7 @@ import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ReturnsPage from "./pages/ReturnsPage";
 import ExportsPage from "./pages/ExportsPage";
+import SparePartsBlindCountPage from "./pages/SparePartsBlindCountPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import BackupPage from "./pages/BackupPage";
 import SystemOperationsPage from "./pages/SystemOperationsPage";
@@ -99,8 +100,9 @@ const PayrollProcessingCentrePage = lazy(() =>
   import("./pages/PayrollProcessingCentrePage")
 );
 
-const businessWorkRoles = ["admin", "manager", "cashier"];
+const businessWorkRoles = ["admin", "manager", "cashier", "auditor"];
 const adminManagerRoles = ["admin", "manager"];
+const sparePartsOperatorRoles = ["admin", "manager", "auditor"];
 const auditReadRoles = ["admin", "manager", "auditor"];
 const adminOnlyRoles = ["admin"];
 
@@ -293,6 +295,10 @@ export default function App() {
               path="exports"
               element={rolePage(auditReadRoles, <ExportsPage />)}
             />
+            <Route
+              path="stock-count"
+              element={rolePage(auditReadRoles, <SparePartsBlindCountPage />)}
+            />
 
             <Route
               path="audit-unlock-requests"
@@ -300,27 +306,27 @@ export default function App() {
             />
             <Route
               path="low-stock"
-              element={rolePage(adminManagerRoles, <LowStockPage />)}
+              element={rolePage(sparePartsOperatorRoles, <LowStockPage />)}
             />
             <Route
               path="stock-transfers"
-              element={rolePage(adminManagerRoles, <StockTransfersPage />)}
+              element={rolePage(sparePartsOperatorRoles, <StockTransfersPage />)}
             />
             <Route
               path="expenses"
-              element={rolePage(adminManagerRoles, <ExpensesPage />)}
+              element={rolePage(sparePartsOperatorRoles, <ExpensesPage />)}
             />
             <Route
               path="purchases"
-              element={rolePage(adminManagerRoles, <PurchasesPage />)}
+              element={rolePage(sparePartsOperatorRoles, <PurchasesPage />)}
             />
             <Route
               path="returns"
-              element={rolePage(adminManagerRoles, <ReturnsPage />)}
+              element={rolePage(sparePartsOperatorRoles, <ReturnsPage />)}
             />
             <Route
               path="daily-closing"
-              element={rolePage(adminManagerRoles, <DailyClosingPage />)}
+              element={rolePage(sparePartsOperatorRoles, <DailyClosingPage />)}
             />
             <Route path="sms" element={rolePage(adminManagerRoles, <SmsPage />)} />
 

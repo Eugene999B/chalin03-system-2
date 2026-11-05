@@ -2978,17 +2978,17 @@ router.get(
   }
 );
 
-// GET /api/exports/discount-audit — administrator-only report of positive
+// GET /api/exports/discount-audit — administrator/auditor report of positive
 // sale-level discounts. This only reads the original sales and item snapshots.
 router.get(
   "/discount-audit",
   requireAuth,
-  requireRole("admin"),
+  requireRole("admin", "auditor"),
   async (req, res) => {
     try {
-      // The shared requireRole middleware permits auditors for other exports.
-      // This sensitive investigation must explicitly remain administrator-only.
-      if (!isAdminAuthorized(req.user)) {
+      // Both administrators and assigned Spare Parts auditors may investigate
+      // discounts for their selected store; other staff remain excluded.
+      if (!isAdminAuthorized(req.user) && String(req.user?.role || "").toLowerCase() !== "auditor") {
         return res.status(403).json({
           status: "error",
           message: "Administrator authorization required.",

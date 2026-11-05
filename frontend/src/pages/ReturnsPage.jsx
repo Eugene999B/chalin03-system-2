@@ -237,7 +237,7 @@ export default function ReturnsPage() {
     }
   }
 
-  if (!["admin", "manager"].includes(role)) {
+  if (!["admin", "manager", "auditor"].includes(role)) {
     return (
       <div>
         <div className="page-header">

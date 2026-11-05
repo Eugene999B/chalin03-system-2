@@ -1056,7 +1056,7 @@ export default function SalesHistoryPage() {
           </strong>
           <p>
             {isAuditor
-              ? "Auditor read-only view: inspect and download selected-store sales and receipts. Creating, editing and voiding sales are not permitted."
+              ? "Auditor workspace: inspect and download store receipts, and record authorised sales from New Sale. Voiding remains administrator-controlled and all records remain branch-scoped."
               : "Sales history, receipt preview, PDF download and void actions are filtered to this selected store only."}
           </p>
         </div>
