@@ -34,19 +34,29 @@ function escapeRows(rows, columns) {
 }
 async function sendAuditExport(res, config) {
   const { format = "xlsx", title, description, period, branch, generatedBy, columns,
-    rows, metrics = [], filename = "chalin03-audit", sections = [] } = config;
+    rows, metrics = [], filename = "chalin03-audit", sections = [], fromDate, toDate } = config;
   const mode = String(format).toLowerCase();
+  const showDateRange = fromDate !== undefined || toDate !== undefined;
+  const startLabel = fromDate || "Earliest available";
+  const endLabel = toDate || "Latest available";
   const data = escapeRows(rows, columns);
   const date = new Date().toISOString().replace("T"," ").slice(0,19) + " UTC";
   const meta = [
     ["Report", title], ["Purpose", description || ""], ["Selected store", branch],
-    ["Period", period || "Current snapshot"], ["Generated", date],
+    ["Period", period || "Current snapshot"],
+    ...(showDateRange ? [["From Date", startLabel], ["To Date", endLabel]] : []),
+    ["Generated", date],
     ["Prepared by", generatedBy || "CHALIN03 authorised staff"], ["Detail records", rows.length],
     ...metrics,
   ];
   if (mode === "csv") {
     setHeaders(res, "text/csv; charset=utf-8", filename + ".csv");
-    const result = "\uFEFF" + columns.map(x=>csvValue(x.label)).join(",") + "\r\n" +
+    const preamble = showDateRange
+      ? [["Report", title], ["From Date", startLabel], ["To Date", endLabel],
+          ["Selected store", branch], ["Generated", date]]
+          .map(([label, value]) => [csvValue(label), csvValue(value)].join(",")).join("\r\n") + "\r\n\r\n"
+      : "";
+    const result = "\uFEFF" + preamble + columns.map(x=>csvValue(x.label)).join(",") + "\r\n" +
       data.map(row => row.map(csvValue).join(",")).join("\r\n") + "\r\n";
     return res.status(200).send(result);
   }
@@ -59,16 +69,29 @@ async function sendAuditExport(res, config) {
     meta.forEach(([measure,value])=>cover.addRow({measure:safeCell(measure),value:safeCell(value)}));
     const addTable = (name, cols, recs) => {
       const sheet = book.addWorksheet(name.slice(0,31));
-      sheet.columns = cols.map(c => ({header:c.label,key:c.key,width:Math.max(14,Math.min(43,c.label.length+8))}));
+      sheet.columns = cols.map(c => ({key:c.key,width:Math.max(14,Math.min(43,c.label.length+8))}));
+      if (showDateRange) {
+        sheet.addRow([title]);
+        sheet.mergeCells(1,1,1,cols.length);
+        sheet.getRow(1).font = {bold:true,size:15,color:{argb:"FF133B37"}};
+        sheet.getRow(1).height = 30;
+        sheet.addRow(["From Date",startLabel,"To Date",endLabel]);
+        sheet.addRow(["Selected store",branch,"Generated",date]);
+        sheet.addRow([]);
+        sheet.getRow(2).font = {bold:true,color:{argb:"FF133B37"}};
+        sheet.getRow(3).font = {color:{argb:"FF3F6259"}};
+      }
+      const headerRow = showDateRange ? 5 : 1;
+      sheet.addRow(cols.map(c=>c.label));
       recs.forEach(row=>{const safe={};cols.forEach(c=>safe[c.key]=safeCell(row[c.key]));sheet.addRow(safe)});
-      sheet.views=[{state:"frozen",ySplit:1}];
-      sheet.autoFilter = {from:{row:1,column:1},to:{row:Math.max(1,recs.length+1),column:cols.length}};
-      sheet.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
-      sheet.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF133B37"}};
-      sheet.getRow(1).height=27;
-      sheet.getRow(1).alignment={vertical:"middle",wrapText:true};
-      for(let i=2;i<=recs.length+1;i++) {
-        if(i%2===0) sheet.getRow(i).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF0F7F5"}};
+      sheet.views=[{state:"frozen",ySplit:headerRow}];
+      sheet.autoFilter = {from:{row:headerRow,column:1},to:{row:Math.max(headerRow,headerRow+recs.length),column:cols.length}};
+      sheet.getRow(headerRow).font={bold:true,color:{argb:"FFFFFFFF"}};
+      sheet.getRow(headerRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF133B37"}};
+      sheet.getRow(headerRow).height=27;
+      sheet.getRow(headerRow).alignment={vertical:"middle",wrapText:true};
+      for(let i=headerRow+1;i<=headerRow+recs.length;i++) {
+        if((i-headerRow)%2===0) sheet.getRow(i).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF0F7F5"}};
       }
     };
     cover.getRow(1).font={bold:true,color:{argb:"FFFFFFFF"}};
