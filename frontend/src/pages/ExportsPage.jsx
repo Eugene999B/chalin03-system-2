@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "./ExportsPage.css";
@@ -77,6 +78,16 @@ const REPORTS = [
     adminOnly: true,
   },
   {
+    key: "transaction-history",
+    title: "Transaction History · Line-by-Line Forensic Workbook",
+    category: "Sales",
+    icon: "🔬",
+    endpoint: "/exports/transaction-history",
+    description: "Excel investigation of each historical receipt line: date, item, unit price, quantity, amount, cost, discount allocation, gross profit, margin, source line and exceptions. Separate daily, staff, product and payment-channel analyses.",
+    dateFilter: true,
+    featured: true,
+  },
+  {
     key: "sales",
     title: "Sales Transactions",
     category: "Sales",
@@ -142,6 +153,7 @@ const FORMAT_OPTIONS = [
   { key: "xlsx", label: "Excel", icon: "📊", extension: "xlsx" },
   { key: "pdf", label: "PDF", icon: "📄", extension: "pdf" },
   { key: "doc", label: "Word", icon: "📝", extension: "doc" },
+  { key: "csv", label: "CSV", icon: "📋", extension: "csv" },
 ];
 
 function toLocalIsoDate(date) {
@@ -203,7 +215,7 @@ export default function ExportsPage() {
     const query = search.trim().toLowerCase();
 
     return REPORTS.filter((report) => {
-      if (report.adminOnly && role !== "admin") return false;
+      if (report.adminOnly && !["admin", "auditor"].includes(role)) return false;
       const matchesCategory = category === "All" || report.category === category;
       const matchesSearch =
         !query ||
@@ -369,16 +381,18 @@ export default function ExportsPage() {
           <span className="ec-eyebrow">REPORTING AND DOCUMENT CENTRE</span>
           <h1>Professional Export Centre</h1>
           <p>
-            Download every business report as a professionally arranged Excel
+            Download historical transaction investigations and every business report as a professionally arranged Excel
             workbook, print-ready PDF or editable Microsoft Word document.
           </p>
         </div>
 
         <div className="ec-hero-badge" aria-label="Available export formats">
-          <strong>3 formats</strong>
-          <span>Excel • PDF • Word</span>
+          <strong>4 formats</strong>
+          <span>Excel • PDF • Word • CSV on Transaction History</span>
         </div>
       </section>
+
+      <section className="ec-feature-path"><div><strong>New: Blind Stock Audit</strong><span>Count physical items first, reveal stock variances after submission, and download detailed investigations.</span></div><Link to="/stock-count">Open Blind Count →</Link></section>
 
       <section className="ec-store-banner">
         <div className="ec-store-icon">🏪</div>
@@ -496,7 +510,7 @@ export default function ExportsPage() {
             </div>
 
             <div className="ec-format-actions">
-              {FORMAT_OPTIONS.map((format) => {
+              {FORMAT_OPTIONS.filter((format) => format.key !== "csv" || report.key === "transaction-history").map((format) => {
                 const requestKey = `${report.key}-${format.key}`;
                 const isBusy = busyKey === requestKey;
 
