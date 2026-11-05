@@ -48,17 +48,12 @@ async function session(db,id,branch,lock=false){
  return rows[0]||null;
 }
 async function items(db,id){
- const [rows]=await db.query([
- "SELECT i.*,u.full_name AS counted_by_name",
- "FROM spare_parts_blind_count_items i LEFT JOIN users u ON u.id=i.counted_by",
- "WHERE i.count_id=? ORDER BY i.product_name,i.product_id"
- ].join(" "),[id]);return rows;
+ const [rows]=await db.query("SELECT i.* FROM spare_parts_blind_count_items i WHERE i.count_id=? ORDER BY i.product_name,i.product_id",[id]);return rows;
 }
 function view(item,reveal){
  const common={product_id:item.product_id,name:item.product_name,
    barcode:item.barcode||"",category:item.category||"",size:item.product_size||"",
-   counted_qty:item.counted_qty,remarks:item.remarks||"",
-   counted_at:item.counted_at||null,counted_by_name:item.counted_by_name||""};
+   counted_qty:item.counted_qty};
  if(!reveal)return common;
  return {...common,expected_qty:Number(item.expected_qty),unit_cost:Number(item.unit_cost),
    unit_price:Number(item.unit_price),system_qty_at_submit:item.system_qty_at_submit};
@@ -127,8 +122,7 @@ router.put("/:id/entries",async(req,res)=>{
   const product=idNum(entry?.product_id);
   if(!product||seen.has(product))return false;
   seen.add(product);
-  return (entry?.counted_qty===null||validInt(entry?.counted_qty)) &&
-    String(entry?.remarks||"").length<=600;
+  return entry?.counted_qty===null||validInt(entry?.counted_qty);
  });
  if(!valid)return res.status(400).json({status:"error",message:"Count quantities must be non-negative whole numbers. Use an empty field for uncounted items, not zero."});
  let db;try{
@@ -137,8 +131,8 @@ router.put("/:id/entries",async(req,res)=>{
   if(!s){await db.rollback();return res.status(404).json({status:"error",message:"Stock count not found in this store."})}
   if(s.status!=="draft"){await db.rollback();return res.status(409).json({status:"error",message:"Submitted stock counts are immutable. Start a new count for revisions."})}
   for(const row of list){
-    const [result]=await db.query("UPDATE spare_parts_blind_count_items SET counted_qty=?,remarks=?,counted_by=?,counted_at=NOW() WHERE count_id=? AND product_id=?",
-      [row.counted_qty===null?null:Number(row.counted_qty),text(row.remarks,600)||null,actor(req),id,Number(row.product_id)]);
+    const [result]=await db.query("UPDATE spare_parts_blind_count_items SET counted_qty=?,counted_by=?,counted_at=NOW() WHERE count_id=? AND product_id=?",
+      [row.counted_qty===null?null:Number(row.counted_qty),actor(req),id,Number(row.product_id)]);
     if(result.affectedRows!==1)throw Object.assign(new Error("Unknown product or stale session."),{statusCode:409});
   }
   await db.commit();
@@ -153,8 +147,8 @@ router.post("/:id/submit",async(req,res)=>{
   const s=await session(db,id,storeId(req),true);
   if(!s){await db.rollback();return res.status(404).json({status:"error",message:"Stock count not found."})}
   if(s.status!=="draft"){await db.rollback();return res.status(409).json({status:"error",message:"This count has already been submitted."})}
-  const [missing]=await db.query("SELECT COUNT(*) AS n FROM spare_parts_blind_count_items WHERE count_id=? AND counted_qty IS NULL",[id]);
-  if(Number(missing[0].n)>0){await db.rollback();return res.status(422).json({status:"error",message:missing[0].n+" products have not been counted. Enter the physical quantity, including zero where verified."})}
+  // Incomplete counts are valid audit evidence. Null remains Not Counted;
+  // it must NEVER be rewritten to zero or included in shortage totals.
   const [updated]=await db.query([
     "UPDATE spare_parts_blind_count_items i",
     "LEFT JOIN products p ON p.id=i.product_id AND p.branch_id=?",
@@ -165,7 +159,7 @@ router.post("/:id/submit",async(req,res)=>{
   const [saved]=await db.query("UPDATE spare_parts_blind_counts SET status='submitted',submitted_by=?,submitted_at=NOW() WHERE id=? AND branch_id=? AND status='draft'",[actor(req),id,storeId(req)]);
   if(saved.affectedRows!==1)throw new Error("Concurrent submission detected.");
   await db.commit();
-  return res.json({status:"success",message:"Blind count submitted and frozen. Differences are now available for investigation. No product stock was changed."});
+  return res.json({status:"success",message:"Count saved. Blank quantities are marked Not Counted in exports and excluded from differences. No product stock was changed."});
  }catch(e){try{await db?.rollback()}catch{}console.error("Stock count submit",e);return res.status(503).json({status:"error",message:"Could not submit the count. Inventory was not changed."})}
  finally{db?.release()}
 });
