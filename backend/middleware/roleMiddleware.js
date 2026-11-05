@@ -8,6 +8,30 @@ const AUDITOR_FULL_AUDIT_PREFIXES = [
   "/api/exports",
 ];
 
+// The user explicitly authorises auditor read/write operations in the Spare Parts
+// workspace. This allowlist does not include privileged user management,
+// security, backups, maintenance, or independent approval endpoints.
+// The existing Spare Parts category and per-store boundary run before these routes.
+const AUDITOR_SPARE_PARTS_OPERATION_PREFIXES = [
+  "/api/products",
+  "/api/sales",
+  "/api/installments",
+  "/api/debts",
+  "/api/expenses",
+  "/api/purchases",
+  "/api/returns",
+  "/api/stock-transfers",
+  "/api/daily-closing",
+  "/api/receipts",
+];
+function canAuditorOperateSpareParts(req) {
+  if (!isAuditor(req) || !req.sparePartsBranch) return false;
+  const path = getCleanPath(req);
+  return AUDITOR_SPARE_PARTS_OPERATION_PREFIXES.some(
+    prefix => path === prefix || path.startsWith(prefix + "/")
+  );
+}
+
 const AUDITOR_READ_ONLY_PREFIXES = [
   "/api/customer-statement",
   "/api/customer-statements",
@@ -94,6 +118,7 @@ function requireRole(...allowedRoles) {
       return next();
     }
 
+    if (canAuditorOperateSpareParts(req)) return next();
     if (canAuditorUseFullAuditRoute(req)) return next();
     if (canAuditorReadOnlyRoute(req)) return next();
 
