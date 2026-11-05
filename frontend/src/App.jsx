@@ -28,6 +28,7 @@ import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ReturnsPage from "./pages/ReturnsPage";
 import ExportsPage from "./pages/ExportsPage";
+import SparePartsBlindCountPage from "./pages/SparePartsBlindCountPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import BackupPage from "./pages/BackupPage";
 import SystemOperationsPage from "./pages/SystemOperationsPage";
@@ -292,6 +293,10 @@ export default function App() {
             <Route
               path="exports"
               element={rolePage(auditReadRoles, <ExportsPage />)}
+            />
+            <Route
+              path="stock-count"
+              element={rolePage(auditReadRoles, <SparePartsBlindCountPage />)}
             />
 
             <Route
