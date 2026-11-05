@@ -921,15 +921,9 @@ router.get("/discount-permission", requireAuth, async (req, res) => {
 
 // POST /api/sales
 router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
-  // Auditors may inspect sales and receipts but can never create sales.
-  if (String(req.user?.role || "").trim().toLowerCase() === "auditor") {
-    return res.status(403).json({
-      status: "error",
-      code: "AUDITOR_SALES_READ_ONLY",
-      message: "Auditors can review Sales History but cannot create or change sales.",
-    });
-  }
-
+  // Store-authorised Spare Parts auditors may now record sales at the user's
+  // direction. Existing input validation, store isolation, receipt evidence,
+  // independent approvals and financial integrity checks all still apply.
   const connection = await pool.getConnection();
 
   try {
