@@ -1,0 +1,79 @@
+.blind-page{--bc-ink:#132f2b;--bc-soft:#f4f8f6;--bc-border:#d8e7e1;--bc-accent:#147e6d;max-width:1620px;margin:0 auto;padding:clamp(16px,2.2vw,32px);color:var(--bc-ink);font-family:inherit}
+.blind-page *{box-sizing:border-box}.blind-page button,.blind-page input,.blind-page select,.blind-page textarea{font:inherit}
+.blind-hero{background:linear-gradient(124deg,#153b37 2%,#0a6b5a 63%,#11856a);border-radius:24px;padding:clamp(24px,4vw,45px);display:flex;justify-content:space-between;align-items:center;gap:30px;color:#fff;box-shadow:0 18px 35px #0c5c4930}
+.blind-hero h1{font-size:clamp(30px,3.7vw,49px);letter-spacing:-.035em;margin:6px 0 12px;line-height:1.08;color:#fff}.blind-hero p{max-width:780px;line-height:1.65;opacity:.91;font-size:15px;margin:0}
+.blind-eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:10px;font-weight:800;color:#159482}.blind-hero .blind-eyebrow{color:#b4e8d7}
+.blind-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.blind-tags span{font-size:11px;padding:7px 12px;border:1px solid #ffffff44;border-radius:100px;background:#ffffff12}
+.blind-store{background:#ffffff12;border:1px solid #ffffff3a;padding:22px;border-radius:18px;display:grid;gap:8px;min-width:210px;max-width:320px}.blind-store small{font-size:11px;color:#c8e9dd}.blind-store strong{font-size:17px;line-height:1.35}
+.blind-alert{border-radius:13px;margin:15px 0;padding:13px 18px;font-weight:600}.blind-alert.error{color:#7d1a2a;background:#fdebef;border:1px solid #f9c9d2}.blind-alert.success{color:#136347;background:#eaf9f1;border:1px solid #bee6ce}
+.blind-workspace{display:grid;grid-template-columns:minmax(230px,320px) minmax(0,1fr);gap:22px;align-items:start;margin-top:22px}
+.blind-aside,.blind-content{background:#fff;border:1px solid var(--bc-border);box-shadow:0 6px 22px #123b2b0a;border-radius:20px;min-width:0}
+.blind-aside{padding:22px;position:sticky;top:18px;max-height:calc(100vh - 40px);overflow:auto}
+.blind-pane-title h2,.blind-section-head h2{margin:5px 0 4px;font-size:22px;letter-spacing:-.025em;color:var(--bc-ink)}
+.blind-start{padding:16px;background:var(--bc-soft);border-radius:16px;margin:20px 0;display:grid;gap:10px}
+.blind-start label{font-size:12px;font-weight:750}.blind-start input,.blind-search input,.blind-filter select,.blind-table input,.blind-review textarea{color:var(--bc-ink);border:1px solid #cbdcd6;border-radius:10px;background:#fff;min-height:42px;padding:9px 11px;width:100%;outline-color:var(--bc-accent)}
+.blind-start button,.blind-actions button,.blind-download-buttons button,.blind-review button{padding:11px 15px;border:1px solid #087b63;background:#137c6b;color:#fff;border-radius:11px;cursor:pointer;font-weight:750;line-height:1.3}
+.blind-start button:hover,.blind-actions button:hover,.blind-download-buttons button:hover,.blind-review button:hover{filter:brightness(.95)}
+.blind-page button:disabled{opacity:.52;cursor:not-allowed}
+.blind-sessions{display:grid;gap:9px}.blind-session{text-align:left;border:1px solid var(--bc-border);background:#fff;padding:13px 14px;border-radius:13px;display:grid;gap:4px;color:var(--bc-ink);cursor:pointer}
+.blind-session.active{background:#eaf8f4;border-color:#138675;box-shadow:inset 3px 0 #138675}
+.blind-session strong{font-size:13px}.blind-session small{font-size:11px;opacity:.75}.blind-session span{font-size:12px;color:#146c5b;font-weight:700}
+.blind-content{padding:clamp(18px,2.2vw,31px)}.blind-welcome{text-align:center;padding:80px 18px;color:#637b70;max-width:600px;margin:auto}
+.blind-welcome>span{font-size:64px;display:block;color:#138e79}.blind-welcome h2{color:var(--bc-ink);font-size:23px}
+.blind-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px}
+.blind-section-head h2{font-size:clamp(23px,2.5vw,32px)}.blind-section-head p{margin:8px 0 20px;color:#637970;line-height:1.6;max-width:760px}
+.blind-stage{font-size:11px;background:#fff5de;color:#8d630d;padding:8px 12px;border-radius:50px;font-weight:800;white-space:nowrap}.blind-stage.done{background:#e6f8f0;color:#14745d}
+.blind-progress{background:#f6f9f8;border:1px solid var(--bc-border);border-radius:15px;padding:18px;margin-bottom:24px}.blind-progress-head{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:12px}
+.blind-progress-bar{height:9px;background:#dbeae4;border-radius:100px;overflow:hidden}.blind-progress-bar span{display:block;height:100%;border-radius:100px;background:linear-gradient(90deg,#09a88a,#128a75);transition:width .22s}
+.blind-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin:15px 0}
+.blind-stat{background:#f2f8f5;border:1px solid #dbe9e1;border-radius:14px;padding:17px;min-height:105px;display:flex;flex-direction:column;gap:7px}
+.blind-stat span{font-size:11px;font-weight:700;color:#52695f}.blind-stat strong{font-size:clamp(17px,1.8vw,24px);letter-spacing:-.02em;line-height:1.15;overflow-wrap:anywhere}.blind-stat small{font-size:10px;line-height:1.35;color:#728278}.blind-stat.negative{background:#fff4f3;border-color:#f3d7d2}.blind-stat.negative strong{color:#ae3439}.blind-stat.positive{background:#edf9ef}.blind-stat.positive strong{color:#237f52}.blind-stat.warn{background:#fff9eb}
+.blind-insights{background:#f3f8f5;border-left:4px solid #13a786;padding:16px 20px;margin:15px 0 23px;border-radius:0 12px 12px 0}
+.blind-insights strong{color:#135e53}.blind-insights p{font-size:13px;margin:7px 0;line-height:1.65;color:#3c5d50}
+.blind-toolbar{display:flex;align-items:end;flex-wrap:wrap;gap:10px;margin:18px 0}
+.blind-search{flex:1 1 260px}.blind-filter{flex:0 1 182px}.blind-toolbar label{font-size:11px;font-weight:750;color:#48665a;display:grid;gap:6px}.blind-results{font-size:12px;color:#627f71;align-self:center}
+.blind-table-wrap{overflow-x:auto;border-radius:13px;border:1px solid #dbe8e1}
+.blind-table{width:100%;border-collapse:collapse;min-width:820px;font-size:12px}
+.blind-table th{text-align:left;background:#164a41;color:#fff;font-size:11px;white-space:nowrap;padding:14px 13px;font-weight:800}
+.blind-table td{border-bottom:1px solid #e7f0eb;padding:12px 13px;vertical-align:middle;line-height:1.4}
+.blind-table tr:nth-child(even){background:#f8fbfa}.blind-table tr.is-shortage{background:#fff7f5}.blind-table tr.is-excess{background:#f2fbf4}
+.blind-table td strong{display:block;font-size:12px}.blind-table td small{display:block;color:#6c8176;font-size:10px;margin-top:3px;line-height:1.45}.blind-table input{min-width:120px;min-height:40px}
+.blind-table td[data-label="Count notes"] input{min-width:170px}
+.blind-pill{display:inline-flex;border-radius:50px;background:#f8eedc;color:#8a651e;font-size:10px;font-weight:750;padding:6px 10px}.blind-pill.counted{background:#ddf5ea;color:#0b7157}
+.blind-loss{color:#b53239!important}.blind-gain{color:#21825f!important}
+.blind-risk{display:inline-block;padding:5px 9px;border-radius:40px;background:#fff0dd;color:#925500;font-size:10px;font-weight:750;white-space:nowrap}
+.blind-actions{margin-top:20px;display:flex;align-items:center;justify-content:end;gap:12px;flex-wrap:wrap}
+.blind-actions p{flex:1 1 100%;margin:0 0 4px;font-size:12px;color:#65766c}
+.blind-actions .primary{background:#074d43;border-color:#074d43}
+.blind-download,.blind-review,.blind-reviewed{margin-top:22px;border:1px solid var(--bc-border);border-radius:16px;background:#f7faf8;padding:20px}
+.blind-download{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.blind-download h3,.blind-review h3{margin:5px 0;color:var(--bc-ink)}.blind-download p,.blind-review p{margin:5px 0;font-size:12px;color:#677c70;line-height:1.65}
+.blind-download-buttons{display:flex;gap:8px;flex-wrap:wrap}.blind-download-buttons button{min-width:74px}
+.blind-review textarea{display:block;min-height:90px;margin:13px 0;resize:vertical}
+.blind-reviewed{background:#e9f7f0;font-size:13px}.blind-reviewed p{white-space:pre-wrap}
+.blind-empty{font-size:13px;line-height:1.6;color:#5e786b}
+@media(max-width:1000px){.blind-workspace{grid-template-columns:minmax(0,1fr)}.blind-aside{position:static;max-height:none}.blind-sessions{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}.blind-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.blind-page{padding:12px}.blind-hero{flex-direction:column;align-items:stretch;border-radius:17px;padding:24px 18px}.blind-store{max-width:none;min-width:0}.blind-aside,.blind-content{padding:15px;border-radius:15px}.blind-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.blind-stat{padding:12px;min-height:92px}.blind-section-head{flex-direction:column;gap:2px}.blind-toolbar{align-items:stretch}.blind-filter{flex:1 1 120px}.blind-results{width:100%;padding-bottom:6px}.blind-table{min-width:0;display:block}.blind-table thead{display:none}.blind-table tbody{display:grid;gap:11px;padding:9px}.blind-table tr{display:grid;border:1px solid #dce9e2;border-radius:13px;padding:12px;gap:9px;background:#fff!important}.blind-table td{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border:0}.blind-table td:before{content:attr(data-label);font-size:10px;color:#6b8075;font-weight:750;flex:0 0 86px}.blind-table td[data-label="Product"]:before{display:none}.blind-table td[data-label="Product"]{display:block;border-bottom:1px solid #e6efea;padding-bottom:10px}.blind-table td[data-label="Physical quantity"],.blind-table td[data-label="Count notes"]{align-items:stretch}.blind-table input{min-width:0;width:min(100%,240px)}.blind-actions button{flex:1 1 135px}.blind-download-buttons{width:100%}.blind-download-buttons button{flex:1 1 70px}.blind-hero h1{font-size:31px}}
+
+/* Quantity-only counting: less visual noise, more room for fast mobile input. */
+.blind-simple .blind-hero{padding:clamp(20px,3vw,34px)}
+.blind-simple .blind-hero p{max-width:620px}
+.blind-simple .blind-start{padding:8px;margin:12px 0}
+.blind-simple .blind-table{min-width:620px}
+.blind-simple .blind-table td[data-label="Quantity"] input{
+  width:132px;min-width:0;min-height:46px;font-weight:800;font-size:17px;
+  text-align:center;border:2px solid #b8d7c9;
+}
+.blind-simple .blind-table td[data-label="Quantity"] input:focus{
+  border-color:#0a9075;box-shadow:0 0 0 3px #13ad8723;
+}
+.blind-simple .blind-actions .primary{min-width:220px}
+.blind-simple .blind-actions{position:sticky;bottom:6px;z-index:2;
+  background:#ffffffed;border:1px solid #d5e9df;padding:12px;border-radius:15px;
+  box-shadow:0 -4px 24px #123b2b16;backdrop-filter:blur(8px)}
+@media(max-width:620px){
+  .blind-simple .blind-table{min-width:0}
+  .blind-simple .blind-table td[data-label="Quantity"] input{width:160px;max-width:100%}
+  .blind-simple .blind-actions{bottom:2px}
+  .blind-simple .blind-actions .primary{min-width:0;flex:1 1 100%}
+}

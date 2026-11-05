@@ -23,14 +23,14 @@ function validEnvironment() {
   };
 }
 
-test("Finance runner is locked to one exact release and four ordered migrations", () => {
+test("Finance runner is locked to one exact release and ordered migration plan", () => {
   assert.equal(
     runner.RELEASE_CONFIRMATION,
-    "20260729_EQUIPMENT_FINANCE_COMPLETE"
+    "20260825_EQUIPMENT_FINANCE_POLICY_HARDENING"
   );
   assert.equal(
     runner.MIGRATION_LOCK_NAME,
-    "chalin03:production-migrations:20260729-equipment-finance"
+    "chalin03:production-migrations:20260825-equipment-finance-policy-hardening"
   );
   assert.deepEqual(
     runner.PRODUCTION_MIGRATION_PLAN.map((item) => item.name),
@@ -39,11 +39,16 @@ test("Finance runner is locked to one exact release and four ordered migrations"
       "20260729_equipment_finance_agreement_activation",
       "20260729_equipment_finance_deposit_reservation",
       "20260729_equipment_finance_final_lifecycle",
+      "20260825_equipment_finance_policy_hardening",
     ]
   );
+  assert.match(
+    runner.PRODUCTION_MIGRATION_PLAN.at(-1).verifier,
+    /^20260825_equipment_finance_policy_hardening_verify\.sql$/
+  );
   for (const item of runner.PRODUCTION_MIGRATION_PLAN) {
-    assert.match(item.migration, /^20260729_.*\.sql$/);
-    assert.match(item.verifier, /^20260729_.*_verify\.sql$/);
+    assert.ok(item.migration.endsWith(".sql"));
+    assert.ok(item.verifier.endsWith("_verify.sql"));
     assert.ok(item.expectedProblems.length > 0);
   }
 });
@@ -100,21 +105,36 @@ SELECT 2;
 test("verifier validation rejects missing, non-numeric and non-zero results", () => {
   const plan = {
     name: "example",
+    migrationRecord: "example",
     expectedProblems: ["problem_one", "problem_two"],
   };
   assert.doesNotThrow(() =>
     runner.validateVerifierResults(plan, [
+      [{ migration_name: "example" }],
       [{ problem_one: 0 }],
       [{ problem_two: 0 }],
     ])
   );
   assert.throws(() =>
-    runner.validateVerifierResults(plan, [[{ problem_one: 1 }], [{ problem_two: 0 }]])
+    runner.validateVerifierResults(plan, [
+      [{ migration_name: "example" }],
+      [{ problem_one: 1 }],
+      [{ problem_two: 0 }],
+    ])
   );
   assert.throws(() =>
-    runner.validateVerifierResults(plan, [[{ problem_one: "bad" }], [{ problem_two: 0 }]])
+    runner.validateVerifierResults(plan, [
+      [{ migration_name: "example" }],
+      [{ problem_one: "bad" }],
+      [{ problem_two: 0 }],
+    ])
   );
-  assert.throws(() => runner.validateVerifierResults(plan, [[{ problem_one: 0 }]]));
+  assert.throws(() =>
+    runner.validateVerifierResults(plan, [
+      [{ migration_name: "example" }],
+      [{ problem_one: 0 }],
+    ])
+  );
 });
 
 test("foundation verifier must prove its migration record", () => {
@@ -128,6 +148,23 @@ test("foundation verifier must prove its migration record", () => {
   const badResults = [...goodResults];
   badResults[0] = [{ migration_name: "wrong" }];
   assert.throws(() => runner.validateVerifierResults(plan, badResults));
+});
+
+test("policy hardening verifier is part of the approved plan", () => {
+  const plan = runner.PRODUCTION_MIGRATION_PLAN.at(-1);
+  assert.equal(plan.name, "20260825_equipment_finance_policy_hardening");
+  assert.deepEqual(plan.expectedProblems, [
+    "missing_policy_columns",
+    "missing_policy_indexes",
+    "missing_policy_triggers",
+  ]);
+  const goodResults = [
+    [{ migration_name: plan.migrationRecord }],
+    [{ missing_policy_columns: 0 }],
+    [{ missing_policy_indexes: 0 }],
+    [{ missing_policy_triggers: 0 }],
+  ];
+  assert.doesNotThrow(() => runner.validateVerifierResults(plan, goodResults));
 });
 
 test("Finance migration command is separate from the legacy production runner", () => {
@@ -147,7 +184,7 @@ test("runner documentation preserves the non-automatic safety contract", () => {
     "CHALIN03_EQUIPMENT_FINANCE_MIGRATIONS_ENABLED=true",
     "CHALIN03_SIGNED_BACKUP_CONFIRMED=true",
     "CHALIN03_SQL_BACKUP_CONFIRMED=true",
-    "CHALIN03_MIGRATION_RELEASE=20260729_EQUIPMENT_FINANCE_COMPLETE",
+    "CHALIN03_MIGRATION_RELEASE=20260825_EQUIPMENT_FINANCE_POLICY_HARDENING",
     "CHALIN03_EXPECTED_DATABASE",
     "The runner is **not automatic**",
     "All approved Equipment Finance migrations and verifiers passed.",
@@ -162,6 +199,7 @@ test("runner documentation preserves the non-automatic safety contract", () => {
     "20260729_equipment_finance_agreement_activation.sql",
     "20260729_equipment_finance_deposit_reservation.sql",
     "20260729_equipment_finance_final_lifecycle.sql",
+    "20260825_equipment_finance_policy_hardening.sql",
   ]) {
     assert.match(runnerGuide, new RegExp(filename.replaceAll(".", "\\.")));
     assert.match(migrationIndex, new RegExp(filename.replaceAll(".", "\\.")));

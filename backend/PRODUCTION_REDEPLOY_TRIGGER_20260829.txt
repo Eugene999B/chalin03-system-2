@@ -1,0 +1,8 @@
+CHALIN 03 PRODUCTION BACKEND REDEPLOY TRIGGER
+
+Purpose: force Railway to build the current production source after aligning the Equipment Installment SMS pre-deploy migration chain.
+
+No application logic, database records, or API behavior is changed by this marker.
+
+Source of truth: production
+Triggered: 2026-08-29

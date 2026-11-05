@@ -2,11 +2,20 @@ const express = require("express");
 const crypto = require("crypto");
 
 const { pool } = require("../config/db");
-const { BACKUP_MANIFEST_VERSION } = require("../config/version");
+const {
+  BACKUP_MANIFEST_VERSION: DELEGATED_BACKUP_MANIFEST_VERSION,
+} = require("../config/version");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const {
+  BACKUP_MANIFEST_VERSION: SIGNED_V2_MANIFEST_VERSION,
+  EPHEMERAL_SECURITY_TABLES: SIGNED_V2_EPHEMERAL_SECURITY_TABLES,
+  classifyDatabaseTables,
+  isConfirmedRailwayStaging,
+  validateBackupContract,
+} = require("../services/backupSafetyService");
 const {
   hasDelegatedCapability,
   loadUser,
@@ -17,7 +26,7 @@ const { requireProtectedAction, appendLedger } = release2FinalRoutes;
 const router = express.Router();
 
 const RESTORE_CONFIRMATION_TEXT = "RESTORE_FULL_SYSTEM_BACKUP";
-const MANIFEST_VERSION = BACKUP_MANIFEST_VERSION;
+const MANIFEST_VERSION = DELEGATED_BACKUP_MANIFEST_VERSION;
 const LEGACY_ALIAS_TABLES = new Set([
   "stores",
   "user_store_access",
@@ -59,6 +68,14 @@ function backupChecksum(backup) {
   return crypto.createHash("sha256").update(payload).digest("hex");
 }
 
+function isSignedV2StagingRecovery(backup) {
+  return (
+    isConfirmedRailwayStaging() &&
+    backup?.backup_type === "full_system_backup" &&
+    backup?.version === SIGNED_V2_MANIFEST_VERSION
+  );
+}
+
 async function existingTables(connection) {
   const [rows] = await connection.query(
     `SELECT TABLE_NAME
@@ -73,11 +90,32 @@ async function existingTables(connection) {
     .filter((name) => !LEGACY_ALIAS_TABLES.has(name));
 }
 
-async function tableColumns(connection, tableName) {
+async function tableColumnMetadata(connection, tableName) {
   const [rows] = await connection.query(
-    `SHOW COLUMNS FROM ${safeTableName(tableName)}`
+    `SHOW FULL COLUMNS FROM ${safeTableName(tableName)}`
   );
-  return rows.map((row) => row.Field).filter(isSafeIdentifier);
+  return rows
+    .filter(
+      (column) =>
+        !String(column.Extra || "")
+          .toLowerCase()
+          .includes("generated")
+    )
+    .map((column) => ({
+      name: column.Field,
+      type: String(column.Type || "").toLowerCase(),
+      nullable: String(column.Null || "").toUpperCase() === "YES",
+      hasDefault: column.Default !== null,
+      defaultValue: column.Default,
+      extra: String(column.Extra || "").toLowerCase(),
+    }))
+    .filter((column) => isSafeIdentifier(column.name));
+}
+
+async function tableColumns(connection, tableName) {
+  return (await tableColumnMetadata(connection, tableName)).map(
+    (column) => column.name
+  );
 }
 
 async function tableCounts(connection, tableNames) {
@@ -91,19 +129,71 @@ async function tableCounts(connection, tableNames) {
   return counts;
 }
 
-function normalizeValue(value) {
+async function schemaMigrations(connection) {
+  const tables = await existingTables(connection);
+  if (!tables.includes("schema_migrations")) return [];
+  const [rows] = await connection.query(
+    `SELECT migration_name, description, applied_at
+       FROM schema_migrations
+      ORDER BY migration_name`
+  );
+  return rows.map((row) => ({
+    migration_name: row.migration_name,
+    description: row.description || null,
+    applied_at:
+      row.applied_at instanceof Date
+        ? row.applied_at.toISOString()
+        : row.applied_at,
+  }));
+}
+
+function normalizeValue(value, columnType = "") {
   if (value === undefined) return null;
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    value.__chalin03_type === "buffer_base64" &&
+    typeof value.data === "string"
+  ) {
+    return Buffer.from(value.data, "base64");
+  }
   if (value instanceof Date) {
     return value.toISOString().slice(0, 19).replace("T", " ");
+  }
+
+  const type = String(columnType || "").toLowerCase();
+  if (typeof value === "string" && /^date$/.test(type)) {
+    return value.slice(0, 10);
+  }
+  if (
+    typeof value === "string" &&
+    /^(datetime|timestamp)/.test(type) &&
+    value.includes("T")
+  ) {
+    return value.slice(0, 19).replace("T", " ");
   }
   if (value && typeof value === "object") return JSON.stringify(value);
   return value;
 }
 
-async function insertRows(connection, tableName, rows) {
+async function insertRows(
+  connection,
+  tableName,
+  rows,
+  preferredColumns = null
+) {
   if (!Array.isArray(rows) || rows.length === 0) return;
-  const allowedColumns = new Set(await tableColumns(connection, tableName));
-  const columns = Object.keys(rows[0]).filter(
+  const metadata = await tableColumnMetadata(connection, tableName);
+  const metadataByName = new Map(
+    metadata.map((column) => [column.name, column])
+  );
+  const allowedColumns = new Set(metadataByName.keys());
+  const sourceColumns =
+    Array.isArray(preferredColumns) && preferredColumns.length > 0
+      ? preferredColumns
+      : Object.keys(rows[0]);
+  const columns = sourceColumns.filter(
     (column) => isSafeIdentifier(column) && allowedColumns.has(column)
   );
   if (!columns.length) return;
@@ -115,7 +205,9 @@ async function insertRows(connection, tableName, rows) {
   for (const row of rows) {
     await connection.query(
       sql,
-      columns.map((column) => normalizeValue(row[column]))
+      columns.map((column) =>
+        normalizeValue(row[column], metadataByName.get(column)?.type)
+      )
     );
   }
 }
@@ -158,12 +250,66 @@ function requesterPresent(backup, requester) {
     : [];
   return users.some(
     (user) =>
-      Number(user.id) === Number(requester.id) &&
+      Number(user.id) === Number(requester?.id) &&
       String(user.username || "").trim().toLowerCase() ===
-        String(requester.username || "").trim().toLowerCase() &&
+        String(requester?.username || "").trim().toLowerCase() &&
       String(user.role || "").trim().toLowerCase() === "admin" &&
       Boolean(Number(user.is_active))
   );
+}
+
+async function validateSignedV2StagingBackup(connection, backup, requester) {
+  if (!isSignedV2StagingRecovery(backup)) return null;
+
+  const allTables = await existingTables(connection);
+  const inventory = classifyDatabaseTables(allTables);
+  const currentTableColumns = {};
+  const currentTableMetadata = {};
+
+  for (const tableName of inventory.includedTables) {
+    const metadata = await tableColumnMetadata(connection, tableName);
+    currentTableMetadata[tableName] = metadata;
+    currentTableColumns[tableName] = metadata.map((column) => column.name);
+  }
+
+  const report = validateBackupContract({
+    backup,
+    currentIncludedTables: inventory.includedTables,
+    currentTableColumns,
+    currentTableMetadata,
+    currentSchemaMigrations: await schemaMigrations(connection),
+    signingSecret: String(process.env.BACKUP_SIGNING_SECRET || "").trim(),
+    requireSignature: false,
+    allowAdditiveSchemaDrift: true,
+  });
+
+  const restoreTables = report.includedTables || [];
+  return {
+    valid: report.valid,
+    errors: report.errors || [],
+    warnings: report.warnings || [],
+    restore_tables: restoreTables,
+    tables_to_restore: restoreTables,
+    missing_tables: report.currentOnlyTables || [],
+    preserved_current_only_tables: report.currentOnlyTables || [],
+    unsupported_tables: report.sourceOnlyTables || [],
+    source_only_tables: report.sourceOnlyTables || [],
+    restore_columns: report.restoreColumns || {},
+    checksum_sha256: backup.checksum_sha256 || null,
+    preview_counts: Object.fromEntries(
+      restoreTables.map((tableName) => [
+        tableName,
+        Array.isArray(backup.tables?.[tableName])
+          ? backup.tables[tableName].length
+          : 0,
+      ])
+    ),
+    cross_environment_recovery: true,
+    signed_v2_recovery: true,
+    requester_present_in_backup: requesterPresent(backup, requester),
+    additive_schema_compatibility_applied: true,
+    signature_verified: false,
+  };
 }
 
 async function validateBackup(connection, backup, requester) {
@@ -184,6 +330,13 @@ async function validateBackup(connection, backup, requester) {
       tables_to_restore: [],
     };
   }
+
+  const signedV2Report = await validateSignedV2StagingBackup(
+    connection,
+    backup,
+    requester
+  );
+  if (signedV2Report) return signedV2Report;
 
   const currentTables = (await existingTables(connection)).filter(
     (tableName) => tableName !== "schema_migrations"
@@ -439,6 +592,8 @@ router.post(
           valid: report.valid,
           error_count: report.errors.length,
           warning_count: report.warnings.length,
+          signed_v2_recovery: Boolean(report.signed_v2_recovery),
+          source_only_table_count: (report.source_only_tables || []).length,
         },
         report.valid ? "success" : "failure"
       );
@@ -505,31 +660,82 @@ router.post(
         await connection.query(`DELETE FROM ${safeTableName(tableName)}`);
       }
       for (const tableName of validation.tables_to_restore) {
-        await insertRows(connection, tableName, backup.tables[tableName]);
+        await insertRows(
+          connection,
+          tableName,
+          backup.tables[tableName],
+          validation.restore_columns?.[tableName] || null
+        );
       }
 
-      const currentTableSet = new Set(validation.restore_tables);
-      for (const tableName of EPHEMERAL_SECURITY_TABLES) {
+      const currentTableSet = new Set(await existingTables(connection));
+      const securityTables = validation.signed_v2_recovery
+        ? [...SIGNED_V2_EPHEMERAL_SECURITY_TABLES]
+        : EPHEMERAL_SECURITY_TABLES;
+      const clearedSecurityTables = [];
+      for (const tableName of securityTables) {
         if (currentTableSet.has(tableName)) {
           await connection.query(`DELETE FROM ${safeTableName(tableName)}`);
+          clearedSecurityTables.push(tableName);
+        }
+      }
+
+      if (currentTableSet.has("users")) {
+        const userColumns = await tableColumns(connection, "users");
+        if (userColumns.includes("token_version")) {
+          await connection.query(
+            `UPDATE users SET token_version = COALESCE(token_version, 0) + 1`
+          );
+        }
+      }
+
+      const restoredCounts = await tableCounts(
+        connection,
+        validation.tables_to_restore
+      );
+      for (const tableName of validation.tables_to_restore) {
+        const expected = Number(backup.table_counts?.[tableName]);
+        if (
+          Number.isSafeInteger(expected) &&
+          restoredCounts[tableName] !== expected
+        ) {
+          const error = new Error(
+            `Restore verification failed for ${tableName}: expected ${expected}, found ${restoredCounts[tableName]}.`
+          );
+          error.code = "RESTORE_COUNT_MISMATCH";
+          throw error;
         }
       }
 
       await writeAuditEvent({
         connection,
-        userId: req.user.id,
+        userId:
+          validation.cross_environment_recovery &&
+          !validation.requester_present_in_backup
+            ? null
+            : req.user.id,
         branchId: req.user?.branch_id || req.user?.default_branch_id || 1,
         workspaceCode: req.user?.workspace_code || "spare_parts",
-        action: "DELEGATED_FULL_BACKUP_RESTORED",
-        actionType: "backup.delegated_restore.completed",
+        action: validation.signed_v2_recovery
+          ? "STAGING_SIGNED_V2_BACKUP_RESTORED"
+          : "DELEGATED_FULL_BACKUP_RESTORED",
+        actionType: validation.signed_v2_recovery
+          ? "backup.staging_signed_v2_restore.completed"
+          : "backup.delegated_restore.completed",
         outcome: "success",
         severity: "critical",
         entityType: "backup",
-        details: "A delegated System Administrator completed a validated full-system restore.",
+        details: validation.signed_v2_recovery
+          ? "A protected staging Administrator completed a validated signed-v2 cross-environment recovery restore."
+          : "A delegated System Administrator completed a validated full-system restore.",
         metadata: {
           restored_tables: validation.tables_to_restore,
-          sessions_cleared: EPHEMERAL_SECURITY_TABLES,
+          sessions_cleared: clearedSecurityTables,
           original_owner_protected: true,
+          signed_v2_recovery: Boolean(validation.signed_v2_recovery),
+          preserved_current_only_tables:
+            validation.preserved_current_only_tables || [],
+          source_only_tables: validation.source_only_tables || [],
         },
       });
 
@@ -548,12 +754,18 @@ router.post(
 
       return res.json({
         status: "success",
-        message:
-          "The delegated full-system restore completed. All restored login and protected-action sessions were cleared; sign in again before continuing.",
+        message: validation.signed_v2_recovery
+          ? "The signed-v2 staging recovery restore completed and restored row counts were verified. All current login and protected-action sessions were cleared; sign in again before continuing."
+          : "The delegated full-system restore completed. All restored login and protected-action sessions were cleared; sign in again before continuing.",
         restored_tables: validation.tables_to_restore,
         cleared_tables: validation.restore_tables,
+        preserved_current_only_tables:
+          validation.preserved_current_only_tables || [],
+        source_only_tables: validation.source_only_tables || [],
+        restored_table_counts: restoredCounts,
         auto_increment_warnings: autoIncrementWarnings,
-        sessions_cleared: EPHEMERAL_SECURITY_TABLES,
+        sessions_cleared: clearedSecurityTables,
+        signed_v2_recovery: Boolean(validation.signed_v2_recovery),
       });
     } catch (error) {
       if (transactionStarted) {

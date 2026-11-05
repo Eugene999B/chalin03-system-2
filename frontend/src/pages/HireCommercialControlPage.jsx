@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import "../styles/hireCommercialControl.css";
 
@@ -172,8 +173,9 @@ function SummaryCard({ title, value, note }) {
 }
 
 export default function HireCommercialControlPage() {
-  const { hasPermission, hasAnyPermission } = useAuth();
+  const { user, hasPermission, hasAnyPermission } = useAuth();
   const { selectedContextId, options, loading: contextLoading } = useWorkspaceContext();
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, selectedContextId);
   const selectedLocation = options.find((option) => Number(option.id) === Number(selectedContextId));
   const visibleTabs = useMemo(() => TABS.filter(([, , , permissions]) => hasAnyPermission(permissions)), [hasAnyPermission]);
 
@@ -397,7 +399,7 @@ export default function HireCommercialControlPage() {
               <Field title="Mobilization"><input type="number" min="0" step="0.01" value={item.mobilization_amount} onChange={(event) => updateQuoteItem(index, "mobilization_amount", event.target.value)} /></Field>
               <Field title="Demobilization"><input type="number" min="0" step="0.01" value={item.demobilization_amount} onChange={(event) => updateQuoteItem(index, "demobilization_amount", event.target.value)} /></Field>
               <Field title="Operator"><input type="number" min="0" step="0.01" value={item.operator_amount} onChange={(event) => updateQuoteItem(index, "operator_amount", event.target.value)} /></Field>
-              <Field title="Discount"><input type="number" min="0" step="0.01" value={item.discount_amount} onChange={(event) => updateQuoteItem(index, "discount_amount", event.target.value)} /></Field>
+              {canApplyDiscount && (<Field title="Discount (Boss / System Administrator)"><input type="number" min="0" step="0.01" value={item.discount_amount} onChange={(event) => updateQuoteItem(index, "discount_amount", event.target.value)} /></Field>)}
               <Field title="Tax %"><input type="number" min="0" max="100" step="0.01" value={item.tax_rate_percent} onChange={(event) => updateQuoteItem(index, "tax_rate_percent", event.target.value)} /></Field>
               <Field title="Fuel responsibility"><select value={item.fuel_responsibility} onChange={(event) => updateQuoteItem(index, "fuel_responsibility", event.target.value)}><option value="customer">Customer</option><option value="owner">Owner</option><option value="mixed">Mixed</option></select></Field>
             </div></article>)}</div>

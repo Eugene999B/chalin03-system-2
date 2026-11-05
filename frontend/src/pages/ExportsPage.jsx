@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "./ExportsPage.css";
@@ -62,6 +63,27 @@ const REPORTS = [
     endpoint: "/exports/daily-closings",
     description:
       "Advanced period summary, sales mix, channel reconciliation, counted money, variances and closing controls.",
+    dateFilter: true,
+    featured: true,
+  },
+  {
+    key: "discount-audit",
+    title: "Discount Downloads — Staff Investigation",
+    category: "Sales",
+    icon: "🔍",
+    endpoint: "/exports/discount-audit",
+    description: "Clear Excel investigation report with purchased products, quantities, staff, customer, and actual discount amounts in Ghana cedis. Separate worksheets show full purchased-item prices, staff totals and audit references. Clear dates for all history.",
+    dateFilter: true,
+    featured: true,
+    adminOnly: true,
+  },
+  {
+    key: "transaction-history",
+    title: "Transaction History · Line-by-Line Forensic Workbook",
+    category: "Sales",
+    icon: "🔬",
+    endpoint: "/exports/transaction-history",
+    description: "Excel investigation of each historical receipt line: date, item, unit price, quantity, amount, cost, discount allocation, gross profit, margin, source line and exceptions. Separate daily, staff, product and payment-channel analyses.",
     dateFilter: true,
     featured: true,
   },
@@ -131,11 +153,24 @@ const FORMAT_OPTIONS = [
   { key: "xlsx", label: "Excel", icon: "📊", extension: "xlsx" },
   { key: "pdf", label: "PDF", icon: "📄", extension: "pdf" },
   { key: "doc", label: "Word", icon: "📝", extension: "doc" },
+  { key: "csv", label: "CSV", icon: "📋", extension: "csv" },
 ];
 
 function toLocalIsoDate(date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+function extractFilename(headers, fallback) {
+  const disposition = headers?.["content-disposition"] || "";
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1].replace(/["']/g, ""));
+  }
+
+  const normalMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return normalMatch?.[1] || fallback;
 }
 
 export default function ExportsPage() {
@@ -180,6 +215,7 @@ export default function ExportsPage() {
     const query = search.trim().toLowerCase();
 
     return REPORTS.filter((report) => {
+      if (report.adminOnly && !["admin", "auditor"].includes(role)) return false;
       const matchesCategory = category === "All" || report.category === category;
       const matchesSearch =
         !query ||
@@ -189,7 +225,7 @@ export default function ExportsPage() {
 
       return matchesCategory && matchesSearch;
     });
-  }, [category, search]);
+  }, [category, search, role]);
 
   function makeSafeFileName(value) {
     return String(value || "store")
@@ -202,13 +238,17 @@ export default function ExportsPage() {
   function buildStoreFileName(reportKey, format) {
     const option = FORMAT_OPTIONS.find((item) => item.key === format);
     const extension = option?.extension || "xlsx";
+    const periodPart =
+      from || to
+        ? `-${from || "earliest"}-to-${to || "latest"}`
+        : "";
 
-    return `chalin03-${makeSafeFileName(currentStoreCode)}-${reportKey}.${extension}`;
+    return `chalin03-${makeSafeFileName(
+      currentStoreCode
+    )}-${reportKey}${periodPart}.${extension}`;
   }
 
-  function validateDates(report) {
-    if (!report.dateFilter) return true;
-
+  function validateDates() {
     if (from && to && from > to) {
       setError("The From Date cannot be later than the To Date.");
       return false;
@@ -217,8 +257,8 @@ export default function ExportsPage() {
     return true;
   }
 
-  async function readExportError(error) {
-    const data = error?.response?.data;
+  async function readExportError(errorValue) {
+    const data = errorValue?.response?.data;
 
     try {
       if (data instanceof Blob) {
@@ -227,14 +267,14 @@ export default function ExportsPage() {
         return parsed?.message || text;
       }
 
-      return data?.message || error?.message || "Export failed.";
+      return data?.message || errorValue?.message || "Export failed.";
     } catch {
-      return error?.message || "Export failed.";
+      return errorValue?.message || "Export failed.";
     }
   }
 
   async function downloadReport(report, format) {
-    if (!validateDates(report)) return;
+    if (!validateDates()) return;
 
     const requestKey = `${report.key}-${format}`;
     setBusyKey(requestKey);
@@ -245,15 +285,18 @@ export default function ExportsPage() {
       const response = await axiosClient.get(report.endpoint, {
         params: {
           format,
-          ...(report.dateFilter ? { from, to } : {}),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
         },
         responseType: "blob",
       });
 
+      const fallbackFilename = buildStoreFileName(report.key, format);
+      const filename = extractFilename(response.headers, fallbackFilename);
       const fileUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = fileUrl;
-      link.setAttribute("download", buildStoreFileName(report.key, format));
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -261,7 +304,15 @@ export default function ExportsPage() {
 
       const formatLabel =
         FORMAT_OPTIONS.find((option) => option.key === format)?.label || format;
-      setNotice(`${report.title} ${formatLabel} export downloaded successfully.`);
+      const selectedPeriod =
+        from || to
+          ? ` for ${from || "the earliest available date"} to ${
+              to || "the latest available date"
+            }`
+          : "";
+      setNotice(
+        `${report.title} ${formatLabel} export${selectedPeriod} downloaded successfully.`
+      );
     } catch (downloadError) {
       const message = await readExportError(downloadError);
       setError(
@@ -303,7 +354,7 @@ export default function ExportsPage() {
     setTo("");
   }
 
-  if (!['admin', 'manager', 'auditor'].includes(role)) {
+  if (!["admin", "manager", "auditor"].includes(role)) {
     return (
       <div className="export-center-v3">
         <div className="page-header">
@@ -330,16 +381,18 @@ export default function ExportsPage() {
           <span className="ec-eyebrow">REPORTING AND DOCUMENT CENTRE</span>
           <h1>Professional Export Centre</h1>
           <p>
-            Download every business report as a professionally arranged Excel
+            Download historical transaction investigations and every business report as a professionally arranged Excel
             workbook, print-ready PDF or editable Microsoft Word document.
           </p>
         </div>
 
         <div className="ec-hero-badge" aria-label="Available export formats">
-          <strong>3 formats</strong>
-          <span>Excel • PDF • Word</span>
+          <strong>4 formats</strong>
+          <span>Excel • PDF • Word • CSV on Transaction History</span>
         </div>
       </section>
+
+      <section className="ec-feature-path"><div><strong>New: Blind Stock Audit</strong><span>Count physical items first, reveal stock variances after submission, and download detailed investigations.</span></div><Link to="/stock-count">Open Blind Count →</Link></section>
 
       <section className="ec-store-banner">
         <div className="ec-store-icon">🏪</div>
@@ -356,15 +409,17 @@ export default function ExportsPage() {
       {error && <div className="error-box ec-message">{error}</div>}
       {notice && <div className="success-box ec-message">{notice}</div>}
 
-      <section className="ec-controls-card">
+      <section className="ec-controls-card" id="ec-report-period">
         <div className="ec-control-heading">
           <div>
             <span className="ec-eyebrow">REPORT PERIOD</span>
             <h2>Choose the reporting dates</h2>
           </div>
           <p>
-            Date-sensitive reports use this period. Products, low stock and open
-            debts always export their current store records.
+            Every download prints the exact selected From and To dates.
+            Date-sensitive reports also filter their rows; products, low stock
+            and open debts remain current snapshots prepared for that selected
+            reporting period.
           </p>
         </div>
 
@@ -445,13 +500,29 @@ export default function ExportsPage() {
             <h3>{report.title}</h3>
             <p>{report.description}</p>
 
+            {report.key === "transaction-history" && (
+              <div className="ec-transaction-period" aria-label="Selected transaction history date range">
+                <div className="ec-transaction-period-label">TRANSACTION PERIOD IN DOWNLOAD</div>
+                <div className="ec-transaction-period-dates">
+                  <span><small>From Date</small><strong>{from || "Earliest available"}</strong></span>
+                  <span aria-hidden="true">→</span>
+                  <span><small>To Date</small><strong>{to || "Latest available"}</strong></span>
+                </div>
+                <a href="#ec-report-period">Change reporting dates</a>
+              </div>
+            )}
+
             <div className="ec-report-meta">
-              <span>{report.dateFilter ? "Uses selected dates" : "Current records"}</span>
+              <span>
+                {report.dateFilter
+                  ? "Filters rows by selected dates"
+                  : "Current snapshot • selected period shown"}
+              </span>
               <span>{currentStoreCode}</span>
             </div>
 
             <div className="ec-format-actions">
-              {FORMAT_OPTIONS.map((format) => {
+              {FORMAT_OPTIONS.filter((format) => format.key !== "csv" || report.key === "transaction-history").map((format) => {
                 const requestKey = `${report.key}-${format.key}`;
                 const isBusy = busyKey === requestKey;
 

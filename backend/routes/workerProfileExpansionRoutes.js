@@ -18,6 +18,9 @@ const {
   cardDatesForReissue,
   ensureWorkerIdentitySchema,
 } = require("../services/workerIdentityService");
+const {
+  assertSchemaReady,
+} = require("../services/payrollFoundationService");
 
 const router = express.Router();
 
@@ -363,6 +366,39 @@ function profilePayload(body = {}) {
       body.supervisor_worker_id
     ),
     notes: nullableText(body.notes, 4000),
+  };
+}
+
+function initialSalaryPayload(body = {}) {
+  const amount = Number(body.basic_salary);
+  const payFrequency = cleanText(body.pay_frequency || "monthly", 30).toLowerCase();
+  const effectiveFrom = dateOnly(body.salary_effective_from || body.employment_start_date);
+  const changeReason = nullableText(body.salary_change_reason, 1000) ||
+    "Initial salary activated automatically when the worker profile was created.";
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    const error = new Error("Enter a positive basic salary before creating the worker.");
+    error.statusCode = 400;
+    error.code = "WORKER_INITIAL_SALARY_REQUIRED";
+    throw error;
+  }
+  if (!["monthly", "weekly", "biweekly"].includes(payFrequency)) {
+    const error = new Error("Choose a valid salary pay frequency.");
+    error.statusCode = 400;
+    error.code = "WORKER_INITIAL_PAY_FREQUENCY_INVALID";
+    throw error;
+  }
+  if (!effectiveFrom) {
+    const error = new Error("Employment start date is required because it is also the initial salary effective date.");
+    error.statusCode = 400;
+    error.code = "WORKER_INITIAL_SALARY_EFFECTIVE_DATE_REQUIRED";
+    throw error;
+  }
+  return {
+    basic_salary: Number(amount.toFixed(2)),
+    pay_frequency: payFrequency,
+    effective_from: effectiveFrom,
+    change_reason: changeReason,
   };
 }
 
@@ -803,10 +839,12 @@ router.post(
   requireAuth,
   requirePermission(
     "workers.manage",
-    "workers.sensitive.view"
+    "workers.sensitive.view",
+    "payroll.manage"
   ),
   asyncHandler(async (req, res) => {
     const payload = profilePayload(req.body);
+    const initialSalary = initialSalaryPayload(req.body);
 
     if (!payload.full_name) {
       return res.status(400).json({
@@ -825,6 +863,7 @@ router.post(
 
     try {
       await connection.beginTransaction();
+      await assertSchemaReady(connection);
       identity = await allocateWorkerIdentity(
         connection,
         workspaceCode,
@@ -864,6 +903,22 @@ router.post(
         values
       );
 
+      const [salaryResult] = await connection.query(
+        `INSERT INTO payroll_compensation_profiles (
+           worker_id, workspace_code, effective_from, currency_code, pay_frequency,
+           basic_salary, status, change_reason, created_by, approved_at
+         ) VALUES (?, ?, ?, 'GHS', ?, ?, 'approved', ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          result.insertId,
+          workspaceCode,
+          initialSalary.effective_from,
+          initialSalary.pay_frequency,
+          initialSalary.basic_salary,
+          initialSalary.change_reason,
+          req.user.id,
+        ]
+      );
+
       await connection.query(
         `INSERT INTO worker_profile_change_history (
            worker_id,
@@ -882,6 +937,9 @@ router.post(
             ...payload,
             employee_number_is_automatic: true,
             card_validity_months: identity.validityMonths,
+            initial_salary_auto_activated: true,
+            initial_salary_profile_id: salaryResult.insertId,
+            initial_pay_frequency: initialSalary.pay_frequency,
           }),
           req.user.id,
         ]
@@ -897,15 +955,27 @@ router.post(
         entityId: result.insertId,
         severity: "notice",
         details:
-          `Expanded worker profile ${payload.employee_number} was created with automatic identity and ${identity.validityMonths}-month card validity.`,
+          `Expanded worker profile ${payload.employee_number} was created with automatic identity and an active initial payroll salary record.`,
+        metadata: {
+          initial_salary_profile_id: salaryResult.insertId,
+          initial_salary_effective_from: initialSalary.effective_from,
+          initial_pay_frequency: initialSalary.pay_frequency,
+        },
       });
 
       return res.status(201).json({
         status: "success",
         message:
-          `Worker profile created. Employee number ${payload.employee_number} and card expiry ${payload.id_card_expiry_date} were generated automatically.`,
+          `Worker profile created. Employee number ${payload.employee_number} was generated automatically and the initial salary is active in Payroll.`,
         employee_number_is_automatic: true,
         card_validity_months: identity.validityMonths,
+        initial_salary_auto_activated: true,
+        initial_salary: {
+          profile_id: salaryResult.insertId,
+          basic_salary: initialSalary.basic_salary,
+          pay_frequency: initialSalary.pay_frequency,
+          effective_from: initialSalary.effective_from,
+        },
         worker: await loadExpandedWorker(result.insertId, req),
       });
     } catch (error) {

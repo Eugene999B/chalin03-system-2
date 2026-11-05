@@ -1,0 +1,621 @@
+.equipment-workforce {
+  width: min(100%, 1500px);
+  margin: 0 auto;
+  padding: 1rem;
+  color: #17251c;
+  overflow-x: hidden;
+}
+
+.equipment-workforce *,
+.equipment-workforce *::before,
+.equipment-workforce *::after {
+  box-sizing: border-box;
+}
+
+.equipment-workforce__hero,
+.equipment-workforce__section,
+.equipment-workforce__form {
+  border: 1px solid #d7e1d9;
+  border-radius: 1.15rem;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(29, 58, 37, 0.08);
+}
+
+.equipment-workforce__hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.6rem);
+  background: linear-gradient(135deg, #102d1c, #28573a 68%, #d8a833);
+  color: #fff;
+}
+
+.equipment-workforce__hero p,
+.equipment-workforce__section-heading p {
+  margin: 0 0 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.equipment-workforce__hero h1,
+.equipment-workforce__section-heading h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.equipment-workforce__hero h1 {
+  font-size: clamp(1.55rem, 4vw, 2.55rem);
+}
+
+.equipment-workforce__hero span {
+  display: block;
+  max-width: 800px;
+  margin-top: 0.55rem;
+  color: #e6f1e9;
+  line-height: 1.55;
+}
+
+.equipment-workforce__hero-actions,
+.equipment-workforce__card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.equipment-workforce button,
+.equipment-workforce a,
+.equipment-workforce input,
+.equipment-workforce select,
+.equipment-workforce textarea {
+  min-height: 44px;
+  font: inherit;
+}
+
+.equipment-workforce button,
+.equipment-workforce a {
+  border: 1px solid #adc1b2;
+  border-radius: 0.72rem;
+  padding: 0.65rem 0.85rem;
+  background: #fff;
+  color: #173d26;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.equipment-workforce button:hover,
+.equipment-workforce a:hover {
+  border-color: #285f3a;
+}
+
+.equipment-workforce button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.equipment-workforce__hero-actions button,
+.equipment-workforce__hero-actions a {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.equipment-workforce__tabs {
+  display: flex;
+  gap: 0.55rem;
+  margin: 1rem 0;
+  padding-bottom: 0.3rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.equipment-workforce__tabs button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.equipment-workforce__tabs button.is-active {
+  border-color: #235a35;
+  background: #235a35;
+  color: #fff;
+}
+
+.equipment-workforce__notice,
+.equipment-workforce__empty {
+  margin: 1rem 0;
+  border: 1px solid #c8d8cc;
+  border-radius: 0.85rem;
+  padding: 0.9rem 1rem;
+  background: #f4f8f5;
+  overflow-wrap: anywhere;
+}
+
+.equipment-workforce__notice.is-error {
+  border-color: #efb8b8;
+  background: #fff0f0;
+  color: #862727;
+}
+
+.equipment-workforce__notice.is-success {
+  border-color: #a8d4b2;
+  background: #eaf7ed;
+  color: #1d6331;
+}
+
+.equipment-workforce__notice.is-info {
+  border-color: #b9d0e7;
+  background: #eff7ff;
+  color: #26567f;
+}
+
+.equipment-workforce__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.equipment-workforce__metric {
+  border: 1px solid #d6e1d8;
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+.equipment-workforce__metric span,
+.equipment-workforce__metric strong,
+.equipment-workforce__metric small {
+  display: block;
+}
+
+.equipment-workforce__metric span {
+  color: #67766b;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.equipment-workforce__metric strong {
+  margin: 0.25rem 0;
+  font-size: clamp(1.3rem, 3vw, 2rem);
+  overflow-wrap: anywhere;
+}
+
+.equipment-workforce__metric small {
+  color: #6e7d72;
+}
+
+.equipment-workforce__journey,
+.equipment-workforce__quick-grid,
+.equipment-workforce__staff-grid,
+.equipment-workforce__role-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.equipment-workforce__journey {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 1rem 0;
+}
+
+.equipment-workforce__journey article {
+  display: flex;
+  gap: 0.75rem;
+  border: 1px solid #d8e3da;
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+  background: #fff;
+}
+
+.equipment-workforce__journey article > span {
+  display: grid;
+  flex: 0 0 2rem;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  background: #235a35;
+  color: #fff;
+  font-weight: 900;
+}
+
+.equipment-workforce__journey h3,
+.equipment-workforce__journey p,
+.equipment-workforce__quick-grid strong,
+.equipment-workforce__quick-grid small {
+  margin: 0;
+}
+
+.equipment-workforce__journey p {
+  margin-top: 0.25rem;
+  color: #667469;
+  line-height: 1.45;
+}
+
+.equipment-workforce__quick-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.equipment-workforce__quick-grid button {
+  display: grid;
+  gap: 0.35rem;
+  min-height: 140px;
+  align-content: center;
+  text-align: left;
+}
+
+.equipment-workforce__quick-grid button > span {
+  font-size: 1.55rem;
+}
+
+.equipment-workforce__quick-grid small {
+  color: #69776d;
+  line-height: 1.4;
+}
+
+.equipment-workforce__section,
+.equipment-workforce__form {
+  margin: 1rem 0;
+  padding: clamp(0.9rem, 2.5vw, 1.35rem);
+}
+
+.equipment-workforce__section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.equipment-workforce__section-heading p {
+  color: #467054;
+}
+
+.equipment-workforce__section-heading span {
+  display: block;
+  max-width: 820px;
+  margin-top: 0.35rem;
+  color: #68766c;
+  line-height: 1.5;
+}
+
+.equipment-workforce__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.equipment-workforce__form-grid label,
+.equipment-workforce__role-select,
+.equipment-workforce__default-location {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.equipment-workforce__form-grid label > span,
+.equipment-workforce__role-select > span,
+.equipment-workforce__default-location > span {
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.equipment-workforce__form-grid label.is-wide {
+  grid-column: 1 / -1;
+}
+
+.equipment-workforce input,
+.equipment-workforce select,
+.equipment-workforce textarea {
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid #bccbc0;
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.75rem;
+  background: #fff;
+  color: #1c2a20;
+}
+
+.equipment-workforce small.is-warning {
+  color: #98540d;
+}
+
+.equipment-workforce__locations {
+  margin: 1rem 0;
+  border: 1px solid #d4dfd6;
+  border-radius: 0.85rem;
+  padding: 0.85rem;
+}
+
+.equipment-workforce__locations legend {
+  padding: 0 0.35rem;
+  font-weight: 900;
+}
+
+.equipment-workforce__locations > p {
+  color: #66756b;
+}
+
+.equipment-workforce__locations > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.equipment-workforce__locations > div label,
+.equipment-workforce__checks label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid #d9e3db;
+  border-radius: 0.72rem;
+  padding: 0.7rem;
+  background: #fafcfa;
+}
+
+.equipment-workforce__locations input,
+.equipment-workforce__checks input {
+  width: auto;
+  min-height: auto;
+  margin-top: 0.2rem;
+}
+
+.equipment-workforce__locations strong,
+.equipment-workforce__locations small {
+  display: block;
+}
+
+.equipment-workforce__default-location {
+  margin-top: 0.75rem;
+}
+
+.equipment-workforce__checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.equipment-workforce__sticky-actions {
+  position: sticky;
+  z-index: 10;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  border: 1px solid #cbd8ce;
+  border-radius: 0.9rem 0.9rem 0 0;
+  padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -10px 26px rgba(27, 54, 34, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.equipment-workforce__sticky-actions button {
+  border-color: #235a35;
+  background: #235a35;
+  color: #fff;
+}
+
+.equipment-workforce__staff-grid,
+.equipment-workforce__role-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.equipment-workforce__staff-card,
+.equipment-workforce__role-card {
+  min-width: 0;
+  border: 1px solid #d6e1d8;
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+  background: #fff;
+}
+
+.equipment-workforce__staff-head,
+.equipment-workforce__role-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: flex-start;
+}
+
+.equipment-workforce__staff-head h3,
+.equipment-workforce__staff-head p,
+.equipment-workforce__role-heading h3,
+.equipment-workforce__role-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.equipment-workforce__staff-head p,
+.equipment-workforce__role-card p {
+  margin-top: 0.3rem;
+  color: #65736a;
+  line-height: 1.45;
+}
+
+.equipment-workforce__staff-head > span:last-child {
+  border-radius: 999px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+}
+
+.equipment-workforce__staff-head > span.is-active {
+  background: #e2f4e6;
+  color: #226336;
+}
+
+.equipment-workforce__staff-head > span.is-inactive {
+  background: #fbe7e7;
+  color: #8e2d2d;
+}
+
+.equipment-workforce__division,
+.equipment-workforce__role-heading span {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.28rem 0.5rem;
+  background: #edf2ee;
+  color: #355d42;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.equipment-workforce__division.is-finance,
+.equipment-workforce__role-card.is-finance .equipment-workforce__role-heading span {
+  background: #e8effb;
+  color: #2a4f82;
+}
+
+.equipment-workforce__division.is-dual,
+.equipment-workforce__role-card.is-dual .equipment-workforce__role-heading span {
+  background: #f6edd2;
+  color: #795c15;
+}
+
+.equipment-workforce__staff-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.equipment-workforce__staff-card dl div {
+  min-width: 0;
+  border-radius: 0.65rem;
+  padding: 0.55rem;
+  background: #f6f9f6;
+}
+
+.equipment-workforce__staff-card dt,
+.equipment-workforce__staff-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.equipment-workforce__staff-card dt {
+  color: #6a776d;
+  font-size: 0.72rem;
+}
+
+.equipment-workforce__staff-card dd {
+  margin-top: 0.2rem;
+  font-weight: 800;
+}
+
+.equipment-workforce__location-chips,
+.equipment-workforce__permission-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.65rem 0;
+}
+
+.equipment-workforce__location-chips span,
+.equipment-workforce__permission-chips span {
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 0.3rem 0.5rem;
+  background: #eef3ef;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.equipment-workforce__role-select {
+  margin-top: 0.8rem;
+}
+
+.equipment-workforce__card-actions {
+  margin-top: 0.7rem;
+}
+
+.equipment-workforce__role-card {
+  border-top-width: 4px;
+  border-top-color: #397b50;
+}
+
+.equipment-workforce__role-card.is-finance {
+  border-top-color: #456da4;
+}
+
+.equipment-workforce__role-card.is-dual {
+  border-top-color: #b28a24;
+}
+
+.equipment-workforce__role-heading strong {
+  font-size: 0.78rem;
+  color: #617067;
+}
+
+.equipment-workforce__role-card details {
+  margin-top: 0.7rem;
+}
+
+.equipment-workforce__role-card summary {
+  cursor: pointer;
+  font-weight: 850;
+}
+
+@media (max-width: 1180px) {
+  .equipment-workforce__staff-grid,
+  .equipment-workforce__role-grid,
+  .equipment-workforce__quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .equipment-workforce__journey {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .equipment-workforce {
+    padding: 0.65rem;
+  }
+
+  .equipment-workforce__hero,
+  .equipment-workforce__section-heading,
+  .equipment-workforce__staff-head,
+  .equipment-workforce__role-heading,
+  .equipment-workforce__sticky-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .equipment-workforce__hero-actions,
+  .equipment-workforce__hero-actions > *,
+  .equipment-workforce__card-actions,
+  .equipment-workforce__card-actions > *,
+  .equipment-workforce__sticky-actions button {
+    width: 100%;
+  }
+
+  .equipment-workforce__metrics,
+  .equipment-workforce__journey,
+  .equipment-workforce__quick-grid,
+  .equipment-workforce__form-grid,
+  .equipment-workforce__locations > div,
+  .equipment-workforce__checks,
+  .equipment-workforce__staff-grid,
+  .equipment-workforce__role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .equipment-workforce__form-grid label.is-wide {
+    grid-column: auto;
+  }
+
+  .equipment-workforce__staff-card dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .equipment-workforce button,
+  .equipment-workforce a {
+    width: 100%;
+  }
+}

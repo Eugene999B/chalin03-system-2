@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { calculateSparePartsProfitSummary } = require("../services/sparePartsProfitSummaryService");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 
@@ -151,6 +152,36 @@ router.get(
          WHERE e.branch_id = ?
          ${expenseDateFilter}`,
         expenseParams
+      );
+
+      // A return affects profit on the day it was RETURNED, not the day of
+      // the original sale. Previously the date filters were missing here,
+      // subtracting all historical refunds on every quiet/no-sales day.
+      const refundParams = [branchId];
+      const refundDateFilter = buildCustomDateFilter("r", "returned_at", from, to, refundParams);
+      const [refundRows] = await pool.query(
+        `SELECT
+            COALESCE(SUM(
+              CASE WHEN r.return_type = 'refund' THEN r.refund_amount ELSE 0 END
+            ), 0) AS total_refunds,
+            COALESCE(SUM(
+              CASE WHEN r.return_type = 'refund' AND r.refund_amount > 0
+                THEN COALESCE(
+                  (SELECT MAX(si.cost_price_at_sale)
+                     FROM sale_items si
+                    WHERE si.sale_id = r.sale_id
+                      AND si.product_id = r.product_id),
+                  0
+                ) * r.quantity
+                ELSE 0
+              END
+            ), 0) AS recovered_return_cost
+           FROM returns r
+           INNER JOIN sales s ON s.id = r.sale_id AND s.branch_id = r.branch_id
+          WHERE r.branch_id = ?
+            AND ${activeCompletedSalesFilter("s")}
+            ${refundDateFilter}`,
+        refundParams
       );
 
       const debtParams = [branchId, branchId];
@@ -396,9 +427,19 @@ router.get(
       const stockTransferSummary = stockTransferRows[0] || {};
       const stockAdjustmentSummary = stockAdjustmentRows[0] || {};
 
-      const grossProfit = Number(profitSummary.gross_profit || 0);
-      const totalExpenses = Number(expenseSummary.total_expenses || 0);
-      const netProfit = grossProfit - totalExpenses;
+      // All four components now share the same requested date window.
+      // Refund and returned-cost adjustments are exposed to make the total auditable.
+      const {
+        gross_profit: grossProfit,
+        total_expenses: totalExpenses,
+        total_refunds: totalRefunds,
+        recovered_return_cost: recoveredReturnCost,
+        net_profit: netProfit,
+      } = calculateSparePartsProfitSummary({
+        profit: profitSummary,
+        expenses: expenseSummary,
+        refunds: refundRows[0],
+      });
 
       return res.json({
         status: "success",
@@ -433,6 +474,9 @@ router.get(
           gross_profit: grossProfit,
           total_expenses: totalExpenses,
           net_profit: netProfit,
+          total_refunds: totalRefunds,
+          recovered_return_cost: recoveredReturnCost,
+          profit_basis: "Completed sales excluding voids; less recorded historical cost, dated expenses and refunds returned within the selected period, plus dated returned stock cost; excludes unrecorded costs.",
 
           outstanding_debts: Number(debtSummary.outstanding_debts || 0),
           active_debt_count: Number(debtSummary.active_debt_count || 0),

@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { requireBossForPositiveDiscount } = require("../middleware/restrictedDiscountMiddleware");
 const { requireAuth } = require("../middleware/authMiddleware");
 const {
   requirePermission,
@@ -371,6 +372,7 @@ async function getContractAsset(
 }
 
 router.use(requireAuth);
+router.use(requireBossForPositiveDiscount);
 
 router.use(async (req, res, next) => {
   try {

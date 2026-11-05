@@ -1,0 +1,774 @@
+.finance-governance {
+  --fg-ink: #14233b;
+  --fg-muted: #65738a;
+  --fg-line: #dfe5ee;
+  --fg-soft: #f5f7fa;
+  --fg-card: #ffffff;
+  --fg-navy: #173151;
+  --fg-blue: #2669aa;
+  --fg-gold: #c5922e;
+  --fg-danger: #a93a3a;
+  --fg-critical: #6f2635;
+  min-width: 0;
+  padding: 24px;
+  color: var(--fg-ink);
+}
+
+.finance-governance *,
+.finance-governance *::before,
+.finance-governance *::after {
+  box-sizing: border-box;
+}
+
+.finance-governance button,
+.finance-governance input,
+.finance-governance select,
+.finance-governance textarea {
+  font: inherit;
+}
+
+.finance-governance button {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 16px;
+  background: var(--fg-navy);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+}
+
+.finance-governance button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(23, 49, 81, 0.17);
+}
+
+.finance-governance button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.finance-governance button.is-secondary {
+  background: #edf2f7;
+  color: var(--fg-navy);
+  border: 1px solid #d6dee9;
+}
+
+.finance-governance button.is-danger,
+.finance-governance__form.is-danger button {
+  background: var(--fg-danger);
+}
+
+.finance-governance__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.7fr);
+  gap: 24px;
+  padding: 28px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #142a47 0%, #1c4b78 72%, #2b6ea5 100%);
+  color: #fff;
+  box-shadow: 0 18px 42px rgba(18, 42, 71, 0.18);
+}
+
+.finance-governance__eyebrow {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: #f1ca73;
+  font-size: 0.77rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.finance-governance__hero h1 {
+  margin: 0;
+  max-width: 780px;
+  font-size: clamp(1.65rem, 2.6vw, 2.7rem);
+  line-height: 1.08;
+}
+
+.finance-governance__hero p {
+  margin: 13px 0 0;
+  max-width: 760px;
+  color: #dce7f3;
+  line-height: 1.65;
+}
+
+.finance-governance__hero aside {
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  padding: 19px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(8px);
+}
+
+.finance-governance__hero aside strong {
+  font-size: 1rem;
+  color: #fff1be;
+}
+
+.finance-governance__hero aside span {
+  color: #e2ecf6;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.finance-governance__notice {
+  margin-top: 16px;
+  padding: 13px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.finance-governance__notice.is-success {
+  border: 1px solid #b9dfcb;
+  background: #effaf4;
+  color: #236a45;
+}
+
+.finance-governance__notice.is-error {
+  border: 1px solid #edc1c1;
+  background: #fff3f3;
+  color: #8e2929;
+}
+
+.finance-governance__metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.finance-governance__metric {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--fg-line);
+  border-radius: 15px;
+  background: var(--fg-card);
+  box-shadow: 0 7px 18px rgba(20, 35, 59, 0.055);
+}
+
+.finance-governance__metric span,
+.finance-governance__metric small {
+  display: block;
+  color: var(--fg-muted);
+}
+
+.finance-governance__metric span {
+  font-size: 0.77rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.finance-governance__metric strong {
+  display: block;
+  margin: 7px 0 4px;
+  overflow-wrap: anywhere;
+  font-size: 1.23rem;
+  color: var(--fg-navy);
+}
+
+.finance-governance__metric small {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.finance-governance__metric.is-warning { border-top: 4px solid var(--fg-gold); }
+.finance-governance__metric.is-danger { border-top: 4px solid var(--fg-danger); }
+.finance-governance__metric.is-critical { border-top: 4px solid var(--fg-critical); }
+
+.finance-governance__controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(220px, 0.8fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--fg-line);
+  border-radius: 16px;
+  background: var(--fg-card);
+}
+
+.finance-governance label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.finance-governance label > span {
+  color: #536177;
+  font-size: 0.79rem;
+  font-weight: 750;
+}
+
+.finance-governance input,
+.finance-governance select,
+.finance-governance textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #ccd5e2;
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: #fff;
+  color: var(--fg-ink);
+  outline: none;
+}
+
+.finance-governance input:focus,
+.finance-governance select:focus,
+.finance-governance textarea:focus {
+  border-color: var(--fg-blue);
+  box-shadow: 0 0 0 3px rgba(38, 105, 170, 0.12);
+}
+
+.finance-governance textarea {
+  min-height: 90px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.finance-governance__list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+  margin: 24px 0 12px;
+}
+
+.finance-governance__list-head h2,
+.finance-governance__list-head p {
+  margin: 0;
+}
+
+.finance-governance__list-head p {
+  margin-top: 3px;
+  color: var(--fg-muted);
+}
+
+.finance-governance__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+}
+
+.finance-governance__legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.finance-governance__legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--fg-blue);
+}
+
+.finance-governance__legend i.is-decision { background: #56855d; }
+.finance-governance__legend i.is-recovery { background: var(--fg-danger); }
+
+.finance-governance__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.finance-governance__card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--fg-line);
+  border-radius: 17px;
+  background: var(--fg-card);
+  box-shadow: 0 8px 22px rgba(20, 35, 59, 0.065);
+}
+
+.finance-governance__card header,
+.finance-governance__pending header,
+.finance-governance__timeline header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.finance-governance__card h3,
+.finance-governance__card p,
+.finance-governance__pending h3,
+.finance-governance__pending p {
+  margin: 0;
+}
+
+.finance-governance__card header small,
+.finance-governance__pending header small {
+  color: var(--fg-blue);
+  font-weight: 800;
+}
+
+.finance-governance__card h3 {
+  margin-top: 4px;
+  font-size: 1.05rem;
+}
+
+.finance-governance__card header p {
+  margin-top: 4px;
+  color: var(--fg-muted);
+  font-size: 0.84rem;
+}
+
+.finance-governance__pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.finance-governance__pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #edf1f6;
+  color: #48566d;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.finance-governance__pill.is-governance { background: #e9f1fb; color: #245f99; }
+.finance-governance__pill.is-pending,
+.finance-governance__pill.is-reschedule_pending,
+.finance-governance__pill.is-default_review_pending { background: #fff3d8; color: #805c17; }
+.finance-governance__pill.is-approved,
+.finance-governance__pill.is-monitored { background: #eaf7ef; color: #276e47; }
+.finance-governance__pill.is-rejected { background: #f2f3f5; color: #5c6370; }
+.finance-governance__pill.is-defaulted,
+.finance-governance__pill.is-defaulted_recovery,
+.finance-governance__pill.is-overdue { background: #fde9e9; color: #922d2d; }
+.finance-governance__pill.is-rescheduled { background: #eee9fb; color: #604195; }
+.finance-governance__pill.is-paid,
+.finance-governance__pill.is-completed { background: #e7f6ec; color: #236d43; }
+
+.finance-governance__figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.finance-governance__figures > div,
+.finance-governance__signals > div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 11px;
+  background: var(--fg-soft);
+}
+
+.finance-governance__figures span,
+.finance-governance__signals span {
+  display: block;
+  color: var(--fg-muted);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.finance-governance__figures strong,
+.finance-governance__signals strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  font-size: 0.91rem;
+}
+
+.finance-governance__figures .is-danger strong { color: var(--fg-danger); }
+
+.finance-governance__signals {
+  display: grid;
+  gap: 7px;
+}
+
+.finance-governance__signals small {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-muted);
+}
+
+.finance-governance__card footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+
+.finance-governance__empty,
+.finance-governance__loading {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 38px 20px;
+  border: 1px dashed #cbd4e0;
+  border-radius: 16px;
+  background: #fafbfc;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.finance-governance__empty span { font-size: 1.8rem; }
+.finance-governance__empty p { max-width: 570px; margin: 0; line-height: 1.5; }
+
+.finance-governance__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10020;
+  display: flex;
+  justify-content: flex-end;
+  padding: 18px;
+  background: rgba(8, 17, 31, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.finance-governance__drawer {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 94vw);
+  max-height: calc(100vh - 36px);
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.3);
+}
+
+.finance-governance__drawer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 21px 24px;
+  background: var(--fg-navy);
+  color: #fff;
+}
+
+.finance-governance__drawer-head h2,
+.finance-governance__drawer-head p {
+  margin: 0;
+}
+
+.finance-governance__drawer-head small { color: #f0cf86; font-weight: 800; }
+.finance-governance__drawer-head h2 { margin-top: 3px; font-size: 1.35rem; }
+.finance-governance__drawer-head p { margin-top: 4px; color: #d7e2ee; }
+
+.finance-governance__drawer-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.finance-governance__drawer-actions button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 99px;
+  background: rgba(255,255,255,0.14);
+  font-size: 1.45rem;
+}
+
+.finance-governance__tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--fg-line);
+  background: #fafbfc;
+}
+
+.finance-governance__tabs button {
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  background: transparent;
+  color: #526078;
+  box-shadow: none;
+}
+
+.finance-governance__tabs button.is-active {
+  background: #eaf1f9;
+  color: var(--fg-navy);
+}
+
+.finance-governance__drawer-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 22px;
+}
+
+.finance-governance__account-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.finance-governance__account-grid > div {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--fg-line);
+  border-radius: 12px;
+}
+
+.finance-governance__account-grid span,
+.finance-governance__account-grid strong {
+  display: block;
+}
+
+.finance-governance__account-grid span {
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+}
+
+.finance-governance__account-grid strong {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.finance-governance__boundary {
+  margin-top: 14px;
+  padding: 16px;
+  border-left: 4px solid var(--fg-gold);
+  border-radius: 10px;
+  background: #fff8e9;
+}
+
+.finance-governance__boundary p { margin: 6px 0 0; line-height: 1.55; color: #6c5a35; }
+
+.finance-governance__table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--fg-line);
+  border-radius: 13px;
+}
+
+.finance-governance table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.finance-governance th,
+.finance-governance td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #e8ecf1;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.finance-governance th {
+  background: #f3f6f9;
+  color: #526078;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.finance-governance td { font-size: 0.85rem; }
+
+.finance-governance__forms-grid,
+.finance-governance__recovery {
+  display: grid;
+  gap: 16px;
+}
+
+.finance-governance__form,
+.finance-governance__pending {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+  border: 1px solid var(--fg-line);
+  border-radius: 15px;
+  background: #fff;
+}
+
+.finance-governance__form.is-danger { border-left: 5px solid var(--fg-danger); }
+.finance-governance__form.is-critical { border-left: 5px solid var(--fg-critical); }
+
+.finance-governance__form header h3,
+.finance-governance__form header p {
+  margin: 0;
+}
+
+.finance-governance__form header p {
+  margin-top: 4px;
+  color: var(--fg-muted);
+  line-height: 1.45;
+}
+
+.finance-governance__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.finance-governance__preview {
+  padding: 13px;
+  border: 1px solid #cddced;
+  border-radius: 12px;
+  background: #f4f8fc;
+}
+
+.finance-governance__preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.finance-governance__preview span {
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #fff;
+  color: #3d5069;
+  font-size: 0.76rem;
+}
+
+.finance-governance__preview small {
+  display: block;
+  margin-top: 7px;
+  color: var(--fg-muted);
+}
+
+.finance-governance__pending {
+  border-left: 5px solid var(--fg-gold);
+  background: #fffdf8;
+}
+
+.finance-governance__pending dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.finance-governance__pending dl > div {
+  padding: 9px;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.finance-governance__pending dt { color: var(--fg-muted); font-size: 0.7rem; }
+.finance-governance__pending dd { margin: 3px 0 0; font-weight: 750; overflow-wrap: anywhere; }
+
+.finance-governance__decision {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid #eadfbf;
+}
+
+.finance-governance__decision textarea { min-height: 68px; }
+.finance-governance__role-note { color: #805c17; font-weight: 700; }
+
+.finance-governance__timeline {
+  display: grid;
+  gap: 0;
+}
+
+.finance-governance__timeline article {
+  position: relative;
+  margin-left: 12px;
+  padding: 0 0 20px 27px;
+  border-left: 2px solid #d7dee8;
+}
+
+.finance-governance__timeline article:last-child { border-left-color: transparent; }
+
+.finance-governance__timeline-marker {
+  position: absolute;
+  top: 2px;
+  left: -7px;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #fff;
+  border-radius: 99px;
+  background: var(--fg-blue);
+  box-shadow: 0 0 0 2px #c8d7e8;
+}
+
+.finance-governance__timeline header strong,
+.finance-governance__timeline header span {
+  display: block;
+}
+
+.finance-governance__timeline header span,
+.finance-governance__timeline small {
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+}
+
+.finance-governance__timeline p {
+  margin: 7px 0;
+  line-height: 1.5;
+}
+
+.finance-governance__timeline blockquote {
+  margin: 8px 0;
+  padding: 9px 11px;
+  border-left: 3px solid var(--fg-gold);
+  background: #fff8e9;
+  color: #675632;
+}
+
+@media (max-width: 1320px) {
+  .finance-governance__metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .finance-governance__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 960px) {
+  .finance-governance { padding: 16px; }
+  .finance-governance__hero { grid-template-columns: 1fr; }
+  .finance-governance__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-governance__account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-governance__pending dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-governance__decision { grid-template-columns: 1fr 1fr; }
+  .finance-governance__decision button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 700px) {
+  .finance-governance { padding: 11px; }
+  .finance-governance__hero { padding: 20px; border-radius: 17px; }
+  .finance-governance__metrics,
+  .finance-governance__grid,
+  .finance-governance__controls,
+  .finance-governance__form-grid,
+  .finance-governance__account-grid,
+  .finance-governance__pending dl,
+  .finance-governance__decision { grid-template-columns: 1fr; }
+  .finance-governance__controls button { width: 100%; }
+  .finance-governance__list-head { align-items: flex-start; flex-direction: column; }
+  .finance-governance__card header,
+  .finance-governance__pending header { flex-direction: column; }
+  .finance-governance__pill-row { justify-content: flex-start; }
+  .finance-governance__backdrop { padding: 0; }
+  .finance-governance__drawer { width: 100%; max-height: 100vh; height: 100vh; border-radius: 0; }
+  .finance-governance__drawer-head { padding: 17px; }
+  .finance-governance__drawer-body { padding: 15px; }
+  .finance-governance__tabs { padding-inline: 10px; }
+  .finance-governance__decision button { grid-column: auto; }
+}
+
+@media (max-width: 440px) {
+  .finance-governance__metrics { grid-template-columns: 1fr; }
+  .finance-governance__figures { grid-template-columns: 1fr; }
+  .finance-governance__hero h1 { font-size: 1.55rem; }
+  .finance-governance__drawer-head { gap: 10px; }
+  .finance-governance__drawer-actions { flex-direction: column-reverse; align-items: flex-end; }
+  .finance-governance__timeline article { padding-left: 22px; }
+}

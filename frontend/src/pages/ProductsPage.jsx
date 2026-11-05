@@ -248,7 +248,7 @@ export default function ProductsPage() {
     user?.selected_branch?.location ||
     "";
 
-  const canAddOrEdit = role === "admin" || role === "manager";
+  const canAddOrEdit = role === "admin" || role === "manager" || role === "auditor";
   const canDelete = role === "admin";
 
   const [products, setProducts] = useState([]);

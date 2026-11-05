@@ -1,0 +1,183 @@
+/* Chalin 03 Dark Mode V4 compatibility layer.
+   Plain selectors only. Loaded last so legacy card text/background declarations are overridden
+   without touching the light theme or image pixels. */
+
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] h1,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] h2,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] h3,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] h4,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] h5,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] h6,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] p,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] span,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] small,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] strong,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] b,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] label,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] legend,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] li,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] dt,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] dd,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] td,
+html[data-chalin-theme="dark"] .bwl-content [class*="card"] th {
+  color: #f4f8f6 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] h1,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] h2,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] h3,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] h4,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] h5,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] h6,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] p,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] span,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] small,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] strong,
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"] label {
+  color: #f4f8f6 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content [class*="card"],
+html[data-chalin-theme="dark"] .bwl-content [class*="panel"],
+html[data-chalin-theme="dark"] .bwl-content [class*="surface"],
+html[data-chalin-theme="dark"] .bwl-content [class*="tile"],
+html[data-chalin-theme="dark"] .bwl-content [class*="metric"],
+html[data-chalin-theme="dark"] .bwl-content [class*="stat"],
+html[data-chalin-theme="dark"] .bwl-content [class*="summary"],
+html[data-chalin-theme="dark"] .bwl-content [class*="popover"],
+html[data-chalin-theme="dark"] .bwl-content [class*="drawer"],
+html[data-chalin-theme="dark"] .bwl-content [class*="modal"],
+html[data-chalin-theme="dark"] .bwl-content [class*="dialog"] {
+  background-color: #111c17 !important;
+  border-color: #2b4036 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .section-card,
+html[data-chalin-theme="dark"] .bwl-content .stat-card,
+html[data-chalin-theme="dark"] .bwl-content .receipt-modal,
+html[data-chalin-theme="dark"] .bwl-content .receipt-preview,
+html[data-chalin-theme="dark"] .bwl-content .selected-sale-box,
+html[data-chalin-theme="dark"] .bwl-content .purchase-item-box,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__section,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__summary article,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__dialog,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__panel,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__metric,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__workflow article,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__inbox article,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__case-summary,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__payment-guide {
+  background-color: #111c17 !important;
+  color: #f4f8f6 !important;
+  border-color: #2b4036 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__facts div,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__summary article {
+  background-color: #17241e !important;
+  color: #f4f8f6 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__facts div span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__facts div strong,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric strong,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__summary article span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__summary article strong {
+  color: #f4f8f6 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card-head small,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__card-head p,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__facts span,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__metric span {
+  color: #9eafa6 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__machine-image,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__photo-preview,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__machine-image,
+html[data-chalin-theme="dark"] .bwl-content .equipment-image {
+  background-color: #17231e !important;
+  border-color: #355044 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__machine-image img,
+html[data-chalin-theme="dark"] .bwl-content .finance-simple__photo-preview img,
+html[data-chalin-theme="dark"] .bwl-content .installment-completion__machine-image img,
+html[data-chalin-theme="dark"] .bwl-content .equipment-image img {
+  filter: none !important;
+  opacity: 1 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content input,
+html[data-chalin-theme="dark"] .bwl-content select,
+html[data-chalin-theme="dark"] .bwl-content textarea,
+html[data-chalin-theme="dark"] .bwl-content [contenteditable="true"] {
+  background-color: #0d1713 !important;
+  color: #f4f8f6 !important;
+  border-color: #40584b !important;
+  -webkit-text-fill-color: #f4f8f6 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content input::placeholder,
+html[data-chalin-theme="dark"] .bwl-content textarea::placeholder {
+  color: #82958b !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content table,
+html[data-chalin-theme="dark"] .bwl-content tbody,
+html[data-chalin-theme="dark"] .bwl-content td {
+  background-color: #111c17 !important;
+  color: #f4f8f6 !important;
+  border-color: #2b4036 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content th {
+  background-color: #1d2d25 !important;
+  color: #ffffff !important;
+  border-color: #2b4036 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content a:not(.bwl-nav-item) {
+  color: #81e6a0 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .success-box,
+html[data-chalin-theme="dark"] .bwl-content [class*="success"] {
+  background-color: #123824 !important;
+  color: #a9f0bd !important;
+  border-color: #2f7d4d !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .warning-box,
+html[data-chalin-theme="dark"] .bwl-content [class*="warning"] {
+  background-color: #40320f !important;
+  color: #f5d889 !important;
+  border-color: #766026 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-content .error-box,
+html[data-chalin-theme="dark"] .bwl-content [class*="error"],
+html[data-chalin-theme="dark"] .bwl-content [class*="danger"] {
+  background-color: #461d24 !important;
+  color: #ffc2ca !important;
+  border-color: #803944 !important;
+}
+
+html[data-chalin-theme="dark"] .bwl-theme-control {
+  background-color: #14251c !important;
+  color: #f4d77e !important;
+  border-color: rgba(224,191,98,.36) !important;
+}
+
+@media (max-width: 760px) {
+  html[data-chalin-theme="dark"] .bwl-content [class*="card"],
+  html[data-chalin-theme="dark"] .bwl-content [class*="panel"] {
+    box-shadow: 0 10px 26px rgba(0,0,0,.28) !important;
+  }
+}

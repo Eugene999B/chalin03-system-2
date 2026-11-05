@@ -146,6 +146,10 @@ async function getInsertableColumnMetadata(connection, tableName) {
     .map((column) => ({
       name: column.Field,
       type: String(column.Type || "").toLowerCase(),
+      nullable: String(column.Null || "").toUpperCase() === "YES",
+      hasDefault: column.Default !== null,
+      defaultValue: column.Default,
+      extra: String(column.Extra || "").toLowerCase(),
     }))
     .filter((column) => isSafeIdentifier(column.name));
 }
@@ -304,18 +308,38 @@ async function validateBackupAgainstCurrentSchema(connection, backup, signingSec
     backup,
     currentIncludedTables: inventory.includedTables,
     currentTableColumns: tableColumns,
+    currentTableMetadata: metadata,
     currentSchemaMigrations: schemaMigrations,
     signingSecret,
     requireSignature: isProduction(),
+    allowAdditiveSchemaDrift: true,
   });
   return { ...report, inventory, metadata, schemaMigrations };
 }
 
-async function insertBackupRows(connection, tableName, rows, columnMetadata) {
+async function insertBackupRows(
+  connection,
+  tableName,
+  rows,
+  columnMetadata,
+  backupColumns
+) {
   if (!rows.length) return;
-  const columns = columnMetadata.map((column) => column.name);
+  const metadataByName = new Map(
+    columnMetadata.map((column) => [column.name, column])
+  );
+  const columns = (backupColumns || []).filter((column) =>
+    metadataByName.has(column)
+  );
+  if (!columns.length || columns.length !== (backupColumns || []).length) {
+    const error = new Error(
+      `Backup columns for ${tableName} cannot be mapped safely to the current schema.`
+    );
+    error.code = "BACKUP_COLUMN_MAPPING_FAILED";
+    throw error;
+  }
   const columnTypes = Object.fromEntries(
-    columnMetadata.map((column) => [column.name, column.type])
+    columns.map((column) => [column, metadataByName.get(column).type])
   );
   const escapedColumns = columns.map((column) => `\`${column}\``).join(", ");
   const placeholders = columns.map(() => "?").join(", ");
@@ -464,6 +488,9 @@ router.post(
         errors: report.errors,
         warnings: report.warnings,
         restore_tables: report.includedTables || [],
+        preserved_current_only_tables: report.currentOnlyTables || [],
+        additive_schema_compatibility_applied:
+          Boolean(report.additiveSchemaCompatibilityApplied),
         excluded_security_tables: report.inventory.ephemeralSecurityTables,
         total_record_count: report.totalRows || 0,
         checksum_sha256: req.validated.backup?.checksum_sha256 || null,
@@ -567,7 +594,8 @@ router.post(
           connection,
           tableName,
           req.validated.backup.tables[tableName],
-          report.metadata[tableName]
+          report.metadata[tableName],
+          req.validated.backup.table_columns?.[tableName] || []
         );
       }
 
@@ -594,6 +622,9 @@ router.post(
           backup_id: req.validated.backup.backup_id,
           manifest_version: req.validated.backup.version,
           restored_tables: report.includedTables,
+          preserved_current_only_tables: report.currentOnlyTables || [],
+          additive_schema_compatibility_applied:
+            Boolean(report.additiveSchemaCompatibilityApplied),
           cleared_security_tables: clearedSecurityTables,
           total_record_count: report.totalRows,
           checksum_sha256: req.validated.backup.checksum_sha256,
@@ -608,6 +639,9 @@ router.post(
         restore_scope: "full_system_all_businesses",
         backup_id: req.validated.backup.backup_id,
         restored_tables: report.includedTables,
+        preserved_current_only_tables: report.currentOnlyTables || [],
+        additive_schema_compatibility_applied:
+          Boolean(report.additiveSchemaCompatibilityApplied),
         restored_table_counts: restoredCounts,
         total_restored_records: report.totalRows,
         cleared_security_tables: clearedSecurityTables,

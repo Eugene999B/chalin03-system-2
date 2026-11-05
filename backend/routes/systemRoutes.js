@@ -9,6 +9,11 @@ const { APP_VERSION, BACKUP_MANIFEST_VERSION } = require("../config/version");
 const {
   delegatedAuthorityCounts,
 } = require("../services/delegatedAdministrationService");
+const customerMergeRecoveryRoutes = require("./customerMergeRecoveryRoutes");
+const equipmentFinancePublicVerificationRoutes = require("./equipmentFinancePublicVerificationRoutes");
+const {
+  MERGE_FREEZE_MESSAGE,
+} = require("./customerMergeRecoveryRoutes");
 
 const router = express.Router();
 const startedAt = Date.now();
@@ -192,8 +197,14 @@ function deploymentStatus() {
   ).trim();
 
   return {
-    provider: process.env.RAILWAY_ENVIRONMENT ? "railway" : "local_or_other",
-    railway_environment: process.env.RAILWAY_ENVIRONMENT || null,
+    provider:
+      process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME
+        ? "railway"
+        : "local_or_other",
+    railway_environment:
+      process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_ENVIRONMENT_NAME ||
+      null,
     railway_service: process.env.RAILWAY_SERVICE_NAME || null,
     commit_sha: commit || null,
     commit_short: commit ? commit.slice(0, 12) : null,
@@ -201,11 +212,33 @@ function deploymentStatus() {
   };
 }
 
+function sendMergeFreeze(_req, res) {
+  return res.status(423).json({
+    status: "error",
+    code: "CUSTOMER_MERGE_EMERGENCY_FREEZE",
+    merge_writes_frozen: true,
+    message: MERGE_FREEZE_MESSAGE,
+  });
+}
+
+// Emergency financial containment. These routes are mounted before the normal
+// customer merge router, so no new merge can be committed while the same-day
+// debt ownership review is active.
+router.post("/debt-customers/merge", requireAuth, sendMergeFreeze);
+router.post("/debt-customers/merge-preview", requireAuth, sendMergeFreeze);
+router.use("/customer-merge-recovery", customerMergeRecoveryRoutes);
+
+// Public, read-only verification for QR codes printed on Equipment Installment
+// Finance documents. The route reveals only masked verification facts and never
+// grants access to the underlying customer/KYC document.
+router.use("/finance-verification", equipmentFinancePublicVerificationRoutes);
+
 router.get("/health", (req, res) => {
   res.json({
     status: "success",
     service: "Chalin 03 Group Operations Platform",
     version: appVersion(),
+    deployment: deploymentStatus(),
     uptime_seconds: Math.floor(process.uptime()),
     time: new Date().toISOString(),
     request_id: req.requestId || null,
@@ -224,6 +257,7 @@ router.get("/readiness", async (req, res) => {
       status: ready ? "success" : "degraded",
       ready,
       version: appVersion(),
+      deployment: deploymentStatus(),
       checks: {
         database: db.reachable ? "ready" : "degraded",
         schema: db.missing_tables.length === 0 ? "ready" : "degraded",

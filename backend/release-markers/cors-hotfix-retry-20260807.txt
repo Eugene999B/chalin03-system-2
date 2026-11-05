@@ -1,0 +1,3 @@
+Retry marker for the 2026-08-07 trusted browser CORS hotfix.
+
+The first Railway deployment of production commit 2c7756eb2f54c2f016ece8f3dd0115040d6a0880 failed after the reviewed hotfix had already merged. This file is non-executable and exists only to trigger a clean backend rebuild without changing runtime behavior, Finance data, routes, schemas, authentication, or security policy.
