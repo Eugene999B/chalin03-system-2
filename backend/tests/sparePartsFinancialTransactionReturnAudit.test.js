@@ -50,7 +50,11 @@ test("Each historical receipt line reconciles exactly to source tax and discount
  assert.equal(data.receipts[0].review_status,"Reconciled");
 });
 test("Different recorded header totals remain an audit exception, never silently made to match",()=>{
- const data=buildSales([sale({total:99.99})]);
+ const data=buildSales([
+  sale({total:99.99}),
+  sale({total:99.99,source_line:2,product_id:5,product_name:"Hydraulic Hose",
+    line_total:66.67,unit_price:66.67,cost_price_at_sale:40})
+ ]);
  assert.equal(data.receipts[0].total_difference,0.01);
  assert.match(data.receipts[0].review_status,/Receipt header fails/);
  assert.ok(data.exceptions.some(x=>x.type==="Sale"));
