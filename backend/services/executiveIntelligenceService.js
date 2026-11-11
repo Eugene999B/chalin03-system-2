@@ -105,15 +105,24 @@ async function loadSparePartsIntelligence(from, to) {
   const expenses = expenseRows[0][0] || {};
   const products = productRows[0][0] || {};
   const debts = debtRows[0][0] || {};
-  const revenue = number(sales.sales_total);
+  const revenue = number(sales.pretax_sales);
+  const salesInvoiceTotal = number(sales.sales_total);
+  // amount_paid belongs to the CURRENT lifetime snapshot of those receipts,
+  // not to the selected date range's cash receipts.
   const payments = number(sales.payments_received);
   const costs = number(expenses.expenses_total);
-  const collectionRate = revenue > 0 ? (payments / revenue) * 100 : 0;
+  const costOfGoods = number(costRows[0][0]?.cost_of_goods);
+  const refundsOut = number(refundRows[0][0]?.refunds_out);
+  const returnedCostEstimate = number(refundRows[0][0]?.recovered_cost_estimate);
+  const estimatedContribution = Number(
+    (revenue-costOfGoods-costs-refundsOut+returnedCostEstimate).toFixed(2)
+  );
+  const collectionRate = salesInvoiceTotal > 0 ? (payments / salesInvoiceTotal) * 100 : 0;
   const outstandingSales = number(sales.sales_balance);
   const expenseRatio = revenue > 0 ? (costs / revenue) * 100 : 0;
-  const operatingMargin = revenue > 0 ? ((revenue - costs) / revenue) * 100 : 0;
+  const operatingMargin = revenue > 0 ? estimatedContribution / revenue * 100 : 0;
   const voidedValue = number(sales.voided_sales_value);
-  const voidedValueRate = revenue > 0 ? (voidedValue / revenue) * 100 : 0;
+  const voidedValueRate = salesInvoiceTotal > 0 ? (voidedValue / salesInvoiceTotal) * 100 : 0;
   const stockRetailAtRisk = number(products.low_stock_retail_value) + number(products.out_of_stock_count) * 0;
   const stockCostAtRisk = number(products.low_stock_cost_value);
   const stockPressureCount = number(products.low_stock_count) + number(products.out_of_stock_count);
@@ -153,10 +162,14 @@ async function loadSparePartsIntelligence(from, to) {
     payments_received: payments,
     outstanding_sales_balance: outstandingSales,
     uncollected_sales_value: outstandingSales,
-    collection_gap_rate: Number(Math.max(0, 100 - collectionRate).toFixed(1)),
+    collection_gap_rate: Number((salesInvoiceTotal>0 ? outstandingSales/salesInvoiceTotal*100 : 0).toFixed(1)),
     expenses: costs,
     expense_ratio: Number(expenseRatio.toFixed(1)),
-    estimated_operating_result: revenue - costs,
+    sales_invoice_total_including_tax: salesInvoiceTotal,
+    cost_of_goods: costOfGoods,
+    financial_refunds_in_period: refundsOut,
+    estimated_recovered_cost_from_refunds: returnedCostEstimate,
+    estimated_operating_result: estimatedContribution,
     operating_margin_proxy: Number(operatingMargin.toFixed(1)),
     collection_rate: Number(collectionRate.toFixed(1)),
     product_count: number(products.product_count),
@@ -322,14 +335,14 @@ function buildAudienceMessage(intelligence, audience) {
   const collectionGap = spare.uncollected_sales_value;
   const financeRiskCount = finance.critical_risk_accounts + finance.high_risk_accounts;
   const expenseSentence = spare.revenue > 0
-    ? `${money(spare.expenses)} recorded expenses consume ${spare.expense_ratio.toFixed(1)}% of sales, leaving ${money(spare.estimated_operating_result)} as the revenue-less-recorded-expense proxy.`
-    : `Recorded expenses are ${money(spare.expenses)} against no completed sales value in the selected period.`;
+    ? `Historic item cost ${money(spare.cost_of_goods)}, active expenses ${money(spare.expenses)}, financial refunds ${money(spare.financial_refunds_in_period)} and estimated recovered stock cost ${money(spare.estimated_recovered_cost_from_refunds)} give ${money(spare.estimated_operating_result)} indicative operating contribution. This is not audited profit; stock-only credit adjustments and final tax treatment need reconciliation.`
+    : `Active expenses are ${money(spare.expenses)} against no completed pre-tax sales in the selected period.`;
   const stockSentence = `${spare.out_of_stock_count} zero-stock and ${spare.low_stock_count} low-stock product(s); ${money(spare.stock_retail_at_low_stock)} of retail value remains in low-stock items.`;
   const financeSentence = `${finance.active_accounts} active Finance agreement(s) currently carry ${money(finance.outstanding_amount)} outstanding; ${money(finance.overdue_amount)} is overdue across ${finance.overdue_accounts} account(s), with ${financeRiskCount} high/critical-risk account(s).`;
   const lines = [
     `${audienceName}: ${range.from} to ${range.to}.`,
     "Scope: Spare Parts + Installment Finance.",
-    `Sales evidence: ${money(spare.revenue)} across ${spare.sales_count} completed sale(s); ${money(spare.payments_received)} collected (${spare.collection_rate.toFixed(1)}%), leaving ${money(collectionGap)} uncollected. ${expenseSentence}`,
+    `Sales evidence: ${money(spare.revenue)} pre-tax sales across ${spare.sales_count} completed sale(s); ${money(spare.payments_received)} paid to date on that sale cohort (${spare.collection_rate.toFixed(1)}% of original VAT-inclusive receipts), with ${money(collectionGap)} currently outstanding. These payments are lifetime values, not all cash received in this reporting period. ${expenseSentence}`,
     `Operating evidence: ${stockSentence} ${spare.voided_sales_count} voided sale(s) account for ${money(spare.voided_sales_value)} recorded value (${spare.voided_sales_value_rate.toFixed(1)}% of completed sales).`,
     `Finance evidence: ${financeSentence} ${money(finance.due_next_7_days)} is due within 7 days (${finance.due_next_7_days_share.toFixed(1)}% of current outstanding).`,
   ];
