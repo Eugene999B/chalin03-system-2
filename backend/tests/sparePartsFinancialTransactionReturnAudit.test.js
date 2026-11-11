@@ -134,7 +134,9 @@ test("Legacy paid receipts without original payment channel evidence are highlig
  assert.equal(result.summary.receipts_missing_original_payment_allocations,1);
  assert.equal(result.summary.lifetime_paid_on_unallocated_receipts,33.33);
  assert.equal(result.summary.original_sale_collections_in_period,0);
- assert.ok(result.financialExceptions.some(x=>/allocation missing/.test(x.issue)));
+ assert.equal(result.summary.receipts_with_unknown_initial_channel,1);
+ assert.equal(result.summary.unknown_original_channel_amount,33.33);
+ assert.ok(result.financialExceptions.some(x=>/UNKNOWN channel/.test(x.issue)));
 });
 
 test("Fully credit sale later paid has no missing original tender or false cash exception",()=>{
