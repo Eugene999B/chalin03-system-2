@@ -184,9 +184,9 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
     const s=outcome.summary;
     const expenseAudit=[];
     const byExpenseId=new Map(expenses.map(e=>[Number(e.id),e]));
+    const reversedExpenseIds=new Set(expenses.filter(e=>Number(e.is_reversal)).map(e=>Number(e.reversal_of_expense_id)));
     for(const e of expenses){
-      if(Number(e.is_voided) && !expenses.some(r=>Number(r.is_reversal) &&
-        Number(r.reversal_of_expense_id)===Number(e.id))){
+      if(Number(e.is_voided) && !reversedExpenseIds.has(Number(e.id))){
         expenseAudit.push({type:"Expense",date:e.date,receipt:"",source_id:Number(e.id),
           item:e.category,issue:"Voided expense has no matching reversal in this reporting range",
           amount:e.amount});
@@ -225,6 +225,8 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
       ["Total currently-active operating expenses (GHS)",s.active_operating_expenses],
       ["Sale-period receipt value LESS return-period refunds (GHS)",s.sales_receipt_value_less_period_refunds],
       ["Indicative margin bridge AFTER returns and expenses (GHS)",s.period_profit_bridge_estimate],
+      ["Completed receipts with no original payment-channel allocation",s.receipts_missing_original_payment_allocations],
+      ["LIFETIME paid snapshot on unallocated receipts (NOT initial cash) (GHS)",s.lifetime_paid_on_unallocated_receipts],
       ["Verified payment allocations on sales IN PERIOD (GHS)",s.original_sale_collections_in_period],
       ["Debt repayments actually collected IN PERIOD (GHS)",s.debt_collections_in_period],
       ["Customer money IN minus refunds OUT (GHS)",s.customer_money_in_less_refunds],
@@ -294,6 +296,7 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
       {measure:"CASH BASIS",value:"Cash/Bank/MoMo refunds are actual money OUT; stock-only returns are NOT money OUT."},
       {measure:"COST BASIS",value:"Returned stock cost is estimated using the original sale's quantity-weighted historical item cost."},
       {measure:"PAID BASIS",value:"sales.amount_paid is lifetime, not initial collection. Payment allocations are initial sale receipts."},
+      {measure:"MISSING LEGACY ALLOCATIONS",value:"A completed receipt can have recorded lifetime payment but no original payment-channel row. It is highlighted in Review Exceptions; do not assume Cash, MoMo or Bank without source evidence. Verified receipt inflows may be incomplete until historical payment evidence is reconciled."},
       {measure:"PROFIT BASIS",value:"Indicative period bridge: sold-item pretax margin minus actual refunds plus estimated recovered cost minus effective expenses. Refund tax allocation may require manual accounting adjustment."},
       {measure:"PERIOD CUT-OFF",value:"Returns from an older sale still appear when returned during the selected date window. Sales from previous periods are not rebooked."},
       {measure:"REPORT LIMITS",value:"Read-only source evidence; other corrections, liabilities, credit adjustments, external payment confirmation and tax returns need independent reconciliation."}
