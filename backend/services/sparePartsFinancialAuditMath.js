@@ -152,7 +152,7 @@ function buildReturns(rows) {
       sale_id:Number(r.sale_id||0),product_id:Number(r.product_id||0),
       item:r.historical_product_name||r.product_name||"[Missing historical item]",
       customer:r.customer_name||"Walk-in",
-      qty:units,return_type:isRefund?"Cash/financial refund":"Stock-only return",
+      qty:units,return_type:isRefund?"Financial refund":"Stock-only return",
       cash_involved:method==="cash"&&refund>0?"YES":"NO",
       refund_method:method,refund_amount:refund,cash_refund:method==="cash"?refund:0,
       momo_refund:method==="momo"?refund:0,bank_refund:method==="bank"?refund:0,
@@ -206,7 +206,8 @@ function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
   const activeSales=sales.receipts.filter(x=>x.active);
   const validLines=sales.lines.filter(x=>!x.voided&&!x.missing_item);
   const moneySum=(rows,key)=>dec(sumCents(rows,key));
-  const refunds=returned.lines.filter(x=>x.refund_amount>0);
+  const financialReturns=returned.lines.filter(x=>x.return_type==="Financial refund");
+  const refunds=financialReturns.filter(x=>x.refund_amount>0);
   const refundByChannel={cash:moneySum(refunds,"cash_refund"),momo:moneySum(refunds,"momo_refund"),
     bank:moneySum(refunds,"bank_refund"),other:moneySum(refunds,"other_refund")};
   const cashReturnTotal=moneySum(refunds,"refund_amount");
@@ -272,8 +273,8 @@ function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
     historical_cost:saleCost,original_gross_profit:bookedProfit,
     return_count:returned.lines.length,
     returned_units:returned.lines.reduce((s,x)=>s+x.qty,0),
-    financial_return_count:refunds.length,
-    stock_only_return_count:returned.lines.length-refunds.length,
+    financial_return_count:financialReturns.length,
+    stock_only_return_count:returned.lines.length-financialReturns.length,
     total_refunded:cashReturnTotal,
     recovered_refund_stock_cost_estimate:returnsCost,
     cash_refunded:refundByChannel.cash,momo_refunded:refundByChannel.momo,
