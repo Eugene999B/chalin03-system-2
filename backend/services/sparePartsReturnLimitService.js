@@ -9,17 +9,26 @@
  * Stock-only returns do not constitute a customer cash refund.
  */
 const toCents = value => {
-  const amount=Number(value);
-  if(!Number.isFinite(amount)||amount<0||amount>9e12)
-    throw new Error("Financial return source has an invalid amount.");
-  return Math.round(amount*100);
+  const text=String(value ?? "0").trim();
+  // A financial receipt is a 2-decimal amount. Reject fractional pesewas
+  // rather than letting Number.toFixed silently change what was recorded.
+  if(!/^(?:0|[1-9]\\d{0,12})(?:\\.\\d{1,2})?$/.test(text))
+    throw new Error("Financial return source has an invalid 2-decimal amount.");
+  const [whole,fraction=""]=text.split(".");
+  const cents=Number(whole)*100+Number(fraction.padEnd(2,"0"));
+  if(!Number.isSafeInteger(cents))
+    throw new Error("Financial return value exceeds safe accounting precision.");
+  return cents;
 };
 const asMoney = c => Number((c/100).toFixed(2));
 const roundedShare=(part,whole,total)=>{
   if(!Number.isSafeInteger(part)||!Number.isSafeInteger(whole)||
       !Number.isSafeInteger(total)||whole<=0||part<0||total<0)
     throw new Error("Historical return item value cannot be reconciled.");
-  return Math.round(total*part/whole);
+  const rounded=(BigInt(total)*BigInt(part)+BigInt(whole)/2n)/BigInt(whole);
+  const asNumber=Number(rounded);
+  if(!Number.isSafeInteger(asNumber))throw new Error("Financial allocation exceeds safe precision.");
+  return asNumber;
 };
 function calculateReturnLimit({
   saleSubtotal,saleDiscount,saleTax,saleTotal,
