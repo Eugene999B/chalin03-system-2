@@ -1752,7 +1752,7 @@ This disables login, revokes all active sessions and assigned access, and preser
                       </select>
 
                       <div className="users-role-grid">
-                        {Object.entries(roleCards).map(([roleKey, roleInfo]) => (
+                        {Object.entries(roleCards).filter(([roleKey]) => roleKey !== "staff").map(([roleKey, roleInfo]) => (
                           <button
                             key={roleKey}
                             type="button"
