@@ -153,8 +153,14 @@ function deriveAccount(row, today = ghanaToday()) {
   const daysUntilDue = nextDueDate ? dayDifference(today, nextDueDate) : null;
   const outstanding = Number(row.outstanding_balance || 0);
   const calculatedOverdue = Number(row.calculated_overdue_amount || 0);
-  const storedOverdue = Number(row.overdue_amount || 0);
-  const overdue = Math.max(calculatedOverdue, storedOverdue, 0);
+  // This approved-credit read model already computes overdue from active
+  // schedule evidence on every request. A stored overdue cache can be stale
+  // after a new due date, payment, waiver or reschedule; taking MAX of that
+  // cache and the derived value may materially OVERSTATE customer arrears.
+  // Never let the displayed overdue amount exceed actual outstanding.
+  const overdue = Number.isFinite(calculatedOverdue)
+    ? Math.max(0, Math.min(Math.max(outstanding, 0), calculatedOverdue))
+    : 0;
 
   let status = String(row.agreement_status || "active");
   if (!["cancelled", "defaulted"].includes(status)) {
