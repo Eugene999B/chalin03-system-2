@@ -225,7 +225,12 @@ router.get(
           si.product_id,
           si.product_name,
           SUM(si.quantity) AS quantity_sold,
-          SUM(si.line_total) AS revenue
+          ROUND(SUM(
+            CASE WHEN s.subtotal > 0
+              THEN si.line_total * (s.subtotal - s.discount_amount) / s.subtotal
+              ELSE 0 END
+          ), 2) AS revenue,
+          ROUND(SUM(si.line_total), 2) AS gross_before_discount
          FROM sale_items si
          INNER JOIN sales s ON si.sale_id = s.id
          WHERE s.branch_id = ?
