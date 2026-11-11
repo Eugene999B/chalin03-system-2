@@ -12,7 +12,7 @@ const toCents = value => {
   const text=String(value ?? "0").trim();
   // A financial receipt is a 2-decimal amount. Reject fractional pesewas
   // rather than letting Number.toFixed silently change what was recorded.
-  if(!/^(?:0|[1-9]\\d{0,12})(?:\\.\\d{1,2})?$/.test(text))
+  if(!/^(?:0|[1-9]\d{0,12})(?:\.\d{1,2})?$/.test(text))
     throw new Error("Financial return source has an invalid 2-decimal amount.");
   const [whole,fraction=""]=text.split(".");
   const cents=Number(whole)*100+Number(fraction.padEnd(2,"0"));
