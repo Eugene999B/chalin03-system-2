@@ -207,8 +207,18 @@ function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
   const perSale=new Map();
   for(const a of allocations)perSale.set(Number(a.sale_id),(perSale.get(Number(a.sale_id))||0)+cents(a.amount));
   const allocationExceptions=[];
+  let missingOriginalAllocation=0;
+  let missingAllocationLifetimePaid=0;
   for(const sale of activeSales) {
     const allocated=perSale.get(Number(sale.sale_id))||0;
+    if(allocated===0 && cents(sale.paid_lifetime)>0) {
+      missingOriginalAllocation++;
+      missingAllocationLifetimePaid+=cents(sale.paid_lifetime);
+      allocationExceptions.push({type:"Payment",date:sale.date,
+        receipt:sale.receipt,source_id:sale.sale_id,item:"Payment allocations",
+        issue:"Original payment channel allocation missing. The lifetime paid amount cannot establish which channel was used when this sale occurred.",
+        amount:sale.paid_lifetime});
+    }
     if(allocated>cents(sale.total)) allocationExceptions.push({type:"Payment",date:sale.date,
       receipt:sale.receipt,source_id:sale.sale_id,item:"Payment allocations",
       issue:"Initial channel allocations exceed receipt total",amount:dec(allocated-cents(sale.total))});
@@ -236,6 +246,8 @@ function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
     sales_receipt_value_less_period_refunds:money(saleInvoice-cashReturnTotal),
     period_profit_bridge_estimate:money(bookedProfit-cashReturnTotal+returnsCost-expenseAmount),
     active_operating_expenses:expenseAmount,
+    receipts_missing_original_payment_allocations:missingOriginalAllocation,
+    lifetime_paid_on_unallocated_receipts:dec(missingAllocationLifetimePaid),
     original_sale_collections_in_period:initialCollected,
     debt_collections_in_period:laterDebtCollections,
     customer_money_in_less_refunds:money(initialCollected+laterDebtCollections-cashReturnTotal),
