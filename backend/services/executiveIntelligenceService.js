@@ -44,11 +44,12 @@ async function tableExists(tableName) {
 }
 
 async function loadSparePartsIntelligence(from, to) {
-  const [salesRows, expenseRows, productRows, debtRows] = await Promise.all([
+  const [salesRows, expenseRows, productRows, debtRows, costRows, refundRows] = await Promise.all([
     pool.query(
       `SELECT
          COUNT(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN 1 END) AS sales_count,
          COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN total ELSE 0 END),0) AS sales_total,
+          COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN total - tax_amount ELSE 0 END),0) AS pretax_sales,
          COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN amount_paid ELSE 0 END),0) AS payments_received,
          COALESCE(SUM(CASE WHEN is_voided = 0 AND sale_status = 'completed' THEN balance ELSE 0 END),0) AS sales_balance,
          COALESCE(SUM(CASE WHEN is_voided = 1 THEN 1 ELSE 0 END),0) AS voided_sales_count,
@@ -57,7 +58,7 @@ async function loadSparePartsIntelligence(from, to) {
       [from, to]
     ),
     pool.query(
-      `SELECT COUNT(*) AS expense_count, COALESCE(SUM(amount),0) AS expenses_total FROM expenses WHERE expense_date BETWEEN ? AND ?`,
+      `SELECT COUNT(*) AS expense_count, COALESCE(SUM(amount),0) AS expenses_total FROM expenses WHERE expense_date BETWEEN ? AND ? AND COALESCE(is_voided,0)=0 AND COALESCE(is_reversal,0)=0`,
       [from, to]
     ),
     pool.query(
@@ -77,6 +78,26 @@ async function loadSparePartsIntelligence(from, to) {
        WHERE balance > 0 AND due_date IS NOT NULL AND due_date < CURDATE()
          AND LOWER(COALESCE(status,'active')) NOT IN ('paid','void','cancelled')`,
       []
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(si.quantity * si.cost_price_at_sale),0) AS cost_of_goods
+       FROM sale_items si
+       INNER JOIN sales s ON s.id=si.sale_id
+       WHERE COALESCE(s.is_voided,0)=0 AND s.sale_status='completed'
+         AND DATE(s.created_at) BETWEEN ? AND ?`,
+      [from,to]
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(r.refund_amount),0) AS refunds_out,
+              COALESCE(SUM(r.quantity*COALESCE(hist.historical_unit_cost,0)),0) AS recovered_cost_estimate
+       FROM returns r
+       LEFT JOIN (
+         SELECT sale_id,product_id,
+                SUM(quantity*cost_price_at_sale)/NULLIF(SUM(quantity),0) AS historical_unit_cost
+         FROM sale_items GROUP BY sale_id,product_id
+       ) hist ON hist.sale_id=r.sale_id AND hist.product_id=r.product_id
+       WHERE r.return_type='refund' AND DATE(r.returned_at) BETWEEN ? AND ?`,
+      [from,to]
     ),
   ]);
 
