@@ -51,10 +51,16 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
     const [saleRaw]=await connection.query([
       "SELECT s.id AS sale_id,s.created_at,s.receipt_number,s.customer_name,s.payment_type,",
       "s.sale_status,s.is_voided,s.subtotal,s.discount_amount,s.tax_amount,s.total,",
-      "s.amount_paid,s.balance,staff.full_name AS staff_name,",
+      "s.amount_paid,s.balance,COALESCE(debt_hist.debt_paid_lifetime,0) AS debt_payments_lifetime,",
+      "staff.full_name AS staff_name,",
       "si.id AS source_line,si.product_id,si.product_name,si.quantity,",
       "si.unit_price,si.line_total,si.cost_price_at_sale",
       "FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id",
+      "LEFT JOIN (SELECT d.branch_id,d.sale_id,SUM(dp.amount) AS debt_paid_lifetime",
+      "FROM debts d INNER JOIN debt_payments dp ON dp.debt_id=d.id",
+      "AND dp.branch_id=d.branch_id WHERE d.sale_id IS NOT NULL",
+      "GROUP BY d.branch_id,d.sale_id) debt_hist",
+      "ON debt_hist.sale_id=s.id AND debt_hist.branch_id=s.branch_id",
       "LEFT JOIN users staff ON staff.id=s.staff_id",
       "WHERE s.branch_id = ?"+saleDates,
       "ORDER BY s.created_at DESC,s.id DESC,si.id ASC LIMIT 20001"
@@ -226,11 +232,14 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
       ["Total currently-active operating expenses (GHS)",s.active_operating_expenses],
       ["Sale-period receipt value LESS return-period refunds (GHS)",s.sales_receipt_value_less_period_refunds],
       ["Indicative margin bridge AFTER returns and expenses (GHS)",s.period_profit_bridge_estimate],
-      ["Completed receipts with no original payment-channel allocation",s.receipts_missing_original_payment_allocations],
+      ["Completed receipts with no allocation rows and a positive LIFETIME paid balance",s.receipts_missing_original_payment_allocations],
+      ["Receipts with reconstructed tender but unknown original channel",s.receipts_with_unknown_initial_channel],
+      ["Reconstructed sale-day customer receipts (GHS)",s.reconstructed_original_sale_collections],
+      ["Reconstructed original tender with UNKNOWN channel (GHS)",s.unknown_original_channel_amount],
       ["LIFETIME paid snapshot on unallocated receipts (NOT initial cash) (GHS)",s.lifetime_paid_on_unallocated_receipts],
       ["Verified payment allocations on sales IN PERIOD (GHS)",s.original_sale_collections_in_period],
       ["Debt repayments actually collected IN PERIOD (GHS)",s.debt_collections_in_period],
-      ["Customer money IN minus refunds OUT (GHS)",s.customer_money_in_less_refunds],
+      ["Reconstructed customer receipts IN minus refunds OUT (GHS)",s.customer_money_in_less_refunds],
       ["Issues needing investigation",warnings.length]
     ];
     const groups=[label("name","Group",2),label("lines","Count"),
@@ -278,6 +287,8 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
       label("allocated_total","Allocated Lines Incl Tax"),
       label("total_difference","Difference vs Receipt"),
       label("paid_lifetime","Paid (Lifetime Snapshot)"),
+      label("debt_payments_lifetime","Debt Payments (Lifetime)"),
+      label("initial_paid_reconstructed","Reconstructed Initial Tender"),
       label("balance_lifetime","Outstanding (Lifetime Snapshot)"),
       label("review_status","Reconciliation",3)
     ];
@@ -299,7 +310,7 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
       {measure:"CASH BASIS",value:"Cash/Bank/MoMo refunds are actual money OUT; stock-only returns are NOT money OUT."},
       {measure:"COST BASIS",value:"Returned stock cost is estimated using the original sale's quantity-weighted historical item cost."},
       {measure:"PAID BASIS",value:"sales.amount_paid is lifetime, not initial collection. Payment allocations are initial sale receipts."},
-      {measure:"MISSING LEGACY ALLOCATIONS",value:"A completed receipt can have recorded lifetime payment but no original payment-channel row. It is highlighted in Review Exceptions; do not assume Cash, MoMo or Bank without source evidence. Verified receipt inflows may be incomplete until historical payment evidence is reconciled."},
+      {measure:"MISSING LEGACY ALLOCATIONS",value:"A paid-lifetime receipt may have zero original tender and later debt repayments. Reconstruct original tender as current lifetime paid minus all recorded debt repayments; only a positive unallocated original tender is an investigation gap. Channel is UNKNOWN unless an actual allocation row exists."},
       {measure:"PROFIT BASIS",value:"Indicative period bridge: sold-item pretax margin minus actual refunds plus estimated recovered cost minus effective expenses. Refund tax allocation may require manual accounting adjustment."},
       {measure:"PERIOD CUT-OFF",value:"Returns from an older sale still appear when returned during the selected date window. Sales from previous periods are not rebooked."},
       {measure:"REPORT LIMITS",value:"Read-only source evidence; other corrections, liabilities, credit adjustments, external payment confirmation and tax returns need independent reconciliation."}
