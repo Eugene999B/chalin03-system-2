@@ -6,6 +6,12 @@ const path = require("node:path");
 
 const { activationCandidate } = require("../routes/equipmentFinanceAgreementActivationRoutes");
 
+// The original hard-coded due date expired on 2026-11-11, making an otherwise
+// valid activation fixture fail as calendar time passed. Use a future due date
+// for the success case while keeping explicit historical-date rejection cases.
+const futureFirstDueDate = new Date(Date.now() + 14 * 86400000)
+  .toISOString().slice(0, 10);
+
 const baseCandidate = {
   id: 28, application_number: "ECAPP-028",
   application_status: "approved",
@@ -13,7 +19,7 @@ const baseCandidate = {
   quotation_id: 66, quotation_number: "EIO-066", quotation_status: "approved",
   quoted_total: 1000, proposed_deposit: 200, financed_amount: 800,
   proposed_frequency: "monthly", proposed_installment_count: 4,
-  proposed_first_due_date: "2026-11-10", proposed_periodic_amount: 200,
+  proposed_first_due_date: futureFirstDueDate, proposed_periodic_amount: 200,
   proposed_non_working_day_rule: "exact",
   asset_id: 8, asset_exists: 8, asset_is_active: 1,
   operational_purpose: "sale_only", sale_status: "available",
@@ -112,7 +118,7 @@ test("MySQL DATETIME objects do not create false historical-due warnings", () =>
   const result = activationCandidate({
     ...baseCandidate,
     created_at: new Date("2026-10-26T12:00:00.000Z"),
-    proposed_first_due_date: "2026-11-10",
+    proposed_first_due_date: futureFirstDueDate,
   });
   assert.equal(result.activation_advisories.some((warning) => /predates the application/.test(warning)), false);
 });

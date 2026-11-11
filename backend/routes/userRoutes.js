@@ -809,6 +809,167 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
   }
 });
 
+// PATCH /api/users/:id/role
+// Change only the staff role. Identity, password, stock history and existing
+// branch assignments are preserved; a role change revokes stale sessions.
+router.patch("/:id/role", requireAuth, requireRole("admin"), async (req, res) => {
+  const targetUserId = Number(req.params.id);
+  const newRole = cleanText(req.body?.role).toLowerCase();
+  const assignableRoles = new Set(["admin", "manager", "cashier", "auditor", "staff"]);
+  if (!Number.isSafeInteger(targetUserId) || targetUserId < 1 ||
+      !assignableRoles.has(newRole)) {
+    return res.status(400).json({
+      status: "error",
+      message: "Select a valid user and role: Admin, Manager, Cashier, Auditor or Staff.",
+    });
+  }
+  // Role changes on yourself can accidentally remove the ability to manage
+  // the system. The original owner cannot be demoted through this feature.
+  if (targetUserId === Number(req.user?.id)) {
+    return res.status(403).json({
+      status: "error",
+      message: "You cannot change your own role. Ask another authorised administrator.",
+    });
+  }
+
+  const connection = await pool.getConnection();
+  let committed = false;
+  try {
+    await connection.beginTransaction();
+    const [users] = await connection.query(
+      `SELECT id, username, full_name, role, default_branch_id,
+              can_access_all_branches, primary_workspace_code,
+              category_assignment_status, is_active
+       FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [targetUserId]
+    );
+    const target = users[0];
+    if (!target) {
+      await connection.rollback();
+      return res.status(404).json({ status: "error", message: "User not found." });
+    }
+    if (isOriginalSystemAdministrator(target) ||
+        (targetUserId === SYSTEM_ADMIN_ID &&
+         String(target.username || "").toLowerCase() === SYSTEM_ADMIN_USERNAME)) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        message: "The original System Administrator role is protected.",
+      });
+    }
+    if (String(target.primary_workspace_code || "") !== "spare_parts" ||
+        String(target.category_assignment_status || "") !== "assigned") {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "This account belongs to a separate or protected workspace. Use its dedicated staff management page.",
+      });
+    }
+    const [requesters] = await connection.query(
+      "SELECT id, username, role, is_active FROM users WHERE id = ? LIMIT 1",
+      [req.user.id]
+    );
+    const requester = requesters[0];
+    if (!requester || !Number(requester.is_active) ||
+        String(requester.role).toLowerCase() !== "admin") {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error", message: "An active authorised administrator is required.",
+      });
+    }
+    const originalOwner = isOriginalSystemAdministrator(requester);
+    // Privilege escalation to Administrator is reserved for the owner, even if
+    // another administrator can manage ordinary staff roles.
+    if (newRole === "admin" && !originalOwner) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        message: "Only the original System Administrator may assign the Admin role.",
+      });
+    }
+    const previousRole = String(target.role || "").toLowerCase();
+    if (previousRole === newRole) {
+      await connection.rollback();
+      return res.json({
+        status: "success", changed: false,
+        message: "The user already has that role.",
+        user: normalizeUserRow(await getUserById(targetUserId)),
+      });
+    }
+    if (previousRole === "admin" &&
+        Number(target.is_active) === 1 &&
+        (await activeAdminCountExcluding(connection, targetUserId)) < 1) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error", message: "At least one active Administrator must remain.",
+      });
+    }
+
+    // When demoting an administrator, remove its all-store grant and limit
+    // legacy branch rows to the existing default store. Otherwise keep all
+    // branch assignments unchanged: role editing must not silently move staff.
+    const demotingAdmin = previousRole === "admin" && newRole !== "admin";
+    if (demotingAdmin && (!Number.isSafeInteger(Number(target.default_branch_id)) ||
+                           Number(target.default_branch_id) < 1)) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "Assign a default store to this Administrator before changing the role.",
+      });
+    }
+    await connection.query(
+      `UPDATE users SET role = ?,
+              can_access_all_branches = CASE WHEN ? THEN FALSE ELSE can_access_all_branches END,
+              token_version = token_version + 1
+       WHERE id = ?`,
+      [newRole, demotingAdmin ? 1 : 0, targetUserId]
+    );
+    if (demotingAdmin) {
+      await connection.query(
+        `DELETE FROM user_branch_access
+         WHERE user_id = ? AND branch_id <> ?`,
+        [targetUserId, target.default_branch_id]
+      );
+    }
+    await connection.query(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, 'CHANGE_USER_ROLE', ?)`,
+      [getBranchId(req), req.user.id,
+       `Role changed for user ${target.username} (ID ${targetUserId}): ${previousRole} -> ${newRole}`]
+    );
+    await connection.commit();
+    committed = true;
+
+    // token_version was incremented transactionally, so old tokens cannot
+    // retain permissions even if secondary session cleanup has a problem.
+    try {
+      await revokeAllUserSessions(targetUserId, "role_changed");
+    } catch (cleanupError) {
+      console.error("Role updated; session cleanup warning:", cleanupError);
+    }
+    const updatedUser = await getUserById(targetUserId);
+    return res.json({
+      status: "success",
+      changed: true,
+      message: `Role changed from ${previousRole} to ${newRole}. The user must sign in again.`,
+      user: normalizeUserRow(updatedUser),
+    });
+  } catch (error) {
+    if (!committed) {
+      try { await connection.rollback(); } catch (_rollbackError) {}
+    }
+    console.error("Change user role error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: committed
+        ? "Role was saved, but confirmation could not be loaded. Refresh the user list to verify."
+        : "Could not change the role. No user changes were saved.",
+    });
+  } finally {
+    connection.release();
+  }
+});
+
 // PUT /api/users/:id
 router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
   const connection = await pool.getConnection();
