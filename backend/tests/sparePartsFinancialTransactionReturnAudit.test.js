@@ -114,6 +114,17 @@ test("Source-of-truth cash receipts include debt collections separately; lifetim
  assert.equal(summary.customer_money_in_less_refunds,33.33);
  assert.equal(summary.active_operating_expenses,5);
 });
+test("Legacy paid receipts without original payment channel evidence are highlighted, not assumed cash",()=>{
+ const sales=buildSales([sale({
+   subtotal:33.33,discount_amount:0,tax_amount:0,total:33.33,amount_paid:33.33,balance:0
+ })]);
+ const result=summaryOf(sales,buildReturns([]),[],[],[]);
+ assert.equal(result.summary.receipts_missing_original_payment_allocations,1);
+ assert.equal(result.summary.lifetime_paid_on_unallocated_receipts,33.33);
+ assert.equal(result.summary.original_sale_collections_in_period,0);
+ assert.ok(result.financialExceptions.some(x=>/allocation missing/.test(x.issue)));
+});
+
 test("Report service uses quantity-weighted historical cost and excludes voided/reversal expenses",()=>{
  const report=file("routes/reportRoutes.js");
  assert.match(report,/SUM\(si\.cost_price_at_sale \* si\.quantity\) \/ NULLIF\(SUM\(si\.quantity\), 0\)/);
