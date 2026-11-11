@@ -109,7 +109,12 @@ function buildSales(raw) {
       total_difference:active?dec(lineInvoice-headerInvoice):0,
       subtotal_difference:active?dec(lineSubtotal-headerSubtotal):0,
       pretax_sales:active?dec(headerSubtotal-headerDiscount):0,
-      paid_lifetime:money(s.amount_paid),balance_lifetime:money(s.balance),
+      paid_lifetime:money(s.amount_paid),
+      debt_payments_lifetime:money(s.debt_payments_lifetime),
+      initial_paid_reconstructed:active
+        ? money(Math.max(0,Math.min(Number(s.total||0),
+          Number(s.amount_paid||0)-Number(s.debt_payments_lifetime||0)))):0,
+      balance_lifetime:money(s.balance),
       cost:active?dec(lineCost):0,
       review_status:errors.length?errors.join("; "):"Reconciled",
       active};
@@ -221,15 +226,33 @@ function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
   const allocationExceptions=[];
   let missingOriginalAllocation=0;
   let missingAllocationLifetimePaid=0;
+  let receiptsWithUnknownInitialChannel=0;
+  let unknownOriginalChannelCents=0;
+  let reconstructedOriginalSaleCents=0;
   for(const sale of activeSales) {
     const allocated=perSale.get(Number(sale.sale_id))||0;
+    const initial=cents(sale.initial_paid_reconstructed);
+    reconstructedOriginalSaleCents+=initial;
+    if(initial>allocated) {
+      unknownOriginalChannelCents+=initial-allocated;
+      receiptsWithUnknownInitialChannel++;
+      allocationExceptions.push({type:"Payment",date:sale.date,
+        receipt:sale.receipt,source_id:sale.sale_id,item:"Original tender",
+        issue:"Initial tender reconstructed from lifetime payments minus debt collections exceeds preserved channel allocations; unallocated portion has UNKNOWN channel.",
+        amount:dec(initial-allocated)});
+    }
+    if(allocated>initial) {
+      allocationExceptions.push({type:"Payment",date:sale.date,
+        receipt:sale.receipt,source_id:sale.sale_id,item:"Original tender",
+        issue:"Recorded payment-channel allocations exceed reconstructed original tender; verify debt posting history and corrections.",
+        amount:dec(allocated-initial)});
+    }
     if(allocated===0 && cents(sale.paid_lifetime)>0) {
       missingOriginalAllocation++;
       missingAllocationLifetimePaid+=cents(sale.paid_lifetime);
-      allocationExceptions.push({type:"Payment",date:sale.date,
-        receipt:sale.receipt,source_id:sale.sale_id,item:"Payment allocations",
-        issue:"Original payment channel allocation missing. The lifetime paid amount cannot establish which channel was used when this sale occurred.",
-        amount:sale.paid_lifetime});
+      // No allegation of missing cash: this is only a lifetime-paid receipt
+      // without an original channel row, often a fully credit sale later paid.
+      // A genuine missing initial tender is flagged separately above.
     }
     if(allocated>cents(sale.total)) allocationExceptions.push({type:"Payment",date:sale.date,
       receipt:sale.receipt,source_id:sale.sale_id,item:"Payment allocations",
@@ -259,10 +282,13 @@ function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
     period_profit_bridge_estimate:money(bookedProfit-cashReturnTotal+returnsCost-expenseAmount),
     active_operating_expenses:expenseAmount,
     receipts_missing_original_payment_allocations:missingOriginalAllocation,
+    receipts_with_unknown_initial_channel:receiptsWithUnknownInitialChannel,
+    unknown_original_channel_amount:dec(unknownOriginalChannelCents),
+    reconstructed_original_sale_collections:dec(reconstructedOriginalSaleCents),
     lifetime_paid_on_unallocated_receipts:dec(missingAllocationLifetimePaid),
     original_sale_collections_in_period:initialCollected,
     debt_collections_in_period:laterDebtCollections,
-    customer_money_in_less_refunds:money(initialCollected+laterDebtCollections-cashReturnTotal),
+    customer_money_in_less_refunds:money(dec(reconstructedOriginalSaleCents)+laterDebtCollections-cashReturnTotal),
     audit_exception_count:financialExceptions.length,
   },refundByChannel,financialExceptions,validLines,activeSales};
 }
