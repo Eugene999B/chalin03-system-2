@@ -645,7 +645,32 @@ router.post(
         });
       }
 
-      const estimatedReturnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
+      let refundLimit;
+      try {
+        refundLimit = calculateReturnLimit({
+          saleSubtotal: sales[0].subtotal,
+          saleDiscount: sales[0].discount_amount,
+          saleTax: sales[0].tax_amount,
+          saleTotal: sales[0].total,
+          historicalItemGross: saleItem.historical_item_gross,
+          soldQuantity: quantitySold,
+          returnQuantity: cleanQuantity,
+          previouslyRefundedForItem: previousReturns[0].previously_refunded,
+        });
+      } catch (valuationError) {
+        if (cleanReturnType === "refund") {
+          await connection.rollback();
+          return res.status(409).json({
+            status: "error",
+            code: "ORIGINAL_RECEIPT_RECONCILIATION_REQUIRED",
+            message: "The original item price, discount or tax requires reconciliation before paying out a refund.",
+          });
+        }
+        // Unreconciled legacy prices must not prevent physically returning stock.
+        // A stock-only return can never authorise a cash payout.
+        refundLimit = null;
+      }
+      const estimatedReturnAmount = Number(refundLimit?.estimated_return_amount || 0);
       const finalRefundAmount = cleanReturnType === "refund"
         ? Number(cleanRefundAmount.toFixed(2))
         : 0;
@@ -653,11 +678,12 @@ router.post(
         ? requestedRefundMethod
         : "none";
 
-      if (finalRefundAmount - estimatedReturnAmount > 0.009) {
+      if (cleanReturnType === "refund" &&
+          finalRefundAmount - Number(refundLimit?.maximum_refund || 0) > 0.009) {
         await connection.rollback();
         return res.status(400).json({
           status: "error",
-          message: `Refund amount cannot exceed the returned item value of GHS ${estimatedReturnAmount.toFixed(2)}.`,
+          message: `Refund amount cannot exceed the returned item value of GHS ${Number(refundLimit?.maximum_refund || 0).toFixed(2)}.`,
         });
       }
 
