@@ -42,6 +42,14 @@ const roleCards = {
     description:
       "Can manage stock, reports, expenses, purchases, returns and business operations.",
   },
+  staff: {
+    title: "Staff",
+    subtitle: "General operational access",
+    badge: "Staff Access",
+    icon: "👤",
+    tone: "default",
+    description: "Staff access for separately assigned workspaces.",
+  },
   cashier: {
     title: "Cashier",
     subtitle: "Sales and daily work",
@@ -189,6 +197,8 @@ export default function UsersSettingsPage() {
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [offboardingUserId, setOffboardingUserId] = useState("");
+  const [roleDraftByUser, setRoleDraftByUser] = useState({});
+  const [savingRoleUserId, setSavingRoleUserId] = useState(null);
   const [activePanel, setActivePanel] = useState("create");
 
   const selectedBranchId = Number(
@@ -552,6 +562,43 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function changeUserRole(user) {
+    const nextRole = String(roleDraftByUser[user.id] || user.role).toLowerCase();
+    const currentRole = String(user.role || "").toLowerCase();
+    if (nextRole === currentRole) return;
+    const originalOwner = isOriginalSystemAdministrator(currentUser);
+    if (Number(user.id) === Number(currentUser?.id) ||
+        isOriginalSystemAdministrator(user) ||
+        (nextRole === "admin" && !originalOwner) ||
+        String(user.primary_workspace_code || "") !== "spare_parts" ||
+        String(user.category_assignment_status || "") !== "assigned") {
+      setError("This account or role requires separate administrator approval.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Change ${user.full_name} (@${user.username}) from ${getRoleLabel(currentRole)} to ${getRoleLabel(nextRole)}?\n\nTheir permissions will change, and they must sign in again.` +
+      (currentRole === "admin" ? "\n\nDemoting an administrator removes their all-store access." : "")
+    );
+    if (!confirmed) return;
+    setSavingRoleUserId(user.id);
+    setError("");
+    setMessage("");
+    try {
+      const result = await axiosClient.patch(`/users/${user.id}/role`, { role: nextRole });
+      setRoleDraftByUser(previous => {
+        const updated = { ...previous };
+        delete updated[user.id];
+        return updated;
+      });
+      await loadUsers();
+      setMessage(result.data?.message || "Role updated. The user must sign in again.");
+    } catch (err) {
+      setError(err.response?.data?.message || "Role update failed. Refresh the account to confirm its role.");
+    } finally {
+      setSavingRoleUserId(null);
+    }
+  }
+
   async function toggleUserStatus(userId) {
     setMessage("");
     setError("");
@@ -806,6 +853,33 @@ This disables login, revokes all active sessions and assigned access, and preser
           color: rgba(255, 255, 255, 0.74);
           line-height: 1.6;
           font-weight: 750;
+        }
+
+        .users-role-change {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 7px;
+          border: 1px solid #cfdfd9;
+          background: #f3f9f6;
+          border-radius: 10px;
+          padding: 7px;
+        }
+        .users-role-change label { font-size: 11px; font-weight: 800; color: #31584d; }
+        .users-role-change select {
+          min-width: 112px;
+          max-width: 180px;
+          padding: 8px 10px;
+          border: 1px solid #b7cdc4;
+          border-radius: 7px;
+          color: #17392e;
+          background: white;
+          font-size: 13px;
+        }
+        .users-role-change button:disabled { opacity: .5; cursor: not-allowed; }
+        @media (max-width: 700px) {
+          .users-role-change { width: 100%; }
+          .users-role-change select { flex: 1; max-width: none; min-width: 100px; }
         }
 
         .users-hero-actions,
@@ -2116,6 +2190,14 @@ This disables login, revokes all active sessions and assigned access, and preser
                     {users.map((user) => {
                       const roleInfo = getRoleCard(user.role);
                       const protectedAdmin = isOriginalSystemAdministrator(user);
+                      const canChangeRole =
+                        !protectedAdmin &&
+                        Number(user.id) !== Number(currentUser?.id) &&
+                        String(user.primary_workspace_code || "") === "spare_parts" &&
+                        String(user.category_assignment_status || "") === "assigned";
+                      const nextRole = String(roleDraftByUser[user.id] || user.role).toLowerCase();
+                      const roleChanged = nextRole !== String(user.role || "").toLowerCase();
+                      const isRoleSaving = Number(savingRoleUserId) === Number(user.id);
 
                       return (
                         <tr key={user.id}>
@@ -2180,6 +2262,38 @@ This disables login, revokes all active sessions and assigned access, and preser
 
                           <td>
                             <div className="users-actions-row">
+                              {canChangeRole && (
+                                <div className="users-role-change">
+                                  <label htmlFor={`role-for-user-${user.id}`}>Change Role</label>
+                                  <select
+                                    id={`role-for-user-${user.id}`}
+                                    value={nextRole}
+                                    aria-label={`Change role for ${user.full_name}`}
+                                    disabled={isRoleSaving}
+                                    onChange={event => setRoleDraftByUser(previous => ({
+                                      ...previous, [user.id]: event.target.value,
+                                    }))}
+                                  >
+                                    {Object.entries(roleCards)
+                                      .filter(([role]) =>
+                                        role !== "admin" ||
+                                        isOriginalSystemAdministrator(currentUser) ||
+                                        String(user.role).toLowerCase() === "admin"
+                                      )
+                                      .map(([role, card]) =>
+                                        <option key={role} value={role}>{card.title}</option>
+                                      )}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    className="users-small-button success"
+                                    disabled={!roleChanged || isRoleSaving}
+                                    onClick={() => changeUserRole(user)}
+                                  >
+                                    {isRoleSaving ? "Updating…" : "Save Role"}
+                                  </button>
+                                </div>
+                              )}
                               {canCurrentUserResetAccounts() &&
                                 !protectedAdmin && (
                                   <button
