@@ -115,7 +115,7 @@ test("Refund review shows historical discount-and-tax-adjusted item value",()=>{
 });
 
 test("Source-of-truth cash receipts include debt collections separately; lifetime sale paid is not re-counted",()=>{
- const sales=buildSales([sale({subtotal:33.33,discount_amount:0,tax_amount:0,total:33.33,amount_paid:33.33,balance:0})]);
+ const sales=buildSales([sale({subtotal:33.33,discount_amount:0,tax_amount:0,total:33.33,amount_paid:33.33,balance:0,debt_payments_lifetime:20})]);
  const returned=buildReturns([ret({return_type:"stock_only",refund_amount:0,refund_method:"none"})]);
  const summary=summaryOf(sales,returned,[{sale_id:101,payment:"cash",amount:13.33}],
    [{date:"2026-11-11",payment:"bank",amount:20}],
@@ -137,6 +137,18 @@ test("Legacy paid receipts without original payment channel evidence are highlig
  assert.ok(result.financialExceptions.some(x=>/allocation missing/.test(x.issue)));
 });
 
+test("Fully credit sale later paid has no missing original tender or false cash exception",()=>{
+ const saleEvidence=buildSales([sale({
+   subtotal:33.33,discount_amount:0,tax_amount:0,total:33.33,amount_paid:33.33,
+   debt_payments_lifetime:33.33,balance:0
+ })]);
+ assert.equal(saleEvidence.receipts[0].initial_paid_reconstructed,0);
+ const outcome=summaryOf(saleEvidence,buildReturns([]),[],[{amount:33.33}],[]);
+ assert.equal(outcome.summary.receipts_missing_original_payment_allocations,1);
+ assert.equal(outcome.summary.receipts_with_unknown_initial_channel,0);
+ assert.equal(outcome.summary.customer_money_in_less_refunds,33.33);
+ assert.equal(outcome.financialExceptions.length,0);
+});
 test("Report service uses quantity-weighted historical cost and excludes voided/reversal expenses",()=>{
  const report=file("routes/reportRoutes.js");
  assert.match(report,/SUM\(si\.cost_price_at_sale \* si\.quantity\) \/ NULLIF\(SUM\(si\.quantity\), 0\)/);
@@ -157,7 +169,7 @@ test("Transaction report selects original sale price and independent dated retur
   /si\.cost_price_at_sale/,/si\.id AS source_line/,/s\.branch_id = \?/,
   /dateFilter\("r","returned_at"/,/LEFT JOIN sales s ON s\.id=r\.sale_id/,
   /GROUP BY si\.sale_id,si\.product_id/,/dateFilter\("dp","paid_at"/,
-  /sale_payment_allocations/,/expense_date >= \?/,/START TRANSACTION READ ONLY/,
+  /sale_payment_allocations/,/debt_paid_lifetime/,/expense_date >= \?/,/START TRANSACTION READ ONLY/,
   /Returns Detail/,/Refund Channels/,/Debt Collections/,/Receipt Reconciliation/,
   /Review Exceptions/,/LIMIT 20001/
  ])assert.match(source,expected);
