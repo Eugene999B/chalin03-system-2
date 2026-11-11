@@ -9,6 +9,7 @@ const { markClosingStale } = require("../services/dailyClosingSecurityService");
 const { listActiveReturnReservations } = require("../services/operationalApprovalService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateReturnCreateRequest } = require("../validation/financialRequestValidators");
+const { calculateReturnLimit } = require("../services/sparePartsReturnLimitService");
 
 const router = express.Router();
 
@@ -221,9 +222,9 @@ router.get(
       const [items] = await pool.query(
         `SELECT
           si.product_id,
-          si.product_name,
+          MAX(si.product_name) AS product_name,
           SUM(si.quantity) AS quantity_sold,
-          MAX(si.unit_price) AS unit_price,
+          SUM(si.line_total) AS historical_item_gross,
           SUM(si.line_total) AS line_total,
           COALESCE((
             SELECT SUM(r.quantity)
@@ -517,6 +518,10 @@ router.post(
           sale_status,
           is_voided,
           amount_paid,
+          subtotal,
+          discount_amount,
+          tax_amount,
+          total,
           created_at
          FROM sales
          WHERE id = ?
@@ -558,7 +563,7 @@ router.post(
          WHERE si.sale_id = ?
          AND s.branch_id = ?
          AND si.product_id = ?
-         GROUP BY si.product_id, si.product_name
+         GROUP BY si.product_id
          LIMIT 1`,
         [cleanSaleId, branchId, cleanProductId]
       );
@@ -616,7 +621,8 @@ router.post(
       }
 
       const [previousReturns] = await connection.query(
-        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity
+        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity,
+                COALESCE(SUM(CASE WHEN return_type = 'refund' THEN refund_amount ELSE 0 END),0) AS previously_refunded
          FROM returns
          WHERE branch_id = ?
          AND sale_id = ?
@@ -639,7 +645,32 @@ router.post(
         });
       }
 
-      const estimatedReturnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
+      let refundLimit;
+      try {
+        refundLimit = calculateReturnLimit({
+          saleSubtotal: sales[0].subtotal,
+          saleDiscount: sales[0].discount_amount,
+          saleTax: sales[0].tax_amount,
+          saleTotal: sales[0].total,
+          historicalItemGross: saleItem.historical_item_gross,
+          soldQuantity: quantitySold,
+          returnQuantity: cleanQuantity,
+          previouslyRefundedForItem: previousReturns[0].previously_refunded,
+        });
+      } catch (valuationError) {
+        if (cleanReturnType === "refund") {
+          await connection.rollback();
+          return res.status(409).json({
+            status: "error",
+            code: "ORIGINAL_RECEIPT_RECONCILIATION_REQUIRED",
+            message: "The original item price, discount or tax requires reconciliation before paying out a refund.",
+          });
+        }
+        // Unreconciled legacy prices must not prevent physically returning stock.
+        // A stock-only return can never authorise a cash payout.
+        refundLimit = null;
+      }
+      const estimatedReturnAmount = Number(refundLimit?.estimated_return_amount || 0);
       const finalRefundAmount = cleanReturnType === "refund"
         ? Number(cleanRefundAmount.toFixed(2))
         : 0;
@@ -647,11 +678,12 @@ router.post(
         ? requestedRefundMethod
         : "none";
 
-      if (finalRefundAmount - estimatedReturnAmount > 0.009) {
+      if (cleanReturnType === "refund" &&
+          finalRefundAmount - Number(refundLimit?.maximum_refund || 0) > 0.009) {
         await connection.rollback();
         return res.status(400).json({
           status: "error",
-          message: `Refund amount cannot exceed the returned item value of GHS ${estimatedReturnAmount.toFixed(2)}.`,
+          message: `Refund amount cannot exceed the returned item value of GHS ${Number(refundLimit?.maximum_refund || 0).toFixed(2)}.`,
         });
       }
 
