@@ -47,7 +47,7 @@ test("summary date filter scopes returns by their returned_at date, not the orig
 });
 
 test("refund totals are not multiplied by multiple matching sale item rows", () => {
-  assert.match(route, /SELECT MAX\(si\.cost_price_at_sale\)/);
+  assert.match(route, /SELECT SUM\(si\.cost_price_at_sale \* si\.quantity\) \/ NULLIF\(SUM\(si\.quantity\), 0\)/);
   assert.doesNotMatch(
     route.slice(route.indexOf("const [refundRows]"), route.indexOf("const debtParams")),
     /LEFT JOIN sale_items si/,
