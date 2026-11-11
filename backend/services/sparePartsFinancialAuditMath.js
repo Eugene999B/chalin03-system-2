@@ -93,7 +93,7 @@ function buildSales(raw) {
     const lineInvoice=linePretax+cents(s.tax_amount);
     const headerSubtotal=cents(s.subtotal),headerDiscount=cents(s.discount_amount);
     const headerTax=cents(s.tax_amount),headerInvoice=cents(s.total);
-    const lineCost=sumCents(lines.filter(x=>x.sale_id===saleId && !x.missing_item),"cost");
+    const lineCost=sourceLines.reduce((sum,src)=>sum+Math.round(cents(src.cost_price_at_sale)*Number(src.quantity||0)),0);
     const errors=[];
     if(!sourceLines.length)errors.push("Missing sale item source lines");
     if(lineSubtotal!==headerSubtotal)errors.push("Item line totals differ from receipt subtotal");
@@ -185,7 +185,7 @@ function groupRows(rows,field,fields) {
     return group;
   }).sort((a,b)=>(b.net||b.refund_amount||0)-(a.net||a.refund_amount||0));
 }
-function summaryOf(sales,returned,allocations=[],debts=[]) {
+function summaryOf(sales,returned,allocations=[],debts=[],expenses=[]) {
   const activeSales=sales.receipts.filter(x=>x.active);
   const validLines=sales.lines.filter(x=>!x.voided&&!x.missing_item);
   const moneySum=(rows,key)=>dec(sumCents(rows,key));
@@ -202,6 +202,8 @@ function summaryOf(sales,returned,allocations=[],debts=[]) {
   const bookedProfit=money(salePretax-saleCost);
   const initialCollected=moneySum(allocations,"amount");
   const laterDebtCollections=moneySum(debts,"amount");
+  const activeExpenses=expenses.filter(x=>!Number(x.is_voided||0)&&!Number(x.is_reversal||0));
+  const expenseAmount=moneySum(activeExpenses,"amount");
   const perSale=new Map();
   for(const a of allocations)perSale.set(Number(a.sale_id),(perSale.get(Number(a.sale_id))||0)+cents(a.amount));
   const allocationExceptions=[];
@@ -232,7 +234,8 @@ function summaryOf(sales,returned,allocations=[],debts=[]) {
     cash_refunded:refundByChannel.cash,momo_refunded:refundByChannel.momo,
     bank_refunded:refundByChannel.bank,other_refunded:refundByChannel.other,
     sales_receipt_value_less_period_refunds:money(saleInvoice-cashReturnTotal),
-    period_profit_bridge_estimate:money(bookedProfit-cashReturnTotal+returnsCost),
+    period_profit_bridge_estimate:money(bookedProfit-cashReturnTotal+returnsCost-expenseAmount),
+    active_operating_expenses:expenseAmount,
     original_sale_collections_in_period:initialCollected,
     debt_collections_in_period:laterDebtCollections,
     customer_money_in_less_refunds:money(initialCollected+laterDebtCollections-cashReturnTotal),
