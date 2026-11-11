@@ -129,6 +129,14 @@ function buildReturns(rows) {
     const historicalUnitCost=soldUnits>0?money(recordedCost/soldUnits):0;
     const recoveredCost=soldUnits>0?money(units*recordedCost/soldUnits):0;
     const originalGross=soldUnits>0?money(units*originalItemGross/soldUnits):0;
+    // Net historical item value is a control estimate, not proof of the
+    // customer's refund entitlement. Historical receipt-wide discount/tax
+    // is distributed by original item gross value.
+    const subtotal=Number(r.sale_subtotal||0);
+    const discount=Number(r.sale_discount||0);
+    const tax=Number(r.sale_tax||0);
+    const estimatedNetRefundable=soldUnits>0 && subtotal>0
+      ?money(originalGross*(1-discount/subtotal+tax/subtotal)):0;
     const kind=String(r.return_type||"stock_only").toLowerCase();
     const isRefund=kind==="refund";
     const method=isRefund?String(r.refund_method||"none").toLowerCase():"none";
@@ -145,6 +153,8 @@ function buildReturns(rows) {
       momo_refund:method==="momo"?refund:0,bank_refund:method==="bank"?refund:0,
       other_refund:method==="other"?refund:0,
       original_item_gross_estimate:originalGross,
+      estimated_net_refundable:estimatedNetRefundable,
+      refund_vs_estimated_value:isRefund?money(refund-estimatedNetRefundable):0,
       historical_unit_cost_estimate:historicalUnitCost,
       recovered_stock_cost_estimate:recoveredCost,
       return_revenue_effect:isRefund?refund:0,
@@ -159,6 +169,8 @@ function buildReturns(rows) {
     if(!r.receipt_number) risks.push("Original sale missing");
     if(units<=0) risks.push("Invalid returned quantity");
     if(isRefund&&refund<=0) risks.push("Financial return has no positive refund");
+    if(isRefund&&soldUnits>0&&subtotal>0&&refund>estimatedNetRefundable+0.01)
+      risks.push("Actual refund exceeds pro-rata historical item amount including allocated tax; check contractual adjustment");
     if(isRefund&&!["cash","momo","bank","other"].includes(method)) risks.push("Unrecognised refund payment method");
     if(isRefund&&!r.approved_by_name) risks.push("No independent approver identity");
     if(!isRefund&&cents(r.refund_amount)!==0) risks.push("Stock-only return has refund money");
