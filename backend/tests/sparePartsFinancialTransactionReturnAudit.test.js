@@ -102,6 +102,18 @@ test("Historical return cost uses original quantity-weighted cost, not MAX unit 
  assert.equal(one.lines[0].historical_unit_cost_estimate,25);
  assert.equal(one.lines[0].recovered_stock_cost_estimate,50);
 });
+test("Refund review shows historical discount-and-tax-adjusted item value",()=>{
+ const refund=buildReturns([ret({
+   quantity:1,sold_quantity:2,historical_sale_gross:100,
+   sale_subtotal:100,sale_discount:20,sale_tax:8,refund_amount:50
+ })]);
+ const line=refund.lines[0];
+ assert.equal(line.original_item_gross_estimate,50);
+ assert.equal(line.estimated_net_refundable,44);
+ assert.equal(line.refund_vs_estimated_value,6);
+ assert.match(line.review_status,/exceeds pro-rata historical item amount/);
+});
+
 test("Source-of-truth cash receipts include debt collections separately; lifetime sale paid is not re-counted",()=>{
  const sales=buildSales([sale({subtotal:33.33,discount_amount:0,tax_amount:0,total:33.33,amount_paid:33.33,balance:0})]);
  const returned=buildReturns([ret({return_type:"stock_only",refund_amount:0,refund_method:"none"})]);
@@ -131,6 +143,7 @@ test("Report service uses quantity-weighted historical cost and excludes voided/
  assert.doesNotMatch(report,/SELECT MAX\(si\.cost_price_at_sale\)/);
  assert.match(report,/COALESCE\(e\.is_voided, 0\) = 0/);
  assert.match(report,/COALESCE\(e\.is_reversal, 0\) = 0/);
+ assert.match(report,/THEN si\.line_total \* \(s\.subtotal - s\.discount_amount\) \/ s\.subtotal/);
 });
 test("Daily closing gross before discount excludes recorded tax",()=>{
  const source=file("routes/dailyClosingRoutes.js");
