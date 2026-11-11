@@ -79,11 +79,11 @@ const REPORTS = [
   },
   {
     key: "transaction-history",
-    title: "Transaction History · Line-by-Line Forensic Workbook",
+    title: "Transaction History, Returns & Reconciliation",
     category: "Sales",
     icon: "🔬",
     endpoint: "/exports/transaction-history",
-    description: "Excel investigation of each historical receipt line: date, item, unit price, quantity, amount, cost, discount allocation, gross profit, margin, source line and exceptions. Separate daily, staff, product and payment-channel analyses.",
+    description: "Investigate every sale line and reconcile receipt totals, taxes, discounts, historical costs and profit. Includes each stock-only or cash/MoMo/bank return, actual refund amounts, customer debt collections, expenses, payment-channel analyses and flagged calculation differences. Date range applies to each event on its recorded date.",
     dateFilter: true,
     featured: true,
   },

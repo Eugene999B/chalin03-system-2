@@ -93,7 +93,7 @@ test("Historical transaction export uses recorded source-line prices and branch 
  assert.match(source,/si.cost_price_at_sale/);
  assert.match(source,/si.id AS source_line/);
  assert.match(source,/s.branch_id = \?/);
- assert.match(source,/DATE\(s.created_at\)/);
+ assert.match(source,/dateFilter\("s","created_at",from,to,salesParams\)/);
  assert.match(source,/EXCEPTIONS|Review Exceptions/);
  assert.match(source,/LIMIT 20001/);
 });
