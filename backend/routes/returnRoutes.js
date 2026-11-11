@@ -9,6 +9,7 @@ const { markClosingStale } = require("../services/dailyClosingSecurityService");
 const { listActiveReturnReservations } = require("../services/operationalApprovalService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateReturnCreateRequest } = require("../validation/financialRequestValidators");
+const { calculateReturnLimit } = require("../services/sparePartsReturnLimitService");
 
 const router = express.Router();
 
@@ -221,9 +222,9 @@ router.get(
       const [items] = await pool.query(
         `SELECT
           si.product_id,
-          si.product_name,
+          MAX(si.product_name) AS product_name,
           SUM(si.quantity) AS quantity_sold,
-          MAX(si.unit_price) AS unit_price,
+          SUM(si.line_total) AS historical_item_gross,
           SUM(si.line_total) AS line_total,
           COALESCE((
             SELECT SUM(r.quantity)
@@ -517,6 +518,10 @@ router.post(
           sale_status,
           is_voided,
           amount_paid,
+          subtotal,
+          discount_amount,
+          tax_amount,
+          total,
           created_at
          FROM sales
          WHERE id = ?
@@ -558,7 +563,7 @@ router.post(
          WHERE si.sale_id = ?
          AND s.branch_id = ?
          AND si.product_id = ?
-         GROUP BY si.product_id, si.product_name
+         GROUP BY si.product_id
          LIMIT 1`,
         [cleanSaleId, branchId, cleanProductId]
       );
@@ -616,7 +621,8 @@ router.post(
       }
 
       const [previousReturns] = await connection.query(
-        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity
+        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity,
+                COALESCE(SUM(CASE WHEN return_type = 'refund' THEN refund_amount ELSE 0 END),0) AS previously_refunded
          FROM returns
          WHERE branch_id = ?
          AND sale_id = ?
