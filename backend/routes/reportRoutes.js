@@ -150,6 +150,8 @@ router.get(
           COALESCE(SUM(e.amount), 0) AS total_expenses
          FROM expenses e
          WHERE e.branch_id = ?
+         AND COALESCE(e.is_voided, 0) = 0
+         AND COALESCE(e.is_reversal, 0) = 0
          ${expenseDateFilter}`,
         expenseParams
       );
@@ -167,7 +169,7 @@ router.get(
             COALESCE(SUM(
               CASE WHEN r.return_type = 'refund' AND r.refund_amount > 0
                 THEN COALESCE(
-                  (SELECT MAX(si.cost_price_at_sale)
+                  (SELECT SUM(si.cost_price_at_sale * si.quantity) / NULLIF(SUM(si.quantity), 0)
                      FROM sale_items si
                     WHERE si.sale_id = r.sale_id
                       AND si.product_id = r.product_id),
@@ -223,7 +225,12 @@ router.get(
           si.product_id,
           si.product_name,
           SUM(si.quantity) AS quantity_sold,
-          SUM(si.line_total) AS revenue
+          ROUND(SUM(
+            CASE WHEN s.subtotal > 0
+              THEN si.line_total * (s.subtotal - s.discount_amount) / s.subtotal
+              ELSE 0 END
+          ), 2) AS revenue,
+          ROUND(SUM(si.line_total), 2) AS gross_before_discount
          FROM sale_items si
          INNER JOIN sales s ON si.sale_id = s.id
          WHERE s.branch_id = ?
@@ -476,7 +483,7 @@ router.get(
           net_profit: netProfit,
           total_refunds: totalRefunds,
           recovered_return_cost: recoveredReturnCost,
-          profit_basis: "Completed sales excluding voids; less recorded historical cost, dated expenses and refunds returned within the selected period, plus dated returned stock cost; excludes unrecorded costs.",
+          profit_basis: "Completed sales excluding voids; less historical sold-item cost, active non-voided expenses and dated financial refunds, plus quantity-weighted historical returned cost. Indicative profit; refunded tax and other unrecorded costs need accounting reconciliation.",
 
           outstanding_debts: Number(debtSummary.outstanding_debts || 0),
           active_debt_count: Number(debtSummary.active_debt_count || 0),

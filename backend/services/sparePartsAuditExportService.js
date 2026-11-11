@@ -56,8 +56,17 @@ async function sendAuditExport(res, config) {
           ["Selected store", branch], ["Generated", date]]
           .map(([label, value]) => [csvValue(label), csvValue(value)].join(",")).join("\r\n") + "\r\n\r\n"
       : "";
-    const result = "\uFEFF" + preamble + columns.map(x=>csvValue(x.label)).join(",") + "\r\n" +
-      data.map(row => row.map(csvValue).join(",")).join("\r\n") + "\r\n";
+    const csvTable = (cols, records) => [
+      cols.map(col=>csvValue(col.label)).join(","),
+      ...records.map(record=>cols.map(col=>csvValue(record[col.key])).join(","))
+    ].join("\r\n");
+    // A single CSV cannot contain multiple worksheets: clearly label each
+    // independent section instead of hiding returns, refunds or exceptions.
+    const extras = sections.map(section =>
+      "\r\n" + csvValue("SECTION: "+section.name) + "\r\n" +
+      csvTable(section.columns,section.rows)
+    ).join("\r\n");
+    const result = "\uFEFF" + preamble + csvTable(columns,rows) + "\r\n" + extras + "\r\n";
     return res.status(200).send(result);
   }
   if (mode === "xlsx") {
@@ -104,43 +113,92 @@ async function sendAuditExport(res, config) {
   }
   if (mode === "doc" || mode === "word") {
     const metaRows=meta.map(([a,b])=>"<tr><th>"+html(a)+"</th><td>"+html(fmtNumber(b))+"</td></tr>").join("");
-    const headers=columns.map(c=>"<th>"+html(c.label)+"</th>").join("");
-    const allRows=data.map(row=>"<tr>"+row.map(cell=>"<td>"+html(fmtNumber(cell))+"</td>").join("")+"</tr>").join("");
+    const renderWordTable = (name,cols,records) => {
+      const headers=cols.map(col=>"<th>"+html(col.label)+"</th>").join("");
+      const values=escapeRows(records,cols)
+        .map(row=>"<tr>"+row.map(cell=>"<td>"+html(fmtNumber(cell))+"</td>").join("")+"</tr>").join("");
+      return "<h2>"+html(name)+" ("+records.length+" records)</h2>" +
+        "<table><thead><tr>"+headers+"</tr></thead><tbody>"+values+"</tbody></table>";
+    };
     const result='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+html(title)+'</title>'+
-      '<style>body{font-family:Calibri,Arial,sans-serif;color:#15342f;font-size:10pt}h1{font-size:23pt;color:#153b37}h2{font-size:14pt}p{color:#647672}table{border-collapse:collapse;width:100%;margin:14pt 0}th{background:#153b37;color:#fff;text-align:left}th,td{border:1px solid #dce7e5;padding:5pt}tr:nth-child(even){background:#f3f8f6}thead{display:table-header-group}</style></head><body>'+
-      '<h1>'+html(title)+'</h1><p>'+html(description || "")+'</p><table>'+metaRows+'</table><h2>Transaction and evidence details</h2><table><thead><tr>'+headers+'</tr></thead><tbody>'+allRows+'</tbody></table>'+
-      '<p>CHALIN03 controlled audit evidence. A physical variance is not, by itself, proof of theft.</p></body></html>';
+      '<style>body{font-family:Calibri,Arial,sans-serif;color:#15342f;font-size:10pt}h1{font-size:23pt;color:#153b37}h2{font-size:14pt;page-break-after:avoid}p{color:#647672}table{border-collapse:collapse;width:100%;margin:14pt 0;table-layout:auto}th{background:#153b37;color:#fff;text-align:left}th,td{border:1px solid #dce7e5;padding:5pt;overflow-wrap:anywhere}tr:nth-child(even){background:#f3f8f6}thead{display:table-header-group}</style></head><body>'+
+      '<h1>'+html(title)+'</h1><p>'+html(description || "")+'</p><table>'+metaRows+'</table>'+
+      renderWordTable("Transaction Lines",columns,rows)+
+      sections.map(section=>renderWordTable(section.name,section.columns,section.rows)).join("")+
+      '<p>CHALIN03 controlled audit evidence. Return cost is a historical-weighted estimate, not proof of theft or a bank-settled refund.</p></body></html>';
     setHeaders(res,"application/msword; charset=utf-8",filename+".doc");
     return res.status(200).send(result);
   }
   if (mode === "pdf") {
+    const recordCount = rows.length + sections.reduce((n,s)=>n+s.rows.length,0);
+    // Guard the user against giant incomplete/slow browser PDF streams.
+    // The workbook and CSV remain available for large date ranges.
+    if(recordCount>9000)return res.status(422).json({status:"error",
+      message:"PDF contains too many audit rows. Choose a shorter date range, or use the complete Excel/CSV download."});
     setHeaders(res,"application/pdf",filename+".pdf");
     const doc=new PDFDocument({size:"A4",layout:"landscape",margin:36,bufferPages:true});
     doc.pipe(res);
-    doc.fillColor("#153B37").font("Helvetica-Bold").fontSize(19).text(title);
-    doc.moveDown(.2).font("Helvetica").fontSize(9).fillColor("#536b64").text(description||"");
-    doc.moveDown(.3).fontSize(8).fillColor("#153B37");
+    doc.fillColor("#153B37").font("Helvetica-Bold").fontSize(18).text(title);
+    doc.moveDown(.3).font("Helvetica").fontSize(9).fillColor("#536b64").text(description||"");
+    doc.moveDown(.4).fontSize(8).fillColor("#153B37");
     meta.forEach(([a,b])=>doc.text(a+": "+fmtNumber(b),{lineGap:2}));
     doc.moveDown(.6);
     const usable=doc.page.width-72;
-    const widths=columns.map(c=>Math.max(1,Number(c.weight||1)));
-    const total=widths.reduce((n,v)=>n+v,0);
-    const splits=widths.map(w=>usable*w/total);
-    const drawRow=(arr,header=false)=>{
-      const height=34;
-      if(doc.y+height>doc.page.height-42){doc.addPage();if(!header)drawRow(columns.map(c=>c.label),true)}
-      const yy=doc.y,x0=36;
-      doc.rect(x0,yy,usable,height).fill(header?"#153B37":(Math.floor(yy/height)%2?"#F3F8F6":"#FFFFFF"));
-      let xx=x0;doc.font(header?"Helvetica-Bold":"Helvetica").fontSize(7).fillColor(header?"#FFFFFF":"#263C37");
-      arr.forEach((t,j)=>{doc.text(String(fmtNumber(t)).slice(0,145),xx+4,yy+5,{width:splits[j]-8,height:height-9,ellipsis:true});xx+=splits[j]});
-      doc.y=yy+height;
-    };
-    drawRow(columns.map(c=>c.label),true);
-    data.forEach(row=>drawRow(row));
+    function renderSection(name,cols,recs) {
+      // Narrow, evidence-heavy sections are split into readable groups of
+      // columns. Each group repeats the first source identifier so every page
+      // can still be traced to its original transaction or return.
+      const idCount=cols.length>9?2:0;
+      const idCols=cols.slice(0,idCount);
+      const remaining=cols.slice(idCount);
+      const groups=remaining.length>9
+        ? Array.from({length:Math.ceil(remaining.length/7)},(_,i)=>[
+            ...idCols,...remaining.slice(i*7,(i+1)*7)])
+        : [cols];
+      for(let g=0;g<groups.length;g++) {
+        const subset=groups[g];
+        if(doc.y>doc.page.height-96)doc.addPage();
+        doc.moveDown(.4);
+        doc.font("Helvetica-Bold").fontSize(11).fillColor("#153B37")
+          .text(name+" ("+recs.length+" records)"+
+            (groups.length>1?" — columns "+(g+1)+"/"+groups.length:""));
+        doc.moveDown(.2);
+        const weights=subset.map(col=>Math.max(1,Number(col.weight||1)));
+        const denom=weights.reduce((a,b)=>a+b,0);
+        const splits=weights.map(w=>usable*w/denom);
+        const widthEnough=splits.every(w=>w>22);
+        const drawRow=(values,header=false)=>{
+          const height=header?36:34;
+          if(doc.y+height>doc.page.height-42) {
+            doc.addPage();
+            if(!header)drawRow(subset.map(col=>col.label),true);
+          }
+          const y=doc.y;
+          doc.rect(36,y,usable,height).fill(header?"#153B37":(Math.floor(y/height)%2?"#F3F8F6":"#FFFFFF"));
+          let x=36;
+          doc.font(header?"Helvetica-Bold":"Helvetica").fontSize(widthEnough?7:6)
+            .fillColor(header?"#FFFFFF":"#263C37");
+          values.forEach((v,i)=>{
+            doc.text(String(fmtNumber(v)).slice(0,130),x+3,y+5,{
+              width:Math.max(12,splits[i]-6),height:height-8,ellipsis:true
+            });
+            x+=splits[i];
+          });
+          doc.y=y+height;
+        };
+        drawRow(subset.map(col=>col.label),true);
+        for(const record of recs)drawRow(subset.map(col=>safeCell(record[col.key])));
+      }
+    }
+    renderSection("Transaction Lines",columns,rows);
+    for(const section of sections)renderSection(section.name,section.columns,section.rows);
     const pages=doc.bufferedPageRange();
     for(let k=pages.start;k<pages.start+pages.count;k++){
       doc.switchToPage(k);
-      doc.fontSize(7).fillColor("#6B7975").text("CHALIN03 • "+html(branch)+" • Page "+(k+1)+" of "+pages.count,36,doc.page.height-25,{width:usable,align:"right"});
+      doc.fontSize(7).fillColor("#6B7975").text(
+        "CHALIN03 • "+clean(branch)+" • Page "+(k+1)+" of "+pages.count,
+        36,doc.page.height-25,{width:usable,align:"right"}
+      );
     }
     doc.end();
     return;
