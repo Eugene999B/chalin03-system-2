@@ -40,6 +40,7 @@ export default function Layout() {
     branchName,
     branchLocation,
     canAccessAllBranches,
+    hasPermission,
   } = useAuth();
 
   const navigate = useNavigate();
@@ -93,6 +94,18 @@ export default function Layout() {
   const navigationSections = useMemo(() => {
     const mainWorkItems = isAuditor
       ? [
+          { title: "Dashboard", description: "Store performance and operational summary", path: "/", icon: "🏠", keywords: "dashboard summary" },
+          { title: "Products", description: "Search, manage and review spare-part stock", path: "/products", icon: "📦", keywords: "products inventory stock" },
+          { title: "New Sale", description: "Record an authorised Spare Parts transaction", path: "/new-sale", icon: "🛒", keywords: "record sale receipt" },
+          { title: "Installment Sales", description: "Review and manage Spare Parts installment records", path: "/installments", icon: "📅", keywords: "installments finance collections" },
+          { title: "Debts", description: "Review and manage customer debt records", path: "/debts", icon: "📒", keywords: "debts collection" },
+          {
+            title: "Sales History",
+            description: "Read-only review of store sales, receipts, voids and corrections",
+            path: "/sales-history",
+            icon: "🧾",
+            keywords: "audit sales history receipts voided corrected transactions date filters",
+          },
           {
             title: "Change Password",
             description: "Update your auditor login password",
@@ -160,6 +173,17 @@ export default function Layout() {
             icon: "📞",
             keywords: "debt debts credit balance payment reminder whatsapp owing",
           },
+          ...(hasPermission("payroll.view")
+            ? [
+                {
+                  title: "Payroll Processing",
+                  description: "Validate, approve, pay and reconcile protected salary cycles",
+                  path: "/payroll",
+                  icon: "💵",
+                  keywords: "payroll salary wages approval payment reconciliation workforce",
+                },
+              ]
+            : []),
           {
             title: "Change Password",
             description: "Update your staff login password",
@@ -240,6 +264,13 @@ export default function Layout() {
             "audit signoff sign-off approval history approved period accountant certificate management",
         },
         {
+          title: "Blind Stock Count",
+          description: "Independent physical counting, variance risk and downloadable audit evidence",
+          path: "/stock-count",
+          icon: "📋",
+          keywords: "blind stock count physical quantity theft variance missing inventory",
+        },
+        {
           title: "Exports",
           description: "Export audit and management records",
           path: "/exports",
@@ -258,6 +289,17 @@ export default function Layout() {
           keywords:
             "group executive boss control centre dashboard spare parts mining equipment hire fleet revenue expenses debt alerts",
         });
+      }
+
+      if (isAuditor) {
+        auditItems.push(
+          { title: "Stock Transfers", description: "Manage the store-to-store movement evidence", path: "/stock-transfers", icon: "🔁", keywords: "stock transfer dispatch receive" },
+          { title: "Low Stock / Restock", description: "Review stock shortages and replenishment", path: "/low-stock", icon: "🚨", keywords: "restock inventory shortage" },
+          { title: "Purchases", description: "Record and inspect supplier purchases", path: "/purchases", icon: "🚚", keywords: "supplier buying purchases" },
+          { title: "Returns", description: "Review and record customer returns", path: "/returns", icon: "↩️", keywords: "return refund" },
+          { title: "Expenses", description: "Review and record approved store expenses", path: "/expenses", icon: "🧾", keywords: "expenses" },
+          { title: "Daily Closing", description: "Close and reconcile store transactions", path: "/daily-closing", icon: "🌙", keywords: "closing cash reconciliation" }
+        );
       }
 
       if (canManage) {
@@ -428,7 +470,7 @@ export default function Layout() {
     }
 
     return sections;
-  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator]);
+  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission]);
 
   const commandItems = useMemo(() => {
     return navigationSections.flatMap((section) =>

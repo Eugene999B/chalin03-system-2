@@ -13,6 +13,7 @@ const sarif = JSON.parse(fs.readFileSync(absoluteSarifPath, "utf8"));
 const results = sarif.runs?.flatMap((run) => run.results || []) || [];
 
 const reviewedRules = new Set([
+  "js/incomplete-sanitization",
   "js/insecure-randomness",
   "js/missing-rate-limiting",
   "js/user-controlled-bypass",
@@ -25,6 +26,15 @@ const reviewedBypassFiles = new Set([
   "backend/routes/expenseReversalRoutes.js",
   "backend/routes/returnRoutes.js",
   "backend/routes/saleRoutes.js",
+  "backend/services/operationalApprovalService.js",
+]);
+
+// This compatibility service composes reviewed Finance routers onto the
+// equipment-sales router. Requests still enter through the global /api limiter
+// asserted below, so CodeQL's router-mount finding is the same reviewed API
+// surface class as findings emitted directly from backend/routes/.
+const reviewedRateLimitCompositionFiles = new Set([
+  "backend/services/equipmentSalesReminderService.js",
 ]);
 
 const counts = new Map();
@@ -65,6 +75,15 @@ for (const result of results) {
     continue;
   }
 
+  if (ruleId === "js/incomplete-sanitization") {
+    const isStaticContractTest = location.uri.startsWith("backend/tests/");
+    if (!isStaticContractTest) {
+      violations.push(
+        `Incomplete sanitization appeared outside a reviewed static contract test at ${location.uri}:${location.line}`
+      );
+    }
+  }
+
   if (ruleId === "js/insecure-randomness") {
     const reviewedFallbackSource = relatedLocationsFor(result).some(
       (source) =>
@@ -75,7 +94,7 @@ for (const result of results) {
 
     if (!reviewedFallbackSource) {
       violations.push(
-        `Insecure-randomness result appeared outside the reviewed non-secret equipment application reference fallback at ${location.uri}:${location.line}`
+        `Insecure-randomness result appeared outside the one reviewed non-secret public document reference fallback at ${location.uri}:${location.line}`
       );
     }
   }
@@ -83,7 +102,8 @@ for (const result of results) {
   if (ruleId === "js/missing-rate-limiting") {
     const isBackendRoute =
       location.uri === "backend/server.js" ||
-      location.uri.startsWith("backend/routes/");
+      location.uri.startsWith("backend/routes/") ||
+      reviewedRateLimitCompositionFiles.has(location.uri);
     if (!isBackendRoute) {
       violations.push(
         `Rate-limiting result appeared outside the reviewed API surface at ${location.uri}:${location.line}`
@@ -131,8 +151,24 @@ const saleRoutesSource = fs.readFileSync(
   path.join(root, "backend/routes/saleRoutes.js"),
   "utf8"
 );
+const operationalApprovalServiceSource = fs.readFileSync(
+  path.join(root, "backend/services/operationalApprovalService.js"),
+  "utf8"
+);
+const operationalApprovalBootstrapSource = fs.readFileSync(
+  path.join(root, "backend/services/operationalApprovalBootstrap.js"),
+  "utf8"
+);
+const equipmentSalesReminderServiceSource = fs.readFileSync(
+  path.join(root, "backend/services/equipmentSalesReminderService.js"),
+  "utf8"
+);
 const equipmentCreditApplicationSource = fs.readFileSync(
   path.join(root, "backend/routes/equipmentCreditApplicationRoutes.js"),
+  "utf8"
+);
+const equipmentFinancePhaseOneSource = fs.readFileSync(
+  path.join(root, "backend/routes/equipmentFinancePhaseOneRoutes.js"),
   "utf8"
 );
 const equipmentCreditMigrationSource = fs.readFileSync(
@@ -192,9 +228,53 @@ assert.match(saleRoutesSource, /Edit reason is required/);
 assert.match(saleRoutesSource, /Void reason is required/);
 assert.match(saleRoutesSource, /FOR UPDATE/);
 
-// The fallback creates a public, human-readable document reference only. It is
-// never used as a password, token, authorisation decision or ownership proof.
-// Database uniqueness remains the authoritative collision safeguard.
+// Operational rejection is not an authorization bypass: the administrator has
+// already passed role, branch, self-approval and bcrypt checks. The user-controlled
+// value is only the mandatory explanatory note saved with a rejection decision.
+assert.match(operationalApprovalServiceSource, /SELF_APPROVAL_FORBIDDEN/);
+assert.match(
+  operationalApprovalServiceSource,
+  /bcrypt\.compare\(String\(password\), reviewer\.password_hash\)/
+);
+assert.match(operationalApprovalServiceSource, /userCanAccessBranch\(/);
+assert.match(
+  operationalApprovalServiceSource,
+  /if \(!cleanText\(reviewNote, 5000\)\)[\s\S]*A rejection reason is required/
+);
+assert.match(
+  operationalApprovalServiceSource,
+  /execution_status = 'executing'/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /const approvalRequestLimiter = rateLimit\(/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /const approvalDecisionLimiter = rateLimit\(/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /buildOperationalApprovalRateLimitRouter\(/
+);
+assert.match(
+  operationalApprovalBootstrapSource,
+  /protectedRouteExecutionLimiter[\s\S]*operationalApprovalExecutionMiddleware/
+);
+
+// Keep the reviewed service allowlist tied to the specific router composition
+// that CodeQL reports. If this service stops being a mount-only compatibility
+// layer, the policy should fail rather than silently broadening the exception.
+assert.match(
+  equipmentSalesReminderServiceSource,
+  /equipmentSalesRoutes\.use\(\s*"\/finance-lifecycle",\s*equipmentFinanceFinalLifecycleRoutes\s*\)/
+);
+
+// The legacy credit-application fallback creates a public, human-readable
+// document reference only. It is never a password, token, authorisation
+// decision, ownership proof or payment idempotency key. Database uniqueness is
+// authoritative, and duplicate writes fail closed rather than overwriting an
+// existing record.
 assert.match(
   equipmentCreditApplicationSource,
   /function fallbackApplicationNumber\(\)[\s\S]*return `ECAPP-\$\{stamp\}-\$\{random\}`/
@@ -203,6 +283,20 @@ assert.match(
   equipmentCreditApplicationSource,
   /nextDocumentNumber\("EQUIPMENT_CREDIT_APPLICATION"[\s\S]*return fallbackApplicationNumber\(\)/
 );
+
+// Phase 3 no longer relies on Math.random for the guided Finance fallback.
+// It must use Node's cryptographic random integer generator, and any future
+// insecure-randomness finding in this route is deliberately not allowlisted.
+assert.match(equipmentFinancePhaseOneSource, /const crypto = require\("crypto"\)/);
+assert.match(
+  equipmentFinancePhaseOneSource,
+  /function fallbackNumber\(prefix\)[\s\S]*crypto\.randomInt\(0, 1000000\)[\s\S]*padStart\(6, "0"\)/
+);
+assert.match(
+  equipmentFinancePhaseOneSource,
+  /async function documentNumber\(sequence, prefix, actorId\)[\s\S]*nextDocumentNumber\(sequence, \{ userId: actorId \}\)[\s\S]*return fallbackNumber\(prefix\)/
+);
+assert.match(equipmentFinancePhaseOneSource, /error\?\.code === "ER_DUP_ENTRY"/);
 assert.match(
   equipmentCreditMigrationSource,
   /application_number VARCHAR\(80\) NOT NULL UNIQUE/

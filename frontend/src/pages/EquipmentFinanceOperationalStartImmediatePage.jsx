@@ -1,0 +1,420 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import axiosClient from "../api/axiosClient";
+import { useAuth } from "../context/AuthContext";
+import EquipmentFinanceStartWizardPage from "./EquipmentFinanceStartWizardPage";
+import "../styles/equipmentFinanceOperationalPolish.css";
+
+const API = "/equipment-catalogue/sales/operational-polish";
+const DRAFT_KEY = "chalin03.finance.start-installment.v2";
+const LEGACY_DRAFT_KEY = "chalin03.finance.start-installment.v1";
+const DRAFT_CONFLICT_CODE = "FINANCE_DRAFT_VERSION_CONFLICT";
+const RECOVERY_TIMEOUT_MS = 8000;
+const SAVE_TIMEOUT_MS = 12000;
+
+function parseLocalDraft() {
+  const current = window.localStorage.getItem(DRAFT_KEY);
+  if (current) {
+    try {
+      return JSON.parse(current);
+    } catch {
+      window.localStorage.removeItem(DRAFT_KEY);
+    }
+  }
+
+  const legacy = window.localStorage.getItem(LEGACY_DRAFT_KEY);
+  if (!legacy) return null;
+  try {
+    const migrated = JSON.parse(legacy);
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(migrated));
+    window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+    return migrated;
+  } catch {
+    window.localStorage.removeItem(LEGACY_DRAFT_KEY);
+    return null;
+  }
+}
+
+function text(value) {
+  return String(value || "").trim();
+}
+
+function numberValue(value) {
+  const number = Number(String(value || "0").replaceAll(",", ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+function localProgress(payload = {}) {
+  const sellingPrice = numberValue(payload.offer?.selling_price);
+  const deposit = numberValue(payload.offer?.deposit);
+  const financed = Math.max(sellingPrice - deposit, 0);
+  const guarantorRequired = financed >= 100000;
+  const checks = [
+    {
+      code: "customer",
+      label: "Customer",
+      complete:
+        (payload.customerMode === "existing" && Boolean(payload.customer_id)) ||
+        (payload.customerMode === "new" &&
+          Boolean(text(payload.customer?.customer_name)) &&
+          Boolean(text(payload.customer?.phone))),
+    },
+    { code: "machine", label: "Excavator", complete: Boolean(payload.asset_id) },
+    {
+      code: "plan",
+      label: "Payment plan",
+      complete:
+        sellingPrice > 0 &&
+        deposit >= 0 &&
+        deposit <= sellingPrice &&
+        numberValue(payload.offer?.installment_count) > 0 &&
+        Boolean(payload.offer?.first_due_date),
+    },
+    {
+      code: "kyc",
+      label: "KYC details",
+      complete:
+        Boolean(text(payload.kyc?.id_number)) &&
+        Boolean(text(payload.kyc?.employment_type)) &&
+        Boolean(text(payload.kyc?.occupation)) &&
+        Boolean(text(payload.kyc?.residential_address || payload.customer?.address)),
+    },
+    {
+      code: "affordability",
+      label: "Affordability",
+      complete:
+        numberValue(payload.affordability?.monthly_salary_income) +
+          numberValue(payload.affordability?.monthly_business_income) +
+          numberValue(payload.affordability?.monthly_other_income) >
+        0,
+    },
+    {
+      code: "consent",
+      label: "Consent",
+      complete: Boolean(
+        payload.kyc?.customer_consent_confirmed &&
+          payload.kyc?.credit_assessment_consent_confirmed
+      ),
+    },
+    {
+      code: "guarantor",
+      label: guarantorRequired ? "Guarantor" : "Guarantor not required",
+      complete:
+        !guarantorRequired ||
+        Boolean(
+          text(payload.kyc?.guarantor_name) &&
+            text(payload.kyc?.guarantor_phone) &&
+            text(payload.kyc?.guarantor_id_number)
+        ),
+    },
+  ];
+  const completed = checks.filter((item) => item.complete).length;
+  return {
+    checklist: checks,
+    complete_count: completed,
+    total_count: checks.length,
+    completion_percent: Number(((completed / checks.length) * 100).toFixed(2)),
+  };
+}
+
+function timeLabel(value) {
+  if (!value) return "Not saved yet";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : date.toLocaleTimeString("en-GH", { hour: "2-digit", minute: "2-digit" });
+}
+
+function safeServerMessage(response, fallback) {
+  return response?.data?.message || fallback;
+}
+
+export default function EquipmentFinanceOperationalStartImmediatePage() {
+  const { effectivePermissions = [] } = useAuth();
+  const canServerSave = effectivePermissions.includes("fleet.assets.manage");
+  const initialLocalDraft = useMemo(() => parseLocalDraft(), []);
+  const [saveState, setSaveState] = useState(
+    canServerSave ? "loading" : "local_only"
+  );
+  const [progress, setProgress] = useState(() =>
+    localProgress(initialLocalDraft || {})
+  );
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [conflict, setConflict] = useState(null);
+  const [problem, setProblem] = useState("");
+  const versionRef = useRef(null);
+  const conflictRef = useRef(null);
+  const savingRef = useRef(false);
+  const queuedRef = useRef(false);
+
+  const restoreServerDraft = useCallback((draft) => {
+    if (!draft?.payload) return;
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft.payload));
+    versionRef.current = Number(draft.version || 1);
+    setProgress(draft.progress || localProgress(draft.payload));
+    setLastSavedAt(draft.last_saved_at || null);
+  }, []);
+
+  useEffect(() => {
+    if (!canServerSave) {
+      setSaveState("local_only");
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function recoverInBackground() {
+      try {
+        const response = await axiosClient.get(`${API}/drafts/start-installment`, {
+          signal: controller.signal,
+          timeout: RECOVERY_TIMEOUT_MS,
+        });
+        if (!active) return;
+
+        if (response.data?.server_draft_available === false) {
+          setSaveState("offline");
+          setProblem(
+            safeServerMessage(
+              response,
+              "Server draft recovery is unavailable. This device copy remains protected."
+            )
+          );
+          return;
+        }
+
+        const serverDraft = response.data?.draft;
+        const localDraft = parseLocalDraft();
+        if (!localDraft && serverDraft?.payload) {
+          restoreServerDraft(serverDraft);
+          setSaveState("restored");
+        } else {
+          versionRef.current = serverDraft?.version ?? null;
+          setProgress(localProgress(localDraft || serverDraft?.payload || {}));
+          setLastSavedAt(serverDraft?.last_saved_at || null);
+          setSaveState(localDraft ? "pending" : "ready");
+        }
+      } catch (error) {
+        if (!active) return;
+        setSaveState("offline");
+        setProblem(
+          error?.response?.data?.message ||
+            "Server draft recovery did not respond. The complete device copy remains available."
+        );
+      }
+    }
+
+    recoverInBackground();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [canServerSave, restoreServerDraft]);
+
+  const saveCurrentDraft = useCallback(
+    async (forceConflictResolution = false) => {
+      if (
+        !canServerSave ||
+        savingRef.current ||
+        (conflictRef.current && !forceConflictResolution)
+      ) {
+        return;
+      }
+      const payload = parseLocalDraft();
+      if (!payload) return;
+
+      savingRef.current = true;
+      queuedRef.current = false;
+      setSaveState("saving");
+      setProblem("");
+      try {
+        const response = await axiosClient.put(
+          `${API}/drafts/start-installment`,
+          {
+            payload,
+            known_version: versionRef.current,
+          },
+          { timeout: SAVE_TIMEOUT_MS }
+        );
+
+        if (response.data?.server_saved === false) {
+          setSaveState("offline");
+          setProblem(
+            safeServerMessage(
+              response,
+              "The server could not save this draft yet. The complete device copy remains protected."
+            )
+          );
+          return;
+        }
+
+        const draft = response.data?.draft;
+        versionRef.current = draft?.version ?? versionRef.current;
+        conflictRef.current = null;
+        setConflict(null);
+        setProgress(draft?.progress || localProgress(payload));
+        setLastSavedAt(draft?.last_saved_at || new Date().toISOString());
+        setSaveState("saved");
+      } catch (error) {
+        if (
+          error.response?.status === 409 &&
+          error.response?.data?.code === DRAFT_CONFLICT_CODE &&
+          error.response?.data?.current_draft
+        ) {
+          conflictRef.current = error.response.data.current_draft;
+          setConflict(error.response.data.current_draft);
+          setSaveState("conflict");
+          setProblem(error.response.data.message);
+        } else {
+          setSaveState("offline");
+          setProblem(
+            error.response?.data?.message ||
+              "Server autosave did not complete. The current device copy remains protected."
+          );
+        }
+      } finally {
+        savingRef.current = false;
+        if (queuedRef.current && !conflictRef.current) {
+          queuedRef.current = false;
+          window.setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("chalin03:finance-draft-change", {
+                detail: { payload: parseLocalDraft() },
+              })
+            );
+          }, 0);
+        }
+      }
+    },
+    [canServerSave]
+  );
+
+  useEffect(() => {
+    let timer = null;
+
+    const scheduleSave = (event) => {
+      const payload = event?.detail?.payload || parseLocalDraft();
+      setProgress(localProgress(payload || {}));
+      window.clearTimeout(timer);
+
+      if (!canServerSave) return;
+      if (!payload) {
+        timer = window.setTimeout(() => {
+          if (savingRef.current) {
+            queuedRef.current = true;
+            return;
+          }
+          axiosClient
+            .delete(`${API}/drafts/start-installment`, {
+              timeout: SAVE_TIMEOUT_MS,
+            })
+            .then((response) => {
+              if (response.data?.server_draft_available === false) {
+                setSaveState("offline");
+                return;
+              }
+              versionRef.current = null;
+              setLastSavedAt(null);
+              setSaveState("ready");
+            })
+            .catch(() => setSaveState("offline"));
+        }, 300);
+        return;
+      }
+
+      timer = window.setTimeout(() => {
+        if (savingRef.current) {
+          queuedRef.current = true;
+          return;
+        }
+        saveCurrentDraft();
+      }, 800);
+    };
+
+    window.addEventListener("chalin03:finance-draft-change", scheduleSave);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("chalin03:finance-draft-change", scheduleSave);
+    };
+  }, [canServerSave, saveCurrentDraft]);
+
+  function useServerVersion() {
+    restoreServerDraft(conflictRef.current);
+    conflictRef.current = null;
+    setConflict(null);
+    setProblem("");
+    setSaveState("restored");
+  }
+
+  async function keepDeviceVersion() {
+    versionRef.current = conflictRef.current?.version ?? versionRef.current;
+    setProblem("");
+    setSaveState("pending");
+    await saveCurrentDraft(true);
+  }
+
+  const statusText = useMemo(() => {
+    const labels = {
+      loading: "Draft open — checking server copy in background",
+      ready: "Server autosave ready",
+      pending: "Waiting to save…",
+      saving: "Saving securely…",
+      saved: `Saved at ${timeLabel(lastSavedAt)}`,
+      restored: "Server draft restored",
+      conflict: "Draft needs your decision",
+      offline: "Device copy protected — server retry available",
+      local_only: "Device draft available for this access level",
+    };
+    return labels[saveState] || "Draft protection active";
+  }, [lastSavedAt, saveState]);
+
+  return (
+    <>
+      <section className={`finance-draft-bar is-${saveState}`} aria-live="polite">
+        <div className="finance-draft-bar__status">
+          <span aria-hidden="true">{saveState === "saved" ? "✓" : "●"}</span>
+          <div>
+            <strong>{statusText}</strong>
+            <small>
+              The installment form is available immediately. Server recovery never blocks this screen.
+            </small>
+          </div>
+        </div>
+        <div className="finance-draft-bar__progress">
+          <div>
+            <span style={{ width: `${progress.completion_percent || 0}%` }} />
+          </div>
+          <strong>{Math.round(progress.completion_percent || 0)}%</strong>
+        </div>
+        <div className="finance-draft-bar__checks">
+          {(progress.checklist || []).map((item) => (
+            <span className={item.complete ? "is-complete" : ""} key={item.code}>
+              {item.complete ? "✓" : "○"} {item.label}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {problem ? (
+        <div className="finance-ops__notice is-warning" role="alert">
+          <span>{problem}</span>
+          {conflict ? (
+            <div>
+              <button type="button" onClick={useServerVersion}>
+                Use latest server draft
+              </button>
+              <button type="button" onClick={keepDeviceVersion}>
+                Keep this device draft
+              </button>
+            </div>
+          ) : canServerSave ? (
+            <button type="button" onClick={() => saveCurrentDraft()}>
+              Retry server save
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <EquipmentFinanceStartWizardPage />
+    </>
+  );
+}

@@ -225,6 +225,37 @@ async function resolveIndependentFinanceScope(
 ) {
   const path = financeSalesPath(req);
   const method = String(req.method || "GET").toUpperCase();
+
+  // Finance is company-wide. A controlled agreement is its own scope
+  // reference, so a missing hire_location_id must not block Finance
+  // lifecycle mutations such as collections, delivery, or ownership.
+  const lifecycleMatch = path?.match(
+    /^\/finance-lifecycle\/accounts\/(\d+)(?:\/|$)/
+  );
+  if (lifecycleMatch) {
+    const agreementId = positiveId(lifecycleMatch[1]);
+    if (agreementId) {
+      const [rows] = await connection.query(
+        `SELECT id
+         FROM equipment_sale_agreements
+         WHERE id = ?
+         LIMIT 1`,
+        [agreementId]
+      );
+      if (rows.length) {
+        return {
+          locationId: null,
+          location: null,
+          allLocations: true,
+          automaticAccess: true,
+          independentFinance: true,
+          equipmentOriginReference: true,
+          financeRecordReference: agreementId,
+        };
+      }
+    }
+  }
+
   const locationId = await resolveFinanceRecordLocation(req, connection);
 
   if (locationId) {

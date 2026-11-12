@@ -1,0 +1,4 @@
+Chalin 03 production frontend release marker: Excavator register v5.1 — visible professional availability status filter.
+Includes All excavators, Available for a new installment, Reserved / held, Under installment agreement, Sold / completed sale, Not offered for installment sale, and Cancelled / unavailable.
+The filter is rendered only inside the Equipment Catalogue and is not part of Installment Finance.
+Do not remove unless superseded by a newer deployment marker.

@@ -1,0 +1,373 @@
+/* Installment Finance mobile color parity layer.
+ * Scope: the Installment Finance workspace only.
+ * IMPORTANT: this file intentionally changes COLORS only. Existing mobile
+ * layout, spacing, sizing, stacking and responsive dimensions remain untouched.
+ * Desktop is the source of truth for the visual palette.
+ */
+
+@media (max-width: 767px) {
+  .bwl-shell.bwl-theme-finance-signature {
+    color-scheme: light;
+    --finance-shell-night: #06130e;
+    --finance-shell-green: #0c2e21;
+    --finance-shell-emerald: #146444;
+    --finance-shell-gold: #d9b85d;
+    --finance-shell-paper: #f4f1e8;
+    --finance-shell-ink: #12231c;
+    background: #f4f1e8 !important;
+    color: #12231c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-main {
+    background:
+      linear-gradient(rgba(18, 35, 28, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(18, 35, 28, 0.025) 1px, transparent 1px),
+      #f4f1e8 !important;
+    background-size: 34px 34px;
+    color: #12231c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-topbar {
+    background: rgba(247, 244, 236, 0.94) !important;
+    border-bottom-color: rgba(18, 35, 28, 0.1) !important;
+    color: #10251c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-topbar small {
+    color: #78827c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-topbar strong {
+    color: #10251c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-sidebar {
+    background:
+      linear-gradient(rgba(217, 184, 93, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(217, 184, 93, 0.035) 1px, transparent 1px),
+      radial-gradient(circle at 16% 4%, rgba(53, 169, 117, 0.22), transparent 18rem),
+      radial-gradient(circle at 90% 84%, rgba(217, 184, 93, 0.12), transparent 18rem),
+      linear-gradient(180deg, #081711 0%, #06110d 48%, #030b08 100%) !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-mobile-toggle {
+    background:
+      radial-gradient(circle at 15% 0%, rgba(34, 123, 83, 0.28), transparent 60%),
+      #06130e !important;
+    color: #fffaf0 !important;
+    border-bottom-color: rgba(217, 184, 93, 0.18) !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-mobile-toggle span {
+    border-color: rgba(217, 184, 93, 0.24) !important;
+    background: rgba(217, 184, 93, 0.08) !important;
+    color: #f2d476 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .bwl-mobile-toggle strong {
+    color: #fffaf0 !important;
+  }
+
+  /* General Installment canvas: paper background, never a flat white page. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simple,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow,
+  .bwl-shell.bwl-theme-finance-signature .installment-completion,
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle,
+  .bwl-shell.bwl-theme-finance-signature .installment-page {
+    background: transparent !important;
+    color: #17231c !important;
+  }
+
+  /* Main hero surfaces must remain the dark Finance signature seen on desktop. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simple__hero,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero {
+    border-color: rgba(226, 198, 111, 0.22) !important;
+    background:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+      radial-gradient(circle at 84% 18%, rgba(226, 198, 111, .23), transparent 24rem),
+      radial-gradient(circle at 8% 10%, rgba(47, 145, 105, .28), transparent 22rem),
+      linear-gradient(135deg, #06140e 0%, #0b2c1f 52%, #133d2c 100%) !important;
+    color: #fff !important;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero {
+    background:
+      linear-gradient(108deg, rgba(4, 23, 16, 0.995) 0 53%, rgba(9, 66, 43, 0.95) 100%),
+      #061a12 !important;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero {
+    background:
+      linear-gradient(118deg, rgba(4, 20, 13, 0.995), rgba(8, 48, 32, 0.98) 62%, rgba(17, 95, 62, 0.93)),
+      #061a12 !important;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero {
+    background:
+      radial-gradient(circle at 82% 21%, rgba(214, 178, 80, 0.17), transparent 15rem),
+      linear-gradient(116deg, #051810, #0d3f2b 72%, #09291d) !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero h1,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero h2,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero h3,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero h1,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero h2,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero h3,
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simple__hero h1,
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simple__hero h2,
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simple__hero h3 {
+    color: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero p,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero .finance-simple__eyebrow,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero p,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero .finance-flow__eyebrow {
+    color: #ead99d !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__hero span,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__hero span,
+  .bwl-shell.bwl-theme-finance-signature .finance-simplified .finance-simple__hero span {
+    color: rgba(237, 247, 242, 0.74) !important;
+  }
+
+  /* Three-page signature pseudo-labels/ornament remain gold/white. */
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero::before,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero::before,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero::before {
+    color: rgba(235, 217, 157, 0.8) !important;
+  }
+
+  /* White desktop surfaces stay white, but their contents must be dark/readable. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__panel,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__section,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__card,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__machine,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__customer,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__guide-card,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__panel,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__section,
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__panel,
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__case-summary,
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__payment-guide,
+  .bwl-shell.bwl-theme-finance-signature .finance-accounts__dialog,
+  .bwl-shell.bwl-theme-finance-signature .finance-docs__panel,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__boundary,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__metrics article,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__stages,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__toolbar,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__queue,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__foundation,
+  .bwl-shell.bwl-theme-finance-signature .installment-panel {
+    border-color: #dbe3dd !important;
+    background: #fff !important;
+    color: #17231c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__panel :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__section :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__card :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__machine :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__customer :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__guide-card :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__panel :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__section :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__panel :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__case-summary :where(h1,h2,h3,h4,p,span,small,label,strong,td,th),
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__payment-guide :where(h1,h2,h3,h4,p,span,small,label,strong,td,th) {
+    color: #17231c !important;
+  }
+
+  /* Restore known secondary text hierarchy used on desktop. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__muted,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow__muted,
+  .bwl-shell.bwl-theme-finance-signature .installment-completion__muted,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__boundary p,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__metrics p,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__empty p,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__confirmation p {
+    color: #637069 !important;
+  }
+
+  /* Inputs/selects/textareas match the desktop light-surface treatment. */
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) input,
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) select,
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) textarea {
+    border-color: #c8d4ca !important;
+    background: #fff !important;
+    color: #17231c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) :is(input,textarea)::placeholder {
+    color: #7b877f !important;
+    opacity: 1 !important;
+  }
+
+  /* Secondary buttons: white surface with green text; primary buttons stay green with white text. */
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) button,
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) a.finance-simple__button {
+    border-color: #b7c7bb !important;
+    background: #fff !important;
+    color: #183d27 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature :is(.finance-simple,.finance-flow,.installment-completion) :is(.is-primary,.finance-simple__button.is-primary) {
+    border-color: #1f5b36 !important;
+    background: #1f5b36 !important;
+    color: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero-actions :is(a,button) {
+    border-color: rgba(255,255,255,.35) !important;
+    background: rgba(255,255,255,.12) !important;
+    color: #fff !important;
+  }
+
+  /* Legacy Installment page is also part of the workspace and keeps its desktop signature. */
+  .bwl-shell.bwl-theme-finance-signature .installment-hero {
+    border-color: rgba(217, 184, 93, 0.22) !important;
+    background: linear-gradient(125deg, #153c2d, #2f6848 58%, #8b6518) !important;
+    color: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .installment-hero h1,
+  .bwl-shell.bwl-theme-finance-signature .installment-hero p {
+    color: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .installment-eyebrow {
+    color: #f7d774 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .installment-panel {
+    border-color: #dbe4ef !important;
+    background: #fff !important;
+    color: #162033 !important;
+  }
+
+  /* Cards, facts and metrics use the same quiet paper hierarchy as desktop. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__facts div {
+    background: #f4f7f4 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__metric,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__summary article {
+    border-color: #dbe4dc !important;
+    background: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__check {
+    border-color: #dbe4dd !important;
+    background: #f9fbf9 !important;
+    color: #17231c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__empty {
+    border-color: #bdcbbf !important;
+    background: #fafcfa !important;
+    color: #68746b !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__pill {
+    background: #edf3ee !important;
+    color: #365b42 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__pill.is-good {
+    background: #e2f5e7 !important;
+    color: #1d6433 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__pill.is-warning {
+    background: #fff2d5 !important;
+    color: #7b5514 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__pill.is-danger {
+    background: #fde5e5 !important;
+    color: #8d2929 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__step {
+    border-color: #d8e2da !important;
+    background: #fff !important;
+    color: #68736b !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__step.is-active,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__step.is-done {
+    border-color: #6b9b78 !important;
+    color: #173d27 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__step.is-active b,
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__step.is-done b {
+    background: #24623a !important;
+    color: #fff !important;
+  }
+
+  /* Sticky actions and dialogs are color-matched without touching their responsive geometry. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__sticky-actions {
+    border-color: #cedbd1 !important;
+    background: rgba(255,255,255,.97) !important;
+    box-shadow: 0 -10px 28px rgba(20,45,29,.12) !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__dialog,
+  .bwl-shell.bwl-theme-finance-signature .finance-accounts__dialog {
+    background: #fff !important;
+    color: #17231c !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-simple__dialog-backdrop,
+  .bwl-shell.bwl-theme-finance-signature .finance-accounts__backdrop {
+    background: rgba(8,21,13,.7) !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .installment-photo-picker__button {
+    border-color: #bfd0c3 !important;
+    background: #fff !important;
+    color: #183d27 !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .installment-photo-picker__button.is-primary {
+    border-color: #1f5b36 !important;
+    background: #1f5b36 !important;
+    color: #fff !important;
+  }
+
+  /* Lifecycle screen: keep its desktop dark hero and readable white hero copy. */
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero {
+    border-color: rgba(225,183,81,.24) !important;
+    background:
+      radial-gradient(circle at top right, rgba(225,183,81,.24), transparent 34%),
+      linear-gradient(135deg, #173b2a 0%, #28543a 58%, #675f35 100%) !important;
+    color: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero h1,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero p,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero > div > span {
+    color: #fff !important;
+  }
+
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero-actions a,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle__hero-actions button {
+    background: rgba(255,255,255,.12) !important;
+    color: #fff !important;
+  }
+
+  /* Do not let a generic mobile dark-mode/repaint rule turn desktop-paper content white-on-white. */
+  .bwl-shell.bwl-theme-finance-signature .finance-simple,
+  .bwl-shell.bwl-theme-finance-signature .finance-flow,
+  .bwl-shell.bwl-theme-finance-signature .installment-completion,
+  .bwl-shell.bwl-theme-finance-signature .finance-lifecycle,
+  .bwl-shell.bwl-theme-finance-signature .installment-page {
+    -webkit-text-fill-color: currentColor;
+  }
+}

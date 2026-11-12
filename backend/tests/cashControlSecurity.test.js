@@ -95,10 +95,12 @@ test("Daily Closing summary calculations support transactional reconciliation", 
 const returnsSource = read("routes/returnRoutes.js");
 const exportSource = read("routes/exportRoutes.js");
 
-test("Financial returns require exact refund channel and independent approval", () => {
+test("Financial returns require exact refund channel and protected approval", () => {
   assert.match(returnsSource, /allowedReturnTypes = new Set\(\["stock_only", "refund"\]\)/);
   assert.match(returnsSource, /Refund approver must be an active administrator or manager/);
-  assert.match(returnsSource, /cannot approve the same financial refund/);
+  assert.match(returnsSource, /const samePerson = Number\(approver\.id\) === Number\(currentUserId\)/);
+  assert.match(returnsSource, /samePerson && approverRole !== "admin"/);
+  assert.match(returnsSource, /Only a System Administrator can approve their own financial refund/);
   assert.match(returnsSource, /refund_reference/);
   assert.match(returnsSource, /markClosingStale/);
   assert.match(migrationSource, /refund_method.*ENUM\('none','cash','momo','bank','other'\)/s);

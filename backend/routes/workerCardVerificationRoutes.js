@@ -6,6 +6,7 @@ const { pool } = require("../config/db");
 const {
   verifyWorkerCardSignature,
 } = require("../services/workerCardVerificationService");
+const payrollPayslipVerificationRoutes = require("./payrollPayslipVerificationRoutes");
 
 const router = express.Router();
 
@@ -490,5 +491,7 @@ router.get(
     }
   }
 );
+
+router.use("/verification", payrollPayslipVerificationRoutes);
 
 module.exports = router;

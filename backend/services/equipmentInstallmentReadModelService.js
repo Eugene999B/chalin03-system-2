@@ -130,7 +130,7 @@ function scheduleOpenCondition(columnMap, alias = "eis") {
   if (!hasColumn(columnMap, "equipment_installment_schedule", "schedule_status")) {
     return "1 = 1";
   }
-  return `${alias}.schedule_status NOT IN ('paid','cancelled','waived')`;
+  return `${alias}.schedule_status NOT IN ('paid','cancelled','waived','rescheduled')`;
 }
 
 function paymentWhere(columnMap, alias = "esp") {
@@ -153,8 +153,14 @@ function deriveAccount(row, today = ghanaToday()) {
   const daysUntilDue = nextDueDate ? dayDifference(today, nextDueDate) : null;
   const outstanding = Number(row.outstanding_balance || 0);
   const calculatedOverdue = Number(row.calculated_overdue_amount || 0);
-  const storedOverdue = Number(row.overdue_amount || 0);
-  const overdue = Math.max(calculatedOverdue, storedOverdue, 0);
+  // This approved-credit read model already computes overdue from active
+  // schedule evidence on every request. A stored overdue cache can be stale
+  // after a new due date, payment, waiver or reschedule; taking MAX of that
+  // cache and the derived value may materially OVERSTATE customer arrears.
+  // Never let the displayed overdue amount exceed actual outstanding.
+  const overdue = Number.isFinite(calculatedOverdue)
+    ? Math.max(0, Math.min(Math.max(outstanding, 0), calculatedOverdue))
+    : 0;
 
   let status = String(row.agreement_status || "active");
   if (!["cancelled", "defaulted"].includes(status)) {
@@ -301,6 +307,7 @@ async function loadRows(connection = pool, locationId = null) {
      FROM equipment_sale_agreements esa
      ${locationJoin}
      WHERE esa.sale_type = 'installment'
+       AND esa.activation_source = 'approved_credit_application'
        ${filter.sql}
      ORDER BY esa.next_due_date, esa.id`,
     filter.params
@@ -407,6 +414,7 @@ async function getInstallmentPortfolio({ locationId = null } = {}) {
        FROM equipment_installment_schedule eis
        INNER JOIN equipment_sale_agreements esa ON esa.id = eis.agreement_id
        WHERE esa.sale_type = 'installment'
+         AND esa.activation_source = 'approved_credit_application'
          AND esa.agreement_status NOT IN ('completed','cancelled','defaulted')
          AND ${openSchedule}
          AND eis.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
@@ -446,7 +454,7 @@ async function listInstallmentCollections({
   status = "",
   risk = "",
   aging = "",
-  limit = 500,
+  limit = null,
 } = {}) {
   const { rows, readiness } = await loadRows(pool, locationId);
   const term = cleanText(search).toLowerCase();
@@ -472,10 +480,14 @@ async function listInstallmentCollections({
       .some((value) => String(value).toLowerCase().includes(term));
   });
 
+  const requestedLimit = Number(limit);
+  const accounts = Number.isInteger(requestedLimit) && requestedLimit > 0
+    ? filtered.slice(0, requestedLimit)
+    : filtered;
   return {
     readiness,
     count: filtered.length,
-    accounts: filtered.slice(0, Math.max(1, Math.min(Number(limit) || 500, 500))),
+    accounts,
   };
 }
 

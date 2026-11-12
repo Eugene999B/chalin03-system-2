@@ -39,12 +39,24 @@ const CORE_PERMISSIONS = Object.freeze([
   "spare_parts.sell",
   "spare_parts.manage",
   "spare_parts.audit",
+  "spare_parts.blind_count",
   "installments.view",
   "installments.manage",
   "installments.collect",
   "installments.remind",
   "installments.export",
   "installments.settings",
+]);
+
+const PAYROLL_PERMISSIONS = Object.freeze([
+  "payroll.view",
+  "payroll.manage",
+  "payroll.prepare",
+  "payroll.approve",
+  "payroll.pay",
+  "payroll.payslip.issue",
+  "payroll.adjust",
+  "payroll.audit",
 ]);
 
 const MINING_PERMISSIONS = Object.freeze([
@@ -128,6 +140,7 @@ const ALL_PERMISSIONS = Object.freeze([
   ...MINING_PERMISSIONS,
   ...FLEET_PERMISSIONS,
   ...HIRE_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   "operations.documents.view",
   "operations.documents.manage",
   "sms.manage",
@@ -161,10 +174,12 @@ const CATEGORY_SHARED_PERMISSIONS = Object.freeze([
 
 const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
   ...CATEGORY_SHARED_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   "spare_parts.read",
   "spare_parts.sell",
   "spare_parts.manage",
   "spare_parts.audit",
+  "spare_parts.blind_count",
   "installments.view",
   "installments.manage",
   "installments.collect",
@@ -176,6 +191,7 @@ const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
 
 const MINING_CATEGORY_PERMISSIONS = Object.freeze([
   ...CATEGORY_SHARED_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   ...MINING_PERMISSIONS,
   ...FLEET_PERMISSIONS,
   "operations.documents.view",
@@ -184,6 +200,7 @@ const MINING_CATEGORY_PERMISSIONS = Object.freeze([
 
 const HIRE_CATEGORY_PERMISSIONS = Object.freeze([
   ...CATEGORY_SHARED_PERMISSIONS,
+  ...PAYROLL_PERMISSIONS,
   ...HIRE_PERMISSIONS,
   ...FLEET_PERMISSIONS,
   "operations.documents.view",
@@ -276,8 +293,13 @@ const SPARE_PARTS_GRANTS = Object.freeze({
     "shared.reports.export",
     "shared.audit.view",
     "spare_parts.read",
+    "spare_parts.sell",
+    "spare_parts.manage",
+    "spare_parts.blind_count",
     "spare_parts.audit",
     "installments.view",
+    "installments.manage",
+    "installments.collect",
     "installments.export",
     "exports.download",
   ],
@@ -775,6 +797,7 @@ module.exports = {
   MINING_PERMISSIONS,
   FLEET_PERMISSIONS,
   HIRE_PERMISSIONS,
+  PAYROLL_PERMISSIONS,
   CATEGORY_SHARED_PERMISSIONS,
   SPARE_PARTS_CATEGORY_PERMISSIONS,
   MINING_CATEGORY_PERMISSIONS,
