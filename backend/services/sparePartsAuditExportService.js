@@ -278,7 +278,7 @@ async function sendAuditExport(res, config) {
     caution.font = { name: "Aptos", color: { argb: COLOR.navy }, size: 9, italic: true };
     caution.alignment = { indent: 1, vertical: "middle", wrapText: true };
     cover.getRow(cursor).height = 36;
-    cover.printArea = "A1:H" + cursor;
+    cover.pageSetup.printArea = "A1:H" + cursor;
 
     const amountKey = key =>
       /^(unit_price|gross|discount|net|tax|receipt_amount|unit_cost|cost|profit|subtotal|line_subtotal|subtotal_difference|pretax_sales|total|allocated_total|total_difference|paid_lifetime|debt_payments_lifetime|initial_paid_reconstructed|balance_lifetime|refund_amount|cash_refund|momo_refund|bank_refund|other_refund|original_item_gross_estimate|estimated_net_refundable|refund_vs_estimated_value|historical_unit_cost_estimate|recovered_stock_cost_estimate|amount|effective_amount|historical_sale_cost|cash_out|momo_out|bank_out|other_out|sales_total)$/.test(key);
@@ -292,6 +292,15 @@ async function sendAuditExport(res, config) {
       return Math.max(16, Math.min(29, column.label.length + 5));
     }
     function addTable(name, cols, records) {
+      // Reuse styles across thousands of transaction cells to keep exports efficient.
+      const whiteFill = fill(COLOR.white);
+      const stripedFill = fill(COLOR.stripe);
+      const amberFill = fill(COLOR.amber);
+      const redFill = fill(COLOR.redLight);
+      const defaultFont = { name: "Aptos", size: 10, color: { argb: COLOR.ink } };
+      const warningFont = { name: "Aptos", size: 10, bold: true, color: { argb: COLOR.navy } };
+      const redFont = { name: "Aptos", size: 10, bold: true, color: { argb: COLOR.red } };
+      const lineBorder = { bottom: { style: "hair", color: { argb: COLOR.border } } };
       const sheet = book.addWorksheet(name.slice(0, 31), {
         properties: { tabColor: { argb: /Exception|Audit/.test(name) ? COLOR.red :
           /Return|Refund/.test(name) ? COLOR.gold : /Summary/.test(name) ? COLOR.teal : COLOR.navy2 } }
@@ -350,13 +359,13 @@ async function sendAuditExport(res, config) {
           const cell = row.getCell(column);
           const key = String(descriptor.key);
           const numeric = typeof cell.value === "number";
-          cell.fill = fill(index % 2 ? COLOR.stripe : COLOR.white);
-          cell.font = { name: "Aptos", size: 10, color: { argb: COLOR.ink } };
+          cell.fill = index % 2 ? stripedFill : whiteFill;
+          cell.font = defaultFont;
           cell.alignment = {
             vertical: "middle", horizontal: numeric ? "right" : "left",
             wrapText: /item|reason|description|issue|review_status|measure|value/.test(key)
           };
-          cell.border = { bottom: { style: "hair", color: { argb: COLOR.border } } };
+          cell.border = lineBorder;
           if (numeric) {
             cell.numFmt = /margin|percentage/.test(key) ? percentFormat :
               amountKey(key) || (key === "value" && /\(GHS\)|amount|refund|expense|profit|total|money|collected/i.test(String(record.measure || "")))
@@ -364,16 +373,16 @@ async function sendAuditExport(res, config) {
           }
           if (/review_status/.test(key) && cell.value &&
               !/^reconciled$/i.test(String(cell.value))) {
-            cell.fill = fill(COLOR.amber);
-            cell.font = { name: "Aptos", size: 10, bold: true, color: { argb: COLOR.navy } };
+            cell.fill = amberFill;
+            cell.font = warningFont;
           }
           if (/^status$/.test(key) && /void|reversal|cancel/i.test(String(cell.value || ""))) {
-            cell.fill = fill(COLOR.redLight);
-            cell.font = { name: "Aptos", size: 10, bold: true, color: { argb: COLOR.red } };
+            cell.fill = redFill;
+            cell.font = redFont;
           }
           if (/^issue$/.test(key) && cell.value) {
-            cell.fill = fill(COLOR.redLight);
-            cell.font = { name: "Aptos", size: 10, color: { argb: COLOR.red } };
+            cell.fill = redFill;
+            cell.font = redFont;
           }
         }
       });
@@ -382,7 +391,7 @@ async function sendAuditExport(res, config) {
         from: { row: headerRow, column: 1 },
         to: { row: headerRow + records.length, column: cols.length }
       };
-      sheet.printArea = "A1:" + sheet.getColumn(cols.length).letter +
+      sheet.pageSetup.printArea = "A1:" + sheet.getColumn(cols.length).letter +
         Math.max(headerRow, headerRow + records.length);
       return sheet;
     }
