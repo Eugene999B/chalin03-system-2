@@ -174,7 +174,9 @@ async function sendAuditExport(res, config) {
     const detailsBandRow = transactionReport ? 14 : 10;
     band(detailsBandRow, "02  /  REPORT INFORMATION", COLOR.navy2);
     let cursor = detailsBandRow + 1;
-    for (const [key, value] of meta.slice(0, 9)) {
+    const metadataLabels = new Set(["Report", "Purpose", "Selected store", "Period",
+      "From Date", "To Date", "Generated", "Prepared by", "Detail records"]);
+    for (const [key, value] of meta.filter(([label]) => metadataLabels.has(label))) {
       cover.mergeCells(cursor, 1, cursor, 2);
       cover.mergeCells(cursor, 3, cursor, 8);
       const left = cover.getCell(cursor, 1);
