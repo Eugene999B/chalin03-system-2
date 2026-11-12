@@ -83,7 +83,7 @@ const REPORTS = [
     category: "Sales",
     icon: "🔬",
     endpoint: "/exports/transaction-history",
-    description: "Investigate every sale line and reconcile receipt totals, taxes, discounts, historical costs and profit. Includes each stock-only or cash/MoMo/bank return, actual refund amounts, customer debt collections, expenses, payment-channel analyses and flagged calculation differences. Date range applies to each event on its recorded date.",
+    description: "Investigate every sale, return, refund and collection in a premium Excel workbook with an executive dashboard, payment and tax reconciliation, expense analysis and clearly flagged exceptions. Each event follows its own recorded date.",
     dateFilter: true,
     featured: true,
   },
@@ -487,7 +487,7 @@ export default function ExportsPage() {
         {visibleReports.map((report) => (
           <article
             key={report.key}
-            className={`ec-report-card${report.featured ? " is-featured" : ""}`}
+            className={`ec-report-card${report.featured ? " is-featured" : ""}${report.key === "transaction-history" ? " ec-transaction-report" : ""}`}
           >
             <div className="ec-report-topline">
               <div className="ec-report-icon" aria-hidden="true">{report.icon}</div>
@@ -509,6 +509,18 @@ export default function ExportsPage() {
                   <span><small>To Date</small><strong>{to || "Latest available"}</strong></span>
                 </div>
                 <a href="#ec-report-period">Change reporting dates</a>
+              </div>
+            )}
+
+            {report.key === "transaction-history" && (
+              <div className="ec-workbook-preview" aria-label="Excel workbook report highlights">
+                <strong>Inside the Excel workbook</strong>
+                <div>
+                  <span>Executive dashboard</span>
+                  <span>Returns &amp; refunds</span>
+                  <span>Money reconciliation</span>
+                  <span>Highlighted audit issues</span>
+                </div>
               </div>
             )}
 
