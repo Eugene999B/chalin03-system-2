@@ -584,3 +584,57 @@
   .ec-transaction-period-dates { gap: 8px; }
   .ec-transaction-period-dates span:not([aria-hidden]) { min-width: 100px; }
 }
+
+/* Executive-grade transaction workbook entry, deliberately scoped to one report. */
+.ec-transaction-report {
+  border-color: #8dc5b8;
+  background: linear-gradient(150deg, #effaf7 0%, #ffffff 45%, #ffffff 100%);
+}
+.ec-transaction-report .ec-report-icon {
+  background: #d7f3e9;
+}
+.ec-workbook-preview {
+  margin-top: 11px;
+  padding: 13px;
+  border: 1px solid #d5e5eb;
+  border-radius: 13px;
+  background: #ffffff;
+}
+.ec-workbook-preview > strong {
+  display: block;
+  margin-bottom: 9px;
+  color: #203e53;
+  font-size: 12px;
+  letter-spacing: .015em;
+}
+.ec-workbook-preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.ec-workbook-preview span {
+  background: #eaf6f2;
+  border: 1px solid #c4e4db;
+  border-radius: 8px;
+  color: #176456;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 6px 8px;
+}
+.ec-transaction-report .format-xlsx {
+  background: #086f62;
+  border-color: #086f62;
+  color: #ffffff;
+}
+.ec-transaction-report .format-xlsx:hover:not(:disabled) {
+  background: #06584e;
+}
+.ec-transaction-report .ec-format-actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 420px) {
+  .ec-transaction-report .ec-format-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
