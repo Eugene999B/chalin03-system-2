@@ -307,6 +307,15 @@ export default function MultiItemReturnPanel({
     }
 
     if (outcome === "refund") {
+      const collectedAvailable = Math.min(
+        ...selectedLines.map((line) =>
+          Number(verifiedQuote(line)?.amount_collected_available ?? 0)
+        )
+      );
+      if (refundTotal - collectedAvailable > 0.009) {
+        return "Total requested refunds exceed the customer money still available on this receipt (" +
+          formatMoney(collectedAvailable) + ").";
+      }
       if (
         ![
           "cash",
