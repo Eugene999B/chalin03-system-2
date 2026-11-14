@@ -174,6 +174,11 @@ export default function ReturnsPage() {
   }
 
   useEffect(() => {
+    // Never keep a receipt from the previously selected store on screen.
+    setSelectedSaleId("");
+    setSelectedSale(null);
+    setSaleItems([]);
+    setForm(EMPTY_FORM);
     loadPageData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
@@ -288,7 +293,7 @@ export default function ReturnsPage() {
     }
   }
 
-  if (!["admin", "manager", "auditor"].includes(role)) {
+  if (!["admin", "manager"].includes(role)) {
     return (
       <div>
         <div className="page-header">
