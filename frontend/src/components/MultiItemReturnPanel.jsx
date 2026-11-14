@@ -26,6 +26,7 @@ function makeLine(item) {
     selected: false,
     quantity: "",
     refund_amount: "0",
+    refundManuallyEdited: false,
   };
 }
 
@@ -56,6 +57,9 @@ export default function MultiItemReturnPanel({
 
   const [error, setError] =
     useState("");
+  const [refundQuotes, setRefundQuotes] = useState({});
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteLoading, setQuoteLoading] = useState(false);
 
   useEffect(() => {
     setLines((saleItems || []).map(makeLine));
@@ -73,8 +77,66 @@ export default function MultiItemReturnPanel({
     [lines]
   );
 
+  const quoteKey = selectedLines
+    .map((line) => String(line.product_id) + ":" + String(line.quantity))
+    .join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    setRefundQuotes({});
+    setQuoteError("");
+    setQuoteLoading(false);
+    if (outcome !== "refund" || !saleId || !quoteKey) return undefined;
+
+    if (selectedLines.some((line) =>
+      !Number.isInteger(Number(line.quantity)) ||
+      Number(line.quantity) <= 0 ||
+      Number(line.quantity) > line.remaining_quantity
+    )) {
+      setQuoteError("Enter a valid available quantity for every selected product.");
+      return undefined;
+    }
+
+    setQuoteLoading(true);
+    Promise.all(selectedLines.map(async (line) => {
+      const response = await axiosClient.get(
+        `/returns/sales/${saleId}/refund-quote`,
+        { params: { product_id: line.product_id, quantity: Number(line.quantity) } }
+      );
+      return response.data;
+    })).then((quotes) => {
+      if (cancelled) return;
+      const next = Object.fromEntries(quotes.map((quote) => [Number(quote.product_id), quote]));
+      setRefundQuotes(next);
+      setLines((current) => current.map((line) => {
+        const quote = next[line.product_id];
+        if (!quote || !line.selected || line.refundManuallyEdited ||
+            Number(quote.quantity) !== Number(line.quantity)) return line;
+        return { ...line, refund_amount: Number(quote.maximum_refund).toFixed(2) };
+      }));
+    }).catch((requestError) => {
+      if (!cancelled) setQuoteError(
+        requestError?.response?.data?.message ||
+        "Unable to verify the refund limits for all selected items."
+      );
+    }).finally(() => {
+      if (!cancelled) setQuoteLoading(false);
+    });
+    return () => { cancelled = true; };
+  // quoteKey tracks product/quantity changes without reloading when refund fields are edited.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saleId, outcome, quoteKey]);
+
+  function verifiedQuote(line) {
+    const quote = refundQuotes[line.product_id];
+    return quote && Number(quote.quantity) === Number(line.quantity) ? quote : null;
+  }
+
   const estimatedTotal =
-    selectedLines.reduce(
+    outcome === "refund"
+      ? selectedLines.reduce((total, line) =>
+          total + Number(verifiedQuote(line)?.estimated_refund_amount || 0), 0)
+      : selectedLines.reduce(
       (total, line) =>
         total +
         line.unit_price *
