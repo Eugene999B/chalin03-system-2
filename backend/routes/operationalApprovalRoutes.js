@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const { calculateReturnLimit } = require("../services/sparePartsReturnLimitService");
 const { canApplySaleDiscount, discountApprovalRequired } =
   require("../services/saleDiscountAuthorizationService");
 const {
@@ -172,11 +173,14 @@ async function createReturnRefundRequest(req, res) {
     await connection.beginTransaction();
     const sale = await findSale(connection, saleId, branchId, { forUpdate: true });
     assertActiveSale(sale);
+    if (sale.sale_status !== "completed") {
+      throw Object.assign(new Error("Only completed sales can be refunded."), { statusCode: 409 });
+    }
 
     const [itemRows] = await connection.query(
       `SELECT si.product_id, si.product_name,
               SUM(si.quantity) AS quantity_sold,
-              MAX(si.unit_price) AS unit_price,
+              SUM(si.line_total) AS historical_item_gross,
               COALESCE((
                 SELECT SUM(r.quantity)
                 FROM returns r
@@ -184,7 +188,7 @@ async function createReturnRefundRequest(req, res) {
               ), 0) AS quantity_returned
        FROM sale_items si
        WHERE si.sale_id = ? AND si.product_id = ?
-       GROUP BY si.product_id, si.product_name
+       GROUP BY si.product_id
        LIMIT 1
        FOR UPDATE`,
       [branchId, saleId, productId, saleId, productId]
@@ -223,11 +227,35 @@ async function createReturnRefundRequest(req, res) {
       );
     }
 
-    const maximumRefund = Number(item.unit_price || 0) * quantity;
-    if (refundAmount - maximumRefund > 0.009) {
+    const [priorItemRefundRows] = await connection.query(
+      `SELECT COALESCE(SUM(CASE WHEN return_type = 'refund'
+          THEN refund_amount ELSE 0 END), 0) AS previously_refunded
+       FROM returns WHERE branch_id = ? AND sale_id = ? AND product_id = ?`,
+      [branchId, saleId, productId]
+    );
+    let limit;
+    try {
+      limit = calculateReturnLimit({
+        saleSubtotal: sale.subtotal,
+        saleDiscount: sale.discount_amount,
+        saleTax: sale.tax_amount,
+        saleTotal: sale.total,
+        historicalItemGross: item.historical_item_gross,
+        soldQuantity: item.quantity_sold,
+        returnQuantity: quantity,
+        previouslyRefundedForItem: priorItemRefundRows[0].previously_refunded,
+      });
+    } catch {
       throw Object.assign(
-        new Error(`Refund cannot exceed GHS ${maximumRefund.toFixed(2)} for this quantity.`),
-        { statusCode: 400 }
+        new Error("Original sale discount, tax or item value needs reconciliation before refund approval."),
+        { statusCode: 409, code: "ORIGINAL_RECEIPT_RECONCILIATION_REQUIRED" }
+      );
+    }
+    if (refundAmount - limit.maximum_refund > 0.009) {
+      throw Object.assign(
+        new Error("Refund cannot exceed GHS " + limit.maximum_refund.toFixed(2) +
+          " for this returned quantity after receipt discounts, tax and earlier refunds."),
+        { statusCode: 400, code: "REFUND_EXCEEDS_HISTORICAL_LIMIT" }
       );
     }
 
