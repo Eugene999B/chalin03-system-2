@@ -304,6 +304,136 @@ router.get(
   }
 );
 
+
+// GET /api/returns/sales/:saleId/refund-quote
+// This is a read-only estimate. Submission and approval recalculate the limit.
+router.get(
+  "/sales/:saleId/refund-quote",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const saleId = Number(req.params.saleId);
+      const productId = Number(req.query.product_id);
+      const quantity = Number(req.query.quantity);
+      if (![saleId, productId, quantity].every((value) =>
+        Number.isSafeInteger(value) && value > 0
+      )) {
+        return res.status(400).json({
+          status: "error",
+          message: "Receipt, product and quantity must be positive whole numbers.",
+        });
+      }
+
+      const [sales] = await pool.query(
+        `SELECT id, branch_id, sale_status, is_voided,
+                subtotal, discount_amount, tax_amount, total, amount_paid
+         FROM sales WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [saleId, branchId]
+      );
+      const sale = sales[0];
+      if (!sale || sale.sale_status !== "completed" || Number(sale.is_voided || 0) === 1) {
+        return res.status(404).json({
+          status: "error",
+          message: "Active completed receipt not found in the selected store.",
+        });
+      }
+
+      const [items] = await pool.query(
+        `SELECT si.product_id, SUM(si.quantity) AS quantity_sold,
+                SUM(si.line_total) AS historical_item_gross
+         FROM sale_items si
+         INNER JOIN sales s ON s.id = si.sale_id
+         WHERE si.sale_id = ? AND si.product_id = ? AND s.branch_id = ?
+         GROUP BY si.product_id`,
+        [saleId, productId, branchId]
+      );
+      if (!items.length) {
+        return res.status(404).json({
+          status: "error",
+          message: "Product not found on this receipt.",
+        });
+      }
+
+      const [previous] = await pool.query(
+        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity,
+                COALESCE(SUM(CASE WHEN return_type = 'refund'
+                   THEN refund_amount ELSE 0 END), 0) AS previously_refunded
+         FROM returns
+         WHERE branch_id = ? AND sale_id = ? AND product_id = ?`,
+        [branchId, saleId, productId]
+      );
+      const reservations = await listActiveReturnReservations(pool, { branchId, saleId });
+      const activeForProduct = reservations.filter(
+        (reservation) => Number(reservation.product_id) === productId
+      );
+      const quantitySold = Number(items[0].quantity_sold || 0);
+      const remaining = quantitySold - Number(previous[0].returned_quantity || 0);
+      if (activeForProduct.length || quantity > remaining) {
+        return res.status(409).json({
+          status: "error",
+          code: "RETURN_QUANTITY_UNAVAILABLE",
+          message: activeForProduct.length
+            ? "This product already has an active financial return request."
+            : "Only " + Math.max(0, remaining) + " unit(s) remain available for return.",
+        });
+      }
+
+      let limit;
+      try {
+        limit = calculateReturnLimit({
+          saleSubtotal: sale.subtotal,
+          saleDiscount: sale.discount_amount,
+          saleTax: sale.tax_amount,
+          saleTotal: sale.total,
+          historicalItemGross: items[0].historical_item_gross,
+          soldQuantity: quantitySold,
+          returnQuantity: quantity,
+          previouslyRefundedForItem: previous[0].previously_refunded,
+        });
+      } catch {
+        return res.status(409).json({
+          status: "error",
+          code: "ORIGINAL_RECEIPT_RECONCILIATION_REQUIRED",
+          message: "The original receipt requires reconciliation before a refund can be quoted.",
+        });
+      }
+
+      const [previousReceiptRefunds] = await pool.query(
+        `SELECT COALESCE(SUM(refund_amount), 0) AS refunded_total
+         FROM returns WHERE branch_id = ? AND sale_id = ? AND return_type = 'refund'`,
+        [branchId, saleId]
+      );
+      const reservedRefunds = reservations.reduce(
+        (sum, reservation) => sum + Number(reservation.refund_amount || 0), 0
+      );
+      const collectedRemaining = Math.max(0, Math.round(
+        (Number(sale.amount_paid || 0) -
+          Number(previousReceiptRefunds[0].refunded_total || 0) -
+          reservedRefunds) * 100
+      ) / 100);
+      return res.json({
+        status: "success",
+        product_id: productId,
+        quantity,
+        remaining_quantity: remaining,
+        unit_value_estimate: limit.unit_value_estimate,
+        estimated_refund_amount: limit.estimated_return_amount,
+        maximum_refund: Math.min(limit.maximum_refund, collectedRemaining),
+        amount_collected_available: collectedRemaining,
+        historical_item_customer_value: limit.original_item_customer_value,
+      });
+    } catch (error) {
+      console.error("Get sale refund quote error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Unable to calculate the historical receipt refund estimate.",
+      });
+    }
+  }
+);
+
 // GET /api/returns
 router.get(
   "/",
