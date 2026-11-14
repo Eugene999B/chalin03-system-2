@@ -517,7 +517,7 @@ export default function MultiItemReturnPanel({
                       ? ` · Pending approval: ${line.pending_return_quantity}`
                       : ""}
                     {" · "}
-                    {formatMoney(line.unit_price)} each
+                    Historical gross average: {formatMoney(line.unit_price)} each
                     {line.active_refund_request_codes.length > 0
                       ? ` · ${line.active_refund_request_codes.join(", ")}`
                       : ""}
@@ -565,6 +565,9 @@ export default function MultiItemReturnPanel({
                           )
                         }
                       />
+                      {quote && (
+                        <small>Server-verified limit: {formatMoney(quote.maximum_refund)}</small>
+                      )}
                     </label>
                   ) : null}
                 </div>
