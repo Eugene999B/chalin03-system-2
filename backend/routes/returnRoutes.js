@@ -197,7 +197,13 @@ router.get(
           s.id,
           s.branch_id,
           s.receipt_number,
+          s.subtotal,
+          s.discount_amount,
+          s.tax_amount,
           s.total,
+          s.amount_paid,
+          s.sale_status,
+          s.is_voided,
           s.payment_type,
           s.created_at,
           COALESCE(s.customer_name, c.name) AS customer_name,
@@ -225,6 +231,7 @@ router.get(
           MAX(si.product_name) AS product_name,
           SUM(si.quantity) AS quantity_sold,
           SUM(si.line_total) AS historical_item_gross,
+          ROUND(SUM(si.line_total) / NULLIF(SUM(si.quantity), 0), 2) AS unit_price,
           SUM(si.line_total) AS line_total,
           COALESCE((
             SELECT SUM(r.quantity)
@@ -237,8 +244,8 @@ router.get(
          INNER JOIN sales s ON si.sale_id = s.id
          WHERE si.sale_id = ?
          AND s.branch_id = ?
-         GROUP BY si.sale_id, si.product_id, si.product_name
-         ORDER BY si.product_name ASC`,
+         GROUP BY si.sale_id, si.product_id
+         ORDER BY product_name ASC`,
         [branchId, saleId, branchId]
       );
 
@@ -557,7 +564,7 @@ router.post(
           si.product_id,
           si.product_name,
           SUM(si.quantity) AS quantity_sold,
-          MAX(si.unit_price) AS unit_price
+          SUM(si.line_total) AS historical_item_gross
          FROM sale_items si
          INNER JOIN sales s ON si.sale_id = s.id
          WHERE si.sale_id = ?
