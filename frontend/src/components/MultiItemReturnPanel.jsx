@@ -173,14 +173,8 @@ export default function MultiItemReturnPanel({
           ...line,
           selected,
           quantity,
-          refund_amount:
-            selected &&
-            outcome === "refund"
-              ? (
-                  line.unit_price *
-                  Number(quantity || 0)
-                ).toFixed(2)
-              : line.refund_amount,
+          refund_amount: "0",
+          refundManuallyEdited: false,
         };
       })
     );
@@ -202,13 +196,8 @@ export default function MultiItemReturnPanel({
         return {
           ...line,
           quantity: value,
-          refund_amount:
-            outcome === "refund"
-              ? (
-                  line.unit_price *
-                  Number(value || 0)
-                ).toFixed(2)
-              : line.refund_amount,
+          refund_amount: "0",
+          refundManuallyEdited: false,
         };
       })
     );
@@ -225,6 +214,7 @@ export default function MultiItemReturnPanel({
           ? {
               ...line,
               refund_amount: value,
+              refundManuallyEdited: true,
             }
           : line
       )
@@ -237,16 +227,8 @@ export default function MultiItemReturnPanel({
     setLines((current) =>
       current.map((line) => ({
         ...line,
-        refund_amount:
-          value === "refund" &&
-          line.selected
-            ? (
-                line.unit_price *
-                Number(
-                  line.quantity || 0
-                )
-              ).toFixed(2)
-            : "0",
+        refund_amount: "0",
+        refundManuallyEdited: false,
       }))
     );
 
@@ -300,8 +282,11 @@ export default function MultiItemReturnPanel({
           line.refund_amount || 0
         );
 
-        const maximum =
-          line.unit_price * quantity;
+        const quote = verifiedQuote(line);
+        if (!quote) {
+          return quoteError || line.product_name + ": refund amount has not been verified by the server.";
+        }
+        const maximum = Number(quote.maximum_refund || 0);
 
         if (
           !Number.isFinite(
@@ -468,25 +453,27 @@ export default function MultiItemReturnPanel({
       </h2>
 
       <p className="returns-batch-intro">
-        Select every product the customer
-        returned, enter each quantity, then
-        save them together for{" "}
+        Select every returned product and quantity for{" "}
         <strong>
           {storeCode} — {storeName}
-        </strong>
-        .
+        </strong>.
+        Each product is processed as a separate request. If an item fails, earlier
+        successful requests are not automatically rolled back.
       </p>
 
-      {error ? (
-        <div className="error-box">
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className="error-box">{error}</div> : null}
+      {outcome === "refund" && quoteLoading && (
+        <p>Checking historical receipt amounts and previous refunds…</p>
+      )}
+      {outcome === "refund" && quoteError && (
+        <div className="error-box" role="alert">{quoteError}</div>
+      )}
 
       <div className="returns-batch-lines">
         {lines.map((line) => {
           const unavailable =
             line.remaining_quantity <= 0 || line.active_refund_request_count > 0;
+          const quote = verifiedQuote(line);
 
           return (
             <article
@@ -557,13 +544,7 @@ export default function MultiItemReturnPanel({
                         type="number"
                         min="0.01"
                         step="0.01"
-                        max={
-                          line.unit_price *
-                          Number(
-                            line.quantity ||
-                              0
-                          )
-                        }
+                        max={quote ? Number(quote.maximum_refund) : undefined}
                         value={
                           line.refund_amount
                         }
@@ -710,7 +691,8 @@ export default function MultiItemReturnPanel({
         type="submit"
         disabled={
           saving ||
-          selectedLines.length === 0
+          selectedLines.length === 0 ||
+          (outcome === "refund" && (quoteLoading || selectedLines.some((line) => !verifiedQuote(line))))
         }
       >
         {saving
