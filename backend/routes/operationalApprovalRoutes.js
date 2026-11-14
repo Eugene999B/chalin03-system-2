@@ -178,7 +178,7 @@ async function createReturnRefundRequest(req, res) {
     }
 
     const [itemRows] = await connection.query(
-      `SELECT si.product_id, si.product_name,
+      `SELECT si.product_id, MAX(si.product_name) AS product_name,
               SUM(si.quantity) AS quantity_sold,
               SUM(si.line_total) AS historical_item_gross,
               COALESCE((
