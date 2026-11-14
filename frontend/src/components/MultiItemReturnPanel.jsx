@@ -26,6 +26,7 @@ function makeLine(item) {
     selected: false,
     quantity: "",
     refund_amount: "0",
+    refundManuallyEdited: false,
   };
 }
 
@@ -56,6 +57,9 @@ export default function MultiItemReturnPanel({
 
   const [error, setError] =
     useState("");
+  const [refundQuotes, setRefundQuotes] = useState({});
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteLoading, setQuoteLoading] = useState(false);
 
   useEffect(() => {
     setLines((saleItems || []).map(makeLine));
@@ -73,8 +77,66 @@ export default function MultiItemReturnPanel({
     [lines]
   );
 
+  const quoteKey = selectedLines
+    .map((line) => String(line.product_id) + ":" + String(line.quantity))
+    .join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    setRefundQuotes({});
+    setQuoteError("");
+    setQuoteLoading(false);
+    if (outcome !== "refund" || !saleId || !quoteKey) return undefined;
+
+    if (selectedLines.some((line) =>
+      !Number.isInteger(Number(line.quantity)) ||
+      Number(line.quantity) <= 0 ||
+      Number(line.quantity) > line.remaining_quantity
+    )) {
+      setQuoteError("Enter a valid available quantity for every selected product.");
+      return undefined;
+    }
+
+    setQuoteLoading(true);
+    Promise.all(selectedLines.map(async (line) => {
+      const response = await axiosClient.get(
+        `/returns/sales/${saleId}/refund-quote`,
+        { params: { product_id: line.product_id, quantity: Number(line.quantity) } }
+      );
+      return response.data;
+    })).then((quotes) => {
+      if (cancelled) return;
+      const next = Object.fromEntries(quotes.map((quote) => [Number(quote.product_id), quote]));
+      setRefundQuotes(next);
+      setLines((current) => current.map((line) => {
+        const quote = next[line.product_id];
+        if (!quote || !line.selected || line.refundManuallyEdited ||
+            Number(quote.quantity) !== Number(line.quantity)) return line;
+        return { ...line, refund_amount: Number(quote.maximum_refund).toFixed(2) };
+      }));
+    }).catch((requestError) => {
+      if (!cancelled) setQuoteError(
+        requestError?.response?.data?.message ||
+        "Unable to verify the refund limits for all selected items."
+      );
+    }).finally(() => {
+      if (!cancelled) setQuoteLoading(false);
+    });
+    return () => { cancelled = true; };
+  // quoteKey tracks product/quantity changes without reloading when refund fields are edited.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saleId, outcome, quoteKey]);
+
+  function verifiedQuote(line) {
+    const quote = refundQuotes[line.product_id];
+    return quote && Number(quote.quantity) === Number(line.quantity) ? quote : null;
+  }
+
   const estimatedTotal =
-    selectedLines.reduce(
+    outcome === "refund"
+      ? selectedLines.reduce((total, line) =>
+          total + Number(verifiedQuote(line)?.estimated_refund_amount || 0), 0)
+      : selectedLines.reduce(
       (total, line) =>
         total +
         line.unit_price *
@@ -111,14 +173,8 @@ export default function MultiItemReturnPanel({
           ...line,
           selected,
           quantity,
-          refund_amount:
-            selected &&
-            outcome === "refund"
-              ? (
-                  line.unit_price *
-                  Number(quantity || 0)
-                ).toFixed(2)
-              : line.refund_amount,
+          refund_amount: "0",
+          refundManuallyEdited: false,
         };
       })
     );
@@ -140,13 +196,8 @@ export default function MultiItemReturnPanel({
         return {
           ...line,
           quantity: value,
-          refund_amount:
-            outcome === "refund"
-              ? (
-                  line.unit_price *
-                  Number(value || 0)
-                ).toFixed(2)
-              : line.refund_amount,
+          refund_amount: "0",
+          refundManuallyEdited: false,
         };
       })
     );
@@ -163,6 +214,7 @@ export default function MultiItemReturnPanel({
           ? {
               ...line,
               refund_amount: value,
+              refundManuallyEdited: true,
             }
           : line
       )
@@ -175,16 +227,8 @@ export default function MultiItemReturnPanel({
     setLines((current) =>
       current.map((line) => ({
         ...line,
-        refund_amount:
-          value === "refund" &&
-          line.selected
-            ? (
-                line.unit_price *
-                Number(
-                  line.quantity || 0
-                )
-              ).toFixed(2)
-            : "0",
+        refund_amount: "0",
+        refundManuallyEdited: false,
       }))
     );
 
@@ -238,8 +282,11 @@ export default function MultiItemReturnPanel({
           line.refund_amount || 0
         );
 
-        const maximum =
-          line.unit_price * quantity;
+        const quote = verifiedQuote(line);
+        if (!quote) {
+          return quoteError || line.product_name + ": refund amount has not been verified by the server.";
+        }
+        const maximum = Number(quote.maximum_refund || 0);
 
         if (
           !Number.isFinite(
@@ -260,6 +307,15 @@ export default function MultiItemReturnPanel({
     }
 
     if (outcome === "refund") {
+      const collectedAvailable = Math.min(
+        ...selectedLines.map((line) =>
+          Number(verifiedQuote(line)?.amount_collected_available ?? 0)
+        )
+      );
+      if (refundTotal - collectedAvailable > 0.009) {
+        return "Total requested refunds exceed the customer money still available on this receipt (" +
+          formatMoney(collectedAvailable) + ").";
+      }
       if (
         ![
           "cash",
@@ -406,25 +462,27 @@ export default function MultiItemReturnPanel({
       </h2>
 
       <p className="returns-batch-intro">
-        Select every product the customer
-        returned, enter each quantity, then
-        save them together for{" "}
+        Select every returned product and quantity for{" "}
         <strong>
           {storeCode} — {storeName}
-        </strong>
-        .
+        </strong>.
+        Each product is processed as a separate request. If an item fails, earlier
+        successful requests are not automatically rolled back.
       </p>
 
-      {error ? (
-        <div className="error-box">
-          {error}
-        </div>
-      ) : null}
+      {error ? <div className="error-box">{error}</div> : null}
+      {outcome === "refund" && quoteLoading && (
+        <p>Checking historical receipt amounts and previous refunds…</p>
+      )}
+      {outcome === "refund" && quoteError && (
+        <div className="error-box" role="alert">{quoteError}</div>
+      )}
 
       <div className="returns-batch-lines">
         {lines.map((line) => {
           const unavailable =
             line.remaining_quantity <= 0 || line.active_refund_request_count > 0;
+          const quote = verifiedQuote(line);
 
           return (
             <article
@@ -459,7 +517,7 @@ export default function MultiItemReturnPanel({
                       ? ` · Pending approval: ${line.pending_return_quantity}`
                       : ""}
                     {" · "}
-                    {formatMoney(line.unit_price)} each
+                    Historical gross average: {formatMoney(line.unit_price)} each
                     {line.active_refund_request_codes.length > 0
                       ? ` · ${line.active_refund_request_codes.join(", ")}`
                       : ""}
@@ -495,13 +553,7 @@ export default function MultiItemReturnPanel({
                         type="number"
                         min="0.01"
                         step="0.01"
-                        max={
-                          line.unit_price *
-                          Number(
-                            line.quantity ||
-                              0
-                          )
-                        }
+                        max={quote ? Number(quote.maximum_refund) : undefined}
                         value={
                           line.refund_amount
                         }
@@ -513,6 +565,9 @@ export default function MultiItemReturnPanel({
                           )
                         }
                       />
+                      {quote && (
+                        <small>Server-verified limit: {formatMoney(quote.maximum_refund)}</small>
+                      )}
                     </label>
                   ) : null}
                 </div>
@@ -648,7 +703,8 @@ export default function MultiItemReturnPanel({
         type="submit"
         disabled={
           saving ||
-          selectedLines.length === 0
+          selectedLines.length === 0 ||
+          (outcome === "refund" && (quoteLoading || selectedLines.some((line) => !verifiedQuote(line))))
         }
       >
         {saving
