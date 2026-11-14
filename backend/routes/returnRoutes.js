@@ -692,7 +692,7 @@ router.post(
       const [saleItems] = await connection.query(
         `SELECT
           si.product_id,
-          si.product_name,
+          MAX(si.product_name) AS product_name,
           SUM(si.quantity) AS quantity_sold,
           SUM(si.line_total) AS historical_item_gross
          FROM sale_items si
