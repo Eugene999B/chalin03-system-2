@@ -265,9 +265,18 @@ async function createReturnRefundRequest(req, res) {
        WHERE branch_id = ? AND sale_id = ? AND return_type = 'refund'`,
       [branchId, saleId]
     );
+    // Pending approvals reserve potential cash outflow for this receipt.
+    // A new request must not overbook money already held for other products.
+    const reservedRefundAmount = activeReservations.reduce(
+      (sum, reservation) => sum + Number(reservation.refund_amount || 0), 0
+    );
     const collectedAvailable = Math.max(
       0,
-      money(sale.amount_paid) - money(priorRefundRows[0]?.refunded_total)
+      Number((
+        money(sale.amount_paid) -
+        money(priorRefundRows[0]?.refunded_total) -
+        reservedRefundAmount
+      ).toFixed(2))
     );
     if (refundAmount - collectedAvailable > 0.009) {
       const error = new Error(
