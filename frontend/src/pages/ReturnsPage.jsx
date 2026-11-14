@@ -44,6 +44,9 @@ export default function ReturnsPage() {
   const [to, setTo] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [refundQuote, setRefundQuote] = useState(null);
+  const [refundQuoteError, setRefundQuoteError] = useState("");
+  const [refundQuoteLoading, setRefundQuoteLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -51,8 +54,52 @@ export default function ReturnsPage() {
     () => saleItems.find((item) => Number(item.product_id) === Number(form.product_id)),
     [saleItems, form.product_id]
   );
-  const estimatedReturnAmount =
+  const quoteMatches = Boolean(
+    refundQuote &&
+    Number(refundQuote.product_id) === Number(form.product_id) &&
+    Number(refundQuote.quantity) === Number(form.quantity)
+  );
+  const estimatedReturnAmount = quoteMatches
+    ? Number(refundQuote.maximum_refund || 0)
+    : 0;
+  const historicalGrossEstimate =
     Number(selectedReturnItem?.unit_price || 0) * Number(form.quantity || 0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRefundQuote(null);
+    setRefundQuoteError("");
+    setRefundQuoteLoading(false);
+
+    if (form.return_type !== "refund" || !selectedSaleId || !selectedReturnItem ||
+        !Number.isInteger(Number(form.quantity)) || Number(form.quantity) <= 0) {
+      return undefined;
+    }
+
+    if (Number(form.quantity) > Number(selectedReturnItem.remaining_quantity || 0)) {
+      setRefundQuoteError("Quantity exceeds the units available for return.");
+      return undefined;
+    }
+
+    setRefundQuoteLoading(true);
+    axiosClient.get(`/returns/sales/${selectedSaleId}/refund-quote`, {
+      params: { product_id: Number(form.product_id), quantity: Number(form.quantity) },
+    }).then((response) => {
+      if (!cancelled) setRefundQuote(response.data);
+    }).catch((requestError) => {
+      if (!cancelled) setRefundQuoteError(
+        requestError?.response?.data?.message ||
+        "Could not verify the historical refund limit."
+      );
+    }).finally(() => {
+      if (!cancelled) setRefundQuoteLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [
+    selectedSaleId, form.product_id, form.quantity, form.return_type,
+    selectedReturnItem?.remaining_quantity, branchId,
+  ]);
 
   function formatMoney(value) {
     return `GHS ${Number(value || 0).toFixed(2)}`;
@@ -127,6 +174,11 @@ export default function ReturnsPage() {
   }
 
   useEffect(() => {
+    // Never keep a receipt from the previously selected store on screen.
+    setSelectedSaleId("");
+    setSelectedSale(null);
+    setSaleItems([]);
+    setForm(EMPTY_FORM);
     loadPageData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId]);
@@ -164,6 +216,10 @@ export default function ReturnsPage() {
       const refundAmount = Number(form.refund_amount || 0);
       if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
         setError("Enter the actual amount to refund to the customer.");
+        return;
+      }
+      if (!quoteMatches) {
+        setError(refundQuoteError || "Refund limit is not yet verified. Check the selected quantity.");
         return;
       }
       if (refundAmount - estimatedReturnAmount > 0.009) {
@@ -237,7 +293,7 @@ export default function ReturnsPage() {
     }
   }
 
-  if (!["admin", "manager", "auditor"].includes(role)) {
+  if (!["admin", "manager"].includes(role)) {
     return (
       <div>
         <div className="page-header">
@@ -407,7 +463,7 @@ export default function ReturnsPage() {
                       value={form.refund_amount}
                       onChange={handleFormChange}
                       min="0.01"
-                      max={estimatedReturnAmount || undefined}
+                      max={quoteMatches ? estimatedReturnAmount : undefined}
                       step="0.01"
                     />
                   </label>
@@ -435,11 +491,15 @@ export default function ReturnsPage() {
             </div>
 
             <div className="return-amount-box">
-              <span>Maximum amount for selected quantity</span>
-              <strong>{formatMoney(estimatedReturnAmount)}</strong>
+              <span>{form.return_type === "refund"
+                ? "Server-verified maximum refund for selected quantity"
+                : "Historical gross estimate (stock-only; no refund)"}</span>
+              <strong>{formatMoney(form.return_type === "refund" ? estimatedReturnAmount : historicalGrossEstimate)}</strong>
+              {form.return_type === "refund" && refundQuoteLoading && <small>Checking original receipt and previous refunds…</small>}
+              {form.return_type === "refund" && refundQuoteError && <small role="alert">{refundQuoteError}</small>}
             </div>
 
-            <button type="submit" disabled={saving}>
+            <button type="submit" disabled={saving || (form.return_type === "refund" && refundQuoteLoading)}>
               {saving
                 ? "Processing..."
                 : form.return_type === "refund"
