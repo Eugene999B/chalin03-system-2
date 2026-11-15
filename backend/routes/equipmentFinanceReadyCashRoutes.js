@@ -128,7 +128,6 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const customerId = id(req.body?.customer_id);
     const assetId = id(req.body?.asset_id);
     const requestKey = text(req.body?.idempotency_key, 100);
-    const paymentMethod = text(req.body?.payment_method, 30).toLowerCase();
     const requestedCents = cents(req.body?.amount);
     if (!customerId || !assetId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey)) {
       fail(400, "READY_CASH_INPUT_INVALID", "Choose the buyer, machine and a unique checkout reference.");
@@ -137,13 +136,17 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       fail(400, "READY_CASH_TERMS_REQUIRED",
         "The customer must accept the full payment sale terms before checkout.");
     }
-    if (paymentMethod !== "cash" || req.body?.cash_received_confirmed !== true) {
-      fail(400, "READY_CASH_PAYMENT_NOT_VERIFIED",
-        "Instant Ready Cash checkout currently accepts verified physical cash only. MoMo or bank transfers need trusted provider confirmation before settlement.");
+    // Ready Cash describes settlement timing, NOT the tender or a payment provider.
+    // An authorized operator manually confirms a received full payment. This
+    // endpoint never initiates a charge, debit or payment-provider integration.
+    if (req.body?.full_payment_confirmed !== true) {
+      fail(400, "READY_CASH_PAYMENT_NOT_CONFIRMED",
+        "Confirm that the buyer has already paid the complete agreed price.");
     }
-    if (!text(req.body?.cash_shift_reference, 150)) {
-      fail(400, "READY_CASH_SHIFT_REFERENCE_REQUIRED",
-        "An accountable till or cash-shift reference is required for full cash sales.");
+    const paymentReference = text(req.body?.full_payment_reference, 150);
+    if (!paymentReference) {
+      fail(400, "READY_CASH_REFERENCE_REQUIRED",
+        "Record the internal reference for the full payment that was actually received.");
     }
     if (requestedCents === null || requestedCents <= 0) {
       fail(400, "READY_CASH_AMOUNT_INVALID", "Enter the exact full selling price in GHS.");
@@ -247,7 +250,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
         status: "converted", subtotal: money, discount_amount: 0, tax_rate_percent: 0,
         tax_amount: 0, total_amount: money, deposit_required: money,
         delivery_policy: "after_full_payment", delivery_threshold_percent: 100,
-        terms: "Ready Cash: one verified full cash payment; no installment repayment plan.",
+        terms: "Ready Cash: one confirmed full payment; no installment repayment plan.",
         notes: "System-created at protected Ready Cash checkout. Price copied from active machine register.",
         created_by: userId, approved_by: userId, approved_at: new Date(),
       });
@@ -281,7 +284,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
         amount_paid: money, outstanding_balance: 0,
         delivery_policy: "after_full_payment", delivery_threshold_percent: 100,
         terms_accepted: true,
-        agreement_notes: "READY_CASH: full physical cash payment received and attested by operator. Delivery and ownership handover pending.",
+        agreement_notes: "READY_CASH: full payment manually confirmed; no payment gateway initiated. Delivery and ownership handover pending.",
         created_by: userId, completed_at: new Date(),
       });
       await connection.query("INSERT INTO equipment_sale_payments SET ?", {
@@ -289,9 +292,12 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
         idempotency_key: requestKey, hire_location_id: null,
         agreement_id: agreement.insertId, customer_id: customerId,
         payment_date: new Date(), payment_category: "settlement",
-        amount: money, payment_method: "cash",
-        reference_number: text(req.body?.cash_shift_reference, 150) || null,
-        notes: "Verified Ready Cash full payment; no credit agreement or payment schedule.",
+        // Existing schema requires a tender code. 'other' records a manual
+        // full-payment confirmation, NOT a claim that physical cash was tendered.
+        // Treasury must reconcile the actual channel before this is released.
+        amount: money, payment_method: "other",
+        reference_number: paymentReference,
+        notes: "Ready Cash manual full-payment confirmation; payment channel not assigned by this workflow. No installment schedule.",
         received_by: userId,
       });
       await connection.query(
@@ -313,7 +319,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       await audit(connection, req, "EQUIPMENT_READY_CASH_PAID_IN_FULL", agreement.insertId,
         "Ready Cash full settlement " + agreementNumber + " received for " + machine.asset_code + ".",
         { asset_id: assetId, customer_id: customerId, amount: money,
-          payment_method: "cash", receipt_number: receiptNumber,
+          payment_recording: "manual_full_payment", receipt_number: receiptNumber,
           idempotency_key: requestKey, delivery_pending: true, schedule_count: 0 });
       return { agreementId: agreement.insertId, amount: money, assetCode: machine.asset_code };
     });
@@ -322,7 +328,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       installment_schedule_created: false, agreement_id: saved.agreementId,
       agreement_number: agreementNumber, receipt_number: receiptNumber,
       delivery_status: "reserved", ownership_status: "retained",
-      message: "Full cash payment recorded. The machine is reserved, not yet sold. Complete the signed handover to mark it sold.",
+      message: "Full payment recorded manually. The machine is reserved, not yet sold. Complete the signed handover to mark it sold.",
     });
   } catch (error) {
     return sendError(res, error);
