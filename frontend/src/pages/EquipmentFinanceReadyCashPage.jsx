@@ -57,9 +57,9 @@ export default function EquipmentFinanceReadyCashPage() {
   const [assetId, setAssetId] = useState("");
   const [buyerSearch, setBuyerSearch] = useState("");
   const [assetSearch, setAssetSearch] = useState("");
-  const [cashReceived, setCashReceived] = useState(false);
+  const [fullPaymentConfirmed, setFullPaymentConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [shiftReference, setShiftReference] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
   const [checkoutKey, setCheckoutKey] = useState("");
   const [created, setCreated] = useState(null);
   const [handOverId, setHandOverId] = useState("");
@@ -115,7 +115,7 @@ export default function EquipmentFinanceReadyCashPage() {
 
   function resetCheckout() {
     setCheckoutKey("");
-    setCashReceived(false);
+    setFullPaymentConfirmed(false);
     setTermsAccepted(false);
     setCreated(null);
     setProblem("");
@@ -137,8 +137,9 @@ export default function EquipmentFinanceReadyCashPage() {
       setProblem("Choose an eligible machine and active customer with sales permission.");
       return;
     }
-    if (!cashReceived || !termsAccepted || !shiftReference.trim() || !Number.isFinite(finalPrice) || finalPrice <= 0) {
-      setProblem("The exact price, customer terms and actual physical cash receipt must be confirmed.");
+    if (!fullPaymentConfirmed || !termsAccepted || !paymentReference.trim() ||
+        !Number.isFinite(finalPrice) || finalPrice <= 0) {
+      setProblem("Confirm the full amount has already been received, the internal reference, and the customer's terms.");
       return;
     }
     let key = checkoutKey;
@@ -151,11 +152,11 @@ export default function EquipmentFinanceReadyCashPage() {
       const { data } = await axiosClient.post(API + "/ready-cash/checkout", {
         customer_id: Number(customerId),
         asset_id: Number(assetId),
-        payment_method: "cash",
+        sale_option: "ready_cash",
         amount: finalPrice.toFixed(2),
-        cash_received_confirmed: true,
+        full_payment_confirmed: true,
         customer_terms_accepted: true,
-        cash_shift_reference: shiftReference.trim(),
+        full_payment_reference: paymentReference.trim(),
         idempotency_key: key,
       });
       setCreated({
@@ -211,7 +212,7 @@ export default function EquipmentFinanceReadyCashPage() {
       <div>
         <span className="rc-eyebrow">CHALIN03 · Equipment Finance</span>
         <h1>Ready Cash</h1>
-        <p>One customer. One available machine. One verified full payment.
+        <p>One customer. One available machine. One confirmed payment in full.
           No credit application, interest, arrears or installment schedule.</p>
       </div>
       <button type="button" onClick={refresh} disabled={loading || processing}>
@@ -222,7 +223,7 @@ export default function EquipmentFinanceReadyCashPage() {
       <article><span>Available in loaded register</span><strong>{eligibleMachines.length}</strong></article>
       <article><span>Recent paid · awaiting handover</span><strong>{awaitingHandover.length}</strong></article>
       <article><span>Recent sold and transferred</span><strong>{completed.length}</strong></article>
-      <article><span>Recent full cash collected</span><strong>{money(sales.reduce((sum, sale) => sum + Number(sale.amount_paid || 0), 0))}</strong></article>
+      <article><span>Recent full payments recorded</span><strong>{money(sales.reduce((sum, sale) => sum + Number(sale.amount_paid || 0), 0))}</strong></article>
     </section>
 
     {delayedHandovers.length > 0 && (
@@ -236,9 +237,10 @@ export default function EquipmentFinanceReadyCashPage() {
 
     <div className="rc-columns">
       <section className="rc-card">
-        <header><span>01 · Full settlement</span><h2>Sell for Ready Cash</h2>
-          <p>Use only cash that has been physically received and counted.
-            MoMo or bank payments must not be marked paid until provider verification is integrated.</p>
+        <header><span>01 · Pay in full</span><h2>Ready Cash — Full Payment</h2>
+          <p>Ready Cash means the buyer pays the complete price instead of using installments.
+            It does not initiate payments or connect any external provider. Record only a payment
+            already confirmed by the business.</p>
         </header>
         <form onSubmit={recordPayment}>
           <label>Find customer
@@ -278,21 +280,21 @@ export default function EquipmentFinanceReadyCashPage() {
             <strong>{money(finalPrice)}</strong>
             <small>No discounts and no financing. The official server price must still match at checkout.</small>
           </div>}
-          <label>Cash shift / reconciliation reference
-            <input required value={shiftReference} onChange={(e) => setShiftReference(e.target.value)} placeholder="Shift or till number" maxLength={150} />
+          <label>Internal full-payment confirmation reference
+            <input required value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Receipt or approved reconciliation reference" maxLength={150} />
           </label>
           <label className="rc-checkbox">
-            <input type="checkbox" checked={cashReceived} onChange={(e) => setCashReceived(e.target.checked)} />
-            <span>I have physically received and verified the complete cash payment of {money(finalPrice)}.</span>
+            <input type="checkbox" checked={fullPaymentConfirmed} onChange={(e) => setFullPaymentConfirmed(e.target.checked)} />
+            <span>I confirm that the customer has already paid the entire {money(finalPrice)} and the payment is verified in our existing records.</span>
           </label>
           <label className="rc-checkbox">
             <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
             <span>The customer has reviewed and accepted the full-payment sale terms.</span>
           </label>
-          <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !cashReceived || !termsAccepted || !shiftReference.trim()}>
+          <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !fullPaymentConfirmed || !termsAccepted || !paymentReference.trim()}>
             {processing ? "Recording…" : "Record full payment & reserve machine"}
           </button>
-          <p className="rc-muted">Payment and receipt are committed together. A machine is only marked sold after independent signed handover.</p>
+          <p className="rc-muted">The full-payment record is created without an installment schedule. The machine is only marked sold after independent signed handover.</p>
         </form>
         <CheckoutStatus sale={created} />
       </section>
@@ -300,7 +302,7 @@ export default function EquipmentFinanceReadyCashPage() {
       <section className="rc-card">
         <header><span>02 · Independent confirmation</span><h2>Handover & mark sold</h2>
           <p>A different authorized manager confirms the physical delivery and signed transfer.
-            The cashier who recorded the payment cannot approve their own handover.</p></header>
+            The staff member who recorded the full payment cannot approve their own handover.</p></header>
         <form onSubmit={completeHandover}>
           <label>Fully paid sale awaiting handover
             <select value={handOverId} onChange={(e) => setHandOverId(e.target.value)} required>
