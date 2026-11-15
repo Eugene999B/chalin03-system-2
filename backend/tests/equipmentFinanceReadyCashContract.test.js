@@ -21,10 +21,14 @@ test("Ready Cash uses the independent company-wide Finance router and standard p
   assert.match(financeStage, /stage === "ready-cash"/);
 });
 
-test("Cash checkout requires a real verified full cash receipt and customer acceptance, not unverified transfers", () => {
-  assert.match(readyCash, /paymentMethod !== "cash"/);
-  assert.match(readyCash, /cash_received_confirmed !== true/);
+test("Ready Cash is a full-payment sale option, not a payment-method or gateway integration", () => {
+  assert.match(readyCash, /sale_option !== "ready_cash"/);
+  assert.match(readyCash, /full_payment_confirmed !== true/);
+  assert.match(readyCash, /full_payment_reference/);
   assert.match(readyCash, /customer_terms_accepted !== true/);
+  assert.doesNotMatch(readyCash, /paymentMethod !== "cash"/);
+  assert.doesNotMatch(readyCash, /cash_received_confirmed !== true/);
+  assert.doesNotMatch(readyCash, /cash_shift_reference/);
   assert.match(readyCash, /cents\(machine\.target_selling_price\)/);
   assert.match(readyCash, /totalCents !== requestedCents/);
   assert.match(readyCash, /Number\(conflict\.active_hires\)/);
@@ -74,6 +78,6 @@ test("Payment retry is idempotent and cannot attach a reference to a different b
   assert.match(readyCash, /READY_CASH_ORIGINAL_PAYMENT_REVERSED/);
   assert.match(readyCash, /record\.sale_type !== "cash"/);
   assert.match(readyCash, /Number\(record\.is_voided\) === 1/);
-  assert.match(readyCash, /READY_CASH_SHIFT_REFERENCE_REQUIRED/);
+  assert.match(readyCash, /READY_CASH_REFERENCE_REQUIRED/);
   assert.match(readyCash, /duplicate: true, paid_in_full: true/);
 });
