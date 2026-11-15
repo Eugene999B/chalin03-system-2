@@ -141,6 +141,10 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       fail(400, "READY_CASH_PAYMENT_NOT_VERIFIED",
         "Instant Ready Cash checkout currently accepts verified physical cash only. MoMo or bank transfers need trusted provider confirmation before settlement.");
     }
+    if (!text(req.body?.cash_shift_reference, 150)) {
+      fail(400, "READY_CASH_SHIFT_REFERENCE_REQUIRED",
+        "An accountable till or cash-shift reference is required for full cash sales.");
+    }
     if (requestedCents === null || requestedCents <= 0) {
       fail(400, "READY_CASH_AMOUNT_INVALID", "Enter the exact full selling price in GHS.");
     }
