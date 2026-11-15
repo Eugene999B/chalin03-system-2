@@ -30,13 +30,14 @@ function isAvailable(machine) {
     Number(machine.active_application_count || 0) === 0 &&
     Number(machine.active_sale_lock_count || 0) === 0;
 }
-function CheckoutStatus({ sale }) {
+function CheckoutStatus({ sale, downloadReceipt }) {
   if (!sale) return null;
   const sold = sale.ownership_status === "transferred";
   return <div className="rc-result" role="status">
     <span>{sold ? "Machine sold · ownership transferred" : "Paid in full · awaiting handover"}</span>
     <strong>{sale.agreement_number}</strong>
     <p>Receipt: <b>{sale.receipt_number}</b></p>
+    {sale.id && <button className="rc-receipt-action" type="button" onClick={() => downloadReceipt(sale.id)}>Download official receipt (PDF)</button>}
     <p>{money(sale.total_amount)} collected · outstanding {money(sale.outstanding_balance)}</p>
     {!sold && <p className="rc-handover-warning">
       A different authorized finance manager must verify the signed handover before
@@ -60,6 +61,8 @@ export default function EquipmentFinanceReadyCashPage() {
   const [fullPaymentConfirmed, setFullPaymentConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [paymentReference, setPaymentReference] = useState("");
+  const [taxIncluded, setTaxIncluded] = useState("");
+  const [taxReviewed, setTaxReviewed] = useState(false);
   const [checkoutKey, setCheckoutKey] = useState("");
   const [created, setCreated] = useState(null);
   const [handOverId, setHandOverId] = useState("");
@@ -106,6 +109,8 @@ export default function EquipmentFinanceReadyCashPage() {
       (value) => String(value || "").toLowerCase().includes(buyerSearch.toLowerCase())
     )), [customers, buyerSearch]);
   const finalPrice = Number(machine?.target_selling_price || 0);
+  const taxAmountValid = /^\d{1,12}(?:\.\d{1,2})?$/.test(taxIncluded) &&
+    Number(taxIncluded) >= 0 && Number(taxIncluded) <= finalPrice / 2;
   const awaitingHandover = sales.filter((sale) => sale.ownership_status !== "transferred");
   const completed = sales.filter((sale) => sale.ownership_status === "transferred");
   const delayedHandovers = awaitingHandover.filter((sale) =>
@@ -116,6 +121,8 @@ export default function EquipmentFinanceReadyCashPage() {
   function resetCheckout() {
     setCheckoutKey("");
     setFullPaymentConfirmed(false);
+    setTaxIncluded("");
+    setTaxReviewed(false);
     setTermsAccepted(false);
     setCreated(null);
     setProblem("");
@@ -138,6 +145,7 @@ export default function EquipmentFinanceReadyCashPage() {
       return;
     }
     if (!fullPaymentConfirmed || !termsAccepted || !paymentReference.trim() ||
+        !taxAmountValid || !taxReviewed ||
         !Number.isFinite(finalPrice) || finalPrice <= 0) {
       setProblem("Confirm the full amount has already been received, the internal reference, and the customer's terms.");
       return;
@@ -154,12 +162,15 @@ export default function EquipmentFinanceReadyCashPage() {
         asset_id: Number(assetId),
         sale_option: "ready_cash",
         amount: finalPrice.toFixed(2),
+        tax_amount_included: Number(taxIncluded).toFixed(2),
+        tax_treatment_reviewed: true,
         full_payment_confirmed: true,
         customer_terms_accepted: true,
         full_payment_reference: paymentReference.trim(),
         idempotency_key: key,
       });
       setCreated({
+        id: data.agreement_id,
         agreement_number: data.agreement_number, receipt_number: data.receipt_number,
         total_amount: finalPrice, outstanding_balance: 0, ownership_status: "retained",
       });
@@ -171,6 +182,26 @@ export default function EquipmentFinanceReadyCashPage() {
       setProcessing(false);
     }
   }
+  async function downloadReceipt(agreementId) {
+    setProblem("");
+    try {
+      const response = await axiosClient.get(
+        API + "/ready-cash/" + agreementId + "/receipt.pdf",
+        { responseType: "blob" }
+      );
+      const objectUrl = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "CHALIN03-Ready-Cash-" + agreementId + ".pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+    } catch (error) {
+      setProblem(messageFromError(error, "Could not retrieve this sale's official receipt."));
+    }
+  }
+
   async function completeHandover(event) {
     event.preventDefault();
     setProblem("");
@@ -278,8 +309,19 @@ export default function EquipmentFinanceReadyCashPage() {
           {machine && <div className="rc-price" aria-live="polite">
             <span>Configured full selling price</span>
             <strong>{money(finalPrice)}</strong>
-            <small>No discounts and no financing. The official server price must still match at checkout.</small>
+            <small>This is the complete payable amount, including any Finance-approved tax component. No installments are created.</small>
           </div>}
+          <label>Included tax/levy portion of full price (GHS)
+            <input type="number" required min="0" max={finalPrice / 2} step="0.01"
+              value={taxIncluded} onChange={(e) => { setTaxIncluded(e.target.value); setTaxReviewed(false); }}
+              placeholder="Enter the Finance-approved amount, or 0.00 if approved zero-tax" />
+            <small>Do not guess tax. Use the signed-off sale invoice. This amount is already within the total above, not an extra charge.</small>
+          </label>
+          <label className="rc-checkbox">
+            <input type="checkbox" checked={taxReviewed}
+              onChange={(e) => setTaxReviewed(e.target.checked)} />
+            <span>I verified the final agreed price and its included tax/levy treatment against Finance-approved sale evidence.</span>
+          </label>
           <label>Internal full-payment confirmation reference
             <input required value={paymentReference} onChange={(e) => setPaymentReference(e.target.value)} placeholder="Receipt or approved reconciliation reference" maxLength={150} />
           </label>
@@ -291,12 +333,12 @@ export default function EquipmentFinanceReadyCashPage() {
             <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
             <span>The customer has reviewed and accepted the full-payment sale terms.</span>
           </label>
-          <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !fullPaymentConfirmed || !termsAccepted || !paymentReference.trim()}>
+          <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !fullPaymentConfirmed || !termsAccepted || !paymentReference.trim() || !taxReviewed || !taxAmountValid}>
             {processing ? "Recording…" : "Record full payment & reserve machine"}
           </button>
           <p className="rc-muted">The full-payment record is created without an installment schedule. The machine is only marked sold after independent signed handover.</p>
         </form>
-        <CheckoutStatus sale={created} />
+        <CheckoutStatus sale={created} downloadReceipt={downloadReceipt} />
       </section>
 
       <section className="rc-card">
@@ -311,7 +353,7 @@ export default function EquipmentFinanceReadyCashPage() {
                 <option value={sale.id} key={sale.id}>{sale.agreement_number} · {sale.customer_name_snapshot} · {sale.asset_code_snapshot}</option>)}
             </select>
           </label>
-          {selectedHandoverSale && <CheckoutStatus sale={selectedHandoverSale} />}
+          {selectedHandoverSale && <CheckoutStatus sale={selectedHandoverSale} downloadReceipt={downloadReceipt} />}
           <label>Person physically receiving the machine
             <input required maxLength={150} value={receiver} onChange={(e) => setReceiver(e.target.value)} placeholder="Full name" />
           </label>
@@ -344,15 +386,16 @@ export default function EquipmentFinanceReadyCashPage() {
       </header>
       <div className="rc-table-scroller">
         <table>
-          <thead><tr><th>Agreement</th><th>Machine</th><th>Customer</th><th>Receipt</th><th>Paid</th><th>Status</th></tr></thead>
+          <thead><tr><th>Agreement</th><th>Machine</th><th>Customer</th><th>Receipt</th><th>Paid</th><th>Status</th><th>Document</th></tr></thead>
           <tbody>
             {sales.map((sale) => <tr key={sale.id}>
               <td>{sale.agreement_number}</td><td>{sale.asset_code_snapshot} · {sale.asset_name_snapshot}</td>
               <td>{sale.customer_name_snapshot}</td><td>{sale.receipt_number}</td>
               <td>{money(sale.amount_paid)}</td>
               <td>{sale.ownership_status === "transferred" ? "Sold & transferred" : "Fully paid · handover pending"}</td>
+              <td><button type="button" className="rc-receipt-action" onClick={() => downloadReceipt(sale.id)}>Receipt PDF</button></td>
             </tr>)}
-            {!sales.length && <tr><td colSpan={6}>No Ready Cash transactions yet.</td></tr>}
+            {!sales.length && <tr><td colSpan={7}>No Ready Cash transactions yet.</td></tr>}
           </tbody>
         </table>
       </div>
