@@ -250,6 +250,12 @@ export default function EquipmentFinanceMinimalWorkflowPage() {
           </Link>
         </div>
 
+        <div className="finance-flow__notice" role="note">
+          Paying the complete price today? <Link to="/equipment-installment-finance/applications?stage=ready-cash">
+            Open Ready Cash — no credit application or repayment schedule.
+          </Link>
+        </div>
+
         <div className="finance-flow__steps">
           {WORKFLOW_STEPS.map((step) => (
             <article className="finance-flow__step" key={step.number} data-testid={`finance-step-${step.number}`}>
