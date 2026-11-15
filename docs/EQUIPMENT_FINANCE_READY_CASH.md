@@ -1,56 +1,48 @@
-# CHALIN03 — Ready Cash Equipment Sales (development)
+# CHALIN03 — Ready Cash equipment sales
 
-**Branch:** `feature/equipment-finance-ready-cash-20261115`  
-**Draft PR:** #774  
-**Status:** Code and automated contract checks exist; NOT APPROVED FOR LIVE CASH SALES.
+**Business definition:** Ready Cash means **Pay in Full**, an alternative to Installment Finance. It is a sale type, not a payment method and **does not integrate Hubtel, Paystack, mobile money, bank APIs or automatic direct debit**. Those projects are separate future phases.
 
-## Business definition
+**Implementation:** feature branch `feature/equipment-finance-ready-cash-20261115`, PR #774. Merge through `main` to `production` only after CI and operational acceptance; do not test on real customer transactions.
 
-Ready Cash is the immediate, full-payment alternative to Equipment Installment Finance. A Ready Cash transaction uses one active Finance customer and one available excavator at its protected configured sale price. It does **not** create a credit application, financed balance, repayment schedule, interest or arrears.
+## Staff operating instructions
 
-A full payment is not itself proof of physical delivery. Asset states are:
+1. Sign in to the **Equipment Installment Finance** workspace with `fleet.assets.view` and `fleet.assets.manage` permissions.
+2. In the navigation, select **Ready Cash · Full Payment**. You can also open `/equipment-installment-finance/applications?stage=ready-cash` from the Finance homepage.
+3. Use an active company Finance customer (create the customer in the existing **Customers** screen first if needed).
+4. Select the *exact available excavator*, and confirm its identity, serial number, protected photograph and registered final selling price.
+5. Obtain the Finance-approved invoice or other documented sale-price evidence. In **Included tax/levy portion of full price**, enter the **approved included tax amount**. If the approved treatment is tax-free, explicitly enter `0.00`. The system deducts the included tax portion from the pre-tax amount; it does **not** add another charge on top of the displayed full price. Confirm the Finance tax-review checkbox.
+6. Confirm that the buyer has **already paid the complete price** through the company's existing approved payment processes. Enter the internal receipt or reconciliation reference. Do not tick the confirmation if money has not been collected or verified. The Ready Cash feature itself does not take or initiate payment.
+7. Confirm the customer's full-sale terms. Choose **Record full payment & reserve machine** once.
+8. The checkout records a single final-price receipt and asset reservation with a zero outstanding balance, and creates **no** installment application, scheduled repayments, or loan arrears. The machine remains **Paid in Full / Awaiting Handover**.
+9. Use **Download official receipt (PDF)** or the **Receipt PDF** action in the Ready Cash register. If the request response was unclear, check the register first; do not submit a second sale.
+10. A *different authorized Finance manager* signs in. Under **Handover & mark sold**, choose the paid sale, inspect and physically hand over the exact excavator, enter the receiving person's name, actual machine condition, delivery destination and **reference to the signed delivery / ownership document**.
+11. Tick the independent signed-handover confirmation and select **Confirm handover & mark machine sold**. Only then does the asset status change to **SOLD**, with an ownership-transfer record.
+12. Review the final sale, original receipt, audit trail, cash reconciliation and sales records.
 
-1. Available — not committed to another Hire, credit application or sale.
-2. **Fully paid / reserved** — full cash payment and official receipt saved, machine reserved.
-3. **Sold / transferred** — a different authorized manager has verified signed delivery, receiving person and machine condition; the sale, delivery, asset and ownership records commit together.
+## Example — full purchase of an excavator
 
-## Operational path
+- Machine: EX-001
+- Final registered and approved price: GHS 250,000.00 (example only)
+- Finance-approved included tax component: GHS 0.00 **only if specifically approved**; otherwise enter the approved actual included tax amount
+- Customer pays full GHS 250,000.00 in the existing payment process
+- Staff confirm evidence and book Ready Cash; agreement paid GHS 250,000.00, outstanding GHS 0.00
+- No credit application or installment schedule; delivery still pending
+- Different authorized Finance manager verifies signed handover; the machine becomes SOLD and ownership transferred
 
-- Select a valid customer from the existing company-wide Finance customer list.
-- Select an available machine from the Finance machine register.
-- Verify the exact selling price, customer terms, and accountable cash shift/till reference.
-- Record physically received and counted **cash** with the protected checkout.
-- The backend checks price, machine locks, active Hire contracts, open credit cases and prior agreements **inside a transaction**.
-- It creates a historical one-line quote, cash agreement, full-payment receipt, asset lock and high-severity audit event in one transaction.
-- A duplicate checkout UUID must not create a second receipt. When a response is uncertain, check the recent-sales register before retrying.
-- After signed handover, log in using a **separate authorized finance manager account** to record the receiving person, actual condition, destination and signed handover reference.
-- The second transaction creates delivery and ownership evidence and moves the machine to SOLD.
-- The official non-voided payment ledger must still equal the sale total at handover.
+## Controls and accounting semantics
 
-## Technical interfaces
+- `sale_type='cash'` means non-credit sale within the existing schema; it **does not prove that physical banknotes were tendered**.
+- The existing required `payment_method='other'` records a **manually confirmed settlement with unspecified tender**. Accounting must reconcile this to the true payment source; users must not mistake it for a new electronic-payment integration.
+- A unique checkout UUID prevents duplicate postings. Repeat requests are checked against the exact customer, asset, final price, included tax amount and internal payment reference.
+- The original machine's price, active Hire/Finance reservations and competing sales are checked inside the transaction; an error rolls back sale and payment records.
+- One machine can only be sold once. Stock reservation remains in place until signed handover.
+- Signed delivery and ownership are recorded in one transaction by a different authorized manager after non-voided payment-ledger reconciliation.
+- The PDF receipt is a company-wide Finance document; it does not depend on a Hire-location record.
+- Tax is **not automatically calculated**. A signed-off tax amount is necessary; current v1 does not implement a statutory invoice renderer or tax-jurisdiction engine. Managers must review output for compliance.
+- Never alter an existing customer receipt, create an unverified refund, issue a duplicate sale, or record a real transaction to test this feature.
 
-- `GET /api/equipment-catalogue/sales/phase-one/bootstrap` — existing Finance customer and asset lists.
-- `GET /api/equipment-catalogue/sales/ready-cash/recent` — protected receipt/recovery register.
-- `POST /api/equipment-catalogue/sales/ready-cash/checkout` — full cash payment and reserved machine.
-- `POST /api/equipment-catalogue/sales/ready-cash/:agreementId/handover` — independent signed delivery/ownership transfer.
+## Acceptance / verification
 
-The existing Finance authorization and workspaces are retained. This work must not be implemented in the Hire-location-scoped legacy sales path.
+Run backend `npm run syntax-check`, `npm test`, and `npm run migration-safety`; run frontend `npm test`, `npm run lint`, and `npm run build`, plus browser tests. Validate a synthetic customer, eligible machine, price including an approved tax component, full-payment record, one receipt PDF, original sale audit, a separate manager's signed handover, and the final SOLD and ownership state. Verify both Railway and Cloudflare after release; code checks alone do not establish live business workflow success.
 
-## Release blockers and accounting sign-off
-
-1. **Tax policy:** The current development code treats `fleet_assets.target_selling_price` as the final cash price and records a zero separate tax component. Finance must explicitly confirm the lawful VAT/levy treatment and whether the catalogue price is tax-inclusive before production release. Add the actual approved statutory tax breakdown if applicable.
-2. **Payment evidence:** Only physical cash with operator attestation and till/shift reference can complete instantly in this version. Hubtel, Paystack, MoMo and bank transfers must use a provider-verified callback, matched settlement and idempotent ledger entry before they can trigger `paid_in_full`.
-3. **Database contract:** Verify nullable `hire_location_id` Finance records and all current Finance triggers, including agreement, quote, payment, lock, delivery and transfer schemas. No migrations are included here.
-4. **Independent handover:** Test with two different authorized users and a real signed delivery-document reference in a synthetic environment. Uploading or archiving the actual signed evidence in a secure document vault is the follow-on integration.
-5. **Atomic integrity:** Exercise double clicks, repeated request UUIDs, stale price, a machine held in Hire/Finance, transaction failures at each insert, reversal or void before delivery and cross-division denial. Original finance records must not be rewritten.
-6. **Reconciliation:** Verify receipt accuracy, tax split, till/daily closing, cash flow reports, portfolio exclusion from installment arrears, sold asset visibility, audit trail, backup and rollback.
-
-## Acceptance data (synthetic only)
-
-Use an active test Finance customer, synthetic available machine and approved final selling price (for example GHS 125,000.00); no real customer should pay or receive an ownership transfer in the test.
-
-Expected immediately after checkout: exactly one payment receipt for GHS 125,000.00; agreement `sale_type='cash'`, `amount_paid=125000.00`, `outstanding_balance=0.00`, `financed_amount=0`, zero installment-schedule rows, machine `sale_status='reserved'` and ownership `retained`.
-
-Expected after independent signed handover: exactly one delivery, one ownership transfer, machine `sale_status='sold'`, agreement ownership `transferred`, same original receipt and complete audit evidence.
-
-**Production decision:** Do not merge or deploy until finance/accounting has approved final-price/tax treatment and synthetic acceptance has passed.
+Operational staff must use real accounting evidence for payments, approved tax policy and signed handover. No background payment collection, MoMo, Hubtel or Paystack is part of this feature.
