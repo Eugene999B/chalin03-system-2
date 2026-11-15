@@ -108,6 +108,9 @@ export default function EquipmentFinanceReadyCashPage() {
   const finalPrice = Number(machine?.target_selling_price || 0);
   const awaitingHandover = sales.filter((sale) => sale.ownership_status !== "transferred");
   const completed = sales.filter((sale) => sale.ownership_status === "transferred");
+  const delayedHandovers = awaitingHandover.filter((sale) =>
+    sale.created_at && Date.now() - new Date(sale.created_at).getTime() > 48 * 60 * 60 * 1000
+  );
   const selectedHandoverSale = sales.find((sale) => String(sale.id) === String(handOverId));
 
   function resetCheckout() {
@@ -216,12 +219,18 @@ export default function EquipmentFinanceReadyCashPage() {
       </button>
     </header>
     <section className="rc-stats" aria-label="Ready Cash status">
-      <article><span>Ready for cash sale</span><strong>{eligibleMachines.length}</strong></article>
-      <article><span>Paid · awaiting handover</span><strong>{awaitingHandover.length}</strong></article>
-      <article><span>Sold and transferred</span><strong>{completed.length}</strong></article>
+      <article><span>Available in loaded register</span><strong>{eligibleMachines.length}</strong></article>
+      <article><span>Recent paid · awaiting handover</span><strong>{awaitingHandover.length}</strong></article>
+      <article><span>Recent sold and transferred</span><strong>{completed.length}</strong></article>
       <article><span>Recent full cash collected</span><strong>{money(sales.reduce((sum, sale) => sum + Number(sale.amount_paid || 0), 0))}</strong></article>
     </section>
 
+    {delayedHandovers.length > 0 && (
+      <div className="rc-intelligence-alert" role="alert">
+        <strong>{delayedHandovers.length} paid machine(s) still awaiting handover after 48 hours.</strong>
+        <span>Finance management should review signed delivery evidence before marking these assets sold.</span>
+      </div>
+    )}
     {problem && <div className="rc-error" role="alert">{problem}</div>}
     {notice && <div className="rc-notice" role="status">{notice}</div>}
 
