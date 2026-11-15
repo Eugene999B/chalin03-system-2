@@ -201,7 +201,8 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       );
       const machine = machines[0];
       if (!machine || !["sale_only", "sale_or_hire"].includes(machine.operational_purpose) ||
-          machine.sale_status !== "available") {
+          machine.sale_status !== "available" ||
+          !text(machine.asset_code) || !text(machine.asset_name) || !text(machine.asset_type)) {
         fail(409, "READY_CASH_MACHINE_UNAVAILABLE", "This excavator is not available for sale.");
       }
       const totalCents = cents(machine.target_selling_price);
@@ -368,6 +369,17 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
            AND is_voided = FALSE LIMIT 1 FOR UPDATE`, [agreementId]
       );
       if (!payments.length) fail(409, "READY_CASH_RECEIPT_MISSING", "Confirmed full-payment evidence is missing.");
+      const [paymentTotals] = await connection.query(
+        `SELECT COALESCE(SUM(CASE WHEN payment_category <> 'refund'
+             THEN amount ELSE -amount END), 0) AS net_collected
+         FROM equipment_sale_payments
+         WHERE agreement_id = ? AND is_voided = FALSE`,
+        [agreementId]
+      );
+      if (cents(paymentTotals[0]?.net_collected) !== cents(agreement.total_amount)) {
+        fail(409, "READY_CASH_LEDGER_NOT_RECONCILED",
+          "The immutable payment ledger no longer matches the sale total. Reconcile before ownership transfer.");
+      }
       const [prior] = await connection.query(
         "SELECT id FROM equipment_deliveries WHERE agreement_id = ? LIMIT 1 FOR UPDATE",
         [agreementId]
