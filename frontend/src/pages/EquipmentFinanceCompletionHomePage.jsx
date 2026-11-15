@@ -62,6 +62,9 @@ export default function EquipmentFinanceCompletionHomePage() {
           <Link className="is-primary" to="/equipment-installment-finance/applications?stage=start">
             Start New Installment
           </Link>
+          <Link to="/equipment-installment-finance/applications?stage=ready-cash">
+            Ready Cash · Full Payment
+          </Link>
           <Link to="/equipment-installment-finance/applications?stage=collections">
             Record Payment
           </Link>
