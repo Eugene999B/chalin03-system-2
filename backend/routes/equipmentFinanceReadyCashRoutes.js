@@ -1,6 +1,6 @@
 "use strict";
 
-const crypto = require("node:crypto");
+const PDFDocument = require("pdfkit");
 const express = require("express");
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
@@ -129,6 +129,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const assetId = id(req.body?.asset_id);
     const requestKey = text(req.body?.idempotency_key, 100);
     const requestedCents = cents(req.body?.amount);
+    const taxCents = cents(req.body?.tax_amount_included);
     if (req.body?.sale_option !== "ready_cash") {
       fail(400, "READY_CASH_SALE_OPTION_REQUIRED",
         "Select Ready Cash as the pay-in-full sale option.");
@@ -154,6 +155,11 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     }
     if (requestedCents === null || requestedCents <= 0) {
       fail(400, "READY_CASH_AMOUNT_INVALID", "Enter the exact full selling price in GHS.");
+    }
+    if (taxCents === null || taxCents >= requestedCents ||
+        req.body?.tax_treatment_reviewed !== true) {
+      fail(400, "READY_CASH_TAX_REVIEW_REQUIRED",
+        "Enter the explicitly approved tax included in the full price (use 0 only for an approved zero-tax treatment), and confirm Finance review.");
     }
 
     const [previous] = await pool.query(
@@ -248,14 +254,20 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       }
 
       const money = currency(totalCents);
+      const taxAmount = currency(taxCents);
+      const subtotal = currency(totalCents - taxCents);
+      const effectiveTaxPercent = taxCents > 0
+        ? Number((taxCents / (totalCents - taxCents) * 100).toFixed(4))
+        : 0;
       const [q] = await connection.query("INSERT INTO equipment_sales_quotations SET ?", {
         quotation_number: quoteNumber, hire_location_id: null, enquiry_id: null,
         customer_id: customerId, quotation_date: dateToday(), validity_date: nextDate(7),
-        status: "converted", subtotal: money, discount_amount: 0, tax_rate_percent: 0,
-        tax_amount: 0, total_amount: money, deposit_required: money,
+        status: "converted", subtotal, discount_amount: 0,
+        tax_rate_percent: effectiveTaxPercent,
+        tax_amount: taxAmount, total_amount: money, deposit_required: money,
         delivery_policy: "after_full_payment", delivery_threshold_percent: 100,
         terms: "Ready Cash: one confirmed full payment; no installment repayment plan.",
-        notes: "System-created at protected Ready Cash checkout. Price copied from active machine register.",
+        notes: "Ready Cash final price copied from machine register. Included tax component manually confirmed from approved invoice; effective blended percent is arithmetic only.",
         created_by: userId, approved_by: userId, approved_at: new Date(),
       });
       const [qi] = await connection.query("INSERT INTO equipment_sales_quotation_items SET ?", {
@@ -266,7 +278,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
         model_year_snapshot: machine.model_year,
         serial_number_snapshot: machine.serial_number,
         main_image_url_snapshot: machine.main_image_url,
-        quantity: 1, unit_price: money, discount_amount: 0, tax_amount: 0, line_total: money,
+        quantity: 1, unit_price: subtotal, discount_amount: 0, tax_amount: taxAmount, line_total: money,
       });
       const [agreement] = await connection.query("INSERT INTO equipment_sale_agreements SET ?", {
         agreement_number: agreementNumber, hire_location_id: null,
@@ -282,7 +294,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
         model_snapshot: machine.model, model_year_snapshot: machine.model_year,
         serial_number_snapshot: machine.serial_number,
         main_image_url_snapshot: machine.main_image_url,
-        sale_price: money, discount_amount: 0, tax_amount: 0, total_amount: money,
+        sale_price: subtotal, discount_amount: 0, tax_amount: taxAmount, total_amount: money,
         deposit_required: money, deposit_received: money,
         financed_amount: 0, scheduled_total: 0,
         amount_paid: money, outstanding_balance: 0,
@@ -323,7 +335,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       await audit(connection, req, "EQUIPMENT_READY_CASH_PAID_IN_FULL", agreement.insertId,
         "Ready Cash full settlement " + agreementNumber + " received for " + machine.asset_code + ".",
         { asset_id: assetId, customer_id: customerId, amount: money,
-          payment_recording: "manual_full_payment", receipt_number: receiptNumber,
+          payment_recording: "manual_full_payment", tax_amount: taxAmount, receipt_number: receiptNumber,
           idempotency_key: requestKey, delivery_pending: true, schedule_count: 0 });
       return { agreementId: agreement.insertId, amount: money, assetCode: machine.asset_code };
     });
