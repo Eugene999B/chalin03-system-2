@@ -43,8 +43,11 @@ function currency(value) {
   return Number((value / 100).toFixed(2));
 }
 function dateToday() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra",
-    year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (part) => parts.find((entry) => entry.type === part)?.value;
+  return value("year") + "-" + value("month") + "-" + value("day");
 }
 function nextDate(days) {
   const d = new Date(dateToday() + "T00:00:00Z");
@@ -129,6 +132,10 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const requestedCents = cents(req.body?.amount);
     if (!customerId || !assetId || !/^[0-9a-f-]{36}$/i.test(requestKey)) {
       fail(400, "READY_CASH_INPUT_INVALID", "Choose the buyer, machine and a unique checkout reference.");
+    }
+    if (req.body?.customer_terms_accepted !== true) {
+      fail(400, "READY_CASH_TERMS_REQUIRED",
+        "The customer must accept the full payment sale terms before checkout.");
     }
     if (paymentMethod !== "cash" || req.body?.cash_received_confirmed !== true) {
       fail(400, "READY_CASH_PAYMENT_NOT_VERIFIED",
