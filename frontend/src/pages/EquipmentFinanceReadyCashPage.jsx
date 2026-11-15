@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import ProtectedFinanceImage, { financeMachineImagePath } from "../components/ProtectedFinanceImage";
 import "./../styles/equipmentFinanceReadyCash.css";
 
 const API = "/equipment-catalogue/sales";
@@ -251,6 +252,18 @@ export default function EquipmentFinanceReadyCashPage() {
               </option>)}
             </select>
           </label>
+          {machine && <div className="rc-machine-preview">
+            <ProtectedFinanceImage
+              src={financeMachineImagePath(machine)}
+              alt={machine.asset_name || "Selected excavator"}
+              className="rc-machine-photo"
+            />
+            <div>
+              <span>Exact machine identity</span>
+              <strong>{machine.asset_code} · {machine.asset_name}</strong>
+              <small>{machine.make || "Make unrecorded"} {machine.model || ""} · Serial: {machine.serial_number || "Check asset register"}</small>
+            </div>
+          </div>}
           {machine && <div className="rc-price" aria-live="polite">
             <span>Configured full selling price</span>
             <strong>{money(finalPrice)}</strong>
