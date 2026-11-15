@@ -108,7 +108,7 @@ router.get("/ready-cash/recent", requirePermission("fleet.assets.view"), async (
               a.asset_name_snapshot, a.customer_name_snapshot, a.total_amount,
               a.amount_paid, a.outstanding_balance, a.agreement_status,
               a.delivery_status, a.ownership_status, a.created_at,
-              p.receipt_number, p.idempotency_key, p.payment_method
+              p.receipt_number, p.payment_method
        FROM equipment_sale_agreements a
        INNER JOIN equipment_sale_payments p ON p.agreement_id = a.id
          AND p.payment_category = 'settlement' AND p.is_voided = FALSE
@@ -130,7 +130,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const requestKey = text(req.body?.idempotency_key, 100);
     const paymentMethod = text(req.body?.payment_method, 30).toLowerCase();
     const requestedCents = cents(req.body?.amount);
-    if (!customerId || !assetId || !/^[0-9a-f-]{36}$/i.test(requestKey)) {
+    if (!customerId || !assetId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey)) {
       fail(400, "READY_CASH_INPUT_INVALID", "Choose the buyer, machine and a unique checkout reference.");
     }
     if (req.body?.customer_terms_accepted !== true) {
@@ -152,7 +152,8 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const [previous] = await pool.query(
       `SELECT a.id, a.agreement_number, a.customer_id, a.asset_id,
               a.total_amount, a.delivery_status, a.ownership_status,
-              p.receipt_number
+              p.receipt_number, p.is_voided, a.outstanding_balance,
+              a.agreement_notes, a.sale_type
        FROM equipment_sale_payments p
        INNER JOIN equipment_sale_agreements a ON a.id = p.agreement_id
        WHERE p.idempotency_key = ? LIMIT 1`,
@@ -160,6 +161,13 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     );
     if (previous.length) {
       const record = previous[0];
+      if (Number(record.is_voided) === 1 ||
+          record.sale_type !== "cash" ||
+          !String(record.agreement_notes || "").startsWith("READY_CASH:") ||
+          cents(record.outstanding_balance) !== 0) {
+        fail(409, "READY_CASH_ORIGINAL_PAYMENT_REVERSED",
+          "This checkout reference is not an active, settled Ready Cash receipt. Review its full transaction history.");
+      }
       if (Number(record.customer_id) !== customerId ||
           Number(record.asset_id) !== assetId ||
           cents(record.total_amount) !== requestedCents) {
