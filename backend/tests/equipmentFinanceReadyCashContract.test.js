@@ -71,5 +71,9 @@ test("Payment retry is idempotent and cannot attach a reference to a different b
   assert.match(readyCash, /Number\(record\.customer_id\) !== customerId/);
   assert.match(readyCash, /Number\(record\.asset_id\) !== assetId/);
   assert.match(readyCash, /READY_CASH_IDEMPOTENCY_CONFLICT/);
+  assert.match(readyCash, /READY_CASH_ORIGINAL_PAYMENT_REVERSED/);
+  assert.match(readyCash, /record\.sale_type !== "cash"/);
+  assert.match(readyCash, /Number\(record\.is_voided\) === 1/);
+  assert.match(readyCash, /READY_CASH_SHIFT_REFERENCE_REQUIRED/);
   assert.match(readyCash, /duplicate: true, paid_in_full: true/);
 });
