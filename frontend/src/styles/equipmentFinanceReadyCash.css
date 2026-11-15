@@ -57,3 +57,7 @@
 .rc-intelligence-alert { margin:16px 0; padding:17px 20px; border:1px solid #f0cd88; background:#fff8eb; color:#794a11; border-radius:15px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
 .rc-intelligence-alert strong { font-size:.91rem; }
 .rc-intelligence-alert span { font-size:.84rem; }
+
+.rc-receipt-action { background:#e7f4f0; color:#09685a; border:1px solid #badfd4; border-radius:9px; padding:8px 12px; font-weight:800; font-size:.84rem; cursor:pointer; }
+.rc-receipt-action:hover { background:#d8eee7; }
+.ready-cash form small { color:#657587; font-weight:500; line-height:1.45; }
