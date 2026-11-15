@@ -156,7 +156,7 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     if (requestedCents === null || requestedCents <= 0) {
       fail(400, "READY_CASH_AMOUNT_INVALID", "Enter the exact full selling price in GHS.");
     }
-    if (taxCents === null || taxCents >= requestedCents ||
+    if (taxCents === null || taxCents > requestedCents / 2 ||
         req.body?.tax_treatment_reviewed !== true) {
       fail(400, "READY_CASH_TAX_REVIEW_REQUIRED",
         "Enter the explicitly approved tax included in the full price (use 0 only for an approved zero-tax treatment), and confirm Finance review.");
@@ -164,8 +164,8 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
 
     const [previous] = await pool.query(
       `SELECT a.id, a.agreement_number, a.customer_id, a.asset_id,
-              a.total_amount, a.delivery_status, a.ownership_status,
-              p.receipt_number, p.is_voided, a.outstanding_balance,
+              a.total_amount, a.tax_amount, a.delivery_status, a.ownership_status,
+              p.receipt_number, p.reference_number, p.is_voided, a.outstanding_balance,
               a.agreement_notes, a.sale_type
        FROM equipment_sale_payments p
        INNER JOIN equipment_sale_agreements a ON a.id = p.agreement_id
@@ -183,7 +183,9 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
       }
       if (Number(record.customer_id) !== customerId ||
           Number(record.asset_id) !== assetId ||
-          cents(record.total_amount) !== requestedCents) {
+          cents(record.total_amount) !== requestedCents ||
+          cents(record.tax_amount) !== taxCents ||
+          text(record.reference_number) !== paymentReference) {
         fail(409, "READY_CASH_IDEMPOTENCY_CONFLICT", "This checkout reference belongs to another sale.");
       }
       return res.json({
