@@ -24,6 +24,7 @@ const EquipmentFinancePaymentHistoryPage = lazy(() => import("./EquipmentFinance
 const EquipmentFinancePaymentsCentrePage = lazy(() => import("./EquipmentFinancePaymentsCentrePage"));
 const EquipmentFinanceProfessionalPage = lazy(() => import("./EquipmentFinanceProfessionalPage"));
 const EquipmentFinanceRecoveryGovernancePage = lazy(() => import("./EquipmentFinanceRecoveryGovernancePage"));
+const EquipmentFinanceReadyCashPage = lazy(() => import("./EquipmentFinanceReadyCashPage"));
 const EquipmentFinanceTaskInboxPage = lazy(() => import("./EquipmentFinanceTaskInboxPage"));
 const InstallmentCompletionPhaseFourPage = lazy(() => import("./InstallmentCompletionPhaseFourPage"));
 
@@ -44,6 +45,7 @@ function stagePage(stage) {
   if (stage === "customers") return <EquipmentFinanceCustomerCentrePage />;
   if (stage === "customer-portfolios") return <EquipmentFinanceCustomerPortfolioPage />;
   if (stage === "machines") return <EquipmentFinanceExcavatorsPage />;
+  if (stage === "ready-cash") return <EquipmentFinanceReadyCashPage />;
   if (stage === "guide") return <EquipmentFinanceGuidePage />;
   if (stage === "documents" || stage === "case-workspace") return <EquipmentFinanceCaseWorkspacePage />;
   if (stage === "generated-documents") return <EquipmentFinanceDocumentCentrePage />;
