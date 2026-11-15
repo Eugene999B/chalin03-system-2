@@ -285,7 +285,7 @@ export default function EquipmentFinanceReadyCashPage() {
           </label>
           <label className="rc-checkbox">
             <input type="checkbox" checked={fullPaymentConfirmed} onChange={(e) => setFullPaymentConfirmed(e.target.checked)} />
-            <span>I confirm that the customer has already paid the entire {money(finalPrice)} and the payment is verified in our existing records.</span>
+            <span>I confirm that the customer has paid the entire {money(finalPrice)}, and I have independently verified the payment evidence before recording it here.</span>
           </label>
           <label className="rc-checkbox">
             <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
