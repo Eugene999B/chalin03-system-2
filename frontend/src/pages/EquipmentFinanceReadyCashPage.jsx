@@ -22,7 +22,7 @@ function newCheckoutKey() {
   throw new Error("This browser cannot create secure checkout references. Use an updated browser.");
 }
 function isAvailable(machine) {
-  return machine.sale_status === "available" &&
+  return Boolean(machine) && machine.sale_status === "available" &&
     ["sale_only", "sale_or_hire"].includes(machine.operational_purpose) &&
     machine.readiness?.ready !== false &&
     Number(machine.active_hire_count || 0) === 0 &&
