@@ -26,6 +26,7 @@ const equipmentFinanceDraftRuntimeRoutes = require("./equipmentFinanceDraftRunti
 const equipmentFinanceMachineRegisterRoutes = require("./equipmentFinanceMachineRegisterRoutes");
 const equipmentFinanceScheduleRoutes = require("./equipmentFinanceScheduleRoutes");
 const equipmentFinancePhaseOneRoutes = require("./equipmentFinancePhaseOneRoutes");
+const equipmentFinanceReadyCashRoutes = require("./equipmentFinanceReadyCashRoutes");
 const equipmentCreditOptionalDecisionRoutes = require("./equipmentCreditOptionalDecisionRoutes");
 const equipmentFinanceDraftRecoveryRoutes = require("./equipmentFinanceDraftRecoveryRoutes");
 const equipmentFinanceAgreementActivationRoutes = require("./equipmentFinanceAgreementActivationRoutes");
@@ -155,6 +156,7 @@ router.use(equipmentFinanceScheduleRoutes);
 router.use("/agreement-activations", equipmentFinanceAgreementActivationRoutes);
 router.use("/credit-applications", equipmentCreditOptionalDecisionRoutes);
 router.use("/credit-applications", equipmentFinanceDraftRecoveryRoutes);
+router.use(equipmentFinanceReadyCashRoutes);
 router.use(equipmentFinancePhaseOneRoutes);
 
 router.use(equipmentFinanceDocumentCompletionRoutes);
