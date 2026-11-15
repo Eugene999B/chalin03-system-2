@@ -53,3 +53,7 @@
 .rc-machine-preview strong { color:#1d354c; font-size:.96rem; overflow-wrap:anywhere; }
 .rc-machine-preview small { color:#64778b; line-height:1.45; }
 @media(max-width:650px) { .rc-machine-photo { width:85px; min-width:85px; height:82px; } }
+
+.rc-intelligence-alert { margin:16px 0; padding:17px 20px; border:1px solid #f0cd88; background:#fff8eb; color:#794a11; border-radius:15px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+.rc-intelligence-alert strong { font-size:.91rem; }
+.rc-intelligence-alert span { font-size:.84rem; }
