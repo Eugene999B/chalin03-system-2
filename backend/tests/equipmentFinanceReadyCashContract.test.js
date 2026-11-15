@@ -30,6 +30,12 @@ test("Ready Cash is a full-payment sale option, not a payment-method or gateway 
   assert.doesNotMatch(readyCash, /cash_received_confirmed !== true/);
   assert.doesNotMatch(readyCash, /cash_shift_reference/);
   assert.match(readyCash, /cents\(machine\.target_selling_price\)/);
+  assert.match(readyCash, /tax_amount_included/);
+  assert.match(readyCash, /tax_treatment_reviewed !== true/);
+  assert.match(readyCash, /const subtotal = currency\(totalCents - taxCents\)/);
+  assert.match(readyCash, /tax_amount: taxAmount/);
+  assert.match(readyCash, /cents\(record\.tax_amount\) !== taxCents/);
+  assert.match(readyCash, /text\(record\.reference_number\) !== paymentReference/);
   assert.match(readyCash, /totalCents !== requestedCents/);
   assert.match(readyCash, /Number\(conflict\.active_hires\)/);
   assert.match(readyCash, /Number\(conflict\.active_sale_locks\)/);
@@ -68,6 +74,15 @@ test("Sold status requires independent manager, signed handover, nonvoided recei
   assert.match(readyCash, /INSERT INTO equipment_ownership_transfers SET/);
   assert.match(readyCash, /UPDATE fleet_assets SET sale_status = 'sold'/);
   assert.match(readyCash, /EQUIPMENT_READY_CASH_OWNERSHIP_TRANSFERRED/);
+});
+
+test("downloadable full payment PDF is not dependent on a Hire location", () => {
+  assert.match(readyCash, /"\/ready-cash\/:agreementId\/receipt\.pdf"/);
+  assert.match(readyCash, /new PDFDocument\(/);
+  assert.match(readyCash, /Content-Type", "application\/pdf"/);
+  assert.match(readyCash, /p\.is_voided = FALSE/);
+  assert.match(readyCash, /a\.hire_location_id IS NULL/);
+  assert.match(readyCash, /EQUIPMENT_READY_CASH_RECEIPT_DOWNLOADED/);
 });
 
 test("Payment retry is idempotent and cannot attach a reference to a different buyer or asset", () => {
