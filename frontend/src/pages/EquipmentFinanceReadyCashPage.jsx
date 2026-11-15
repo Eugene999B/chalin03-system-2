@@ -133,7 +133,7 @@ export default function EquipmentFinanceReadyCashPage() {
       setProblem("Choose an eligible machine and active customer with sales permission.");
       return;
     }
-    if (!cashReceived || !termsAccepted || !Number.isFinite(finalPrice) || finalPrice <= 0) {
+    if (!cashReceived || !termsAccepted || !shiftReference.trim() || !Number.isFinite(finalPrice) || finalPrice <= 0) {
       setProblem("The exact price, customer terms and actual physical cash receipt must be confirmed.");
       return;
     }
@@ -256,8 +256,8 @@ export default function EquipmentFinanceReadyCashPage() {
             <strong>{money(finalPrice)}</strong>
             <small>No discounts and no financing. The official server price must still match at checkout.</small>
           </div>}
-          <label>Cash shift / reconciliation reference (optional)
-            <input value={shiftReference} onChange={(e) => setShiftReference(e.target.value)} placeholder="Shift or till number" maxLength={150} />
+          <label>Cash shift / reconciliation reference
+            <input required value={shiftReference} onChange={(e) => setShiftReference(e.target.value)} placeholder="Shift or till number" maxLength={150} />
           </label>
           <label className="rc-checkbox">
             <input type="checkbox" checked={cashReceived} onChange={(e) => setCashReceived(e.target.checked)} />
@@ -267,7 +267,7 @@ export default function EquipmentFinanceReadyCashPage() {
             <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
             <span>The customer has reviewed and accepted the full-payment sale terms.</span>
           </label>
-          <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !cashReceived || !termsAccepted}>
+          <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !cashReceived || !termsAccepted || !shiftReference.trim()}>
             {processing ? "Recording…" : "Record full payment & reserve machine"}
           </button>
           <p className="rc-muted">Payment and receipt are committed together. A machine is only marked sold after independent signed handover.</p>
