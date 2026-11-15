@@ -129,6 +129,10 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const assetId = id(req.body?.asset_id);
     const requestKey = text(req.body?.idempotency_key, 100);
     const requestedCents = cents(req.body?.amount);
+    if (req.body?.sale_option !== "ready_cash") {
+      fail(400, "READY_CASH_SALE_OPTION_REQUIRED",
+        "Select Ready Cash as the pay-in-full sale option.");
+    }
     if (!customerId || !assetId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey)) {
       fail(400, "READY_CASH_INPUT_INVALID", "Choose the buyer, machine and a unique checkout reference.");
     }
