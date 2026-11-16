@@ -362,12 +362,32 @@ export function AuthProvider({ children }) {
       localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
       setToken(refreshToken);
       setUser(freshUser);
-    } catch {
+    } catch (error) {
       const activeToken = localStorage.getItem(TOKEN_KEY);
 
       // This failure belongs to an older desktop session. It may be a 401,
       // 403, 400 or network failure; none may erase a newer successful login.
       if (activeToken && activeToken !== refreshToken) {
+        adoptLatestStoredSession();
+        return;
+      }
+
+      const statusCode = Number(error?.response?.status || 0);
+      const temporaryVerificationFailure =
+        Boolean(activeToken) &&
+        activeToken === refreshToken &&
+        (statusCode === 0 || statusCode === 408 || statusCode === 429 ||
+          statusCode >= 500);
+      if (temporaryVerificationFailure) {
+        // Keep the previously authenticated identity visible during a
+        // temporary DB/API outage. Every protected API still requires fresh
+        // server-side verification, so no authorization is bypassed.
+        try {
+          sessionStorage.setItem(
+            "chalin03_session_warning",
+            "Connection to the server is temporarily unavailable. Your sign-in has been preserved; please retry."
+          );
+        } catch { /* Storage may be unavailable. */ }
         adoptLatestStoredSession();
         return;
       }
