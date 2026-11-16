@@ -26,8 +26,9 @@ test("public homepage has a three-card commercial desktop layout", async ({ page
   );
   expect(columns).toHaveLength(3);
   await expect(page.locator(".ch-home__menu-toggle")).toBeHidden();
-  await expect(page.locator(".ch-home__hero-image")).toHaveAttribute("src", /images\.unsplash\.com/);
-  await expect(page.getByRole("link", { name: /Call our team/i })).toHaveAttribute("href", /tel:\+233249469080/);
+  const heroImageUrl = await page.locator(".ch-home__hero-image").getAttribute("src");
+  expect(heroImageUrl).toContain("https://images.unsplash.com/photo-");
+  await expect(page.getByRole("link", { name: /Call our team/i })).toHaveAttribute("href", "tel:+233249469080");
   await noHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("public-homepage-desktop.png"), fullPage: true });
 });
@@ -49,7 +50,8 @@ test("public homepage mobile menu, contacts and tap targets work at 390px", asyn
   await expect(page.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("#spare-parts")).toBeInViewport();
   await expect(page.locator(".ch-home__service-card")).toHaveCount(3);
-  await expect(page.getByRole("link", { name: /Find a part/i })).toHaveAttribute("href", /wa\.me\/233249469080/);
+  const partsEnquiryUrl = await page.getByRole("link", { name: /Find a part/i }).getAttribute("href");
+  expect(partsEnquiryUrl).toContain("https://wa.me/233249469080?text=");
   await noHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("public-homepage-mobile.png"), fullPage: true });
 });
