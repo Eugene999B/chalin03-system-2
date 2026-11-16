@@ -16,6 +16,12 @@ assert.match(auth, /tokenAfterRequest !== expectedToken/);
 assert.match(auth, /const refreshToken = localStorage\.getItem\(TOKEN_KEY\)/);
 assert.match(auth, /activeToken && activeToken !== refreshToken/);
 assert.match(auth, /await logout\(\{ expectedToken: refreshToken \}\)/);
+assert.match(auth, /statusCode === 408 \|\| statusCode === 429/);
+assert.match(auth, /statusCode >= 500/);
+assert.match(auth, /temporaryVerificationFailure/);
+assert.match(auth, /adoptLatestStoredSession\(\);/);
+assert.match(auth, /if \(temporaryVerificationFailure\) \{[\s\S]*?adoptLatestStoredSession\(\);[\s\S]*?return;/);
+
 assert.match(auth, /401,[\s\S]*403,[\s\S]*400/);
 
 const responseGuard = auth.indexOf("activeToken && activeToken !== refreshToken");

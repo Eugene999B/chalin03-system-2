@@ -184,7 +184,9 @@ assert.match(serverSource, /app\.use\("\/api", generalApiLimiter\)/);
 assert.match(serverSource, /API_RATE_LIMIT_WINDOW_MINUTES/);
 assert.match(serverSource, /API_RATE_LIMIT_MAX/);
 
-assert.match(authMiddlewareSource, /const decoded = jwt\.verify/);
+assert.match(authMiddlewareSource, /decoded = jwt\.verify/);
+assert.match(authMiddlewareSource, /code: "INVALID_TOKEN"/);
+assert.match(authMiddlewareSource, /code: "AUTH_VERIFICATION_UNAVAILABLE"/);
 assert.match(authMiddlewareSource, /id: state\.id/);
 assert.match(authMiddlewareSource, /username: state\.username/);
 assert.match(authMiddlewareSource, /role: state\.role/);
