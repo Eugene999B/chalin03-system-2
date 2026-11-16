@@ -4,11 +4,13 @@ import "../styles/publicCompanyHome.css";
 
 const PHONE = "+233249469080";
 const DISPLAY_PHONE = "+233 24 946 9080";
+// Versioned WebP files live on CHALIN03's Cloudflare Pages domain.
 const PHOTO = {
-  hero: "https://images.unsplash.com/photo-1747004066130-c6531b74d353?auto=format&fit=crop&w=1920&q=82",
-  equipment: "https://images.unsplash.com/photo-1751054619908-65d27a503ce8?auto=format&fit=crop&w=1100&q=78",
-  parts: "https://images.unsplash.com/photo-1766650189458-bb0e7969ba5d?auto=format&fit=crop&w=1100&q=78",
-  hire: "https://images.unsplash.com/photo-1719410491473-d06e21e25449?auto=format&fit=crop&w=1100&q=78",
+  hero: "/images/home/v1/hero-desktop.webp",
+  heroMobile: "/images/home/v1/hero-mobile.webp",
+  equipment: "/images/home/v1/excavators.webp",
+  parts: "/images/home/v1/parts.webp",
+  hire: "/images/home/v1/hire.webp",
 };
 const ENQUIRIES = {
   excavators: "Hello CHALIN03, I would like to ask about excavators for sale. Can you help with available machines and prices?",
@@ -102,15 +104,18 @@ export default function PublicCompanyHomePage() {
       </header>
 
       <section className="ch-home__hero" aria-labelledby="ch-home-hero-title">
-        <img
-          className="ch-home__hero-image"
-          src={PHOTO.hero}
-          alt="A yellow excavator with a large digging bucket at an active worksite"
-          width="1600"
-          height="1067"
-          fetchPriority="high"
-          decoding="async"
-        />
+        <picture className="ch-home__hero-art">
+          <source media="(max-width: 760px)" srcSet={PHOTO.heroMobile} />
+          <img
+            className="ch-home__hero-image"
+            src={PHOTO.hero}
+            alt="A yellow excavator with a large digging bucket at an active worksite"
+            width="1600"
+            height="980"
+            fetchPriority="high"
+            decoding="async"
+          />
+        </picture>
         <div className="ch-home__hero-content">
           <span className="ch-home__overline"><span className="ch-home__overline-line" /> EQUIPMENT & PARTS · GHANA</span>
           <h1 id="ch-home-hero-title">Built for the <em>work ahead.</em></h1>
@@ -134,7 +139,7 @@ export default function PublicCompanyHomePage() {
           {services.map((service) => (
             <article className="ch-home__service-card" id={service.id} key={service.id}>
               <div className="ch-home__service-picture">
-                <img src={service.image} alt={service.alt} width="680" height="510" loading="lazy" decoding="async" />
+                <img src={service.image} alt={service.alt} width="960" height="720" loading="lazy" decoding="async" />
                 <span className="ch-home__service-number">{service.number} / {service.label}</span>
               </div>
               <div className="ch-home__service-body">
@@ -171,7 +176,7 @@ export default function PublicCompanyHomePage() {
           <a href={"tel:" + PHONE} className="ch-home__text-link">Speak with our team <span aria-hidden="true">↗</span></a>
         </div>
         <div className="ch-home__about-image">
-          <img src={PHOTO.equipment} alt="Excavator working in an earthmoving area" width="900" height="600" loading="lazy" decoding="async" />
+          <img src={PHOTO.equipment} alt="Excavator working in an earthmoving area" width="960" height="720" loading="lazy" decoding="async" />
           <div className="ch-home__about-caption"><span>CHALIN03</span><strong>Let's get to work.</strong></div>
         </div>
       </section>
