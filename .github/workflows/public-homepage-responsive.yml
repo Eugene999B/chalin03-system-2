@@ -1,0 +1,57 @@
+name: Public Homepage Responsive UI
+
+on:
+  pull_request:
+    branches: [main, production]
+    paths:
+      - "frontend/src/pages/PublicCompanyHomePage.jsx"
+      - "frontend/src/styles/publicCompanyHome.css"
+      - "frontend/scripts/publicHomepageResponsiveTests.mjs"
+      - "frontend/e2e/publicHomepageResponsive.spec.js"
+      - "frontend/public/_headers"
+      - "frontend/package.json"
+      - ".github/workflows/public-homepage-responsive.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-homepage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Check public homepage contracts
+        run: node scripts/publicHomepageResponsiveTests.mjs && node scripts/securityPublicWebTests.mjs
+      - name: Lint source
+        run: npm run lint
+      - name: Build site
+        run: npm run build
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Verify desktop tablet and phone layouts
+        run: npx playwright test e2e/publicHomepageResponsive.spec.js
+      - name: Preserve screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-homepage-desktop-mobile-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 14
