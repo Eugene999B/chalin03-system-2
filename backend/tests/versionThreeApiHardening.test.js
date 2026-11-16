@@ -19,7 +19,9 @@ test("Version Three applies a broad API rate ceiling before route handlers", () 
 });
 
 test("authenticated identity fields are refreshed from server-side state", () => {
-  assert.match(authSource, /const decoded = jwt\.verify/);
+  assert.match(authSource, /decoded = jwt\.verify/);
+  assert.match(authSource, /return res\.status\(401\)\.json\(\{[\s\S]*?code: "INVALID_TOKEN"/);
+  assert.match(authSource, /return res\.status\(503\)\.json\(\{[\s\S]*?code: "AUTH_VERIFICATION_UNAVAILABLE"/);
   assert.match(authSource, /id: state\.id/);
   assert.match(authSource, /username: state\.username/);
   assert.match(authSource, /role: state\.role/);
