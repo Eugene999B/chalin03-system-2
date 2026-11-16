@@ -13,6 +13,8 @@ Photos are available under the [Unsplash License](https://unsplash.com/license) 
 
 - Do **not** put model names, specific prices, quantities, or "in stock" badges on this public site without verified inventory data and sales approval.
 - CHALIN03's actual machinery, warehouse and team photos should replace illustrative images when approved, with permission to publish.
-- Images are hosted through `images.unsplash.com` and their host is explicitly permitted in Cloudflare's `img-src` Content Security Policy; no other policy directive is broadened.
+- The same licensed photographs have been optimized into **five local WebP files** in `frontend/public/images/home/v1/`. Cloudflare Pages serves them from `chalin03.com` with long-lived versioned caching. The runtime homepage never requests Unsplash and its Content Security Policy no longer allows that image host.
+- The hero uses a smaller, separately cropped mobile file; supporting photos load lazily and never cause extra downloads on the staff login screen.
+- Image importer: `frontend/scripts/cache_public_homepage_photos.py` can recreate the static assets during a reviewed maintenance change. It is not executed at runtime.
 - The phone number `+233 24 946 9080` and location "Dunkwa Police Barrier, Ghana" are carried from the previous public CHALIN03 website. Verify that this phone is also active on WhatsApp before public promotion.
 - The service buttons lead to enquiries, **not** unbuilt shops or fake product listings. Staff Login still points to `/login`, and internal Mining/Hiring operations are untouched.
