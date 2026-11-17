@@ -290,7 +290,7 @@ export default function ExportsPage() {
 
   function buildStoreFileName(reportKey, format) {
     const option = FORMAT_OPTIONS.find((item) => item.key === format);
-    const extension = option?.extension || "xlsx";
+    const extension = format === "word" || format === "docx" ? "docx" : option?.extension || "xlsx";
     const periodPart =
       from || to
         ? `-${from || "earliest"}-to-${to || "latest"}`
@@ -387,7 +387,7 @@ export default function ExportsPage() {
       window.URL.revokeObjectURL(fileUrl);
 
       const formatLabel =
-        FORMAT_OPTIONS.find((option) => option.key === format)?.label || format;
+        (format === "word" ? "Word" : FORMAT_OPTIONS.find((option) => option.key === format)?.label) || format;
       const selectedPeriod =
         from || to
           ? ` for ${from || "the earliest available date"} to ${
@@ -458,29 +458,43 @@ export default function ExportsPage() {
     );
   }
 
+  const presentationReports = visibleReports.filter((report) => report.deepReport);
+  const operationalReports = visibleReports.filter((report) => !report.deepReport);
+
   return (
-    <div className="export-center-v3">
-      <section className="ec-hero">
+    <div className="export-center-v3 ec-publishing-studio">
+      <section className="ec-hero ec-publishing-hero">
         <div>
-          <span className="ec-eyebrow">REPORTING AND DOCUMENT CENTRE</span>
-          <h1>Reports & Business Intelligence</h1>
+          <span className="ec-eyebrow">CHALIN03 / REPORTING PUBLICATIONS</span>
+          <h1>Business reports. Built to explain.</h1>
           <p>
-            Understand the numbers, spot what needs attention and download practical
-            reports for the boss, accountant and auditor. Excel, PDF and Word.
+            Present the business, not just the numbers. Download financial stories,
+            operational analysis and audit evidence for real management decisions.
           </p>
+          <div className="ec-publishing-hero-links">
+            <a href="#ec-intelligence-reports">Management editions ↗</a>
+            <a href="#ec-operational-library">Operational downloads ↗</a>
+            <Link to="/advanced-accounting-intelligence">Accounting ↗</Link>
+          </div>
         </div>
 
-        <div className="ec-hero-badge" aria-label="Available export formats">
-          <strong>4 formats</strong>
-          <span>Excel • PDF • Word • CSV on Transaction History</span>
+        <div className="ec-report-cover-art" aria-hidden="true">
+          <div className="ec-cover-header"><span>CHALIN03</span><small>INTERNAL / MANAGEMENT EDITION</small></div>
+          <div className="ec-cover-title">THE BUSINESS<br/><em>IN FOCUS.</em></div>
+          <div className="ec-cover-viz">
+            <span style={{height:"28%"}}/><span style={{height:"46%"}}/><span style={{height:"37%"}}/>
+            <span style={{height:"68%"}}/><span style={{height:"54%"}}/><span style={{height:"82%"}}/>
+            <span style={{height:"63%"}}/><span style={{height:"94%"}}/>
+          </div>
+          <div className="ec-cover-footer">FINANCIAL REVIEW <strong>01 / 05</strong></div>
         </div>
       </section>
 
       <section className="ec-intelligence-intro">
         <div>
-          <span className="ec-eyebrow">NEW / MANAGEMENT INTELLIGENCE</span>
-          <h2>See the whole Spare Parts business.</h2>
-          <p>Sales, collections, debt, stock, expenses and audit checks — explained together. No guesswork, no invented figures.</p>
+          <span className="ec-eyebrow">LIVE / EVIDENCE-BASED ANALYSIS</span>
+          <h2>See the store before you publish.</h2>
+          <p>Review recorded sales, actual collections and open debt. See the trends, follow the exceptions and then choose the report you need.</p>
         </div>
         <button type="button" disabled={previewBusy || Boolean(busyKey)}
           onClick={loadIntelligencePreview}>
@@ -612,9 +626,9 @@ export default function ExportsPage() {
 
       <section className="ec-library-heading">
         <div>
-          <span className="ec-eyebrow">REPORT LIBRARY</span>
-          <h2>Select a report and format</h2>
-          <p>{visibleReports.length} report(s) currently displayed.</p>
+          <span className="ec-eyebrow">THE REPORT COLLECTION</span>
+          <h2>Choose your publication.</h2>
+          <p>{presentationReports.length} management editions · {operationalReports.length} operational downloads shown.</p>
         </div>
 
         <div className="ec-library-filters">
@@ -642,11 +656,59 @@ export default function ExportsPage() {
         </div>
       </section>
 
-      <div className="ec-report-grid" id="ec-intelligence-reports">
-        {visibleReports.map((report) => (
+      {presentationReports.length > 0 && (
+        <section className="ec-report-publications" id="ec-intelligence-reports" aria-label="Management intelligence publications">
+          <div className="ec-publications-heading">
+            <div><span className="ec-eyebrow">01 / INTELLIGENCE SERIES</span>
+              <h2>For directors, finance and audit teams.</h2>
+              <p>Five focused publications with charts, written analysis and the original accounting basis.</p>
+            </div><span>PDF · EXCEL · WORD</span>
+          </div>
+          <div className="ec-publication-grid">
+            {presentationReports.map((report,index) => (
+              <article key={report.key} className="ec-publication">
+                <div className={"ec-publication-cover ec-cover-" + report.key}>
+                  <div className="ec-publication-cover-top"><span>CHALIN03</span><small>ANALYSIS / {String(index+1).padStart(2,"0")}</small></div>
+                  <strong>{report.title}</strong>
+                  <div className="ec-publication-cover-visual" aria-hidden="true">
+                    <i/><i/><i/><i/><i/><i/><i/>
+                  </div>
+                  <div className="ec-publication-cover-bottom"><span>MANAGEMENT REPORT</span><span>INTERNAL</span></div>
+                </div>
+                <div className="ec-publication-description">
+                  <div className="ec-publication-label"><span>{String(index+1).padStart(2,"0")} / REPORT SERIES</span><small>{report.category}</small></div>
+                  <h3>{report.title}</h3>
+                  <p>{report.description}</p>
+                  <div className="ec-publication-includes">
+                    <span>Visual analysis</span><span>Management interpretation</span><span>Audit basis</span>
+                  </div>
+                  <div className="ec-publication-formats" aria-label={"Download " + report.title}>
+                    {FORMAT_OPTIONS.filter(option=>option.key!=="csv").map(format=>{
+                      const key=report.key+"-"+format.key;
+                      return <button key={key} type="button"
+                        disabled={Boolean(busyKey)}
+                        onClick={()=>downloadReport(report,format.key==="doc"?"word":format.key)}
+                        aria-label={"Download "+report.title+" as "+format.label}>
+                        <strong>{busyKey===key?"Preparing…":format.label}</strong>
+                        <span aria-hidden="true">↓</span>
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      <div className="ec-operational-heading" id="ec-operational-library">
+        <div><span className="ec-eyebrow">02 / SOURCE DOCUMENTS</span><h2>Operational downloads.</h2>
+          <p>Original records and supporting evidence for detailed reviews.</p></div>
+      </div>
+      <div className="ec-report-grid ec-operational-grid">
+        {operationalReports.map((report) => (
           <article
             key={report.key}
-            className={`ec-report-card${report.featured ? " is-featured" : ""}${report.key === "transaction-history" ? " ec-transaction-report" : ""}${report.deepReport ? " ec-intelligence-report" : ""}`}
+            className={`ec-report-card${report.featured ? " is-featured" : ""}${report.key === "transaction-history" ? " ec-transaction-report" : ""}`}
           >
             <div className="ec-report-topline">
               <div className="ec-report-icon" aria-hidden="true">{report.icon}</div>
@@ -658,16 +720,6 @@ export default function ExportsPage() {
 
             <h3>{report.title}</h3>
             <p>{report.description}</p>
-
-            {report.deepReport && (
-              <div className="ec-intelligence-preview" aria-label="Evidence and analysis included">
-                <strong>Inside this report</strong>
-                <span>Charts &amp; business trends</span>
-                <span>Clear accounting basis</span>
-                <span>Priority actions and source checks</span>
-                <small>Defaults to the last 30 days. Current debts and stock are marked as snapshots.</small>
-              </div>
-            )}
 
             {report.key === "transaction-history" && (
               <div className="ec-transaction-period" aria-label="Selected transaction history date range">

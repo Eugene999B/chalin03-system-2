@@ -130,6 +130,10 @@ test("Excel exports visual worksheet, actual financial numbers and evidence meta
   await wb.xlsx.load(Buffer.concat(chunks));
   assert.ok(wb.getWorksheet("Executive Summary"));
   const visual=wb.getWorksheet("Visual Analysis");
+  const presentation=wb.getWorksheet("Presentation Charts");
+  assert.ok(presentation,"Editorial chart worksheet");
+  assert.ok(presentation.getImages().length>=4,
+    "The downloadable workbook must contain real rendered graph images");
   assert.ok(visual,"Charts worksheet");
   assert.ok(wb.getWorksheet("Debt Aging"));
   assert.ok(wb.getWorksheet("Supplier Payables Now"));
@@ -141,15 +145,42 @@ test("Excel exports visual worksheet, actual financial numbers and evidence meta
   assert.ok(cells.includes(190));
   assert.match(String(wb.getWorksheet("Executive Summary").getCell("A1").value),/EXECUTIVE REPORT/);
 });
-test("Word file includes editable chart bars, source basis and audit limitations",async()=>{
+function unzipLocalParts(bytes) {
+  const zlib=require("node:zlib");
+  const files=new Map();let pos=0;
+  while(pos+30<bytes.length&&bytes.readUInt32LE(pos)===0x04034b50){
+    const method=bytes.readUInt16LE(pos+8);
+    const packed=bytes.readUInt32LE(pos+18),length=bytes.readUInt16LE(pos+26);
+    const extra=bytes.readUInt16LE(pos+28);
+    const name=bytes.subarray(pos+30,pos+30+length).toString("utf8");
+    const offset=pos+30+length+extra;
+    const data=bytes.subarray(offset,offset+packed);
+    files.set(name,method===8?zlib.inflateRawSync(data):data);
+    pos=offset+packed;
+  }
+  return files;
+}
+test("Word intelligence report is a genuine editable DOCX with narrative, charts and evidence",async()=>{
   const {res,chunks}=writableResponse();
-  await sendAuditExport(res,config("doc"));
-  const data=Buffer.concat(chunks).toString("utf8");
-  assert.match(data,/Charts and visual analysis/);
-  assert.match(data,/background:#087f75/);
-  assert.match(data,/Accounting.*?Limitations|Calculation Notes/);
-  assert.match(data,/Debt Aging/);
-  assert.equal(res.headers["content-type"].startsWith("application/msword"),true);
+  await sendAuditExport(res,config("word"));
+  const bytes=Buffer.concat(chunks);
+  assert.equal(bytes.subarray(0,4).toString("latin1"),"PK\x03\x04");
+  const parts=unzipLocalParts(bytes);
+  assert.ok(parts.has("[Content_Types].xml"));
+  assert.ok(parts.has("word/document.xml"));
+  assert.ok(parts.has("word/styles.xml"));
+  assert.ok(parts.has("word/_rels/document.xml.rels"));
+  assert.ok([...parts.keys()].filter(name=>name.startsWith("word/media/chart")).length>=4);
+  const xml=parts.get("word/document.xml").toString("utf8");
+  assert.match(xml,/<w:document /);
+  assert.match(xml,/Management interpretation/);
+  assert.match(xml,/Detailed records and reconciliations/);
+  assert.match(xml,/Accounting basis/);
+  assert.match(xml,/Debt Aging/);
+  assert.match(xml,/<w:drawing>/);
+  assert.match(xml,/<w:tbl>/);
+  assert.match(res.headers["content-type"],/wordprocessingml\.document/);
+  assert.match(res.headers["content-disposition"],/\.docx"/);
 });
 test("PDF export draws charts rather than only plain numbers",async()=>{
   const {res,chunks}=writableResponse();
@@ -158,7 +189,9 @@ test("PDF export draws charts rather than only plain numbers",async()=>{
   await finished;
   const buffer=Buffer.concat(chunks);
   assert.equal(buffer.subarray(0,4).toString(),"%PDF");
-  assert.ok(buffer.length>8000);
+  assert.ok(buffer.length>14000,"The PDF should contain designed visual pages");
+  assert.equal((buffer.toString("latin1").match(/\/Type \/Page\b/g)||[]).length>=3,true,
+    "PDF should contain cover, interpretation and chart content pages");
   assert.equal(res.headers["content-type"],"application/pdf");
 });
 test("source reads are scoped to one selected store and a read-only snapshot",async()=>{
@@ -202,6 +235,20 @@ test("source reads are scoped to one selected store and a read-only snapshot",as
   assert.ok(reads.length>=8);
   assert.ok(reads.every(x=>x.params[0]===7),"Every query must use the selected store ID");
   assert.ok(statements.every(x=>!/^(UPDATE|DELETE|INSERT|ALTER|DROP)/.test(x.sql.trim())));
+});
+
+test("presentation chart PNGs preserve source labels without SVG injection",async()=>{
+  const {renderBusinessChartPng,svgMarkup}=require("../services/reportPresentationCharts");
+  const chart={kind:"bar",title:"Reconciled sources <script>alert(1)</script>",
+    note:"No bank verification & not a statement",
+    points:[{label:"Original <cash> & debt",value:159.75}]};
+  const svg=svgMarkup(chart);
+  assert.ok(svg.includes("&lt;script&gt;"));
+  assert.ok(svg.includes("&amp;"));
+  assert.ok(!svg.includes("<script>"));
+  const image=await renderBusinessChartPng(chart);
+  assert.equal(image.subarray(1,4).toString(),"PNG");
+  assert.ok(image.length>4000);
 });
 
 test("source route explicitly protects store and management access",()=>{

@@ -429,7 +429,7 @@ router.get("/business-intelligence/preview",
 for(const [slug,variant] of Object.entries(REPORT_VARIANTS)){
   router.get("/"+slug,requireRole("admin","manager","auditor"),async(req,res)=>{
     const format=String(req.query.format||"xlsx").toLowerCase();
-    if(!["xlsx","pdf","doc","word"].includes(format))
+    if(!["xlsx","pdf","doc","word","docx"].includes(format))
       return res.status(400).json({status:"error",code:"UNSUPPORTED_REPORT_FORMAT",
         message:"Choose Excel, PDF or Word."});
     try{
