@@ -381,7 +381,7 @@ const REPORT_VARIANTS={
   "audit-intelligence":{
     title:"Spare Parts | Accounting & Audit Investigation",
     description:"Receipt anomalies, quality of recorded cost evidence, refund and collection sources, governance warnings and investigation actions. Not a certified statutory audit.",
-    sectionNames:["Actions and Warnings","Receipt Exceptions","Daily Sales and Cash","Expenses by Category","Calculation Notes"],
+    sectionNames:["Actions and Warnings","Receipt Exceptions","Return Exceptions","Daily Sales and Cash","Expenses by Category","Calculation Notes"],
     chartNames:["Recorded receipts and refunds","Active expense categories","Daily completed invoice value"]
   },
   "stock-intelligence":{
