@@ -113,7 +113,6 @@ test("Excel exports visual worksheet, actual financial numbers and evidence meta
   const {res,chunks}=writableResponse();
   await sendAuditExport(res,config("xlsx"));
   if(!res.writableEnded)res.end();
-  await once(res,"finish").catch(()=>{});
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(Buffer.concat(chunks));
   assert.ok(wb.getWorksheet("Executive Summary"));
