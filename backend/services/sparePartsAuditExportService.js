@@ -34,7 +34,8 @@ function escapeRows(rows, columns) {
 }
 async function sendAuditExport(res, config) {
   const { format = "xlsx", title, description, period, branch, generatedBy, columns,
-    rows, metrics = [], filename = "chalin03-audit", sections = [], fromDate, toDate } = config;
+    rows, metrics = [], filename = "chalin03-audit", sections = [], fromDate, toDate,
+    charts = [], dashboardCards = [], primarySectionName = "Transaction Lines" } = config;
   const mode = String(format).toLowerCase();
   const showDateRange = fromDate !== undefined || toDate !== undefined;
   const startLabel = fromDate || "Earliest available";
@@ -93,7 +94,9 @@ async function sendAuditExport(res, config) {
     const indicator = (name, label, note, isMoney, tone = COLOR.teal) => ({
       label, value: metricMap.has(name) ? metricMap.get(name) : "—", note, isMoney, tone
     });
-    const cards = transactionReport ? [
+    const cards = dashboardCards.length ? dashboardCards.map(item => ({
+      ...item, tone: item.tone || COLOR.teal
+    })) : transactionReport ? [
       indicator("Active completed sale receipts", "COMPLETED RECEIPTS", "Recorded active sales", false),
       indicator("Full receipt totals INCLUDING tax (GHS)", "RECEIPT VALUE • GHS", "Includes recorded tax", true),
       indicator("Total MONEY REFUNDED (GHS)", "REFUNDS OUT • GHS", "Actual recorded refunds", true, COLOR.red),
@@ -171,7 +174,7 @@ async function sendAuditExport(res, config) {
       cover.getRow(topRow + 1).height = 37;
       cover.getRow(topRow + 2).height = 22;
     });
-    const detailsBandRow = transactionReport ? 14 : 10;
+    const detailsBandRow = cards.length > 4 ? 14 : 10;
     band(detailsBandRow, "02  /  REPORT INFORMATION", COLOR.navy2);
     let cursor = detailsBandRow + 1;
     const metadataLabels = new Set(["Report", "Purpose", "Selected store", "Period",
@@ -253,7 +256,11 @@ async function sendAuditExport(res, config) {
     }
     cursor += 1;
     band(cursor++, "04  /  WORKSHEET DIRECTORY", COLOR.navy2);
-    const worksheetDirectory = [{ name: "Transaction Lines", count: rows.length }, ...sections.map(s => ({ name: s.name, count: s.rows.length }))];
+    const worksheetDirectory = [
+      ...(charts.length ? [{ name: "Visual Analysis", count: charts.length }] : []),
+      { name: primarySectionName, count: rows.length },
+      ...sections.map(s => ({ name: s.name, count: s.rows.length }))
+    ];
     worksheetDirectory.forEach(({ name, count }, index) => {
       cover.mergeCells(cursor, 1, cursor, 6);
       cover.mergeCells(cursor, 7, cursor, 8);
@@ -397,7 +404,74 @@ async function sendAuditExport(res, config) {
         Math.max(headerRow, headerRow + records.length);
       return sheet;
     }
-    addTable("Transaction Lines", columns, rows);
+    function addVisualAnalysis() {
+      const chartSheet = book.addWorksheet("Visual Analysis", {
+        properties: { tabColor: { argb: COLOR.gold } },
+        views: [{ state: "frozen", ySplit: 3 }]
+      });
+      chartSheet.columns = Array.from({length:12},(_,i)=>({
+        key:"visual_col_"+i,width:i<4?15:i===4?20:12
+      }));
+      chartSheet.mergeCells("A1:L1");
+      chartSheet.getCell("A1").value="CHALIN03  /  SPARE PARTS  /  DATA VISUALISATION";
+      chartSheet.getCell("A1").fill=fill(COLOR.navy);
+      chartSheet.getCell("A1").font={bold:true,color:{argb:COLOR.white},size:14};
+      chartSheet.getRow(1).height=36;
+      chartSheet.mergeCells("A2:L2");
+      chartSheet.getCell("A2").value="Comparative chart bars use the same source numbers as the supporting worksheets. All money is GHS.";
+      chartSheet.getCell("A2").font={size:10,color:{argb:COLOR.muted},italic:true};
+      chartSheet.getRow(2).height=29;
+      let row=4;
+      for(const chart of charts.slice(0,8)) {
+        chartSheet.mergeCells(row,1,row,12);
+        chartSheet.getCell(row,1).value=safeCell(chart.title);
+        chartSheet.getCell(row,1).fill=fill(COLOR.navy2);
+        chartSheet.getCell(row,1).font={bold:true,color:{argb:COLOR.white},size:12};
+        chartSheet.getRow(row).height=31;
+        row++;
+        chartSheet.mergeCells(row,1,row,12);
+        chartSheet.getCell(row,1).value=safeCell(chart.note||chart.unit||"");
+        chartSheet.getCell(row,1).font={size:9,italic:true,color:{argb:COLOR.muted}};
+        chartSheet.getRow(row).height=27;
+        row++;
+        const points=Array.isArray(chart.points)?chart.points.slice(0,31):[];
+        const maxValue=Math.max(0,...points.map(p=>Number(p.value)||0));
+        if(!points.length){
+          chartSheet.mergeCells(row,1,row,12);
+          chartSheet.getCell(row,1).value="No matching source records for this chart.";
+          row+=2; continue;
+        }
+        points.forEach((point,i)=>{
+          chartSheet.mergeCells(row,1,row,4);
+          chartSheet.getCell(row,1).value=safeCell(String(point.label).slice(0,150));
+          chartSheet.getCell(row,1).font={name:"Aptos",size:9,color:{argb:COLOR.ink}};
+          chartSheet.getCell(row,1).alignment={vertical:"middle",indent:1,shrinkToFit:true};
+          const value=Number(point.value)||0;
+          const valueCell=chartSheet.getCell(row,5);
+          valueCell.value=value;
+          valueCell.numFmt=moneyFormat;
+          valueCell.font={bold:true,size:10,color:{argb:COLOR.navy}};
+          valueCell.alignment={horizontal:"right",vertical:"middle"};
+          const filled=maxValue>0?Math.round(Math.max(0,value)/maxValue*7):0;
+          for(let n=0;n<7;n++){
+            const cell=chartSheet.getCell(row,6+n);
+            cell.value=" ";
+            cell.fill=fill(n<filled?(i%2?COLOR.teal:COLOR.navy2):COLOR.blueLight);
+          }
+          chartSheet.getRow(row).height=23;
+          row++;
+        });
+        row+=2;
+      }
+      chartSheet.pageSetup={
+        paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,
+      };
+      chartSheet.headerFooter.oddFooter="&LCHALIN03 business visuals&C"+clean(branch).slice(0,34)+"&RPage &P of &N";
+      chartSheet.pageSetup.printArea="A1:L"+Math.max(4,row);
+    }
+
+    if (charts.length) addVisualAnalysis();
+    addTable(primarySectionName, columns, rows);
     sections.forEach(section => addTable(section.name, section.columns, section.rows));
     const buffer = await book.xlsx.writeBuffer();
     setHeaders(res, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename + ".xlsx");
@@ -415,7 +489,7 @@ async function sendAuditExport(res, config) {
     const result='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+html(title)+'</title>'+
       '<style>body{font-family:Calibri,Arial,sans-serif;color:#15342f;font-size:10pt}h1{font-size:23pt;color:#153b37}h2{font-size:14pt;page-break-after:avoid}p{color:#647672}table{border-collapse:collapse;width:100%;margin:14pt 0;table-layout:auto}th{background:#153b37;color:#fff;text-align:left}th,td{border:1px solid #dce7e5;padding:5pt;overflow-wrap:anywhere}tr:nth-child(even){background:#f3f8f6}thead{display:table-header-group}</style></head><body>'+
       '<h1>'+html(title)+'</h1><p>'+html(description || "")+'</p><table>'+metaRows+'</table>'+
-      renderWordTable("Transaction Lines",columns,rows)+
+      renderWordTable(primarySectionName,columns,rows)+
       sections.map(section=>renderWordTable(section.name,section.columns,section.rows)).join("")+
       '<p>CHALIN03 controlled audit evidence. Return cost is a historical-weighted estimate, not proof of theft or a bank-settled refund.</p></body></html>';
     setHeaders(res,"application/msword; charset=utf-8",filename+".doc");
@@ -482,7 +556,7 @@ async function sendAuditExport(res, config) {
         for(const record of recs)drawRow(subset.map(col=>safeCell(record[col.key])));
       }
     }
-    renderSection("Transaction Lines",columns,rows);
+    renderSection(primarySectionName,columns,rows);
     for(const section of sections)renderSection(section.name,section.columns,section.rows);
     const pages=doc.bufferedPageRange();
     for(let k=pages.start;k<pages.start+pages.count;k++){
