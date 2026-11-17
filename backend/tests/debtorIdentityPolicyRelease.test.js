@@ -110,7 +110,7 @@ test("new credit debt and both payment routes enforce identity before money chan
     singleSegment.indexOf("applyPaymentToDebt("));
   assert.match(debts,/router\.post\("\/customers\/:customerKey\/identity",requireAuth/);
   assert.match(debts,/identity_requirements/);
-  assert.match(debts,/original_sale_receipts_preserved/);
+  assert.match(debts,/historical_receipts_unchanged/);
 });
 test("all-staff notice deduplicates contact numbers and never targets customer phone rows",()=>{
   assert.match(SMS_TEXT,/CHALIN03 NOTICE/);
