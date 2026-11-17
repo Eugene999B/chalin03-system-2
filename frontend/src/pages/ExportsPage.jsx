@@ -290,7 +290,7 @@ export default function ExportsPage() {
 
   function buildStoreFileName(reportKey, format) {
     const option = FORMAT_OPTIONS.find((item) => item.key === format);
-    const extension = option?.extension || "xlsx";
+    const extension = format === "word" || format === "docx" ? "docx" : option?.extension || "xlsx";
     const periodPart =
       from || to
         ? `-${from || "earliest"}-to-${to || "latest"}`
@@ -387,7 +387,7 @@ export default function ExportsPage() {
       window.URL.revokeObjectURL(fileUrl);
 
       const formatLabel =
-        FORMAT_OPTIONS.find((option) => option.key === format)?.label || format;
+        (format === "word" ? "Word" : FORMAT_OPTIONS.find((option) => option.key === format)?.label) || format;
       const selectedPeriod =
         from || to
           ? ` for ${from || "the earliest available date"} to ${
