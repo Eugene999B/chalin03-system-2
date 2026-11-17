@@ -687,7 +687,7 @@ export default function ExportsPage() {
                       const key=report.key+"-"+format.key;
                       return <button key={key} type="button"
                         disabled={Boolean(busyKey)}
-                        onClick={()=>downloadReport(report,format.key)}
+                        onClick={()=>downloadReport(report,format.key==="doc"?"word":format.key)}
                         aria-label={"Download "+report.title+" as "+format.label}>
                         <strong>{busyKey===key?"Preparing…":format.label}</strong>
                         <span aria-hidden="true">↓</span>
