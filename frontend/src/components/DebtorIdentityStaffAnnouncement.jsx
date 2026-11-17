@@ -16,7 +16,7 @@ export default function DebtorIdentityStaffAnnouncement(){
   if(!isLoggedIn||!staffId||closed)return null;
   const isSpareParts=!workspaceCode||workspaceCode==="spare_parts";
   function confirmRead(){
-    try{localStorage.setItem(key,"acknowledged");}catch{}
+    try{localStorage.setItem(key,"acknowledged");}catch{ /* Storage can be unavailable in private browsing; in-memory dismissal still works. */ }
     setClosed(true);
   }
   return (
