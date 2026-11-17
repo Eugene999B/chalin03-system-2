@@ -486,9 +486,27 @@ async function sendAuditExport(res, config) {
       return "<h2>"+html(name)+" ("+records.length+" records)</h2>" +
         "<table><thead><tr>"+headers+"</tr></thead><tbody>"+values+"</tbody></table>";
     };
+    const renderWordCharts = () => charts.length ? (
+      "<h2>Charts and visual analysis</h2>" + charts.slice(0,8).map(chart=>{
+        const points=Array.isArray(chart.points)?chart.points.slice(0,20):[];
+        const max=Math.max(0,...points.map(p=>Number(p.value)||0));
+        const graphRows=points.map(p=>{
+          const value=Number(p.value)||0;
+          const percent=max>0?Math.round(Math.max(0,value)/max*100):0;
+          return "<tr><td style=\"width:28%\">"+html(p.label)+
+            "</td><td style=\"width:18%;text-align:right\">"+html(fmtNumber(value))+
+            "</td><td style=\"width:54%;background:#edf4f5\"><div style=\"height:14pt;width:"+
+            percent+"%;background:#087f75\">&nbsp;</div></td></tr>";
+        }).join("");
+        return "<h3>"+html(chart.title)+"</h3><p>"+html(chart.unit||"")+
+          " | "+html(chart.note||"")+"</p><table>"+graphRows+
+          (graphRows?"":"<tr><td>No records in selection</td></tr>")+"</table>";
+      }).join("")
+    ) : "";
     const result='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+html(title)+'</title>'+
       '<style>body{font-family:Calibri,Arial,sans-serif;color:#15342f;font-size:10pt}h1{font-size:23pt;color:#153b37}h2{font-size:14pt;page-break-after:avoid}p{color:#647672}table{border-collapse:collapse;width:100%;margin:14pt 0;table-layout:auto}th{background:#153b37;color:#fff;text-align:left}th,td{border:1px solid #dce7e5;padding:5pt;overflow-wrap:anywhere}tr:nth-child(even){background:#f3f8f6}thead{display:table-header-group}</style></head><body>'+
       '<h1>'+html(title)+'</h1><p>'+html(description || "")+'</p><table>'+metaRows+'</table>'+
+      renderWordCharts()+
       renderWordTable(primarySectionName,columns,rows)+
       sections.map(section=>renderWordTable(section.name,section.columns,section.rows)).join("")+
       '<p>CHALIN03 controlled audit evidence. Return cost is a historical-weighted estimate, not proof of theft or a bank-settled refund.</p></body></html>';
@@ -510,6 +528,67 @@ async function sendAuditExport(res, config) {
     meta.forEach(([a,b])=>doc.text(a+": "+fmtNumber(b),{lineGap:2}));
     doc.moveDown(.6);
     const usable=doc.page.width-72;
+    function drawPdfCharts() {
+      for(const chart of charts.slice(0,8)) {
+        const points=Array.isArray(chart.points)?chart.points.slice(0,24):[];
+        const isLine=chart.kind==="line";
+        const count=points.length;
+        const height=isLine?250:Math.max(175,Math.min(420,count*32+75));
+        if(doc.y+height+40>doc.page.height-43)doc.addPage();
+        const x=36,y=doc.y+6,innerX=x+15,innerWidth=usable-30;
+        doc.rect(x,y,usable,height).fill("#F4F8FA");
+        doc.font("Helvetica-Bold").fontSize(12).fillColor("#173B4F")
+          .text(clean(chart.title).slice(0,100),innerX,y+12,{width:innerWidth});
+        doc.font("Helvetica").fontSize(8).fillColor("#5D7282")
+          .text(clean(chart.note||chart.unit||"").slice(0,220),innerX,y+33,{width:innerWidth});
+        const max=Math.max(0,...points.map(p=>Number(p.value)||0),1);
+        if(count===0){
+          doc.fontSize(10).text("No source records for this chart.",innerX,y+85);
+        }else if(isLine) {
+          const chartY=y+82,plotHeight=110,plotX=innerX+18;
+          const plotWidth=innerWidth-48;
+          doc.moveTo(plotX,chartY).lineTo(plotX,chartY+plotHeight)
+            .lineTo(plotX+plotWidth,chartY+plotHeight).lineWidth(.75)
+            .strokeColor("#BFCED5").stroke();
+          points.forEach((p,i)=>{
+            const px=plotX+(count===1?plotWidth/2:(i/(count-1))*plotWidth);
+            const py=chartY+plotHeight-Math.max(0,Number(p.value)||0)/max*plotHeight;
+            if(i===0)doc.moveTo(px,py);else doc.lineTo(px,py);
+          });
+          doc.strokeColor("#087F75").lineWidth(2).stroke();
+          points.forEach((p,i)=>{
+            const px=plotX+(count===1?plotWidth/2:i/(count-1)*plotWidth);
+            const py=chartY+plotHeight-Math.max(0,Number(p.value)||0)/max*plotHeight;
+            doc.circle(px,py,2.1).fill("#E6B91E");
+            if(i===0||i===count-1||i%Math.max(1,Math.ceil(count/7))===0){
+              doc.fontSize(6.5).fillColor("#526B79").text(String(p.label).slice(0,12),
+                Math.max(innerX,px-24),chartY+plotHeight+8,{width:49,align:"center"});
+            }
+          });
+          doc.font("Helvetica").fontSize(8).fillColor("#36586B").text(
+            "Peak: "+fmtNumber(max)+" "+clean(chart.unit||""),innerX,y+height-30
+          );
+        }else{
+          const chartX=innerX,amountX=x+usable-115;
+          const graphX=innerX+Math.min(215,innerWidth*.45),graphWidth=Math.max(70,innerWidth-330);
+          points.forEach((p,i)=>{
+            const rowY=y+66+i*32;
+            const bar=Math.max(0,Number(p.value)||0)/max*graphWidth;
+            doc.font("Helvetica").fontSize(8).fillColor("#203847").text(
+              clean(p.label).slice(0,38),chartX,rowY+3,{width:graphX-chartX-11,ellipsis:true}
+            );
+            doc.rect(graphX,rowY+4,graphWidth,13).fill("#DFE9EE");
+            if(bar>0)doc.rect(graphX,rowY+4,bar,13).fill(i%2?"#087F75":"#173B68");
+            doc.font("Helvetica-Bold").fontSize(8).fillColor("#203847").text(
+              fmtNumber(Number(p.value)||0),amountX,rowY+3,{width:100,align:"right"}
+            );
+          });
+        }
+        doc.y=y+height+18;
+      }
+      if(charts.length)doc.addPage();
+    }
+    drawPdfCharts();
     function renderSection(name,cols,recs) {
       // Narrow, evidence-heavy sections are split into readable groups of
       // columns. Each group repeats the first source identifier so every page
