@@ -12,6 +12,7 @@ export default function DebtorIdentityStaffAnnouncement(){
   const staffId=user?.id||user?.username;
   const key=POLICY+"-"+String(staffId||"unknown");
   const [closed,setClosed]=useState(()=>acknowledged(key));
+  const [expanded,setExpanded]=useState(false);
   useEffect(()=>{setClosed(acknowledged(key));},[key]);
   if(!isLoggedIn||!staffId||closed)return null;
   const isSpareParts=!workspaceCode||workspaceCode==="spare_parts";
@@ -25,7 +26,14 @@ export default function DebtorIdentityStaffAnnouncement(){
         <span>CHALIN03 · IMPORTANT STAFF NOTICE</span>
         <button type="button" onClick={confirmRead} aria-label="Mark debtor identity notice as read">×</button>
       </div>
-      <strong>Check every customer's real name and phone number.</strong>
+      <div className="debt-policy-announcement__summary">
+        <strong>Old debtors: verify two real names and a valid Ghana phone.</strong>
+        <button type="button" onClick={()=>setExpanded(value=>!value)}
+          aria-expanded={expanded} aria-controls="debt-policy-notice-details">
+          {expanded ? "Hide details" : "Read details"}
+        </button>
+      </div>
+      <div id="debt-policy-notice-details" hidden={!expanded}>
       <p>Existing debtors may have been registered without a phone number or with only
         one name or numbers instead of a name. All staff, including the boss,
         administrators, managers and cashiers, must help correct these records.
@@ -35,6 +43,7 @@ export default function DebtorIdentityStaffAnnouncement(){
       <div className="debt-policy-announcement__actions">
         {isSpareParts && <Link to="/debts" onClick={confirmRead}>Review debtors</Link>}
         <button type="button" onClick={confirmRead}>I have read this</button>
+      </div>
       </div>
     </aside>
   );
