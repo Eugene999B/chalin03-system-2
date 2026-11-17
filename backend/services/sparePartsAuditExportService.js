@@ -34,7 +34,8 @@ function escapeRows(rows, columns) {
 }
 async function sendAuditExport(res, config) {
   const { format = "xlsx", title, description, period, branch, generatedBy, columns,
-    rows, metrics = [], filename = "chalin03-audit", sections = [], fromDate, toDate } = config;
+    rows, metrics = [], filename = "chalin03-audit", sections = [], fromDate, toDate,
+    charts = [], dashboardCards = [], primarySectionName = "Transaction Lines" } = config;
   const mode = String(format).toLowerCase();
   const showDateRange = fromDate !== undefined || toDate !== undefined;
   const startLabel = fromDate || "Earliest available";
@@ -93,7 +94,9 @@ async function sendAuditExport(res, config) {
     const indicator = (name, label, note, isMoney, tone = COLOR.teal) => ({
       label, value: metricMap.has(name) ? metricMap.get(name) : "—", note, isMoney, tone
     });
-    const cards = transactionReport ? [
+    const cards = dashboardCards.length ? dashboardCards.map(item => ({
+      ...item, tone: item.tone || COLOR.teal
+    })) : transactionReport ? [
       indicator("Active completed sale receipts", "COMPLETED RECEIPTS", "Recorded active sales", false),
       indicator("Full receipt totals INCLUDING tax (GHS)", "RECEIPT VALUE • GHS", "Includes recorded tax", true),
       indicator("Total MONEY REFUNDED (GHS)", "REFUNDS OUT • GHS", "Actual recorded refunds", true, COLOR.red),
@@ -171,7 +174,7 @@ async function sendAuditExport(res, config) {
       cover.getRow(topRow + 1).height = 37;
       cover.getRow(topRow + 2).height = 22;
     });
-    const detailsBandRow = transactionReport ? 14 : 10;
+    const detailsBandRow = cards.length > 4 ? 14 : 10;
     band(detailsBandRow, "02  /  REPORT INFORMATION", COLOR.navy2);
     let cursor = detailsBandRow + 1;
     const metadataLabels = new Set(["Report", "Purpose", "Selected store", "Period",
@@ -253,7 +256,11 @@ async function sendAuditExport(res, config) {
     }
     cursor += 1;
     band(cursor++, "04  /  WORKSHEET DIRECTORY", COLOR.navy2);
-    const worksheetDirectory = [{ name: "Transaction Lines", count: rows.length }, ...sections.map(s => ({ name: s.name, count: s.rows.length }))];
+    const worksheetDirectory = [
+      ...(charts.length ? [{ name: "Visual Analysis", count: charts.length }] : []),
+      { name: primarySectionName, count: rows.length },
+      ...sections.map(s => ({ name: s.name, count: s.rows.length }))
+    ];
     worksheetDirectory.forEach(({ name, count }, index) => {
       cover.mergeCells(cursor, 1, cursor, 6);
       cover.mergeCells(cursor, 7, cursor, 8);
@@ -397,7 +404,74 @@ async function sendAuditExport(res, config) {
         Math.max(headerRow, headerRow + records.length);
       return sheet;
     }
-    addTable("Transaction Lines", columns, rows);
+    function addVisualAnalysis() {
+      const chartSheet = book.addWorksheet("Visual Analysis", {
+        properties: { tabColor: { argb: COLOR.gold } },
+        views: [{ state: "frozen", ySplit: 3 }]
+      });
+      chartSheet.columns = Array.from({length:12},(_,i)=>({
+        key:"visual_col_"+i,width:i<4?15:i===4?20:12
+      }));
+      chartSheet.mergeCells("A1:L1");
+      chartSheet.getCell("A1").value="CHALIN03  /  SPARE PARTS  /  DATA VISUALISATION";
+      chartSheet.getCell("A1").fill=fill(COLOR.navy);
+      chartSheet.getCell("A1").font={bold:true,color:{argb:COLOR.white},size:14};
+      chartSheet.getRow(1).height=36;
+      chartSheet.mergeCells("A2:L2");
+      chartSheet.getCell("A2").value="Comparative chart bars use the same source numbers as the supporting worksheets. All money is GHS.";
+      chartSheet.getCell("A2").font={size:10,color:{argb:COLOR.muted},italic:true};
+      chartSheet.getRow(2).height=29;
+      let row=4;
+      for(const chart of charts.slice(0,8)) {
+        chartSheet.mergeCells(row,1,row,12);
+        chartSheet.getCell(row,1).value=safeCell(chart.title);
+        chartSheet.getCell(row,1).fill=fill(COLOR.navy2);
+        chartSheet.getCell(row,1).font={bold:true,color:{argb:COLOR.white},size:12};
+        chartSheet.getRow(row).height=31;
+        row++;
+        chartSheet.mergeCells(row,1,row,12);
+        chartSheet.getCell(row,1).value=safeCell(chart.note||chart.unit||"");
+        chartSheet.getCell(row,1).font={size:9,italic:true,color:{argb:COLOR.muted}};
+        chartSheet.getRow(row).height=27;
+        row++;
+        const points=Array.isArray(chart.points)?chart.points.slice(0,31):[];
+        const maxValue=Math.max(0,...points.map(p=>Number(p.value)||0));
+        if(!points.length){
+          chartSheet.mergeCells(row,1,row,12);
+          chartSheet.getCell(row,1).value="No matching source records for this chart.";
+          row+=2; continue;
+        }
+        points.forEach((point,i)=>{
+          chartSheet.mergeCells(row,1,row,4);
+          chartSheet.getCell(row,1).value=safeCell(String(point.label).slice(0,150));
+          chartSheet.getCell(row,1).font={name:"Aptos",size:9,color:{argb:COLOR.ink}};
+          chartSheet.getCell(row,1).alignment={vertical:"middle",indent:1,shrinkToFit:true};
+          const value=Number(point.value)||0;
+          const valueCell=chartSheet.getCell(row,5);
+          valueCell.value=value;
+          valueCell.numFmt=moneyFormat;
+          valueCell.font={bold:true,size:10,color:{argb:COLOR.navy}};
+          valueCell.alignment={horizontal:"right",vertical:"middle"};
+          const filled=maxValue>0?Math.round(Math.max(0,value)/maxValue*7):0;
+          for(let n=0;n<7;n++){
+            const cell=chartSheet.getCell(row,6+n);
+            cell.value=" ";
+            cell.fill=fill(n<filled?(i%2?COLOR.teal:COLOR.navy2):COLOR.blueLight);
+          }
+          chartSheet.getRow(row).height=23;
+          row++;
+        });
+        row+=2;
+      }
+      chartSheet.pageSetup={
+        paperSize:9,orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0,
+      };
+      chartSheet.headerFooter.oddFooter="&LCHALIN03 business visuals&C"+clean(branch).slice(0,34)+"&RPage &P of &N";
+      chartSheet.pageSetup.printArea="A1:L"+Math.max(4,row);
+    }
+
+    if (charts.length) addVisualAnalysis();
+    addTable(primarySectionName, columns, rows);
     sections.forEach(section => addTable(section.name, section.columns, section.rows));
     const buffer = await book.xlsx.writeBuffer();
     setHeaders(res, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename + ".xlsx");
@@ -412,10 +486,28 @@ async function sendAuditExport(res, config) {
       return "<h2>"+html(name)+" ("+records.length+" records)</h2>" +
         "<table><thead><tr>"+headers+"</tr></thead><tbody>"+values+"</tbody></table>";
     };
+    const renderWordCharts = () => charts.length ? (
+      "<h2>Charts and visual analysis</h2>" + charts.slice(0,8).map(chart=>{
+        const points=Array.isArray(chart.points)?chart.points.slice(0,20):[];
+        const max=Math.max(0,...points.map(p=>Number(p.value)||0));
+        const graphRows=points.map(p=>{
+          const value=Number(p.value)||0;
+          const percent=max>0?Math.round(Math.max(0,value)/max*100):0;
+          return "<tr><td style=\"width:28%\">"+html(p.label)+
+            "</td><td style=\"width:18%;text-align:right\">"+html(fmtNumber(value))+
+            "</td><td style=\"width:54%;background:#edf4f5\"><div style=\"height:14pt;width:"+
+            percent+"%;background:#087f75\">&nbsp;</div></td></tr>";
+        }).join("");
+        return "<h3>"+html(chart.title)+"</h3><p>"+html(chart.unit||"")+
+          " | "+html(chart.note||"")+"</p><table>"+graphRows+
+          (graphRows?"":"<tr><td>No records in selection</td></tr>")+"</table>";
+      }).join("")
+    ) : "";
     const result='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+html(title)+'</title>'+
       '<style>body{font-family:Calibri,Arial,sans-serif;color:#15342f;font-size:10pt}h1{font-size:23pt;color:#153b37}h2{font-size:14pt;page-break-after:avoid}p{color:#647672}table{border-collapse:collapse;width:100%;margin:14pt 0;table-layout:auto}th{background:#153b37;color:#fff;text-align:left}th,td{border:1px solid #dce7e5;padding:5pt;overflow-wrap:anywhere}tr:nth-child(even){background:#f3f8f6}thead{display:table-header-group}</style></head><body>'+
       '<h1>'+html(title)+'</h1><p>'+html(description || "")+'</p><table>'+metaRows+'</table>'+
-      renderWordTable("Transaction Lines",columns,rows)+
+      renderWordCharts()+
+      renderWordTable(primarySectionName,columns,rows)+
       sections.map(section=>renderWordTable(section.name,section.columns,section.rows)).join("")+
       '<p>CHALIN03 controlled audit evidence. Return cost is a historical-weighted estimate, not proof of theft or a bank-settled refund.</p></body></html>';
     setHeaders(res,"application/msword; charset=utf-8",filename+".doc");
@@ -436,6 +528,67 @@ async function sendAuditExport(res, config) {
     meta.forEach(([a,b])=>doc.text(a+": "+fmtNumber(b),{lineGap:2}));
     doc.moveDown(.6);
     const usable=doc.page.width-72;
+    function drawPdfCharts() {
+      for(const chart of charts.slice(0,8)) {
+        const points=Array.isArray(chart.points)?chart.points.slice(0,24):[];
+        const isLine=chart.kind==="line";
+        const count=points.length;
+        const height=isLine?250:Math.max(175,Math.min(420,count*32+75));
+        if(doc.y+height+40>doc.page.height-43)doc.addPage();
+        const x=36,y=doc.y+6,innerX=x+15,innerWidth=usable-30;
+        doc.rect(x,y,usable,height).fill("#F4F8FA");
+        doc.font("Helvetica-Bold").fontSize(12).fillColor("#173B4F")
+          .text(clean(chart.title).slice(0,100),innerX,y+12,{width:innerWidth});
+        doc.font("Helvetica").fontSize(8).fillColor("#5D7282")
+          .text(clean(chart.note||chart.unit||"").slice(0,220),innerX,y+33,{width:innerWidth});
+        const max=Math.max(0,...points.map(p=>Number(p.value)||0),1);
+        if(count===0){
+          doc.fontSize(10).text("No source records for this chart.",innerX,y+85);
+        }else if(isLine) {
+          const chartY=y+82,plotHeight=110,plotX=innerX+18;
+          const plotWidth=innerWidth-48;
+          doc.moveTo(plotX,chartY).lineTo(plotX,chartY+plotHeight)
+            .lineTo(plotX+plotWidth,chartY+plotHeight).lineWidth(.75)
+            .strokeColor("#BFCED5").stroke();
+          points.forEach((p,i)=>{
+            const px=plotX+(count===1?plotWidth/2:(i/(count-1))*plotWidth);
+            const py=chartY+plotHeight-Math.max(0,Number(p.value)||0)/max*plotHeight;
+            if(i===0)doc.moveTo(px,py);else doc.lineTo(px,py);
+          });
+          doc.strokeColor("#087F75").lineWidth(2).stroke();
+          points.forEach((p,i)=>{
+            const px=plotX+(count===1?plotWidth/2:i/(count-1)*plotWidth);
+            const py=chartY+plotHeight-Math.max(0,Number(p.value)||0)/max*plotHeight;
+            doc.circle(px,py,2.1).fill("#E6B91E");
+            if(i===0||i===count-1||i%Math.max(1,Math.ceil(count/7))===0){
+              doc.fontSize(6.5).fillColor("#526B79").text(String(p.label).slice(0,12),
+                Math.max(innerX,px-24),chartY+plotHeight+8,{width:49,align:"center"});
+            }
+          });
+          doc.font("Helvetica").fontSize(8).fillColor("#36586B").text(
+            "Peak: "+fmtNumber(max)+" "+clean(chart.unit||""),innerX,y+height-30
+          );
+        }else{
+          const chartX=innerX,amountX=x+usable-115;
+          const graphX=innerX+Math.min(215,innerWidth*.45),graphWidth=Math.max(70,innerWidth-330);
+          points.forEach((p,i)=>{
+            const rowY=y+66+i*32;
+            const bar=Math.max(0,Number(p.value)||0)/max*graphWidth;
+            doc.font("Helvetica").fontSize(8).fillColor("#203847").text(
+              clean(p.label).slice(0,38),chartX,rowY+3,{width:graphX-chartX-11,ellipsis:true}
+            );
+            doc.rect(graphX,rowY+4,graphWidth,13).fill("#DFE9EE");
+            if(bar>0)doc.rect(graphX,rowY+4,bar,13).fill(i%2?"#087F75":"#173B68");
+            doc.font("Helvetica-Bold").fontSize(8).fillColor("#203847").text(
+              fmtNumber(Number(p.value)||0),amountX,rowY+3,{width:100,align:"right"}
+            );
+          });
+        }
+        doc.y=y+height+18;
+      }
+      if(charts.length)doc.addPage();
+    }
+    drawPdfCharts();
     function renderSection(name,cols,recs) {
       // Narrow, evidence-heavy sections are split into readable groups of
       // columns. Each group repeats the first source identifier so every page
@@ -482,7 +635,7 @@ async function sendAuditExport(res, config) {
         for(const record of recs)drawRow(subset.map(col=>safeCell(record[col.key])));
       }
     }
-    renderSection("Transaction Lines",columns,rows);
+    renderSection(primarySectionName,columns,rows);
     for(const section of sections)renderSection(section.name,section.columns,section.rows);
     const pages=doc.bufferedPageRange();
     for(let k=pages.start;k<pages.start+pages.count;k++){
