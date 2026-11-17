@@ -43,6 +43,16 @@ function syntheticSource(options={}){
       {id:88,name:"Synthetic Engine Filter",quantity:2,low_stock_threshold:5,cost_price:50},
       {id:89,name:"Synthetic Hydraulic Seal",quantity:7,low_stock_threshold:3,cost_price:10},
     ],
+    purchases:[
+      {id:8,supplier_id:4,supplier_name:"Synthetic Supplier",invoice_number:"TEST-PUR-8",
+        purchase_date:"2026-11-05",total_amount:300,amount_paid:120,balance:180},
+    ],
+    supplierPayments:[
+      {paid_at:"2026-11-07",amount:120,payment_method:"bank",
+        supplier_name:"Synthetic Supplier",invoice_number:"TEST-PUR-8"},
+    ],
+    supplierPayables:[{supplier_id:4,supplier_name:"Synthetic Supplier",
+      open_invoices:1,balance:180}],
     previous:{value:100,receipts:1},
   };
 }
@@ -68,6 +78,9 @@ test("receipts, tax, original tenders, later collections and stock-only returns 
   assert.equal(r.summary.openDebtTotal,55);
   assert.equal(r.summary.overdueTotal,40);
   assert.equal(r.summary.expenseTotal,30);
+  assert.equal(r.summary.purchaseInvoices,300);
+  assert.equal(r.summary.supplierPaymentsTotal,120);
+  assert.equal(r.summary.supplierPayablesTotal,180);
   assert.equal(r.summary.margin,80);
   assert.equal(r.summary.lowStock,1);
   assert.equal(r.originalEvents.returns,2);
@@ -119,6 +132,7 @@ test("Excel exports visual worksheet, actual financial numbers and evidence meta
   const visual=wb.getWorksheet("Visual Analysis");
   assert.ok(visual,"Charts worksheet");
   assert.ok(wb.getWorksheet("Debt Aging"));
+  assert.ok(wb.getWorksheet("Supplier Payables Now"));
   assert.ok(wb.getWorksheet("Daily Sales and Cash"));
   assert.match(String(visual.getCell("A1").value),/VISUALISATION/);
   const cells=[];
@@ -196,6 +210,7 @@ test("source route explicitly protects store and management access",()=>{
   assert.match(source,/collections-intelligence/);
   assert.match(source,/audit-intelligence/);
   assert.match(source,/stock-intelligence/);
+  assert.match(source,/supplier-intelligence/);
   assert.match(source,/requireRole\("admin","manager","auditor"\)/);
   assert.match(source,/buildBusinessIntelligence\(req\)/);
 });
