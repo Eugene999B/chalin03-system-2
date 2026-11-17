@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet, useLocation, useNavigate } from "react-router";
+import { getSparePartsPageByPath } from "../security/sparePartsPageAccess";
 import CompactSidebarNavigation from "./CompactSidebarNavigation";
 import SidebarAccountMenu from "./SidebarAccountMenu";
 import "../styles/sidebarPolish.css";
@@ -28,6 +29,23 @@ function getUserInitials(name) {
     .map((part) => part[0])
     .join("")
     .toUpperCase();
+}
+
+// Page permission checks are shared by desktop/mobile navigation and direct URLs.
+// Existing RoleRoute/PermissionRoute and all backend action checks remain in force.
+function PageAccessProtectedOutlet() {
+  const location = useLocation();
+  const { hasPermission } = useAuth();
+  const page = getSparePartsPageByPath(location.pathname);
+  if (page && !hasPermission(page.permission)) {
+    return (
+      <section className="page-access-denied" role="alert" style={{margin:"1rem",padding:"1.5rem",borderRadius:"16px",background:"#fff",border:"1px solid #fecaca"}}>
+        <h1 style={{marginTop:0}}>Page access blocked</h1>
+        <p>Your account cannot open <strong>{page.label}</strong>. Ask the administrator to review this page under User Permissions.</p>
+      </section>
+    );
+  }
+  return <Outlet />;
 }
 
 export default function Layout() {
@@ -293,6 +311,8 @@ export default function Layout() {
 
       if (isAuditor) {
         auditItems.push(
+          { title: "Activity Log", description: "Review staff activities and system evidence", path: "/activity-log", icon: "🕵️", keywords: "audit activity log" },
+          { title: "Worker Profiles", description: "View permitted workforce profiles and records", path: "/workers", icon: "👷", keywords: "worker people staff profiles" },
           { title: "Stock Transfers", description: "Manage the store-to-store movement evidence", path: "/stock-transfers", icon: "🔁", keywords: "stock transfer dispatch receive" },
           { title: "Low Stock / Restock", description: "Review stock shortages and replenishment", path: "/low-stock", icon: "🚨", keywords: "restock inventory shortage" },
           { title: "Purchases", description: "Record and inspect supplier purchases", path: "/purchases", icon: "🚚", keywords: "supplier buying purchases" },
@@ -469,7 +489,15 @@ export default function Layout() {
       });
     }
 
-    return sections;
+    // A page deny must disappear from BOTH desktop and mobile menus and search.
+    // A direct URL is independently checked by PageAccessProtectedOutlet.
+    return sections.map(section => ({
+      ...section,
+      items: section.items.filter(item => {
+        const page = getSparePartsPageByPath(item.path);
+        return !page || hasPermission(page.permission);
+      }),
+    })).filter(section => section.items.length);
   }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission]);
 
   const commandItems = useMemo(() => {
@@ -1712,7 +1740,7 @@ export default function Layout() {
           </div>
         )}
 
-        <Outlet />
+        <PageAccessProtectedOutlet />
       </main>
 
       {commandOpen && (
