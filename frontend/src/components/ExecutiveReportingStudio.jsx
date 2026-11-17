@@ -49,7 +49,7 @@ const selected = (charts,title) => (charts||[]).find(x=>x.title===title);
 function dateIso(date){return date.toISOString().slice(0,10);}
 function dateFromToday(days){const date=new Date();date.setUTCDate(date.getUTCDate()+days);return dateIso(date);}
 function getFilename(id,fmt,store){
-  return ("CHALIN03_"+id+"_"+(store||"selected-store")+"."+(fmt==="word"?"doc":fmt))
+  return ("CHALIN03_"+id+"_"+(store||"selected-store")+"."+(fmt==="word"?"docx":fmt))
     .replace(/[^a-zA-Z0-9._-]/g,"_");
 }
 export default function ExecutiveReportingStudio({context="reports",storeCode="",storeKey="",from="",to="",allStores=false}){
