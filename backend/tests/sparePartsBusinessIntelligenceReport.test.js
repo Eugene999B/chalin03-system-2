@@ -145,19 +145,42 @@ test("Excel exports visual worksheet, actual financial numbers and evidence meta
   assert.ok(cells.includes(190));
   assert.match(String(wb.getWorksheet("Executive Summary").getCell("A1").value),/EXECUTIVE REPORT/);
 });
-test("Word file includes editable chart bars, source basis and audit limitations",async()=>{
+function unzipLocalParts(bytes) {
+  const zlib=require("node:zlib");
+  const files=new Map();let pos=0;
+  while(pos+30<bytes.length&&bytes.readUInt32LE(pos)===0x04034b50){
+    const method=bytes.readUInt16LE(pos+8);
+    const packed=bytes.readUInt32LE(pos+18),length=bytes.readUInt16LE(pos+26);
+    const extra=bytes.readUInt16LE(pos+28);
+    const name=bytes.subarray(pos+30,pos+30+length).toString("utf8");
+    const offset=pos+30+length+extra;
+    const data=bytes.subarray(offset,offset+packed);
+    files.set(name,method===8?zlib.inflateRawSync(data):data);
+    pos=offset+packed;
+  }
+  return files;
+}
+test("Word intelligence report is a genuine editable DOCX with narrative, charts and evidence",async()=>{
   const {res,chunks}=writableResponse();
-  await sendAuditExport(res,config("doc"));
-  const data=Buffer.concat(chunks).toString("utf8");
-  assert.match(data,/Charts and visual analysis/);
-  assert.match(data,/BUSINESS INTELLIGENCE \/ MANAGEMENT EDITION/);
-  assert.match(data,/class="cover"/);
-  assert.match(data,/Management interpretation/);
-  assert.match(data,/Business performance, explained/);
-  assert.match(data,/background:#087f75/);
-  assert.match(data,/Accounting.*?Limitations|Calculation Notes/);
-  assert.match(data,/Debt Aging/);
-  assert.equal(res.headers["content-type"].startsWith("application/msword"),true);
+  await sendAuditExport(res,config("word"));
+  const bytes=Buffer.concat(chunks);
+  assert.equal(bytes.subarray(0,4).toString("latin1"),"PK\x03\x04");
+  const parts=unzipLocalParts(bytes);
+  assert.ok(parts.has("[Content_Types].xml"));
+  assert.ok(parts.has("word/document.xml"));
+  assert.ok(parts.has("word/styles.xml"));
+  assert.ok(parts.has("word/_rels/document.xml.rels"));
+  assert.ok([...parts.keys()].filter(name=>name.startsWith("word/media/chart")).length>=4);
+  const xml=parts.get("word/document.xml").toString("utf8");
+  assert.match(xml,/<w:document /);
+  assert.match(xml,/Management interpretation/);
+  assert.match(xml,/Detailed records and reconciliations/);
+  assert.match(xml,/Accounting basis/);
+  assert.match(xml,/Debt Aging/);
+  assert.match(xml,/<w:drawing>/);
+  assert.match(xml,/<w:tbl>/);
+  assert.match(res.headers["content-type"],/wordprocessingml\.document/);
+  assert.match(res.headers["content-disposition"],/\.docx"/);
 });
 test("PDF export draws charts rather than only plain numbers",async()=>{
   const {res,chunks}=writableResponse();
