@@ -447,7 +447,8 @@ export const SPARE_PARTS_PAGES = Object.freeze([
   }
 ]);
 export function getSparePartsPageByPath(path) {
-  const pathname = String(path || "").replace(/\\/$/, "") || "/";
+  const rawPath = String(path || "/");
+  const pathname = rawPath.endsWith("/") && rawPath !== "/" ? rawPath.slice(0, -1) : rawPath;
   return SPARE_PARTS_PAGES.find(page => page.path === pathname) || null;
 }
 export function actualPageAccess(page, state, role, originalOwner = false) {
