@@ -674,6 +674,8 @@ router.get("/", requireAuth, async (req, res) => {
       s.receipt_number,
       COALESCE(s.customer_id, d.customer_id) AS customer_id,
       ${currentIdentitySelect()},
+      c.name AS master_customer_name,
+      c.phone AS master_customer_phone,
       d.amount_owed,
       d.amount_paid,
       d.balance,
