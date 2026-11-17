@@ -394,6 +394,8 @@ export default function DebtsPage() {
   const [payFullBalance, setPayFullBalance] = useState(false);
   const [paymentRequestKey, setPaymentRequestKey] = useState(makeRequestKey);
   const [paymentBusy, setPaymentBusy] = useState(false);
+  const [identityName,setIdentityName]=useState("");
+  const [identityPhone,setIdentityPhone]=useState("");
   const [latestReceipt, setLatestReceipt] = useState(null);
 
   const [sendingReminder, setSendingReminder] = useState(false);
@@ -535,6 +537,9 @@ export default function DebtsPage() {
     setPaymentMethod("cash");
     setPaymentNotes("");
     setPaymentRequestKey(makeRequestKey());
+    const missing=detail?.identity_requirements?.missing_fields||[];
+    setIdentityName(missing.includes("customer_name") ? "" : (detail.customer.customer_name||""));
+    setIdentityPhone(missing.includes("customer_phone") ? "" : (detail.customer.customer_phone||""));
     setLockedPeriod(null);
     setError("");
     setMessage("");
@@ -563,7 +568,15 @@ export default function DebtsPage() {
     (sum, row) => sum + numberValue(row.amount),
     0
   );
+  const missingIdentity=selected?.identity_requirements?.missing_fields||[];
+  const identityNameParts=identityName.trim().split(/\s+/).filter(Boolean);
+  const identityValid=(!missingIdentity.includes("customer_name") ||
+      (identityNameParts.filter(part=>/[\p{L}]{2,}/u.test(part)).length>=2 &&
+       new Set(identityNameParts.map(part=>part.toLowerCase())).size>=2)) &&
+      (!missingIdentity.includes("customer_phone") ||
+        /^(?:\+233\d{9}|0\d{9}|233\d{9})$/.test(identityPhone.replace(/[\s-]+/g,"")));
   const paymentValid =
+    identityValid &&
     cleanPaymentAmount > 0 &&
     cleanPaymentAmount <= selectedOutstanding &&
     Math.abs(previewAllocated - cleanPaymentAmount) < 0.01;
@@ -588,6 +601,8 @@ export default function DebtsPage() {
           payment_method: paymentMethod,
           notes: paymentNotes,
           request_key: paymentRequestKey,
+          ...(missingIdentity.includes("customer_name") ? {customer_name:identityName.trim()}:{}),
+          ...(missingIdentity.includes("customer_phone") ? {customer_phone:identityPhone.trim()}:{}),
         }
       );
 
@@ -602,6 +617,12 @@ export default function DebtsPage() {
       await loadAccounts({ keepMessages: true });
       await openAccount(selected.customer.customer_key);
     } catch (requestError) {
+      if(requestError?.response?.data?.code==="DEBT_CUSTOMER_IDENTITY_REQUIRED"){
+        const fields=requestError.response.data.missing_fields||[];
+        setSelected(current=>current ? {...current,identity_requirements:{
+          required:true,missing_fields:fields,message:requestError.response.data.message
+        }}:current);
+      }
       const period = lockedPeriodFromError(requestError);
       if (period) setLockedPeriod(period);
       setError(
@@ -1092,6 +1113,12 @@ export default function DebtsPage() {
                 </button>
               </header>
 
+              {selected.identity_requirements?.required && (
+                <div className="debt-desk__legacy-note" role="status">
+                  Identity update needed: verify the debtor's full real name and contact number.
+                  Staff will be asked for the missing information when recording a payment.
+                </div>
+              )}
               {selected.customer.legacy_record ? (
                 <div className="debt-desk__legacy-note">
                   This older debt is not linked to a saved customer profile. It
@@ -1191,6 +1218,30 @@ export default function DebtsPage() {
                       Partial payment
                     </button>
                   </div>
+
+                  {missingIdentity.length > 0 && (
+                    <section className="debt-desk__identity-update" aria-label="Complete debtor identity before payment">
+                      <strong>Complete this customer's details first</strong>
+                      <p>This older debtor is missing a real two-part name or valid phone.
+                        Enter the missing information to save it with this payment. Original
+                        receipts and debt amounts will remain unchanged.</p>
+                      {missingIdentity.includes("customer_name") && (
+                        <label>Customer's two different real names
+                          <input type="text" value={identityName} maxLength={150} autoComplete="name"
+                            placeholder="Example: Appiah Eugene" required
+                            onChange={event=>setIdentityName(event.target.value)}/>
+                        </label>
+                      )}
+                      {missingIdentity.includes("customer_phone") && (
+                        <label>Customer's valid Ghana phone
+                          <input type="tel" value={identityPhone} maxLength={40}
+                            autoComplete="tel" placeholder="0241234567" required
+                            onChange={event=>setIdentityPhone(event.target.value)}/>
+                        </label>
+                      )}
+                      {!identityValid && <small>Enter the missing name and phone correctly to continue.</small>}
+                    </section>
+                  )}
 
                   <label>
                     <span>Amount received</span>
