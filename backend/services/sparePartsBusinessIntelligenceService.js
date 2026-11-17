@@ -59,7 +59,7 @@ async function loadEvidence(branchId,p){
   try{
     await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await conn.query("START TRANSACTION READ ONLY");started=true;
-    const [branchReply,sales,allocations,debtPaid,refunds,expenses,openDebts,products,previousReply] = await Promise.all([
+    const [branchReply,sales,allocations,debtPaid,refunds,expenses,openDebts,products,purchases,supplierPayments,supplierPayables,previousReply] = await Promise.all([
       conn.query("SELECT id,name,code FROM branches WHERE id=? LIMIT 1",[branchId]),
       read(conn,[
         "SELECT s.id AS sale_id,s.created_at,s.receipt_number,s.customer_name,s.payment_type,",
@@ -103,6 +103,28 @@ async function loadEvidence(branchId,p){
         "SELECT id,name,quantity,low_stock_threshold,cost_price",
         "FROM products WHERE branch_id=? ORDER BY id LIMIT 12001"
       ].join(" "),[branchId],"product"),
+      read(conn,[
+        "SELECT p.id,p.supplier_id,s.name AS supplier_name,p.invoice_number,p.purchase_date,",
+        "p.total_amount,p.balance,p.amount_paid",
+        "FROM purchases p LEFT JOIN suppliers s ON s.id=p.supplier_id AND s.branch_id=p.branch_id",
+        "WHERE p.branch_id=? AND p.purchase_date>=? AND p.purchase_date<=?",
+        "ORDER BY p.id LIMIT 12001"
+      ].join(" "),[branchId,p.from,p.to],"purchase"),
+      read(conn,[
+        "SELECT pp.paid_at,pp.amount,pp.payment_method,p.invoice_number,s.name AS supplier_name",
+        "FROM purchase_payments pp INNER JOIN purchases p",
+        "ON p.id=pp.purchase_id AND p.branch_id=pp.branch_id",
+        "LEFT JOIN suppliers s ON s.id=p.supplier_id AND s.branch_id=p.branch_id",
+        "WHERE pp.branch_id=? AND pp.paid_at>=? AND pp.paid_at<DATE_ADD(?,INTERVAL 1 DAY)",
+        "ORDER BY pp.id LIMIT 12001"
+      ].join(" "),[branchId,p.from,p.to],"supplier payment"),
+      read(conn,[
+        "SELECT p.supplier_id,COALESCE(s.name,'Unidentified supplier') AS supplier_name,",
+        "COUNT(*) AS open_invoices,SUM(p.balance) AS balance",
+        "FROM purchases p LEFT JOIN suppliers s ON s.id=p.supplier_id AND s.branch_id=p.branch_id",
+        "WHERE p.branch_id=? AND p.balance>0",
+        "GROUP BY p.supplier_id,s.name ORDER BY balance DESC LIMIT 12001"
+      ].join(" "),[branchId],"supplier balance"),
       conn.query([
         "SELECT COUNT(*) AS receipts,COALESCE(SUM(total),0) AS value",
         "FROM sales WHERE branch_id=? AND sale_status='completed'",
@@ -114,7 +136,7 @@ async function loadEvidence(branchId,p){
     const prev=previousReply[0];
     if(!branchRows.length)throw new IntelligenceReportError("STORE_NOT_FOUND","Selected store was not found.",404);
     await conn.commit();started=false;
-    return {branch:branchRows[0],sales,allocations,debtPaid,refunds,expenses,openDebts,products,previous:prev[0]||{}};
+    return {branch:branchRows[0],sales,allocations,debtPaid,refunds,expenses,openDebts,products,purchases,supplierPayments,supplierPayables,previous:prev[0]||{}};
   }catch(error){if(started)await conn.rollback().catch(()=>{});throw error;}
   finally{conn.release();}
 }
@@ -136,6 +158,9 @@ function buildVisualModel(evidence,p,generatedAt){
   const collectedNet=money(collectedAtSale+debtCollected-refundTotal);
   const activeExpenses=evidence.expenses.filter(r=>!num(r.is_voided)&&!num(r.is_reversal));
   const expenseTotal=sum(activeExpenses,"amount");
+  const purchaseInvoices=sum(evidence.purchases,"total_amount");
+  const supplierPaymentsTotal=sum(evidence.supplierPayments,"amount");
+  const supplierPayablesTotal=sum(evidence.supplierPayables,"balance");
   const openDebtTotal=sum(evidence.openDebts,"balance");
   const asOf=generatedAt.slice(0,10);
   const ageDetails=evidence.openDebts.map(d=>{
@@ -192,6 +217,13 @@ function buildVisualModel(evidence,p,generatedAt){
     ...x,provisional_margin:x.has_cost_gap?"Withheld — missing cost":x.provisional_margin
   })).sort((a,b)=>b.net_sales-a.net_sales);
   const expenses=group(activeExpenses,"category","amount");
+  const supplierSpend=group(evidence.purchases.map(r=>({...r,
+    name:r.supplier_name||"Not recorded"})),"name","total_amount");
+  const openSupplierBalances=evidence.supplierPayables.map(row=>({
+    supplier:row.supplier_name||"Unidentified supplier",
+    invoices:num(row.open_invoices),
+    balance:money(row.balance),
+  })).sort((a,b)=>b.balance-a.balance);
   const tender=group(evidence.allocations.map(r=>({...r,channel:r.payment_channel}))
     .concat(evidence.debtPaid.map(r=>({...r,channel:r.payment_method}))),"channel","amount");
   const lowStock=evidence.products.filter(x=>x.low_stock_threshold!=null
@@ -243,6 +275,10 @@ function buildVisualModel(evidence,p,generatedAt){
   finding(lowStock.length?"MEDIUM":"INFO","Stock replenishment",
     lowStock.length+" products are at/below their reorder threshold.",
     "Confirm supplier lead time, stock counts and replenishment budget.","products.low_stock_threshold");
+  finding(supplierPayablesTotal>0?"MEDIUM":"INFO","Supplier commitments",
+    "Current unpaid supplier invoices total "+gh(supplierPayablesTotal)+".",
+    "Review supplier statements and payment terms before releasing further purchase orders.",
+    "purchases.balance, purchase_payments.paid_at");
   finding("INFO","Cash movement",
     "Recorded receipts at sale "+gh(collectedAtSale)+", debt receipts "+gh(debtCollected)+
       ", and financial refunds out "+gh(refundTotal)+".",
@@ -268,7 +304,9 @@ function buildVisualModel(evidence,p,generatedAt){
         ". This is not net profit or an accountant-certified statement."},
     {topic:"Expenses and purchasing",explanation:
       "Active recorded business expenses in the period are "+gh(expenseTotal)+
-      ". Voided/reversal records are excluded. Purchase expenditure is not automatically treated as cost of goods sold."},
+      ". Voided/reversal records are excluded. Purchase invoices booked in the period total "+
+      gh(purchaseInvoices)+" while actual recorded supplier payments dated in the period were "+
+      gh(supplierPaymentsTotal)+". These are different event dates. Purchases are not cost of goods sold."},
     {topic:"Inventory controls",explanation:
       evidence.products.length+" products are in the current store register, with estimated catalogue-cost value "+
       gh(inventoryCost)+". "+lowStock.length+" products require restock review and "+
@@ -293,6 +331,11 @@ function buildVisualModel(evidence,p,generatedAt){
     {title:"Current debt by due-date age",kind:"bar",unit:"GHS",
       note:"As-of-download snapshot. No due date shown separately.",
       points:aging.map(x=>({label:x.bucket,value:x.balance}))},
+    {title:"Supplier invoices and recorded payments",kind:"bar",unit:"GHS",
+      note:"Invoices by purchase date versus outgoing supplier payments by paid date. Not COGS.",
+      points:[{label:"Purchases booked",value:purchaseInvoices},
+        {label:"Supplier payments",value:supplierPaymentsTotal},
+        {label:"Open supplier balance",value:supplierPayablesTotal}]},
     {title:"Active expense categories",kind:"bar",unit:"GHS",
       note:"Excludes voided/reversal expenses; not audited cash spend.",
       points:expenses.slice(0,8).map(x=>({label:x.label,value:x.value}))},
@@ -307,6 +350,9 @@ function buildVisualModel(evidence,p,generatedAt){
     ["Current open debt (GHS)",openDebtTotal],
     ["Past-due debt (GHS)",overdueTotal],
     ["Active expense total (GHS)",expenseTotal],
+    ["Purchase invoices booked (GHS)",purchaseInvoices],
+    ["Supplier payments dated in period (GHS)",supplierPaymentsTotal],
+    ["Current supplier payables (GHS)",supplierPayablesTotal],
     ["Historical cost of sold items (GHS)",sum(lines,"cost")],
     ["Historical gross margin before returns (GHS)",margin==null?"Withheld: missing historical costs":margin],
     ["Historical cost coverage (%)",costCoverage==null?"No sold lines":costCoverage],
@@ -332,7 +378,8 @@ function buildVisualModel(evidence,p,generatedAt){
     {basis:"Returns",detail:"Only return_type=refund causes cash-out; stock-only returns do not reduce cash."},
     {basis:"Debt aging",detail:"Unpaid balances are current snapshot, aged against due_date. No due date is distinct from not overdue."},
     {basis:"Inventory",detail:"Quantities and catalogue-cost valuations are current snapshots, not stock value at period close."},
-    {basis:"Profit",detail:"Historical cost gaps prevent certified gross profit. Expense totals do not equal statutory net profit."},
+    {basis:"Profit",detail:"Historical cost gaps prevent certified gross profit. Purchases booked are not automatically COGS. Expense totals do not equal statutory net profit."},
+    {basis:"Suppliers",detail:"Invoice totals are purchase-dated, payments are paid-at dated and supplier payables are current snapshots across all purchase dates."},
     {basis:"Cash",detail:"Recorded payments are not verified external bank/MoMo settlements and exclude other cash outflows."},
     {basis:"Timing",detail:"Raw transaction evidence is read in one repeatable-read MySQL snapshot. System-wide accounting views have separate controls."},
   ];
@@ -353,6 +400,15 @@ function buildVisualModel(evidence,p,generatedAt){
     {name:"Debt Aging",columns:cols(["bucket","Due-date age"],["accounts","Debt records"],
       ["balance","Outstanding GHS"]),rows:aging},
     {name:"Expenses by Category",columns:cols(["label","Expense category"],["value","Active expense GHS"]),rows:expenses},
+    {name:"Supplier Invoices",columns:cols(["invoice_number","Invoice"],
+      ["supplier_name","Supplier"],["purchase_date","Purchase date"],
+      ["total_amount","Booked total"],["balance","Lifetime unpaid snapshot"]),
+      rows:evidence.purchases.slice(0,150)},
+    {name:"Supplier Payables Now",columns:cols(["supplier","Supplier"],
+      ["invoices","Open invoices"],["balance","Current unpaid GHS"]),
+      rows:openSupplierBalances.slice(0,150)},
+    {name:"Supplier Spend Mix",columns:cols(["label","Supplier"],["value","Period invoices GHS"]),
+      rows:supplierSpend.slice(0,100)},
     {name:"Restock Watchlist",columns:cols(["id","Product ID"],["name","Product"],
       ["quantity","On hand"],["low_stock_threshold","Reorder threshold"],
       ["cost_price","Catalogue cost"]),rows:lowStock.slice(0,200)},
@@ -365,7 +421,7 @@ function buildVisualModel(evidence,p,generatedAt){
   ];
   return {metrics,cards,charts,sections,narrative,
     summary:{invoiceTotal,pretax,collectedAtSale,debtCollected,refundTotal,collectedNet,
-      openDebtTotal,overdueTotal,expenseTotal,inventoryCost,margin,missingHistoricalCosts:missingCost.length,
+      openDebtTotal,overdueTotal,expenseTotal,purchaseInvoices,supplierPaymentsTotal,supplierPayablesTotal,inventoryCost,margin,missingHistoricalCosts:missingCost.length,
       lowStock:lowStock.length,negativeStock:negatives.length,returnIssues:returnIssues.length},
     originalEvents:{sales:active.length,lines:lines.length,
       returns:evidence.refunds.length,debtPayments:evidence.debtPaid.length,
