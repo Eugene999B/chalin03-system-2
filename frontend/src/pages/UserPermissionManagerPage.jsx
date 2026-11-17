@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import PageAccessMatrix from "../components/PageAccessMatrix";
+import { SPARE_PARTS_PAGES } from "../security/sparePartsPageAccess";
 import "../styles/userPermissionManager.css";
 
 function formatDate(value) {
@@ -87,11 +88,12 @@ export default function UserPermissionManagerPage() {
   const visiblePermissions = useMemo(() => {
     const term = search.trim().toLowerCase();
     return catalog.filter((item) => {
+      if (workspaceCode === "spare_parts" && item.code.startsWith("page.spare_parts.")) return false;
       if (category !== "all" && item.category !== category) return false;
       if (!term) return true;
       return `${item.code} ${item.label} ${item.category}`.toLowerCase().includes(term);
     });
-  }, [catalog, category, search]);
+  }, [catalog, category, search, workspaceCode]);
 
   async function loadWorkspaceData(workspace = workspaceCode) {
     setLoading(true);
@@ -221,9 +223,10 @@ export default function UserPermissionManagerPage() {
     if (!actionPrerequisites()) return;
 
     const verb = effect === "allow" ? "allow" : "restrict";
+    const pageName = SPARE_PARTS_PAGES.find(page => page.permission === permissionCode)?.label || permissionCode;
     if (
       !window.confirm(
-        `${verb === "allow" ? "Allow" : "Restrict"} ${permissionCode} for ${
+        `${verb === "allow" ? "Allow" : "Block"} ${pageName} for ${
           selectedUser?.full_name || selectedUser?.username
         } in ${workspaceCode.replaceAll("_", " ")}?`
       )
@@ -269,7 +272,8 @@ export default function UserPermissionManagerPage() {
 
   async function resetPermission(permissionCode) {
     if (!actionPrerequisites()) return;
-    if (!window.confirm(`Return ${permissionCode} to the assigned role default?`)) return;
+    const pageName = SPARE_PARTS_PAGES.find(page => page.permission === permissionCode)?.label || permissionCode;
+    if (!window.confirm(`Restore ${pageName} to the assigned role default?`)) return;
 
     setActionLoading(`${permissionCode}:reset`);
     setError("");
