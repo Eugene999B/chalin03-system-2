@@ -6,6 +6,47 @@ import "./ExportsPage.css";
 
 const REPORTS = [
   {
+    key: "business-intelligence",
+    title: "Complete Spare Parts Business Review",
+    category: "Intelligence",
+    icon: "📈",
+    endpoint: "/exports/business-intelligence",
+    description: "One connected report for sales, collections, debts, returns, expenses, stock and audit findings. Visual charts and clear management actions.",
+    dateFilter: true,
+    featured: true,
+    deepReport: true,
+  },
+  {
+    key: "collections-intelligence",
+    title: "Credit, Debtors & Collections",
+    category: "Intelligence",
+    icon: "💰",
+    endpoint: "/exports/collections-intelligence",
+    description: "Find overdue balances, follow-up priorities and collection trends. See what was received at sale and what customers paid later.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
+    key: "audit-intelligence",
+    title: "Accounting & Audit Investigation",
+    category: "Intelligence",
+    icon: "🛡️",
+    endpoint: "/exports/audit-intelligence",
+    description: "Receipt checks, unusual entries, financial control warnings and suggested investigations. Built around source evidence.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
+    key: "stock-intelligence",
+    title: "Stock, Sales & Restock Intelligence",
+    category: "Intelligence",
+    icon: "📦",
+    endpoint: "/exports/stock-intelligence",
+    description: "See top-selling items, low-stock risks, stock values and clear restock priorities.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
     key: "products",
     title: "Products and Inventory",
     category: "Inventory",
@@ -379,10 +420,10 @@ export default function ExportsPage() {
       <section className="ec-hero">
         <div>
           <span className="ec-eyebrow">REPORTING AND DOCUMENT CENTRE</span>
-          <h1>Professional Export Centre</h1>
+          <h1>Reports & Business Intelligence</h1>
           <p>
-            Download historical transaction investigations and every business report as a professionally arranged Excel
-            workbook, print-ready PDF or editable Microsoft Word document.
+            Understand the numbers, spot what needs attention and download practical
+            reports for the boss, accountant and auditor. Excel, PDF and Word.
           </p>
         </div>
 
@@ -390,6 +431,15 @@ export default function ExportsPage() {
           <strong>4 formats</strong>
           <span>Excel • PDF • Word • CSV on Transaction History</span>
         </div>
+      </section>
+
+      <section className="ec-intelligence-intro">
+        <div>
+          <span className="ec-eyebrow">NEW / MANAGEMENT INTELLIGENCE</span>
+          <h2>See the whole Spare Parts business.</h2>
+          <p>Sales, collections, debt, stock, expenses and audit checks — explained together. No guesswork, no invented figures.</p>
+        </div>
+        <a href="#ec-intelligence-reports">Explore intelligence reports</a>
       </section>
 
       <section className="ec-feature-path"><div><strong>New: Blind Stock Audit</strong><span>Count physical items first, reveal stock variances after submission, and download detailed investigations.</span></div><Link to="/stock-count">Open Blind Count →</Link></section>
@@ -483,11 +533,11 @@ export default function ExportsPage() {
         </div>
       </section>
 
-      <div className="ec-report-grid">
+      <div className="ec-report-grid" id="ec-intelligence-reports">
         {visibleReports.map((report) => (
           <article
             key={report.key}
-            className={`ec-report-card${report.featured ? " is-featured" : ""}${report.key === "transaction-history" ? " ec-transaction-report" : ""}`}
+            className={`ec-report-card${report.featured ? " is-featured" : ""}${report.key === "transaction-history" ? " ec-transaction-report" : ""}${report.deepReport ? " ec-intelligence-report" : ""}`}
           >
             <div className="ec-report-topline">
               <div className="ec-report-icon" aria-hidden="true">{report.icon}</div>
@@ -499,6 +549,16 @@ export default function ExportsPage() {
 
             <h3>{report.title}</h3>
             <p>{report.description}</p>
+
+            {report.deepReport && (
+              <div className="ec-intelligence-preview" aria-label="Evidence and analysis included">
+                <strong>Inside this report</strong>
+                <span>Charts &amp; business trends</span>
+                <span>Clear accounting basis</span>
+                <span>Priority actions and source checks</span>
+                <small>Defaults to the last 30 days. Current debts and stock are marked as snapshots.</small>
+              </div>
+            )}
 
             {report.key === "transaction-history" && (
               <div className="ec-transaction-period" aria-label="Selected transaction history date range">
@@ -526,9 +586,11 @@ export default function ExportsPage() {
 
             <div className="ec-report-meta">
               <span>
-                {report.dateFilter
-                  ? "Filters rows by selected dates"
-                  : "Current snapshot • selected period shown"}
+                {report.deepReport
+                  ? "Activity by date · open debt & stock now"
+                  : report.dateFilter
+                    ? "Filters rows by selected dates"
+                    : "Current snapshot • selected period shown"}
               </span>
               <span>{currentStoreCode}</span>
             </div>
