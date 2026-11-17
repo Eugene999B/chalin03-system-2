@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import ExecutiveReportingStudio from "../components/ExecutiveReportingStudio";
 import { useAuth } from "../context/AuthContext";
 
 function MobilePageFix() {
@@ -1574,33 +1575,18 @@ export default function AuditAccountingPage() {
   return (
     <div className="boss-mobile-fix" style={styles.page}>
       <MobilePageFix />
-      <div style={styles.hero}>
+      <ExecutiveReportingStudio context="audit" storeCode={currentStoreCode}
+        storeKey={branchId}
+        from={period.start ? apiDate(period.start) : ""}
+        to={period.end ? apiDate(period.end) : ""} />
+      <div className="rpt-audit-operational-actions">
+        <span>Audit sign-off, original evidence and period controls continue below.</span>
         <div>
-          <p style={styles.eyebrow}>Audit Command Board</p>
-          <h1 style={styles.title}>Audit Command Board & Accounting Lock Room</h1>
-          <p style={styles.subtitle}>
-            Control sales, cash, debts, expenses, purchases, returns, stock
-            adjustments, stock transfers, SMS, backup/restore activity,
-            maintenance events and period sign-off approval for{" "}
-            <strong>
-              {currentStoreCode} — {currentStoreName}
-            </strong>
-            . This layout is styled as an audit command room for management review.
-          </p>
-        </div>
-
-        <div style={styles.heroActions}>
           <button type="button" onClick={refreshEverything} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh Review"}
+            {loading ? "Refreshing…" : "Refresh review"}
           </button>
-
-          <button type="button" className="secondary-button" onClick={printAuditReport}>
-            Print / Save PDF
-          </button>
-
-          <button type="button" className="secondary-button" onClick={copyAuditSummary}>
-            Copy Summary
-          </button>
+          <button type="button" onClick={printAuditReport}>Print / save existing audit PDF</button>
+          <button type="button" onClick={copyAuditSummary}>Copy original audit summary</button>
         </div>
       </div>
 
