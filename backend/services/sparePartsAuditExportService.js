@@ -1,6 +1,7 @@
 "use strict";
 const ExcelJS = require("./excelJsCompat");
 const PDFDocument = require("pdfkit");
+const { renderBusinessChartPng } = require("./reportPresentationCharts");
 
 function clean(value) {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
@@ -257,6 +258,7 @@ async function sendAuditExport(res, config) {
     cursor += 1;
     band(cursor++, "04  /  WORKSHEET DIRECTORY", COLOR.navy2);
     const worksheetDirectory = [
+      ...(charts.length ? [{ name: "Presentation Charts", count: charts.length }] : []),
       ...(charts.length ? [{ name: "Visual Analysis", count: charts.length }] : []),
       { name: primarySectionName, count: rows.length },
       ...sections.map(s => ({ name: s.name, count: s.rows.length }))
@@ -470,6 +472,39 @@ async function sendAuditExport(res, config) {
       chartSheet.pageSetup.printArea="A1:L"+Math.max(4,row);
     }
 
+
+    async function addPresentationCharts() {
+      const sheet = book.addWorksheet("Presentation Charts", {
+        properties: { tabColor: { argb: COLOR.teal }, defaultRowHeight: 20 },
+        views: [{state:"frozen",ySplit:3}],
+      });
+      sheet.columns = Array.from({length:12},()=>({width:15}));
+      sheet.mergeCells("A1:L2");
+      const masthead=sheet.getCell("A1");
+      masthead.value="CHALIN03  /  EXECUTIVE VISUAL BRIEFING";
+      masthead.font={name:"Aptos Display",size:18,bold:true,color:{argb:COLOR.white}};
+      masthead.fill=fill(COLOR.navy);
+      masthead.alignment={vertical:"middle",indent:1};
+      sheet.getRow(1).height=24;sheet.getRow(2).height=30;
+      sheet.mergeCells("A3:L3");
+      sheet.getCell("A3").value=clean(branch)+"   •   "+clean(period||"Current reporting period")+"   •   Figures from original recorded evidence";
+      sheet.getCell("A3").font={size:10,color:{argb:COLOR.muted},italic:true};
+      sheet.getRow(3).height=28;
+      for(let index=0;index<Math.min(charts.length,8);index++){
+        const base=5+index*20;
+        const chart=charts[index];
+        const buffer=await renderBusinessChartPng(chart);
+        const imageId=book.addImage({buffer,extension:"png"});
+        sheet.addImage(imageId,{tl:{col:0.16,row:base},ext:{width:960,height:405}});
+        sheet.getRow(base+16).height=15;
+      }
+      sheet.headerFooter.oddFooter="&LCHALIN03 • Source-backed management charts&RPage &P of &N";
+      sheet.pageSetup={paperSize:9,orientation:"landscape",fitToPage:true,
+        fitToWidth:1,fitToHeight:0};
+      sheet.pageSetup.printArea="A1:L"+(5+Math.min(charts.length,8)*20);
+    }
+
+    if (charts.length) await addPresentationCharts();
     if (charts.length) addVisualAnalysis();
     addTable(primarySectionName, columns, rows);
     sections.forEach(section => addTable(section.name, section.columns, section.rows));
