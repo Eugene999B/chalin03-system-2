@@ -384,6 +384,12 @@ const REPORT_VARIANTS={
     sectionNames:["Actions and Warnings","Receipt Exceptions","Return Exceptions","Daily Sales and Cash","Expenses by Category","Calculation Notes"],
     chartNames:["Recorded receipts and refunds","Active expense categories","Daily completed invoice value"]
   },
+  "supplier-intelligence":{
+    title:"Spare Parts | Purchases & Supplier Liabilities",
+    description:"Period purchase invoices, actual supplier payments and current unpaid supplier balances. Purchasing is NOT automatically cost of goods sold.",
+    sectionNames:["Supplier Invoices","Supplier Payables Now","Supplier Spend Mix","Actions and Warnings","Calculation Notes"],
+    chartNames:["Supplier invoices and recorded payments","Active expense categories"]
+  },
   "stock-intelligence":{
     title:"Spare Parts | Stock, Sales & Restock Intelligence",
     description:"Current inventory risk, historical top sellers, stock exception alerts and restock planning. Inventory value is a current register estimate, not verified physical stock.",
