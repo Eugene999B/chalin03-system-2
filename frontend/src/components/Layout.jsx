@@ -35,8 +35,11 @@ function getUserInitials(name) {
 // Existing RoleRoute/PermissionRoute and all backend action checks remain in force.
 function PageAccessProtectedOutlet() {
   const location = useLocation();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const page = getSparePartsPageByPath(location.pathname);
+  // Auditor home intentionally redirects to Audit & Accounting. Preserve the
+  // redirect even though the Dashboard itself is not an auditor page.
+  if (page?.path === "/" && user?.role === "auditor") return <Outlet />;
   if (page && !hasPermission(page.permission)) {
     return (
       <section className="page-access-denied" role="alert" style={{margin:"1rem",padding:"1.5rem",borderRadius:"16px",background:"#fff",border:"1px solid #fecaca"}}>
