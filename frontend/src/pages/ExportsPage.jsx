@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
@@ -246,6 +246,8 @@ export default function ExportsPage() {
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [intelligencePreview, setIntelligencePreview] = useState(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   const categories = useMemo(
     () => ["All", ...new Set(REPORTS.map((report) => report.category))],
@@ -287,6 +289,37 @@ export default function ExportsPage() {
     return `chalin03-${makeSafeFileName(
       currentStoreCode
     )}-${reportKey}${periodPart}.${extension}`;
+  }
+
+  useEffect(() => {
+    // A report for yesterday or another store must not remain on screen after
+    // switching dates or the selected Spare Parts branch.
+    setIntelligencePreview(null);
+  }, [from, to, currentStoreCode]);
+
+  const currency = (value) => "GHS " + Number(value || 0).toLocaleString("en-GH", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2
+  });
+
+  async function loadIntelligencePreview() {
+    if (!validateDates()) return;
+    setPreviewBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data } = await axiosClient.get("/exports/business-intelligence/preview", {
+        params: {
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+        }
+      });
+      setIntelligencePreview(data);
+    } catch (error) {
+      setIntelligencePreview(null);
+      setError(error?.response?.data?.message || "Business analysis could not be loaded.");
+    } finally {
+      setPreviewBusy(false);
+    }
   }
 
   function validateDates() {
@@ -439,8 +472,74 @@ export default function ExportsPage() {
           <h2>See the whole Spare Parts business.</h2>
           <p>Sales, collections, debt, stock, expenses and audit checks — explained together. No guesswork, no invented figures.</p>
         </div>
-        <a href="#ec-intelligence-reports">Explore intelligence reports</a>
+        <button type="button" disabled={previewBusy || Boolean(busyKey)}
+          onClick={loadIntelligencePreview}>
+          {previewBusy ? "Analysing store…" : "Analyse this store"}
+        </button>
       </section>
+
+      {intelligencePreview?.status === "success" && (
+        <section className="ec-intelligence-live" aria-label="Live Spare Parts intelligence">
+          <div className="ec-intelligence-live-head">
+            <div>
+              <span className="ec-eyebrow">STORE INTELLIGENCE / LIVE EVIDENCE</span>
+              <h2>{intelligencePreview.scope.branch}</h2>
+              <p>Activity: {intelligencePreview.scope.from} to {intelligencePreview.scope.to} ·
+                Open debts and stock are current snapshots.</p>
+            </div>
+            <button type="button" onClick={() => setIntelligencePreview(null)}>Close analysis</button>
+          </div>
+          <div className="ec-intelligence-kpis">
+            {[
+              ["Sales incl. tax", intelligencePreview.summary.invoiceTotal, "GHS"],
+              ["At-sale collections", intelligencePreview.summary.collectedAtSale, "GHS"],
+              ["Later debt payments", intelligencePreview.summary.debtCollected, "GHS"],
+              ["Current open debt", intelligencePreview.summary.openDebtTotal, "GHS"],
+              ["Refunds paid out", intelligencePreview.summary.refundTotal, "GHS"],
+              ["Overdue debt", intelligencePreview.summary.overdueTotal, "GHS"],
+            ].map(([label, value, unit]) => (
+              <div key={label} className="ec-intelligence-kpi">
+                <span>{label}</span>
+                <strong>{unit === "GHS" ? currency(value) : value}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="ec-live-chart-grid">
+            {intelligencePreview.charts.slice(0, 4).map((chart) => {
+              const points = chart.points.slice(0, 12);
+              const maxValue = Math.max(1, ...points.map(point => Number(point.value) || 0));
+              return <div key={chart.title} className="ec-live-chart">
+                <h3>{chart.title}</h3>
+                <p>{chart.note}</p>
+                {points.length ? points.map((point, index) => (
+                  <div className="ec-live-chart-row" key={chart.title + index}>
+                    <span title={point.label}>{point.label}</span>
+                    <div className="ec-live-bar-track" aria-label={point.label + ": " + currency(point.value)}>
+                      <div style={{ width: Math.max(0, Math.min(100,
+                        (Number(point.value) || 0) / maxValue * 100)) + "%" }} />
+                    </div>
+                    <strong>{Number(point.value || 0).toLocaleString("en-GH", {
+                      maximumFractionDigits: 0
+                    })}</strong>
+                  </div>
+                )) : <div className="ec-no-chart-data">No records for this view.</div>}
+              </div>;
+            })}
+          </div>
+          <div className="ec-intelligence-findings">
+            <h3>What needs attention</h3>
+            {intelligencePreview.findings.slice(0, 6).map((item, index) => (
+              <article key={index} className="ec-intelligence-finding">
+                <strong>{item.priority} · {item.area}</strong>
+                <p>{item.observation}</p>
+                <small>{item.action}</small>
+              </article>
+            ))}
+          </div>
+          <p className="ec-intelligence-disclosure">{intelligencePreview.warning}
+            Download the Excel, PDF or Word report below for full charts, data tables and calculation notes.</p>
+        </section>
+      )}
 
       <section className="ec-feature-path"><div><strong>New: Blind Stock Audit</strong><span>Count physical items first, reveal stock variances after submission, and download detailed investigations.</span></div><Link to="/stock-count">Open Blind Count →</Link></section>
 
