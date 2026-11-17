@@ -638,3 +638,99 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* Business-intelligence reporting — desktop and phone. */
+.ec-intelligence-intro {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  padding:clamp(24px,3.5vw,38px);
+  border:1px solid #b9d7d3;
+  border-radius:20px;
+  background:linear-gradient(120deg,#edf8f5 0%,#fafdfd 62%,#f4f6ff 100%);
+}
+.ec-intelligence-intro h2 {
+  color:#132b3a;
+  font-size:clamp(24px,2.2vw,34px);
+  letter-spacing:-.035em;
+  line-height:1.14;
+  margin:10px 0;
+}
+.ec-intelligence-intro p {
+  color:#4e6471;
+  max-width:660px;
+  font-size:14px;
+  line-height:1.7;
+  margin:0;
+}
+.ec-intelligence-intro a {
+  flex-shrink:0;
+  background:#123949;
+  color:#fff;
+  border-radius:12px;
+  min-height:48px;
+  padding:13px 21px;
+  font-weight:800;
+  font-size:13px;
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
+  text-decoration:none;
+}
+.ec-intelligence-intro a:hover { background:#087f75; }
+.ec-report-card.ec-intelligence-report {
+  position:relative;
+  border:1px solid #b8d7d7;
+  background:linear-gradient(164deg,#ffffff,#f8fbfc);
+  box-shadow:0 9px 30px rgba(6,48,63,.07);
+}
+.ec-report-card.ec-intelligence-report.is-featured {
+  border:2px solid #12877c;
+  box-shadow:0 14px 35px rgba(4,99,99,.12);
+}
+.ec-intelligence-report .ec-report-icon {
+  background:#e8f7f3;
+}
+.ec-intelligence-preview {
+  border:1px solid #d2e6e2;
+  background:#f0f9f6;
+  padding:15px;
+  border-radius:12px;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:9px 12px;
+  margin:16px 0;
+  color:#264e55;
+  font-size:12px;
+  line-height:1.5;
+}
+.ec-intelligence-preview strong,
+.ec-intelligence-preview small {
+  grid-column:1/-1;
+}
+.ec-intelligence-preview strong {
+  color:#0c5a5a;
+  font-size:12px;
+  letter-spacing:.025em;
+}
+.ec-intelligence-preview span::before {
+  content:"✓";
+  color:#0c7e68;
+  font-weight:900;
+  margin-right:6px;
+}
+.ec-intelligence-preview small {
+  color:#657984;
+  border-top:1px solid #d4e7e2;
+  padding-top:8px;
+}
+@media (max-width:760px) {
+  .ec-intelligence-intro { flex-direction:column;align-items:stretch;gap:20px;padding:22px 18px; }
+  .ec-intelligence-intro a { width:100%; }
+  .ec-intelligence-preview { grid-template-columns:1fr; }
+  .ec-intelligence-preview strong,.ec-intelligence-preview small { grid-column:1; }
+  .ec-intelligence-report .ec-format-actions { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px; }
+  .ec-intelligence-report .ec-format-actions button { min-height:48px;padding:11px 5px; }
+}
