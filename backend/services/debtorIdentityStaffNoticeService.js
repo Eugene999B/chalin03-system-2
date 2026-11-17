@@ -6,7 +6,7 @@ const {getSmsConfig,normalizeGhanaPhone,sendSms}=require("./smsService");
 // One announcement for active internal accounts, not customer phones.
 const POLICY_ID="CHALIN03_DEBT_IDENTITY_20261117_V1";
 const LOCK_NAME="chalin03_debt_identity_notice_20261117_v1";
-const SMS_TEXT="CHALIN03 NOTICE: Verify two different real names and valid phone numbers for all customers who owe. Complete missing details before new credit sales or debt payments.";
+const SMS_TEXT="CHALIN03 NOTICE: All staff must verify 2 different real names and a valid phone for debtors. Complete missing details before credit sales or debt payments.";
 const MAX_RECIPIENTS=500;
 function sourceReference(phone) {
   return POLICY_ID+":"+crypto.createHash("sha256").update(phone).digest("hex").slice(0,26);
