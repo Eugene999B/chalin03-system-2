@@ -350,6 +350,9 @@ function normalizeConsolidatedCustomerDetail(
     },
     debts,
     payments,
+    identity_requirements: currentAccount?.identity_requirements || {
+      required:false,missing_fields:[]
+    },
   };
 }
 
@@ -383,6 +386,14 @@ function normalizeLegacyDebtDetail(responseData, customerKey) {
     },
     debts: [{ ...debt, payments, items: [] }],
     payments,
+    identity_requirements: {
+      missing_fields:incompleteIdentityFields(
+        debt.debt_customer_name_snapshot,debt.debt_customer_phone_snapshot
+      ),
+      required:incompleteIdentityFields(
+        debt.debt_customer_name_snapshot,debt.debt_customer_phone_snapshot
+      ).length>0,
+    }
   };
 }
 
