@@ -12,6 +12,7 @@ for (const endpoint of [
   "/exports/collections-intelligence",
   "/exports/audit-intelligence",
   "/exports/stock-intelligence",
+  "/exports/supplier-intelligence",
 ]) assert.ok(page.includes(endpoint), "Missing working report endpoint " + endpoint);
 assert.match(page, /Analyse this store/);
 assert.match(page, /\/exports\/business-intelligence\/preview/);
