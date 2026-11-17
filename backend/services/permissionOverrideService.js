@@ -233,10 +233,6 @@ function validateOverridePolicy({ targetUser, permissionCode, effect, workspaceC
       return { ok: false, statusCode: 409, code: "PAGE_ROLE_INELIGIBLE",
         message: "This page is protected by the user's role. Assign an eligible role before granting page access." };
     }
-    if (page.gate && !getEffectivePermissions({...targetUser,workspace_code:workspace}).includes(page.gate)) {
-      return { ok: false, statusCode: 409, code: "PAGE_FEATURE_PERMISSION_REQUIRED",
-        message: "This page requires an existing feature permission. Grant the feature access before allowing this page." };
-    }
   }
   if (!isPermissionAllowedForWorkspace(permissionCode, workspace)) {
     return {
@@ -289,6 +285,7 @@ function permissionCategory(permissionCode) {
     operations: "Operational Documents",
     sms: "SMS",
     exports: "Exports",
+    page: "Page Access",
   };
 
   return labels[prefix] || "Other";
@@ -306,7 +303,7 @@ function buildPermissionDescriptors(workspaceCode = "spare_parts") {
   return ALL_PERMISSIONS.filter((permissionCode) => allowed.has(permissionCode))
     .map((permissionCode) => ({
       code: permissionCode,
-      label: humanizePermission(permissionCode),
+      label: sparePartsPageForPermission(permissionCode)?.label || humanizePermission(permissionCode),
       category: permissionCategory(permissionCode),
       owner_protected: OWNER_PROTECTED_PERMISSIONS.includes(permissionCode),
       admin_only_grant: ADMIN_ONLY_GRANTS.includes(permissionCode),
