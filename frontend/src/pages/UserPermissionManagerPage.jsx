@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import PageAccessMatrix from "../components/PageAccessMatrix";
 import "../styles/userPermissionManager.css";
 
 function formatDate(value) {
@@ -455,9 +456,9 @@ export default function UserPermissionManagerPage() {
       <header className="upm-hero">
         <div>
           <p>Release 3F-C2 · Independent Category Control</p>
-          <h1>User Permission Manager</h1>
+          <h1>Pages & User Permissions</h1>
           <span>
-            Select one independent business category at a time. Only its users and permissions are shown. Explicit deny overrides allow, every change needs a reason, and ambiguous category assignments remain blocked until reviewed.
+            Choose a business category and a staff account. For Spare Parts, see exactly which pages they can open, which are blocked, and change page access directly. Every change remains password-protected and audited.
           </span>
         </div>
         <div className="upm-hero-badge">🔐 Protected changes</div>
@@ -658,10 +659,25 @@ export default function UserPermissionManagerPage() {
         <article><span>Effective permissions</span><strong>{state?.effective_permissions?.length || 0}</strong></article>
       </section>
 
+      {workspaceCode === "spare_parts" && (
+        <PageAccessMatrix
+          state={state}
+          selectedUser={selectedUser}
+          detailLoading={detailLoading}
+          tokenReady={tokenReady}
+          actionLoading={actionLoading}
+          onAllow={(code) => applyOverride(code, "allow")}
+          onBlock={(code) => applyOverride(code, "deny")}
+          onReset={resetPermission}
+        />
+      )}
+
+      <details className="upm-advanced" open={workspaceCode !== "spare_parts" ? true : undefined}>
+        <summary>Advanced permissions — actions, security and special features</summary>
       <section className="upm-card">
         <div className="upm-card-heading upm-permission-heading">
           <div>
-            <h2>Feature, Page and Action Permissions</h2>
+            <h2>Technical Feature and Action Permissions</h2>
             <p>Use Allow or Restrict for a direct user rule. Reset returns the permission to the assigned role.</p>
           </div>
           <div className="upm-filters">
@@ -762,6 +778,8 @@ export default function UserPermissionManagerPage() {
           </table>
         </div>
       </section>
+
+      </details>
 
       <section className="upm-card">
         <div className="upm-card-heading">
