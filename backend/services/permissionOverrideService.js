@@ -1,4 +1,5 @@
 const { pool } = require("../config/db");
+const {defaultSparePartsPagePermissions, sparePartsPageForPermission} = require("../security/sparePartsPageCatalog");
 const {
   ALL_PERMISSIONS,
   getEffectivePermissions,
@@ -67,13 +68,17 @@ function roleDefaultPermissions(session = {}) {
     session.workspace_code || session.active_workspace?.code
   );
   const allowed = new Set(permissionsForWorkspace(workspace));
-  return uniquePermissions([
+  const basePermissions = uniquePermissions([
     ...getEffectivePermissions(session),
     ...equipmentRoleDefaultPermissions({
       ...session,
       workspace_code: workspace,
     }),
   ]).filter((permission) => allowed.has(permission));
+  const pageDefaults = workspace === "spare_parts"
+    ? defaultSparePartsPagePermissions(session, basePermissions)
+    : [];
+  return uniquePermissions([...basePermissions, ...pageDefaults]);
 }
 
 function applyPermissionOverrides(basePermissions = [], overrides = []) {
@@ -220,6 +225,19 @@ function validateOverridePolicy({ targetUser, permissionCode, effect, workspaceC
   }
 
   const workspace = normalizeWorkspace(workspaceCode);
+  const page = workspace === "spare_parts"
+    ? sparePartsPageForPermission(permissionCode) : null;
+  if (page && normalizedEffect === "allow") {
+    const role = String(targetUser?.role || "").trim().toLowerCase();
+    if (page.roles.length && !page.roles.includes(role)) {
+      return { ok: false, statusCode: 409, code: "PAGE_ROLE_INELIGIBLE",
+        message: "This page is protected by the user's role. Assign an eligible role before granting page access." };
+    }
+    if (page.gate && !getEffectivePermissions({...targetUser,workspace_code:workspace}).includes(page.gate)) {
+      return { ok: false, statusCode: 409, code: "PAGE_FEATURE_PERMISSION_REQUIRED",
+        message: "This page requires an existing feature permission. Grant the feature access before allowing this page." };
+    }
+  }
   if (!isPermissionAllowedForWorkspace(permissionCode, workspace)) {
     return {
       ok: false,
