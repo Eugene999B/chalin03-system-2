@@ -28,7 +28,12 @@ function fileSlug(value) {
 }
 function setHeaders(res, type, name) {
   res.setHeader("Content-Type", type);
-  res.setHeader("Content-Disposition", 'attachment; filename="' + fileSlug(name) + '"');
+  const providedName = String(name || "chalin03-report");
+  const knownExt = /\.(xlsx|csv|pdf|docx|doc)$/i.exec(providedName);
+  const safeName = knownExt
+    ? fileSlug(providedName.slice(0, knownExt.index)) + "." + knownExt[1].toLowerCase()
+    : fileSlug(providedName);
+  res.setHeader("Content-Disposition", 'attachment; filename="' + safeName + '"');
   res.setHeader("Cache-Control", "private, no-store");
 }
 function escapeRows(rows, columns) {
@@ -549,75 +554,13 @@ async function sendAuditExport(res, config) {
           (graphRows?"":"<tr><td>No records in selection</td></tr>")+"</table>";
       }).join("")
     ) : "";
-    const editionCards=(dashboardCards.length?dashboardCards:metrics.slice(0,6)
-      .map(([label,value])=>({label,value,note:"Recorded source figure"}))).slice(0,8);
-    const wordKpis="<table class=\"kpi\"><tbody>"+editionCards.reduce((result,card,i)=>{
-      if(i%4===0)result+="<tr>";
-      result+="<td><small>"+html(card.label)+"</small><strong>"+html(fmtNumber(card.value))+
-        "</strong><em>"+html(card.note||"")+"</em></td>";
-      if(i%4===3||i===editionCards.length-1)result+="</tr>";
-      return result;
-    },"")+"</tbody></table>";
-    const wordStories=rows.length?"<h2>Management interpretation</h2>"+
-      rows.slice(0,12).map((item,index)=>
-        "<table class=\"story\"><tr><th style=\"width:10%\">"+
-        String(index+1).padStart(2,"0")+"</th><th>"+
-        html(item.topic||item.heading||item[columns?.[0]?.key]||"Analysis")+
-        "</th></tr><tr><td></td><td>"+
-        html(item.explanation||item.text||item[columns?.[1]?.key]||"")+
-        "</td></tr></table>"
-      ).join(""):"";
-    const wordCover="<div class=\"cover\"><table class=\"topline\"><tr><td><b>CHALIN03</b></td>"+
-      "<td style=\"text-align:right\">BUSINESS INTELLIGENCE / MANAGEMENT EDITION</td></tr></table>"+
-      "<div class=\"cover-kicker\">SPARE PARTS / CONTROLLED BUSINESS EVIDENCE</div>"+
-      "<h1>"+html(title)+"</h1><p class=\"cover-subtitle\">"+
-      html(description||"Source-based management reporting")+"</p>"+
-      "<table class=\"cover-facts\"><tr><th>STORE</th><th>PERIOD</th><th>GENERATED</th></tr><tr><td>"+
-      html(branch)+"</td><td>"+html(period||"Current snapshot")+"</td><td>"+html(date)+"</td></tr></table>"+
-      "<div class=\"cover-art\"><span>SALES</span><span>COLLECTIONS</span><span>DEBT</span><span>STOCK</span><span>AUDIT</span></div>"+
-      "<p class=\"cover-bottom\">CONFIDENTIAL • PREPARED FROM ORIGINAL STORE RECORDS • GHANA CEDIS</p></div>";
-    const wordStyle='<style>'+
-      '@page{size:A4;margin:18mm}body{font-family:Calibri,Arial,sans-serif;font-size:10pt;line-height:1.55;color:#1b3844}'+
-      '.cover{page-break-after:always;padding:20pt 0 0}.topline{border-collapse:collapse;width:100%;background:#092f3a;color:#fff}.topline td{padding:13pt 12pt;border:0;font-size:9pt}.topline b{font-size:21pt;letter-spacing:-1pt}'+
-      '.cover-kicker{margin-top:53pt;color:#0a776e;font-size:9pt;font-weight:bold;letter-spacing:2pt}'+
-      'h1{font-size:36pt;line-height:1.05;color:#113644;margin:18pt 0 20pt}'+
-      '.cover-subtitle{font-size:14pt;color:#59717b;max-width:450pt;line-height:1.5}'+
-      '.cover-facts{margin-top:50pt;width:100%;border-collapse:collapse;border-top:3pt solid #c4a45f}'+
-      '.cover-facts th{text-align:left;padding:10pt 7pt;color:#0d6662;background:#eaf3f1;font-size:8pt}'+
-      '.cover-facts td{padding:11pt 7pt;border-bottom:1pt solid #c9dad9;font-size:10pt}'+
-      '.cover-art{background:#0b343e;color:#f7f8f3;margin-top:30pt;padding:18pt 12pt}'+
-      '.cover-art span{padding-right:18pt;font-size:8pt;letter-spacing:1pt}'+
-      '.cover-bottom{font-size:8pt;color:#68838b;margin-top:24pt}'+
-      '.briefing-header{border-left:5pt solid #0e857a;padding-left:15pt;margin:19pt 0 24pt}'+
-      '.briefing-header strong{font-size:23pt;color:#183c46}'+
-      'h2{font-size:17pt;color:#163c46;border-bottom:2pt solid #d7b568;padding-bottom:8pt;margin:28pt 0 14pt;page-break-after:avoid}'+
-      'h3{font-size:12pt;color:#173c46;margin:17pt 0 7pt;page-break-after:avoid}'+
-      'p{color:#536d78;line-height:1.6}'+
-      'table{border-collapse:collapse;width:100%;table-layout:auto;margin:10pt 0 17pt}'+
-      'th{background:#113b48;color:#fff;text-align:left;font-size:9pt}'+
-      'th,td{border-bottom:1pt solid #d7e4e2;padding:7pt 8pt;vertical-align:top;overflow-wrap:anywhere}'+
-      'tr:nth-child(even){background:#f5f9f8}thead{display:table-header-group}'+
-      '.kpi{table-layout:fixed;margin:12pt 0 22pt}.kpi td{background:#eef5f2;border:3pt solid #fff;width:25%;padding:13pt 7pt}'+
-      '.kpi small{display:block;font-size:7pt;font-weight:bold;color:#126c67}'+
-      '.kpi strong{display:block;margin:8pt 0;font-size:14pt;color:#173d49}'+
-      '.kpi em{display:block;font-style:normal;font-size:8pt;color:#637e81}'+
-      '.story{page-break-inside:avoid;margin:12pt 0}.story th{background:#e9f4f0;color:#183d48}'+
-      '.story td{font-size:10pt;color:#486473}.note{background:#fff8e8;border-left:4pt solid #dfb55c;padding:12pt;font-size:9pt;color:#5f635f}'+
-      '.appendix{page-break-before:always}.subnote{font-size:8pt;color:#72858b}'+
-      '</style>';
-    const result='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+
-      html(title)+'</title>'+wordStyle+'</head><body>'+
-      wordCover+
-      '<div class="briefing-header"><div style="color:#087f75;font-size:9pt;font-weight:bold">01 / EXECUTIVE BRIEF</div>'+
-      '<strong>Business performance, explained.</strong><p>Every financial figure below is based on the selected store records and clearly dated evidence.</p></div>'+
-      wordKpis+
-      wordStories+
-      '<div class="note">ACCOUNTING BASIS: Sales values are not cash receipts. Current debtor, supplier and stock balances are download-time snapshots. Recorded money is not a bank-verified balance. Margin figures require valid historical cost and reconciliation.</div>'+
-      '<div class="appendix">'+renderWordCharts()+
-      '<h2>Evidence & detail</h2>'+
+    const result='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+html(title)+'</title>'+
+      '<style>body{font-family:Calibri,Arial,sans-serif;color:#15342f;font-size:10pt}h1{font-size:23pt;color:#153b37}h2{font-size:14pt;page-break-after:avoid}p{color:#647672}table{border-collapse:collapse;width:100%;margin:14pt 0;table-layout:auto}th{background:#153b37;color:#fff;text-align:left}th,td{border:1px solid #dce7e5;padding:5pt;overflow-wrap:anywhere}tr:nth-child(even){background:#f3f8f6}thead{display:table-header-group}</style></head><body>'+
+      '<h1>'+html(title)+'</h1><p>'+html(description || "")+'</p><table>'+metaRows+'</table>'+
+      renderWordCharts()+
       renderWordTable(primarySectionName,columns,rows)+
-      sections.map(section=>renderWordTable(section.name,section.columns,section.rows)).join("")+'</div>'+
-      '<p class="subnote">CHALIN03 controlled internal analysis. Findings are indicators for human review, not fraud findings or statutory sign-off.</p></body></html>';
+      sections.map(section=>renderWordTable(section.name,section.columns,section.rows)).join("")+
+      '<p>CHALIN03 controlled audit evidence. Return cost is a historical-weighted estimate, not proof of theft or a bank-settled refund.</p></body></html>';
     setHeaders(res,"application/msword; charset=utf-8",filename+".doc");
     return res.status(200).send(result);
   }
