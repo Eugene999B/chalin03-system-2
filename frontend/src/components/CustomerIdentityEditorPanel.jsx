@@ -61,7 +61,12 @@ export default function CustomerIdentityEditorPanel({ title = "Edit Customer Det
     event.preventDefault(); setError(""); setMessage("");
     const name = normalize(form.name); const phone = form.phone.trim(); const location = form.location.trim();
     if (!selectedId) return setError("Select a customer first.");
-    if (name.split(" ").filter(Boolean).length < 2) return setError("Customer name must contain at least two separate names, for example Appiah Eugene.");
+    const parts=name.split(" ").filter(Boolean);
+    const alphabetic=parts.filter(part=>/[\p{L}]{2,}/u.test(part));
+    if(alphabetic.length<2 || new Set(alphabetic.map(part=>part.toLowerCase())).size<2)
+      return setError("Enter two different real names containing letters, such as Appiah Eugene. Numbers and repeated names are not accepted.");
+    if(phone && !/^(?:\+233\d{9}|233\d{9}|0\d{9})$/.test(phone.replace(/[\s-]+/g,"")))
+      return setError("Enter a valid Ghana phone number, such as 0241234567.");
     const selected = customers.find((c) => String(c.id || c.customer_id) === selectedId);
     if (debtCountOf(selected) > 0 && !phone) return setError("This customer has debt records, so a phone number is required.");
     setSaving(true);
