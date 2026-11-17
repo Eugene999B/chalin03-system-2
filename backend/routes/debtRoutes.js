@@ -775,6 +775,41 @@ router.get("/customers/:customerKey", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/debts/customers/:customerKey/identity
+// Limited remediation: staff can complete missing names/phones on an existing
+// debtor, but CANNOT change already-valid fields or alter historic sale receipts.
+router.post("/customers/:customerKey/identity",requireAuth,async(req,res)=>{
+  const connection=await pool.getConnection();
+  try{
+    const branchId=getBranchId(req);
+    const parsedKey=parseCustomerKey(req.params.customerKey);
+    await connection.beginTransaction();
+    const debts=await loadOpenDebtsForPayment(connection,branchId,parsedKey);
+    if(!debts.length){
+      throw appError("This customer has no open debt requiring correction.",404,"NO_OPEN_DEBT");
+    }
+    const corrected=await ensureDebtCustomerIdentity(connection,{
+      branchId,debts,body:req.body,req,writeAuditEvent
+    });
+    await connection.commit();
+    return res.status(200).json({
+      status:"success",message:corrected.changed?
+        "Missing debtor identity completed. Original sales, stock and debt balances were not changed.":
+        "This customer's identity is already complete.",
+      branch_id:branchId,customer_key:parsedKey.key,
+      customer_name:corrected.name,customer_phone:corrected.phone,changed:corrected.changed,
+      historical_receipts_unchanged:true,
+    });
+  }catch(error){
+    try{await connection.rollback();}catch{}
+    return res.status(error.statusCode||500).json({
+      status:"error",code:error.code||"DEBT_IDENTITY_UPDATE_FAILED",
+      message:error.statusCode?error.message:"Could not complete the debtor identity.",
+      missing_fields:error.missing_fields||[]
+    });
+  }finally{connection.release();}
+});
+
 // POST /api/debts/customers/:customerKey/payments
 router.post("/customers/:customerKey/payments", requireAuth, async (req, res) => {
   const connection = await pool.getConnection();
