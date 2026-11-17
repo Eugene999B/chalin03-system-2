@@ -16,6 +16,7 @@ const { createAgreementForSale } = require("../services/installmentService");
 const { sendInstallmentEventSms } = require("../services/installmentReminderService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateSaleCreateRequest } = require("../validation/financialRequestValidators");
+const {requiredIdentityFields} = require("../services/debtorIdentityPolicy");
 const { canApplySaleDiscount, discountApprovalRequired } =
   require("../services/saleDiscountAuthorizationService");
 
@@ -1184,6 +1185,23 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       cleanCustomerName || customer?.name || "Walk-in Customer";
 
     const finalCustomerPhone = cleanCustomerPhone || customer?.phone || null;
+
+    // Protect NEW debt creation even when an old linked customer was saved
+    // before mandatory identity fields existed. Do not rewrite old receipts.
+    const createsDebt=payment.balance>0 || ["credit","mixed"].includes(payment_type);
+    if(createsDebt){
+      const missingIdentity=requiredIdentityFields({
+        name:finalCustomerName,phone:finalCustomerPhone
+      });
+      if(missingIdentity.length){
+        await connection.rollback();
+        return res.status(409).json({
+          status:"error",code:"DEBT_CUSTOMER_IDENTITY_REQUIRED",
+          missing_fields:missingIdentity,
+          message:"Before selling on credit, enter the customer's real two-part name and valid Ghana phone number. No sale, stock movement or debt has been saved."
+        });
+      }
+    }
 
     const [saleResult] = await connection.query(
       `INSERT INTO sales (

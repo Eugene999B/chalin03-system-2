@@ -11,6 +11,7 @@ import "../styles/debtDeskLiveHotfix.css";
 
 const FILTERS = [
   ["owing", "Customers owing"],
+  ["needs_identity", "Missing details"],
   ["overdue", "Overdue"],
   ["partial", "Partly paid"],
   ["paid", "Paid history"],
@@ -91,6 +92,7 @@ function accountMatches(account, term) {
 }
 
 function accountMatchesFilter(account, filter) {
+  if (filter === "needs_identity") return account.identity_requirements?.required && numberValue(account.outstanding_balance) > 0;
   if (filter === "overdue") return numberValue(account.overdue_count) > 0;
   if (filter === "partial") return numberValue(account.partial_debt_count) > 0;
   if (filter === "paid") return numberValue(account.outstanding_balance) <= 0;
@@ -169,6 +171,16 @@ function laterDate(current, candidate) {
     : current;
 }
 
+function incompleteIdentityFields(name,phone) {
+  const parts=String(name||"").trim().split(/\s+/).filter(Boolean);
+  const letters=parts.filter(part=>/[\p{L}]{2,}/u.test(part));
+  const fields=[];
+  if(letters.length<2 || new Set(letters.map(v=>v.toLowerCase())).size<2)fields.push("customer_name");
+  const compact=String(phone||"").replace(/[\s-]+/g,"");
+  if(!/^(?:\+233\d{9}|233\d{9}|0\d{9})$/.test(compact))fields.push("customer_phone");
+  return fields;
+}
+
 function buildDebtDeskAccounts(debts = []) {
   const accounts = new Map();
 
@@ -181,6 +193,9 @@ function buildDebtDeskAccounts(debts = []) {
     const amountPaid = numberValue(debt.amount_paid);
     const amountOwed = numberValue(debt.amount_owed);
     const open = balance > 0;
+    const authoritativeName=customerId?debt.master_customer_name:debt.debt_customer_name_snapshot;
+    const authoritativePhone=customerId?debt.master_customer_phone:debt.debt_customer_phone_snapshot;
+    const incomplete=incompleteIdentityFields(authoritativeName,authoritativePhone);
 
     if (!accounts.has(customerKey)) {
       accounts.set(customerKey, {
@@ -203,6 +218,7 @@ function buildDebtDeskAccounts(debts = []) {
         next_due_date: null,
         last_payment_at: null,
         legacy_record: !customerId,
+        identity_requirements:{required:incomplete.length>0,missing_fields:incomplete}
       });
     }
 
@@ -258,6 +274,7 @@ function buildDebtDeskSummary(accounts = []) {
   return accounts.reduce(
     (summary, account) => {
       summary.customer_count += 1;
+      if(account.identity_requirements?.required && numberValue(account.outstanding_balance)>0)summary.identity_incomplete_count += 1;
       summary.customers_owing +=
         numberValue(account.outstanding_balance) > 0 ? 1 : 0;
       summary.overdue_customers +=
@@ -271,6 +288,7 @@ function buildDebtDeskSummary(accounts = []) {
     },
     {
       customer_count: 0,
+      identity_incomplete_count: 0,
       customers_owing: 0,
       overdue_customers: 0,
       debt_record_count: 0,
@@ -332,6 +350,9 @@ function normalizeConsolidatedCustomerDetail(
     },
     debts,
     payments,
+    identity_requirements: currentAccount?.identity_requirements || {
+      required:false,missing_fields:[]
+    },
   };
 }
 
@@ -365,6 +386,14 @@ function normalizeLegacyDebtDetail(responseData, customerKey) {
     },
     debts: [{ ...debt, payments, items: [] }],
     payments,
+    identity_requirements: {
+      missing_fields:incompleteIdentityFields(
+        debt.debt_customer_name_snapshot,debt.debt_customer_phone_snapshot
+      ),
+      required:incompleteIdentityFields(
+        debt.debt_customer_name_snapshot,debt.debt_customer_phone_snapshot
+      ).length>0,
+    }
   };
 }
 
@@ -394,6 +423,10 @@ export default function DebtsPage() {
   const [payFullBalance, setPayFullBalance] = useState(false);
   const [paymentRequestKey, setPaymentRequestKey] = useState(makeRequestKey);
   const [paymentBusy, setPaymentBusy] = useState(false);
+  const [identityCorrectionOpen,setIdentityCorrectionOpen] = useState(false);
+  const [identityCorrectionBusy,setIdentityCorrectionBusy] = useState(false);
+  const [identityName,setIdentityName]=useState("");
+  const [identityPhone,setIdentityPhone]=useState("");
   const [latestReceipt, setLatestReceipt] = useState(null);
 
   const [sendingReminder, setSendingReminder] = useState(false);
@@ -519,6 +552,7 @@ export default function DebtsPage() {
   function closeAccount() {
     setSelected(null);
     setPaymentOpen(false);
+    setIdentityCorrectionOpen(false);
     setPaymentAmount("");
     setPaymentNotes("");
     setPayFullBalance(false);
@@ -530,14 +564,49 @@ export default function DebtsPage() {
     if (!detail || outstanding <= 0) return;
 
     setPaymentOpen(true);
+    setIdentityCorrectionOpen(false);
     setPayFullBalance(fullPayment);
     setPaymentAmount(fullPayment ? outstanding.toFixed(2) : "");
     setPaymentMethod("cash");
     setPaymentNotes("");
     setPaymentRequestKey(makeRequestKey());
+    const missing=detail?.identity_requirements?.missing_fields||[];
+    setIdentityName(missing.includes("customer_name") ? "" : (detail.customer.customer_name||""));
+    setIdentityPhone(missing.includes("customer_phone") ? "" : (detail.customer.customer_phone||""));
     setLockedPeriod(null);
     setError("");
     setMessage("");
+  }
+
+  function beginIdentityCorrection(detail=selected){
+    if(!detail?.identity_requirements?.required)return;
+    setPaymentOpen(false);
+    setIdentityCorrectionOpen(true);
+    setIdentityName(detail.identity_requirements.missing_fields.includes("customer_name")?
+      "":detail.customer.customer_name||"");
+    setIdentityPhone(detail.identity_requirements.missing_fields.includes("customer_phone")?
+      "":detail.customer.customer_phone||"");
+    setError("");setMessage("");
+  }
+
+  async function submitIdentityCorrection(event){
+    event.preventDefault();
+    if(!selected?.customer?.customer_key || !identityValid)return;
+    const key=selected.customer.customer_key;
+    setIdentityCorrectionBusy(true);setError("");setMessage("");
+    try{
+      const response=await axiosClient.post(
+        "/debts/customers/"+encodeURIComponent(key)+"/identity",{
+          ...(missingIdentity.includes("customer_name")?{customer_name:identityName.trim()}:{}),
+          ...(missingIdentity.includes("customer_phone")?{customer_phone:identityPhone.trim()}:{})
+        });
+      setIdentityCorrectionOpen(false);
+      await loadAccounts({keepMessages:true});
+      await openAccount(key);
+      setMessage(response.data.message||"Debtor details saved.");
+    }catch(requestError){
+      setError(errorMessage(requestError,"Could not correct debtor details."));
+    }finally{setIdentityCorrectionBusy(false);}
   }
 
   function selectFullPayment() {
@@ -563,7 +632,15 @@ export default function DebtsPage() {
     (sum, row) => sum + numberValue(row.amount),
     0
   );
+  const missingIdentity=selected?.identity_requirements?.missing_fields||[];
+  const identityNameParts=identityName.trim().split(/\s+/).filter(Boolean);
+  const identityValid=(!missingIdentity.includes("customer_name") ||
+      (identityNameParts.filter(part=>/[\p{L}]{2,}/u.test(part)).length>=2 &&
+       new Set(identityNameParts.map(part=>part.toLowerCase())).size>=2)) &&
+      (!missingIdentity.includes("customer_phone") ||
+        /^(?:\+233\d{9}|0\d{9}|233\d{9})$/.test(identityPhone.replace(/[\s-]+/g,"")));
   const paymentValid =
+    identityValid &&
     cleanPaymentAmount > 0 &&
     cleanPaymentAmount <= selectedOutstanding &&
     Math.abs(previewAllocated - cleanPaymentAmount) < 0.01;
@@ -588,6 +665,8 @@ export default function DebtsPage() {
           payment_method: paymentMethod,
           notes: paymentNotes,
           request_key: paymentRequestKey,
+          ...(missingIdentity.includes("customer_name") ? {customer_name:identityName.trim()}:{}),
+          ...(missingIdentity.includes("customer_phone") ? {customer_phone:identityPhone.trim()}:{}),
         }
       );
 
@@ -602,6 +681,12 @@ export default function DebtsPage() {
       await loadAccounts({ keepMessages: true });
       await openAccount(selected.customer.customer_key);
     } catch (requestError) {
+      if(requestError?.response?.data?.code==="DEBT_CUSTOMER_IDENTITY_REQUIRED"){
+        const fields=requestError.response.data.missing_fields||[];
+        setSelected(current=>current ? {...current,identity_requirements:{
+          required:true,missing_fields:fields,message:requestError.response.data.message
+        }}:current);
+      }
       const period = lockedPeriodFromError(requestError);
       if (period) setLockedPeriod(period);
       setError(
@@ -893,6 +978,14 @@ export default function DebtsPage() {
         <div className="debt-desk__notice is-error">{error}</div>
       ) : null}
 
+      {numberValue(summary.identity_incomplete_count)>0 && (
+        <section className="debt-desk__missing-identity-callout" role="status">
+          <div><strong>{numberValue(summary.identity_incomplete_count)} debtor(s) need verified contact details</strong>
+          <p>Open these accounts to enter real names and phone numbers.
+             Old receipts and amounts remain preserved.</p></div>
+          <button type="button" onClick={()=>setFilter("needs_identity")}>Show affected debtors</button>
+        </section>
+      )}
       <section className="debt-desk__identity-centre-callout">
         <div className="debt-desk__identity-centre-icon" aria-hidden="true">
           ⇄
@@ -1092,6 +1185,42 @@ export default function DebtsPage() {
                 </button>
               </header>
 
+              {selected.identity_requirements?.required && (
+                <div className="debt-desk__legacy-note" role="status">
+                  <strong>Missing customer information.</strong> Check and enter the debtor's
+                  genuine two-part name and Ghana phone before another debt or payment.
+                  <button type="button" onClick={()=>beginIdentityCorrection(selected)}>
+                    Complete debtor details now
+                  </button>
+                </div>
+              )}
+              {identityCorrectionOpen && selected.identity_requirements?.required && (
+                <form className="debt-desk__identity-update" onSubmit={submitIdentityCorrection}>
+                  <strong>Correct missing debtor details</strong>
+                  <p>This updates the current customer identity only. Original receipts and
+                    outstanding amounts will remain intact.</p>
+                  {missingIdentity.includes("customer_name") && (
+                    <label>Two different real names
+                      <input value={identityName} maxLength={150} autoComplete="name"
+                        placeholder="Appiah Eugene" required
+                        onChange={event=>setIdentityName(event.target.value)}/>
+                    </label>
+                  )}
+                  {missingIdentity.includes("customer_phone") && (
+                    <label>Valid Ghana phone number
+                      <input type="tel" value={identityPhone} maxLength={40} autoComplete="tel"
+                        placeholder="0241234567" required
+                        onChange={event=>setIdentityPhone(event.target.value)}/>
+                    </label>
+                  )}
+                  <div className="debt-desk__identity-actions">
+                    <button type="button" onClick={()=>setIdentityCorrectionOpen(false)}>Cancel</button>
+                    <button type="submit" disabled={!identityValid||identityCorrectionBusy}>
+                      {identityCorrectionBusy?"Saving…":"Save verified details"}
+                    </button>
+                  </div>
+                </form>
+              )}
               {selected.customer.legacy_record ? (
                 <div className="debt-desk__legacy-note">
                   This older debt is not linked to a saved customer profile. It
@@ -1191,6 +1320,30 @@ export default function DebtsPage() {
                       Partial payment
                     </button>
                   </div>
+
+                  {missingIdentity.length > 0 && (
+                    <section className="debt-desk__identity-update" aria-label="Complete debtor identity before payment">
+                      <strong>Complete this customer's details first</strong>
+                      <p>This older debtor is missing a real two-part name or valid phone.
+                        Enter the missing information to save it with this payment. Original
+                        receipts and debt amounts will remain unchanged.</p>
+                      {missingIdentity.includes("customer_name") && (
+                        <label>Customer's two different real names
+                          <input type="text" value={identityName} maxLength={150} autoComplete="name"
+                            placeholder="Example: Appiah Eugene" required
+                            onChange={event=>setIdentityName(event.target.value)}/>
+                        </label>
+                      )}
+                      {missingIdentity.includes("customer_phone") && (
+                        <label>Customer's valid Ghana phone
+                          <input type="tel" value={identityPhone} maxLength={40}
+                            autoComplete="tel" placeholder="0241234567" required
+                            onChange={event=>setIdentityPhone(event.target.value)}/>
+                        </label>
+                      )}
+                      {!identityValid && <small>Enter the missing name and phone correctly to continue.</small>}
+                    </section>
+                  )}
 
                   <label>
                     <span>Amount received</span>
@@ -1418,6 +1571,7 @@ function AccountCard({ account, onOpen, onPay }) {
           </div>
           <p>
             {account.customer_phone || "No phone"}
+            {account.identity_requirements?.required && <b className="debt-desk__needs-id-label"> · Missing details</b>}
             {account.customer_location
               ? ` · ${account.customer_location}`
               : ""}

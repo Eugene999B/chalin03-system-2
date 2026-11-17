@@ -17,10 +17,10 @@ const toolsCss = read("frontend", "src", "styles", "topDebtDeskTools.css");
 const DEBT_DELETE = /DELETE\s+FROM\s+(?:debts|debt_payments)\b/i;
 const RUNTIME_DDL = /\b(?:CREATE|ALTER|DROP|TRUNCATE)\s+(?:TABLE|DATABASE)\b/i;
 
-test("Debt Desk resolves the current sale identity without deleting snapshots", () => {
+test("Debt Desk displays corrected customer identities before preserved sale/debt snapshots", () => {
   assert.match(
     routes,
-    /COALESCE\(NULLIF\(s\.customer_name, ''\), NULLIF\(c\.name, ''\), NULLIF\(d\.customer_name, ''\)/
+    /COALESCE\(NULLIF\(c\.name, ''\), NULLIF\(d\.customer_name, ''\), NULLIF\(s\.customer_name, ''\)/
   );
   assert.match(routes, /debt_customer_name_snapshot/);
   assert.match(routes, /sale_customer_name/);
