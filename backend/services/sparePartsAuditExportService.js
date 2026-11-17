@@ -696,7 +696,11 @@ async function sendAuditExport(res, config) {
     }
     const usable=doc.page.width-72;
     function drawPdfCharts() {
-      for(const chart of charts.slice(0,8)) {
+      for(const [chartIndex,chart] of charts.slice(0,8).entries()) {
+        if(chartIndex>0) doc.addPage();
+        doc.font("Helvetica-Bold").fontSize(9).fillColor("#087F75")
+          .text("02 / BUSINESS VISUALISATIONS / "+String(chartIndex+1).padStart(2,"0"),
+            36,33,{width:usable});
         const points=Array.isArray(chart.points)?chart.points.slice(0,24):[];
         const isLine=chart.kind==="line";
         const count=points.length;
@@ -752,6 +756,44 @@ async function sendAuditExport(res, config) {
           });
         }
         doc.y=y+height+18;
+      }
+      // A financial flow drawing explains why payments and invoices differ.
+      const movements=charts.find(c=>c.title==="Recorded receipts and refunds")?.points||[];
+      if(movements.length>=3){
+        const m=movements.map(p=>Math.max(0,Number(p.value)||0));
+        const net=m[0]+m[1]-m[2];
+        doc.addPage();
+        const pw=doc.page.width,margin=36;
+        doc.rect(0,0,pw,11).fill("#07867C");
+        doc.font("Helvetica-Bold").fontSize(10).fillColor("#0A7C73")
+          .text("03 / ACCOUNTING EXPLANATION",margin,36,{width:pw-margin*2});
+        doc.font("Helvetica-Bold").fontSize(24).fillColor("#143A47")
+          .text("How recorded customer money moves",margin,61,{width:pw-margin*2});
+        doc.font("Helvetica").fontSize(10).fillColor("#607B82")
+          .text("These entries are not proof of bank or mobile-money settlement.",
+            margin,106,{width:pw-margin*2});
+        const positions=[36,235,434,633];
+        const values=[m[0],m[1],m[2],net];
+        const labels=["AT-SALE RECEIPTS","+ LATER REPAYMENTS","- FINANCIAL REFUNDS","= RECORDED NET"];
+        values.forEach((value,i)=>{
+          const x=positions[i];
+          doc.rect(x,170,172,130).fill(i===3?"#0A5D58":"#E9F2F1");
+          doc.rect(x,170,172,5).fill(i===2?"#D6A34D":"#0C8579");
+          doc.font("Helvetica-Bold").fontSize(8.5).fillColor(i===3?"#D8F0EA":"#19756E")
+            .text(labels[i],x+12,190,{width:148});
+          doc.font("Helvetica-Bold").fontSize(19).fillColor(i===3?"#FFFFFF":"#153C49")
+            .text("GHS "+fmtNumber(value),x+12,231,{width:148,height:40,ellipsis:true});
+          if(i<3)doc.font("Helvetica-Bold").fontSize(17).fillColor("#8F9E9A")
+            .text(">",x+173,225,{width:26,align:"center"});
+        });
+        doc.rect(margin,354,pw-margin*2,106).fill("#F5F6EF");
+        doc.font("Helvetica-Bold").fontSize(11).fillColor("#143B46")
+          .text("WHY THIS MATTERS",margin+16,372,{width:pw-margin*2-32});
+        doc.font("Helvetica").fontSize(10).fillColor("#506870")
+          .text("This bridge reconciles customer money recorded at sale, repayments received later, "+
+            "and financial refunds. It does not subtract expenses or supplier outflows, "+
+            "and it cannot replace bank, MoMo or closing reconciliation.",
+            margin+16,398,{width:pw-margin*2-32,height:50,ellipsis:true});
       }
       if(charts.length)doc.addPage();
     }
