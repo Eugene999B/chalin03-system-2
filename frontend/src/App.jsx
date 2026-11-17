@@ -14,7 +14,6 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
-import DebtorIdentityStaffAnnouncement from "./components/DebtorIdentityStaffAnnouncement";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -218,7 +217,6 @@ export default function App() {
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
-        <DebtorIdentityStaffAnnouncement />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />

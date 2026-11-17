@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspaceContext } from "../context/WorkspaceContext";
 import WorkspaceContextSelector from "./WorkspaceContextSelector";
+import DebtorIdentityStaffAnnouncement from "./DebtorIdentityStaffAnnouncement";
 import { getChalinThemeMode, setChalinTheme } from "../utils/chalinTheme.js";
 import "../styles/businessWorkspaceLayout.css";
 import "../styles/systemTheme.css";
@@ -242,7 +243,7 @@ export default function BusinessWorkspaceLayout({
             <button type="button" onClick={switchBusiness}>Switch Business</button>
           </div>
         </header>
-        <main className="bwl-content"><Outlet /></main>
+        <main className="bwl-content"><DebtorIdentityStaffAnnouncement /><Outlet /></main>
       </div>
     </div>
   );

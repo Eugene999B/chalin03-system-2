@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from "react-router";
 import { getSparePartsPageByPath } from "../security/sparePartsPageAccess";
 import CompactSidebarNavigation from "./CompactSidebarNavigation";
 import SidebarAccountMenu from "./SidebarAccountMenu";
+import DebtorIdentityStaffAnnouncement from "./DebtorIdentityStaffAnnouncement";
 import "../styles/sidebarPolish.css";
 import { useAuth } from "../context/AuthContext";
 
@@ -1743,6 +1744,7 @@ export default function Layout() {
           </div>
         )}
 
+        <DebtorIdentityStaffAnnouncement />
         <PageAccessProtectedOutlet />
       </main>
 

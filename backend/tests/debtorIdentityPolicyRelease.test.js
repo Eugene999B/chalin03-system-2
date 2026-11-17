@@ -133,6 +133,11 @@ test("all-staff notice deduplicates contact numbers and never targets customer p
   assert.doesNotMatch(source,/FROM customers/);
   const server=read("server.js");
   assert.match(server,/dispatchStaffDebtorIdentityNoticeOnce/);
-  const app=fs.readFileSync(path.join(__dirname,"../../frontend/src/App.jsx"),"utf8");
-  assert.match(app,/DebtorIdentityStaffAnnouncement/);
+  const frontend = path.join(__dirname,"../../frontend/src");
+  const app=fs.readFileSync(path.join(frontend,"App.jsx"),"utf8");
+  const sparePartsLayout=fs.readFileSync(path.join(frontend,"components/Layout.jsx"),"utf8");
+  const businessLayout=fs.readFileSync(path.join(frontend,"components/BusinessWorkspaceLayout.jsx"),"utf8");
+  assert.doesNotMatch(app,/<DebtorIdentityStaffAnnouncement \/>/);
+  assert.match(sparePartsLayout,/<DebtorIdentityStaffAnnouncement \/>/);
+  assert.match(businessLayout,/<DebtorIdentityStaffAnnouncement \/>/);
 });
