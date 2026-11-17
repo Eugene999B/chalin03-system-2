@@ -3,6 +3,8 @@ const express = require("express");
 const {pool} = require("../config/db");
 const {requireRole} = require("../middleware/roleMiddleware");
 const {sendAuditExport} = require("../services/sparePartsAuditExportService");
+const {buildBusinessIntelligence,IntelligenceReportError} =
+  require("../services/sparePartsBusinessIntelligenceService");
 const {
   money, datePart, buildSales, buildReturns, groupRows, summaryOf
 } = require("../services/sparePartsFinancialAuditMath");
@@ -361,4 +363,77 @@ router.get("/transaction-history",requireRole("admin","manager","auditor"),async
     if(connection)connection.release();
   }
 });
+
+// Read-only management intelligence exports. All report variants share
+// the same factual store-scoped model and its original evidence sources.
+const REPORT_VARIANTS={
+  "business-intelligence":{
+    title:"Spare Parts | Executive Business Intelligence",
+    description:"A connected management review of sales, cash collection, customer debt, historical cost coverage, refunds, inventory and audit exceptions. Accounting notes distinguish recorded money from externally verified cash.",
+    sectionNames:null,chartNames:null
+  },
+  "collections-intelligence":{
+    title:"Spare Parts | Collections, Credit & Debtors",
+    description:"Debtor follow-up, recorded sales collections and past-due balances. Debt is a current snapshot; original sale money and debt payments retain their own event dates.",
+    sectionNames:["Daily Sales and Cash","Debt Customer Priorities","Debt Aging","Receipts by Channel","Actions and Warnings","Calculation Notes"],
+    chartNames:["Recorded receipts and refunds","Current debt by due-date age","Daily completed invoice value"]
+  },
+  "audit-intelligence":{
+    title:"Spare Parts | Accounting & Audit Investigation",
+    description:"Receipt anomalies, quality of recorded cost evidence, refund and collection sources, governance warnings and investigation actions. Not a certified statutory audit.",
+    sectionNames:["Actions and Warnings","Receipt Exceptions","Daily Sales and Cash","Expenses by Category","Calculation Notes"],
+    chartNames:["Recorded receipts and refunds","Active expense categories","Daily completed invoice value"]
+  },
+  "stock-intelligence":{
+    title:"Spare Parts | Stock, Sales & Restock Intelligence",
+    description:"Current inventory risk, historical top sellers, stock exception alerts and restock planning. Inventory value is a current register estimate, not verified physical stock.",
+    sectionNames:["Top Product Results","Restock Watchlist","Actions and Warnings","Calculation Notes"],
+    chartNames:["Top selling parts","Daily completed invoice value"]
+  }
+};
+for(const [slug,variant] of Object.entries(REPORT_VARIANTS)){
+  router.get("/"+slug,requireRole("admin","manager","auditor"),async(req,res)=>{
+    const format=String(req.query.format||"xlsx").toLowerCase();
+    if(!["xlsx","pdf","doc","word"].includes(format))
+      return res.status(400).json({status:"error",code:"UNSUPPORTED_REPORT_FORMAT",
+        message:"Choose Excel, PDF or Word."});
+    try{
+      const report=await buildBusinessIntelligence(req);
+      const sections=variant.sectionNames
+        ?report.sections.filter(s=>variant.sectionNames.includes(s.name))
+        :report.sections;
+      const charts=variant.chartNames
+        ?report.charts.filter(c=>variant.chartNames.includes(c.title))
+        :report.charts;
+      const dateBasis="Historical sales / allocations by sale date; debt repayments by paid date; "+
+        "financial refunds by returned date; current stock and open debt are download-time snapshots.";
+      const rows=report.narrative;
+      return await sendAuditExport(res,{
+        format,title:variant.title,description:variant.description,
+        period:report.period.from+" to "+report.period.to,
+        fromDate:report.period.from,toDate:report.period.to,
+        branch:report.branch,
+        generatedBy:req.user?.full_name||req.user?.username||"Authorised CHALIN03 user",
+        filename:"chalin03-"+slug+"-store-"+report.branchId+"-"+report.period.from+"-"+report.period.to,
+        primarySectionName:"Business Narrative",
+        columns:[{key:"topic",label:"Management Question",weight:1.2},
+          {key:"explanation",label:"Evidence-Based Interpretation",weight:3}],
+        rows,charts,dashboardCards:report.cards,
+        metrics:[...report.metrics,["REPORT BASIS",dateBasis],
+          ["DATA LIMIT", "Summary only: refer to original receipts, individual debt statements and detailed Transaction History for complete supporting evidence."]],
+        sections
+      });
+    }catch(error){
+      if(res.headersSent)return res.end();
+      if(error instanceof IntelligenceReportError)
+        return res.status(error.statusCode).json({
+          status:"error",code:error.code,message:error.message});
+      console.error("Spare Parts intelligence download failed",error?.code||error?.message);
+      return res.status(500).json({
+        status:"error",code:"INTELLIGENCE_REPORT_UNAVAILABLE",
+        message:"Could not prepare verified reporting evidence for the selected store. No report was generated."});
+    }
+  });
+}
+
 module.exports=router;
