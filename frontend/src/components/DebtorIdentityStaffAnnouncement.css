@@ -37,3 +37,55 @@
   .debt-policy-announcement__summary strong{font-size:12px;flex:1 1 190px;}
   .debt-policy-announcement__actions :is(a,button){flex:1;}
 }
+
+/* Keep the notice in the workspace content flow, never behind a fixed header. */
+.debt-policy-announcement{
+  display:block;
+  flex-shrink:0;
+  min-width:0;
+  height:auto;
+  max-height:none;
+  overflow:visible;
+  margin:0 0 16px;
+  border:1px solid #b7d9d2;
+  border-radius:12px;
+}
+.debt-policy-announcement__head,
+.debt-policy-announcement__summary {min-width:0;}
+.debt-policy-announcement__summary strong{
+  min-width:0;
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
+.debt-policy-announcement__summary button{
+  max-width:100%;
+  white-space:normal;
+}
+#debt-policy-notice-details {min-width:0;overflow-wrap:anywhere;}
+@media(max-width:600px){
+  .debt-policy-announcement{
+    position:static;
+    padding:12px;
+    margin:0 0 14px;
+  }
+  .debt-policy-announcement__head{gap:8px;}
+  .debt-policy-announcement__head span{max-width:calc(100% - 48px);line-height:1.4;}
+  .debt-policy-announcement__head>button{flex:0 0 36px;min-height:36px;}
+  .debt-policy-announcement__summary{
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    justify-items:stretch;
+    align-items:start;
+    gap:10px;
+    margin-top:5px;
+  }
+  .debt-policy-announcement__summary strong{font-size:13px;line-height:1.5;}
+  .debt-policy-announcement__summary button{
+    justify-self:stretch;
+    min-height:44px;
+    width:100%;
+    font-size:13px;
+  }
+  .debt-policy-announcement__actions{display:grid;grid-template-columns:1fr;}
+  .debt-policy-announcement__actions :is(a,button){width:100%;min-height:44px;}
+}
