@@ -60,7 +60,7 @@ async function loadEvidence(branchId,p){
   try{
     await conn.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await conn.query("START TRANSACTION READ ONLY");started=true;
-    const [[branchRows],[sales],[allocations],[debtPaid],[refunds],[expenses],[openDebts],[products],[prev]] = await Promise.all([
+    const [branchReply,sales,allocations,debtPaid,refunds,expenses,openDebts,products,previousReply] = await Promise.all([
       conn.query("SELECT id,name,code FROM branches WHERE id=? LIMIT 1",[branchId]),
       read(conn,[
         "SELECT s.id AS sale_id,s.created_at,s.receipt_number,s.customer_name,s.payment_type,",
@@ -111,6 +111,8 @@ async function loadEvidence(branchId,p){
         "AND created_at<DATE_ADD(?,INTERVAL 1 DAY)"
       ].join(" "),[branchId,p.previousFrom,p.previousTo])
     ]);
+    const branchRows=branchReply[0];
+    const prev=previousReply[0];
     if(!branchRows.length)throw new IntelligenceReportError("STORE_NOT_FOUND","Selected store was not found.",404);
     await conn.commit();started=false;
     return {branch:branchRows[0],sales,allocations,debtPaid,refunds,expenses,openDebts,products,previous:prev[0]||{}};
