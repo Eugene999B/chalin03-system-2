@@ -87,7 +87,7 @@ function validateDebtPaymentRequest({ params, body }) {
     return failure(errors);
   }
 
-  const allowedKeys = new Set(["amount", "payment_method", "notes"]);
+  const allowedKeys = new Set(["amount", "payment_method", "notes", "customer_name", "customer_phone"]);
   for (const key of unknownKeys(body, allowedKeys)) {
     addError(
       errors,
@@ -154,6 +154,8 @@ function validateDebtPaymentRequest({ params, body }) {
       amount,
       payment_method: paymentMethod,
       notes,
+      customer_name:body.customer_name===undefined?undefined:String(body.customer_name).slice(0,160),
+      customer_phone:body.customer_phone===undefined?undefined:String(body.customer_phone).slice(0,40),
     },
   });
 }
