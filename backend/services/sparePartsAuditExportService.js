@@ -2,6 +2,7 @@
 const ExcelJS = require("./excelJsCompat");
 const PDFDocument = require("pdfkit");
 const { renderBusinessChartPng } = require("./reportPresentationCharts");
+const { buildManagementDocx } = require("./managementDocxWriter");
 
 function clean(value) {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
@@ -511,6 +512,16 @@ async function sendAuditExport(res, config) {
     const buffer = await book.xlsx.writeBuffer();
     setHeaders(res, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename + ".xlsx");
     return res.status(200).send(Buffer.from(buffer));
+  }
+  if(["word","docx","doc"].includes(mode) && (charts.length||dashboardCards.length)){
+    // New intelligence series uses native OOXML, not an HTML .doc alias.
+    const result=await buildManagementDocx({
+      title,description,period,branch,generated:date,generatedBy,
+      columns,rows,charts,dashboardCards,sections
+    });
+    setHeaders(res,"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      filename+".docx");
+    return res.status(200).send(Buffer.from(result));
   }
   if (mode === "doc" || mode === "word") {
     const metaRows=meta.map(([a,b])=>"<tr><th>"+html(a)+"</th><td>"+html(fmtNumber(b))+"</td></tr>").join("");
