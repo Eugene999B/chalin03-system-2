@@ -391,6 +391,35 @@ const REPORT_VARIANTS={
     chartNames:["Top selling parts","Daily completed invoice value"]
   }
 };
+router.get("/business-intelligence/preview",
+  requireRole("admin","manager","auditor"),async(req,res)=>{
+    try{
+      const report=await buildBusinessIntelligence(req);
+      res.setHeader("Cache-Control","private, no-store");
+      return res.status(200).json({
+        status:"success",
+        scope:{branch_id:report.branchId,branch:report.branch,
+          from:report.period.from,to:report.period.to,
+          generated_at:report.generatedAt},
+        summary:report.summary,
+        narrative:report.narrative,
+        findings:report.sections.find(s=>s.name==="Actions and Warnings")?.rows.slice(0,8)||[],
+        charts:report.charts.map(c=>({title:c.title,unit:c.unit,note:c.note,
+          kind:c.kind,points:c.points.slice(0,31)})),
+        warning:"Internal management intelligence, not an audited profit or bank reconciliation."
+      });
+    }catch(error){
+      if(error instanceof IntelligenceReportError)
+        return res.status(error.statusCode).json({
+          status:"error",code:error.code,message:error.message});
+      console.error("Spare Parts intelligence preview failed",error?.code||error?.message);
+      return res.status(500).json({
+        status:"error",code:"INTELLIGENCE_PREVIEW_UNAVAILABLE",
+        message:"Could not prepare the selected store's business analysis."});
+    }
+  }
+);
+
 for(const [slug,variant] of Object.entries(REPORT_VARIANTS)){
   router.get("/"+slug,requireRole("admin","manager","auditor"),async(req,res)=>{
     const format=String(req.query.format||"xlsx").toLowerCase();
