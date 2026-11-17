@@ -37,6 +37,16 @@ const REPORTS = [
     deepReport: true,
   },
   {
+    key: "supplier-intelligence",
+    title: "Purchases & Supplier Liabilities",
+    category: "Intelligence",
+    icon: "🚚",
+    endpoint: "/exports/supplier-intelligence",
+    description: "See purchases, suppliers, payments made and unpaid invoices. Separate amounts purchased from cash actually paid.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
     key: "stock-intelligence",
     title: "Stock, Sales & Restock Intelligence",
     category: "Intelligence",
