@@ -21,7 +21,7 @@ for(const term of [
   /Save verified details/,
   /submitIdentityCorrection/,
   /identityValid &&/,
-  /identityMissing=/,
+  /missingIdentity=/,
   /debt_customer_name_snapshot/,
   /master_customer_name/,
 ]){
