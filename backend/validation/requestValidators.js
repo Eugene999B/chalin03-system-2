@@ -154,8 +154,8 @@ function validateDebtPaymentRequest({ params, body }) {
       amount,
       payment_method: paymentMethod,
       notes,
-      customer_name:body.customer_name===undefined?undefined:String(body.customer_name).slice(0,160),
-      customer_phone:body.customer_phone===undefined?undefined:String(body.customer_phone).slice(0,40),
+      ...(body.customer_name===undefined?{}:{customer_name:String(body.customer_name).slice(0,160)}),
+      ...(body.customer_phone===undefined?{}:{customer_phone:String(body.customer_phone).slice(0,40)}),
     },
   });
 }
