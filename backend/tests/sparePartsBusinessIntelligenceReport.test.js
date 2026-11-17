@@ -147,6 +147,49 @@ test("PDF export draws charts rather than only plain numbers",async()=>{
   assert.ok(buffer.length>8000);
   assert.equal(res.headers["content-type"],"application/pdf");
 });
+test("source reads are scoped to one selected store and a read-only snapshot",async()=>{
+  const Module=require("node:module");
+  const absolute=path.resolve(__dirname,"../services/sparePartsBusinessIntelligenceService.js");
+  const original=Module._load;
+  const statements=[],state={commits:0,rollbacks:0,releases:0};
+  const connection={
+    query:async(sql,params=[])=>{
+      statements.push({sql:String(sql),params});
+      if(/FROM branches WHERE/.test(sql))
+        return [[{id:7,name:"Synthetic Store",code:"T-7"}]];
+      if(/SELECT COUNT\(\*\) AS receipts/.test(sql))
+        return [[{receipts:0,value:0}]];
+      return [[]];
+    },
+    commit:async()=>{state.commits++},
+    rollback:async()=>{state.rollbacks++},
+    release:()=>{state.releases++},
+  };
+  let service;
+  try{
+    Module._load=function(request,parent,isMain){
+      if(parent?.filename===absolute && request==="../config/db")
+        return {pool:{getConnection:async()=>connection}};
+      return original.apply(this,arguments);
+    };
+    delete require.cache[absolute];
+    service=require(absolute);
+  }finally{
+    Module._load=original;
+    delete require.cache[absolute];
+  }
+  const result=await service.loadEvidence(7,period);
+  assert.equal(result.branch.code,"T-7");
+  assert.equal(state.commits,1);
+  assert.equal(state.rollbacks,0);
+  assert.equal(state.releases,1);
+  assert.ok(statements.some(x=>x.sql==="START TRANSACTION READ ONLY"));
+  const reads=statements.filter(x=>x.sql.trim().startsWith("SELECT"));
+  assert.ok(reads.length>=8);
+  assert.ok(reads.every(x=>x.params[0]===7),"Every query must use the selected store ID");
+  assert.ok(statements.every(x=>!/^(UPDATE|DELETE|INSERT|ALTER|DROP)/.test(x.sql.trim())));
+});
+
 test("source route explicitly protects store and management access",()=>{
   const source=fs.readFileSync(path.join(__dirname,"../routes/sparePartsTransactionExportRoutes.js"),"utf8");
   assert.match(source,/business-intelligence/);
