@@ -34,7 +34,17 @@ assertHas(notice,/All staff, including the boss/);
 assertHas(notice,/Never invent names or numbers/);
 assertHas(notice,/isLoggedIn/);
 assertHas(notice,/acknowledged/);
-assertHas(app,/<DebtorIdentityStaffAnnouncement \/>/);
+const spareLayout=read("src/components/Layout.jsx");
+const businessLayout=read("src/components/BusinessWorkspaceLayout.jsx");
+assert.doesNotMatch(app,/<DebtorIdentityStaffAnnouncement \\/>/);
+assertHas(spareLayout,/<DebtorIdentityStaffAnnouncement \\/>/);
+assertHas(businessLayout,/<DebtorIdentityStaffAnnouncement \\/>/);
+assertHas(spareLayout,/<main className="premium-main">[\\s\\S]*?<DebtorIdentityStaffAnnouncement \\/>[\\s\\S]*?<PageAccessProtectedOutlet \\/>/);
+assertHas(businessLayout,/<main className="bwl-content"><DebtorIdentityStaffAnnouncement \\/><Outlet \\/><\\/main>/);
+assertHas(noticeCss,/grid-template-columns:minmax\\(0,1fr\\)/);
+assertHas(noticeCss,/min-height:44px/);
+assertHas(noticeCss,/overflow:visible/);
+
 assertHas(noticeCss,/@media\(max-width:600px\)/);
 assertHas(noticeCss,/position:static/);
 assert.doesNotMatch(noticeCss,/position:fixed/);
