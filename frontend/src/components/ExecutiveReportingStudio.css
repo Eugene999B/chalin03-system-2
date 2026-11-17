@@ -178,3 +178,24 @@
 }
 @media(min-width:741px) and (max-width:1040px){.rpt-editions{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(prefers-reduced-motion:reduce){.rpt-studio *{transition:none!important;animation:none!important;}}
+
+/* Preserve independent audit sign-off and print controls below the new cover. */
+.rpt-audit-operational-actions {
+  display:flex;gap:14px;align-items:center;justify-content:space-between;
+  background:#f0f6f5;border:1px solid #d7e6e3;padding:16px 20px;
+  border-radius:13px;margin:-6px 0 21px;color:#315865;
+}
+.rpt-audit-operational-actions>span {font-size:12px;font-weight:720;}
+.rpt-audit-operational-actions>div {display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+.rpt-audit-operational-actions button {
+  border:1px solid #b8d8d1;background:#fff;color:#145a59;
+  border-radius:8px;min-height:44px;padding:10px 14px;
+  font-size:12px;font-weight:800;cursor:pointer;
+}
+.rpt-audit-operational-actions button:first-child{background:#0e6d67;color:#fff;border-color:#0e6d67;}
+.rpt-audit-operational-actions button:disabled{opacity:.55;cursor:not-allowed;}
+@media(max-width:740px){
+  .rpt-audit-operational-actions{align-items:stretch;flex-direction:column;padding:15px;}
+  .rpt-audit-operational-actions>div {display:grid;grid-template-columns:1fr;gap:8px;}
+  .rpt-audit-operational-actions button {width:100%;}
+}
