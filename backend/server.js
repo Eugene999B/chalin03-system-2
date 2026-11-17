@@ -51,6 +51,7 @@ const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
+const {dispatchStaffDebtorIdentityNoticeOnce} = require("./services/debtorIdentityStaffNoticeService");
 const customerDebtConsolidationRoutes = require("./routes/customerDebtConsolidationRoutes");
 const debtReminderRoutes = require("./routes/debtReminderRoutes");
 const reportRoutes = require("./routes/reportRoutes");
@@ -475,6 +476,15 @@ async function startServer() {
       startSmsDeliveryStatusSync();
       startInstallmentReminderScheduler();
       startDebtReminderScheduler();
+      // Nonblocking, one-time internal staff notice. SMS provider logs each
+      // recipient before submission; a restart never sends a duplicate.
+      // All authenticated accounts also receive the in-app announcement.
+      setImmediate(()=>{
+        void dispatchStaffDebtorIdentityNoticeOnce().catch(error=>{
+          console.warn("Debtor identity staff policy SMS unavailable:",
+            error?.code||error?.message||"UNKNOWN");
+        });
+      });
       startNotificationSyncScheduler();
     });
   } catch (error) {

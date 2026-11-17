@@ -7,6 +7,7 @@ const { writeAuditEvent } = require("../services/auditTrailService");
 const { markClosingStale } = require("../services/dailyClosingSecurityService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateDebtPaymentRequest } = require("../validation/requestValidators");
+const {requiredIdentityFields,ensureDebtCustomerIdentity} = require("../services/debtorIdentityPolicy");
 
 const router = express.Router();
 
@@ -248,8 +249,8 @@ async function loadDebtDeskAccounts(branchId, { includePaid = false } = {}) {
     `SELECT
        CONCAT('legacy-', d.id) AS customer_key,
        NULL AS customer_id,
-       COALESCE(NULLIF(s.customer_name, ''), NULLIF(d.customer_name, ''), 'Legacy Customer') AS customer_name,
-       COALESCE(NULLIF(s.customer_phone, ''), NULLIF(d.customer_phone, '')) AS customer_phone,
+       COALESCE(NULLIF(d.customer_name, ''), NULLIF(s.customer_name, ''), 'Legacy Customer') AS customer_name,
+       COALESCE(NULLIF(d.customer_phone, ''), NULLIF(s.customer_phone, '')) AS customer_phone,
        NULL AS customer_location,
        1 AS debt_count,
        CASE WHEN d.balance > 0 THEN 1 ELSE 0 END AS active_debt_count,
@@ -537,6 +538,10 @@ async function loadDebtDeskAccount(branchId, parsedKey, connection = pool) {
   summary.outstanding_balance = roundMoney(summary.outstanding_balance);
 
   const firstDebt = debtBreakdown[0];
+  const identityReference=customer
+    ? {name:customer.name,phone:customer.phone}
+    : {name:firstDebt.debt_customer_name_snapshot,phone:firstDebt.debt_customer_phone_snapshot};
+  const identityMissing=requiredIdentityFields(identityReference);
   const correctedIdentityDebt =
     debtBreakdown.find(
       (debt) =>
@@ -556,6 +561,12 @@ async function loadDebtDeskAccount(branchId, parsedKey, connection = pool) {
     summary,
     debts: debtBreakdown,
     payments,
+    identity_requirements:{
+      required:identityMissing.length>0,
+      missing_fields:identityMissing,
+      message:identityMissing.length?
+        "A valid two-part name and Ghana phone number are required before recording another debt payment.":""
+    }
   };
 }
 
@@ -571,8 +582,8 @@ async function loadOpenDebtsForPayment(connection, branchId, parsedKey) {
        s.receipt_number,
        s.customer_name AS sale_customer_name,
        s.created_at AS sale_date,
-       COALESCE(NULLIF(s.customer_name, ''), NULLIF(c.name, ''), NULLIF(d.customer_name, ''), 'Unnamed Customer') AS current_customer_name,
-       COALESCE(NULLIF(s.customer_phone, ''), NULLIF(c.phone, ''), NULLIF(d.customer_phone, '')) AS current_customer_phone,
+       COALESCE(NULLIF(c.name, ''), NULLIF(d.customer_name, ''), NULLIF(s.customer_name, ''), 'Unnamed Customer') AS current_customer_name,
+       COALESCE(NULLIF(c.phone, ''), NULLIF(d.customer_phone, ''), NULLIF(s.customer_phone, '')) AS current_customer_phone,
        c.location AS current_customer_location,
        COALESCE(s.customer_id, d.customer_id) AS effective_customer_id
      FROM debts d
@@ -663,6 +674,8 @@ router.get("/", requireAuth, async (req, res) => {
       s.receipt_number,
       COALESCE(s.customer_id, d.customer_id) AS customer_id,
       ${currentIdentitySelect()},
+      c.name AS master_customer_name,
+      c.phone AS master_customer_phone,
       d.amount_owed,
       d.amount_paid,
       d.balance,
@@ -762,6 +775,41 @@ router.get("/customers/:customerKey", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/debts/customers/:customerKey/identity
+// Limited remediation: staff can complete missing names/phones on an existing
+// debtor, but CANNOT change already-valid fields or alter historic sale receipts.
+router.post("/customers/:customerKey/identity",requireAuth,async(req,res)=>{
+  const connection=await pool.getConnection();
+  try{
+    const branchId=getBranchId(req);
+    const parsedKey=parseCustomerKey(req.params.customerKey);
+    await connection.beginTransaction();
+    const debts=await loadOpenDebtsForPayment(connection,branchId,parsedKey);
+    if(!debts.length){
+      throw appError("This customer has no open debt requiring correction.",404,"NO_OPEN_DEBT");
+    }
+    const corrected=await ensureDebtCustomerIdentity(connection,{
+      branchId,debts,body:req.body,req,writeAuditEvent
+    });
+    await connection.commit();
+    return res.status(200).json({
+      status:"success",message:corrected.changed?
+        "Missing debtor identity completed. Original sales, stock and debt balances were not changed.":
+        "This customer's identity is already complete.",
+      branch_id:branchId,customer_key:parsedKey.key,
+      customer_name:corrected.name,customer_phone:corrected.phone,changed:corrected.changed,
+      historical_receipts_unchanged:true,
+    });
+  }catch(error){
+    try{await connection.rollback();}catch{}
+    return res.status(error.statusCode||500).json({
+      status:"error",code:error.code||"DEBT_IDENTITY_UPDATE_FAILED",
+      message:error.statusCode?error.message:"Could not complete the debtor identity.",
+      missing_fields:error.missing_fields||[]
+    });
+  }finally{connection.release();}
+});
+
 // POST /api/debts/customers/:customerKey/payments
 router.post("/customers/:customerKey/payments", requireAuth, async (req, res) => {
   const connection = await pool.getConnection();
@@ -803,6 +851,9 @@ router.post("/customers/:customerKey/payments", requireAuth, async (req, res) =>
     if (debts.length === 0) {
       throw appError("This customer has no outstanding debt to pay.", 400, "NO_OUTSTANDING_DEBT");
     }
+    const correctedCustomer=await ensureDebtCustomerIdentity(connection,{
+      branchId,debts,body:req.body,req,writeAuditEvent
+    });
 
     const previousOutstanding = roundMoney(
       debts.reduce((sum, debt) => sum + Number(debt.balance || 0), 0)
@@ -857,9 +908,9 @@ router.post("/customers/:customerKey/payments", requireAuth, async (req, res) =>
           cleanText(debt.sale_customer_name) &&
           cleanText(debt.sale_customer_name) !== cleanText(debt.customer_name)
       ) || debts[0];
-    const customerName =
+    const customerName=correctedCustomer.name ||
       identityDebt.current_customer_name || identityDebt.customer_name || "Customer";
-    const customerPhone =
+    const customerPhone=correctedCustomer.phone ||
       identityDebt.current_customer_phone || identityDebt.customer_phone || null;
     const newOutstanding = roundMoney(previousOutstanding - requestedAmount);
 
@@ -936,6 +987,7 @@ router.post("/customers/:customerKey/payments", requireAuth, async (req, res) =>
     return res.status(error.statusCode || 500).json({
       status: "error",
       code: error.code || "CUSTOMER_DEBT_PAYMENT_ERROR",
+      missing_fields:error.missing_fields || [],
       message: error.statusCode ? error.message : "Something went wrong while recording the customer debt payment.",
     });
   } finally {
@@ -1027,8 +1079,9 @@ router.post(
            s.receipt_number,
            s.customer_name AS sale_customer_name,
            s.created_at AS sale_date,
-           COALESCE(NULLIF(s.customer_name, ''), NULLIF(c.name, ''), NULLIF(d.customer_name, ''), 'Unnamed Customer') AS current_customer_name,
-           COALESCE(NULLIF(s.customer_phone, ''), NULLIF(c.phone, ''), NULLIF(d.customer_phone, '')) AS current_customer_phone
+           COALESCE(s.customer_id,d.customer_id) AS effective_customer_id,
+           COALESCE(NULLIF(c.name, ''), NULLIF(d.customer_name, ''), NULLIF(s.customer_name, ''), 'Unnamed Customer') AS current_customer_name,
+           COALESCE(NULLIF(c.phone, ''), NULLIF(d.customer_phone, ''), NULLIF(s.customer_phone, '')) AS current_customer_phone
          FROM debts d
          LEFT JOIN sales s ON d.sale_id = s.id AND s.branch_id = d.branch_id
          LEFT JOIN customers c ON c.id = COALESCE(s.customer_id, d.customer_id) AND c.branch_id = d.branch_id
@@ -1055,6 +1108,10 @@ router.post(
         );
       }
 
+      const correctedCustomer=await ensureDebtCustomerIdentity(connection,{
+        branchId,debts,body:req.validated.body,req,writeAuditEvent
+      });
+
       const allocation = await applyPaymentToDebt(connection, {
         branchId,
         debt,
@@ -1064,8 +1121,8 @@ router.post(
         receivedBy: req.user.id,
       });
 
-      const customerName = debt.current_customer_name || debt.customer_name || "Customer";
-      const customerPhone = debt.current_customer_phone || debt.customer_phone || null;
+      const customerName = correctedCustomer.name || debt.current_customer_name || debt.customer_name || "Customer";
+      const customerPhone = correctedCustomer.phone || debt.current_customer_phone || debt.customer_phone || null;
 
       await logActivity(connection, {
         req,
@@ -1151,6 +1208,7 @@ router.post(
       return res.status(error.statusCode || 500).json({
         status: "error",
         code: error.code || "DEBT_PAYMENT_ERROR",
+        missing_fields:error.missing_fields || [],
         message: error.statusCode ? error.message : "Something went wrong while recording debt payment.",
       });
     } finally {

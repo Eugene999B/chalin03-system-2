@@ -3,6 +3,7 @@ const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
+const {isRealTwoPartName,cleanPhone} = require("../services/debtorIdentityPolicy");
 const {
   getCustomerFeatureControls,
   updateCustomerFeatureControls,
@@ -22,7 +23,7 @@ function text(value, max) {
 }
 function customerName(value) {
   const name = text(value, 150);
-  return name && name.split(/\s+/).length >= 2 ? name : null;
+  return isRealTwoPartName(name) ? name : null;
 }
 function positiveInt(value) {
   const parsed = Number(value);
@@ -71,9 +72,9 @@ router.patch("/customer/:customerId/identity", requireRole("admin", "manager"), 
     }
 
     const name = customerName(req.body?.name);
-    const phone = text(req.body?.phone, 40);
+    const phone = cleanPhone(text(req.body?.phone, 40));
     const location = text(req.body?.location, 180);
-    if (!name) return res.status(400).json({ status: "error", code: "CUSTOMER_NAME_REQUIRES_TWO_NAMES", message: "Customer name must contain at least two separate names, for example Appiah Eugene." });
+    if (!name) return res.status(400).json({ status: "error", code: "CUSTOMER_NAME_REQUIRES_TWO_NAMES", message: "Enter at least two different real names containing letters, for example Appiah Eugene. Numbers alone are not names." });
 
     const connection = await pool.getConnection();
     try {
