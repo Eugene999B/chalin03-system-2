@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import ExecutiveReportingStudio from "../components/ExecutiveReportingStudio";
 import { useAuth } from "../context/AuthContext";
 
 function todayText() {
@@ -461,35 +462,9 @@ export default function AdvancedAccountingIntelligencePage() {
           }
         }
       `}</style>
-      <section style={styles.hero}>
-        <div style={styles.orbitOne} />
-        <div style={styles.orbitTwo} />
-
-        <div style={styles.heroContent}>
-          <div>
-            <p style={styles.eyebrow}>
-              Finance Observatory • {displayStoreCode}
-            </p>
-
-            <h1 style={styles.heroTitle}>Advanced Accounting Intelligence</h1>
-
-            <p style={styles.heroSubtitle}>
-              High-level audit, ledger, profit, debt, stock, SMS,
-              system-control and branch intelligence for{" "}
-              <strong>
-                {displayStoreCode} - {displayStoreName}
-              </strong>
-              . This page is designed like a management intelligence observatory.
-            </p>
-          </div>
-
-          <div style={styles.auditRadar}>
-            <span>Audit Score</span>
-            <strong>{summary.audit_score || 0}/100</strong>
-            <small>{summary.audit_status || "needs_review"}</small>
-          </div>
-        </div>
-      </section>
+      <ExecutiveReportingStudio context="accounting" storeCode={displayStoreCode}
+        storeKey={displayStoreCode} from={startDate} to={endDate}
+        allStores={branchMode === "all"} />
 
       <div style={styles.storeNotice}>
         <span style={styles.noticeIcon}>🔭</span>

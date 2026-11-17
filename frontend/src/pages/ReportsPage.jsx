@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import ExecutiveReportingStudio from "../components/ExecutiveReportingStudio";
 import { useAuth } from "../context/AuthContext";
 
 function MobilePageFix() {
@@ -469,33 +470,8 @@ export default function ReportsPage() {
   return (
     <div className="boss-mobile-fix" style={styles.page}>
       <MobilePageFix />
-      <section style={styles.hero}>
-        <div style={styles.heroPattern} />
-
-        <div style={styles.heroContent}>
-          <div>
-            <p style={styles.eyebrow}>Management Report Room • {currentStoreCode}</p>
-
-            <h1 style={styles.heroTitle}>Reports</h1>
-
-            <p style={styles.heroSubtitle}>
-              Review sales, discounts, profit, debts, stock adjustments,
-              transfers, top products and low-stock risks for{" "}
-              <strong>{currentStoreName}</strong>
-              {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
-              This page is designed as a boardroom-style management report.
-            </p>
-          </div>
-
-          <div style={styles.scoreCard}>
-            <span>📊</span>
-            <div>
-              <strong>{managementScore.value}%</strong>
-              <small>{managementScore.label}</small>
-            </div>
-          </div>
-        </div>
-      </section>
+      <ExecutiveReportingStudio context="reports" storeCode={currentStoreCode}
+        storeKey={branchId} from={from} to={to} />
 
       <div style={styles.storeNotice}>
         <span style={styles.noticeIcon}>🏬</span>

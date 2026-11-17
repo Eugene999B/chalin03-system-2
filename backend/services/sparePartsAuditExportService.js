@@ -1,6 +1,8 @@
 "use strict";
 const ExcelJS = require("./excelJsCompat");
 const PDFDocument = require("pdfkit");
+const { renderBusinessChartPng } = require("./reportPresentationCharts");
+const { buildManagementDocx } = require("./managementDocxWriter");
 
 function clean(value) {
   return String(value ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
@@ -26,7 +28,12 @@ function fileSlug(value) {
 }
 function setHeaders(res, type, name) {
   res.setHeader("Content-Type", type);
-  res.setHeader("Content-Disposition", 'attachment; filename="' + fileSlug(name) + '"');
+  const providedName = String(name || "chalin03-report");
+  const knownExt = /\.(xlsx|csv|pdf|docx|doc)$/i.exec(providedName);
+  const safeName = knownExt
+    ? fileSlug(providedName.slice(0, knownExt.index)) + "." + knownExt[1].toLowerCase()
+    : fileSlug(providedName);
+  res.setHeader("Content-Disposition", 'attachment; filename="' + safeName + '"');
   res.setHeader("Cache-Control", "private, no-store");
 }
 function escapeRows(rows, columns) {
@@ -257,6 +264,7 @@ async function sendAuditExport(res, config) {
     cursor += 1;
     band(cursor++, "04  /  WORKSHEET DIRECTORY", COLOR.navy2);
     const worksheetDirectory = [
+      ...(charts.length ? [{ name: "Presentation Charts", count: charts.length }] : []),
       ...(charts.length ? [{ name: "Visual Analysis", count: charts.length }] : []),
       { name: primarySectionName, count: rows.length },
       ...sections.map(s => ({ name: s.name, count: s.rows.length }))
@@ -470,12 +478,55 @@ async function sendAuditExport(res, config) {
       chartSheet.pageSetup.printArea="A1:L"+Math.max(4,row);
     }
 
+
+    async function addPresentationCharts() {
+      const sheet = book.addWorksheet("Presentation Charts", {
+        properties: { tabColor: { argb: COLOR.teal }, defaultRowHeight: 20 },
+        views: [{state:"frozen",ySplit:3}],
+      });
+      sheet.columns = Array.from({length:12},()=>({width:15}));
+      sheet.mergeCells("A1:L2");
+      const masthead=sheet.getCell("A1");
+      masthead.value="CHALIN03  /  EXECUTIVE VISUAL BRIEFING";
+      masthead.font={name:"Aptos Display",size:18,bold:true,color:{argb:COLOR.white}};
+      masthead.fill=fill(COLOR.navy);
+      masthead.alignment={vertical:"middle",indent:1};
+      sheet.getRow(1).height=24;sheet.getRow(2).height=30;
+      sheet.mergeCells("A3:L3");
+      sheet.getCell("A3").value=clean(branch)+"   •   "+clean(period||"Current reporting period")+"   •   Figures from original recorded evidence";
+      sheet.getCell("A3").font={size:10,color:{argb:COLOR.muted},italic:true};
+      sheet.getRow(3).height=28;
+      for(let index=0;index<Math.min(charts.length,8);index++){
+        const base=5+index*20;
+        const chart=charts[index];
+        const buffer=await renderBusinessChartPng(chart);
+        const imageId=book.addImage({buffer,extension:"png"});
+        sheet.addImage(imageId,{tl:{col:0.16,row:base},ext:{width:960,height:405}});
+        sheet.getRow(base+16).height=15;
+      }
+      sheet.headerFooter.oddFooter="&LCHALIN03 • Source-backed management charts&RPage &P of &N";
+      sheet.pageSetup={paperSize:9,orientation:"landscape",fitToPage:true,
+        fitToWidth:1,fitToHeight:0};
+      sheet.pageSetup.printArea="A1:L"+(5+Math.min(charts.length,8)*20);
+    }
+
+    if (charts.length) await addPresentationCharts();
     if (charts.length) addVisualAnalysis();
     addTable(primarySectionName, columns, rows);
     sections.forEach(section => addTable(section.name, section.columns, section.rows));
     const buffer = await book.xlsx.writeBuffer();
     setHeaders(res, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename + ".xlsx");
     return res.status(200).send(Buffer.from(buffer));
+  }
+  if(["word","docx","doc"].includes(mode) && (charts.length||dashboardCards.length)){
+    // New intelligence series uses native OOXML, not an HTML .doc alias.
+    const result=await buildManagementDocx({
+      title,description,period,branch,generated:date,generatedBy,
+      columns,rows,charts,dashboardCards,sections
+    });
+    setHeaders(res,"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      filename+".docx");
+    return res.status(200).send(Buffer.from(result));
   }
   if (mode === "doc" || mode === "word") {
     const metaRows=meta.map(([a,b])=>"<tr><th>"+html(a)+"</th><td>"+html(fmtNumber(b))+"</td></tr>").join("");
@@ -522,14 +573,88 @@ async function sendAuditExport(res, config) {
     setHeaders(res,"application/pdf",filename+".pdf");
     const doc=new PDFDocument({size:"A4",layout:"landscape",margin:36,bufferPages:true});
     doc.pipe(res);
-    doc.fillColor("#153B37").font("Helvetica-Bold").fontSize(18).text(title);
-    doc.moveDown(.3).font("Helvetica").fontSize(9).fillColor("#536b64").text(description||"");
-    doc.moveDown(.4).fontSize(8).fillColor("#153B37");
-    meta.forEach(([a,b])=>doc.text(a+": "+fmtNumber(b),{lineGap:2}));
-    doc.moveDown(.6);
+    const isPresentation=charts.length>0||dashboardCards.length>0;
+    if(isPresentation) {
+      const width=doc.page.width,height=doc.page.height;
+      doc.rect(0,0,width,height).fill("#082833");
+      doc.rect(width-242,0,242,height).fill("#114a4e");
+      doc.circle(width-70,170,170).lineWidth(.7).strokeColor("#4c9d98").stroke();
+      doc.circle(width-70,170,122).lineWidth(.7).strokeColor("#4c9d98").stroke();
+      doc.circle(width-70,170,76).lineWidth(.7).strokeColor("#4c9d98").stroke();
+      doc.rect(36,46,43,5).fill("#d3ad65");
+      doc.font("Helvetica-Bold").fontSize(18).fillColor("#ffffff")
+        .text("CHALIN03",36,63,{width:340});
+      doc.font("Helvetica").fontSize(9).fillColor("#b8d8d6")
+        .text("SPARE PARTS / MANAGEMENT INTELLIGENCE",36,96,{width:450});
+      doc.font("Helvetica-Bold").fontSize(33).fillColor("#fff")
+        .text(clean(title),36,145,{width:605,height:115,ellipsis:true});
+      doc.font("Helvetica").fontSize(10).fillColor("#c0d8d7")
+        .text(clean(description||"A review of original business evidence."),36,257,
+          {width:555,height:75,ellipsis:true,lineGap:3});
+      const cardsOnCover=(dashboardCards.length?dashboardCards:metrics.slice(0,4)
+        .map(([label,value])=>({label,value,note:"Recorded value"}))).slice(0,4);
+      const tileWidth=(width-72-24)/4;
+      cardsOnCover.forEach((card,index)=>{
+        const x=36+index*(tileWidth+8),y=390;
+        doc.rect(x,y,tileWidth,105).fill("#15505a");
+        doc.rect(x,y,3,105).fill(index===3?"#dfa95e":"#26a79b");
+        doc.font("Helvetica-Bold").fontSize(7.4).fillColor("#c2dfdd")
+          .text(clean(card.label||"Indicator").slice(0,28),x+12,y+13,
+            {width:tileWidth-21,height:20,ellipsis:true});
+        doc.font("Helvetica-Bold").fontSize(17).fillColor("#ffffff")
+          .text(fmtNumber(card.value),x+12,y+42,
+            {width:tileWidth-21,height:23,ellipsis:true});
+        doc.font("Helvetica").fontSize(7.3).fillColor("#c5dedc")
+          .text(clean(card.note||"").slice(0,70),x+12,y+76,
+            {width:tileWidth-21,height:22,ellipsis:true});
+      });
+      doc.font("Helvetica").fontSize(8).fillColor("#b6d6d3")
+        .text("STORE  "+clean(branch).slice(0,65),36,525,{width:350});
+      doc.text("PERIOD  "+clean(period||"Current snapshot").slice(0,65),400,525,
+        {width:width-436,align:"right"});
+      doc.fontSize(7).fillColor("#94b9b6")
+        .text("FOR INTERNAL DECISION SUPPORT  |  GENERATED "+date,36,549,{width:width-72});
+      // A dedicated editorial explanation page precedes all evidence tables.
+      doc.addPage();
+      doc.rect(0,0,width,12).fill("#0c7d74");
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#0a7d75")
+        .text("01 / MANAGEMENT INTERPRETATION",36,35,{width:width-72});
+      doc.font("Helvetica-Bold").fontSize(24).fillColor("#163a49")
+        .text("What the numbers are saying",36,60,{width:width-72});
+      doc.font("Helvetica").fontSize(9).fillColor("#627985")
+        .text("Read the source meaning before presenting a figure as profit, cash or a debt movement.",
+          36,101,{width:width-90});
+      const stories=rows.slice(0,6);
+      stories.forEach((row,index)=>{
+        const x=index%2===0?36:430,y=140+Math.floor(index/2)*131;
+        doc.rect(x,y,376,119).fill(index%2?"#edf5f3":"#f3f7f8");
+        doc.rect(x,y,3,119).fill(index%2?"#c8a35c":"#12877c");
+        doc.font("Helvetica-Bold").fontSize(8).fillColor("#177c75")
+          .text(String(index+1).padStart(2,"0")+" / "+
+            clean(row.topic||row.heading||row[columns?.[0]?.key]||"Analysis").slice(0,75),
+            x+13,y+12,{width:349,height:28,ellipsis:true});
+        doc.font("Helvetica").fontSize(8.8).fillColor("#304d59")
+          .text(clean(row.explanation||row.text||row[columns?.[1]?.key]||""),
+            x+13,y+43,{width:349,height:65,ellipsis:true,lineGap:2});
+      });
+      doc.font("Helvetica").fontSize(8).fillColor("#6c7d80")
+        .text("Period activity and current balance snapshots are separate. See basis notes and original records.",
+          36,552,{width:width-72});
+      doc.addPage();
+    } else {
+      doc.fillColor("#153B37").font("Helvetica-Bold").fontSize(18).text(title);
+      doc.moveDown(.3).font("Helvetica").fontSize(9).fillColor("#536b64").text(description||"");
+      doc.moveDown(.4).fontSize(8).fillColor("#153B37");
+      meta.forEach(([a,b])=>doc.text(a+": "+fmtNumber(b),{lineGap:2}));
+      doc.moveDown(.6);
+    }
     const usable=doc.page.width-72;
     function drawPdfCharts() {
-      for(const chart of charts.slice(0,8)) {
+      for(const [chartIndex,chart] of charts.slice(0,8).entries()) {
+        if(chartIndex>0) doc.addPage();
+        doc.font("Helvetica-Bold").fontSize(9).fillColor("#087F75")
+          .text("02 / BUSINESS VISUALISATIONS / "+String(chartIndex+1).padStart(2,"0"),
+            36,33,{width:usable});
         const points=Array.isArray(chart.points)?chart.points.slice(0,24):[];
         const isLine=chart.kind==="line";
         const count=points.length;
@@ -585,6 +710,44 @@ async function sendAuditExport(res, config) {
           });
         }
         doc.y=y+height+18;
+      }
+      // A financial flow drawing explains why payments and invoices differ.
+      const movements=charts.find(c=>c.title==="Recorded receipts and refunds")?.points||[];
+      if(movements.length>=3){
+        const m=movements.map(p=>Math.max(0,Number(p.value)||0));
+        const net=m[0]+m[1]-m[2];
+        doc.addPage();
+        const pw=doc.page.width,margin=36;
+        doc.rect(0,0,pw,11).fill("#07867C");
+        doc.font("Helvetica-Bold").fontSize(10).fillColor("#0A7C73")
+          .text("03 / ACCOUNTING EXPLANATION",margin,36,{width:pw-margin*2});
+        doc.font("Helvetica-Bold").fontSize(24).fillColor("#143A47")
+          .text("How recorded customer money moves",margin,61,{width:pw-margin*2});
+        doc.font("Helvetica").fontSize(10).fillColor("#607B82")
+          .text("These entries are not proof of bank or mobile-money settlement.",
+            margin,106,{width:pw-margin*2});
+        const positions=[36,235,434,633];
+        const values=[m[0],m[1],m[2],net];
+        const labels=["AT-SALE RECEIPTS","+ LATER REPAYMENTS","- FINANCIAL REFUNDS","= RECORDED NET"];
+        values.forEach((value,i)=>{
+          const x=positions[i];
+          doc.rect(x,170,172,130).fill(i===3?"#0A5D58":"#E9F2F1");
+          doc.rect(x,170,172,5).fill(i===2?"#D6A34D":"#0C8579");
+          doc.font("Helvetica-Bold").fontSize(8.5).fillColor(i===3?"#D8F0EA":"#19756E")
+            .text(labels[i],x+12,190,{width:148});
+          doc.font("Helvetica-Bold").fontSize(19).fillColor(i===3?"#FFFFFF":"#153C49")
+            .text("GHS "+fmtNumber(value),x+12,231,{width:148,height:40,ellipsis:true});
+          if(i<3)doc.font("Helvetica-Bold").fontSize(17).fillColor("#8F9E9A")
+            .text(">",x+173,225,{width:26,align:"center"});
+        });
+        doc.rect(margin,354,pw-margin*2,106).fill("#F5F6EF");
+        doc.font("Helvetica-Bold").fontSize(11).fillColor("#143B46")
+          .text("WHY THIS MATTERS",margin+16,372,{width:pw-margin*2-32});
+        doc.font("Helvetica").fontSize(10).fillColor("#506870")
+          .text("This bridge reconciles customer money recorded at sale, repayments received later, "+
+            "and financial refunds. It does not subtract expenses or supplier outflows, "+
+            "and it cannot replace bank, MoMo or closing reconciliation.",
+            margin+16,398,{width:pw-margin*2-32,height:50,ellipsis:true});
       }
       if(charts.length)doc.addPage();
     }
