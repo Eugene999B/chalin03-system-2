@@ -1,7 +1,6 @@
 "use strict";
 
 const { pool } = require("../config/db");
-const { buildAccountingIntelligence } = require("./accountingIntelligenceService");
 const { buildSales, money, datePart } = require("./sparePartsFinancialAuditMath");
 
 class IntelligenceReportError extends Error {
@@ -86,7 +85,7 @@ async function loadEvidence(branchId,p){
         "WHERE dp.branch_id=? AND dp.paid_at>=? AND dp.paid_at<DATE_ADD(?,INTERVAL 1 DAY) LIMIT 12001"
       ].join(" "),[branchId,p.from,p.to],"debt payment"),
       read(conn,[
-        "SELECT r.id,r.returned_at,r.return_type,r.refund_amount,r.refund_method,r.quantity,",
+        "SELECT r.id,r.returned_at,r.return_type,r.refund_amount,r.refund_method,r.quantity,r.approved_by,r.refund_reference,",
         "r.sale_id,r.product_id FROM returns r",
         "WHERE r.branch_id=? AND r.returned_at>=? AND r.returned_at<DATE_ADD(?,INTERVAL 1 DAY)",
         "ORDER BY r.id LIMIT 12001"
@@ -127,7 +126,7 @@ function buildVisualModel(evidence,p,generatedAt){
     &&String(r.sale_status).toLowerCase()==="completed"&&!Number(r.is_voided)
     &&(r.cost_price_at_sale==null||num(r.cost_price_at_sale)<=0));
   const costCoverage=pct(lines.length-missingCost.length,lines.length);
-  const margin=costCoverage===100?sum(lines,"profit"):null;
+  const margin=costCoverage===100&&sales.exceptions.length===0?sum(lines,"profit"):null;
   const invoiceTotal=sum(active,"total"),tax=sum(active,"tax");
   const pretax=sum(active,"pretax_sales"),historicalCost=sum(lines,"cost");
   const validRefunds=evidence.refunds.filter(r=>String(r.return_type||"").toLowerCase()==="refund");
@@ -185,10 +184,13 @@ function buildVisualModel(evidence,p,generatedAt){
     result.net_sales=money(result.net_sales+num(line.net));
     result.cost=money(result.cost+num(line.cost));
     result.provisional_margin=money(result.provisional_margin+num(line.profit));
+    if(num(line.unit_cost)<=0)result.has_cost_gap=true;
     result.lines++;
     productMap.set(key,result);
   }
-  const products=[...productMap.values()].sort((a,b)=>b.net_sales-a.net_sales);
+  const products=[...productMap.values()].map(x=>({
+    ...x,provisional_margin:x.has_cost_gap?"Withheld — missing cost":x.provisional_margin
+  })).sort((a,b)=>b.net_sales-a.net_sales);
   const expenses=group(activeExpenses,"category","amount");
   const tender=group(evidence.allocations.map(r=>({...r,channel:r.payment_channel}))
     .concat(evidence.debtPaid.map(r=>({...r,channel:r.payment_method}))),"channel","amount");
@@ -199,6 +201,24 @@ function buildVisualModel(evidence,p,generatedAt){
   const inventoryCost=money(evidence.products.reduce((sum,x)=>sum+num(x.quantity)*num(x.cost_price),0));
   const previousTotal=money(evidence.previous.value);
   const change=previousTotal>0?money(100*(invoiceTotal-previousTotal)/previousTotal):null;
+  const returnIssues=[];
+  for(const r of evidence.refunds){
+    const isRefund=String(r.return_type||"").toLowerCase()==="refund";
+    const amount=num(r.refund_amount);
+    const kind=String(r.refund_method||"").toLowerCase();
+    const reasons=[];
+    if(isRefund&&amount<=0)reasons.push("Financial refund has no positive amount");
+    if(!isRefund&&amount!==0)reasons.push("Stock-only return records money out");
+    if(isRefund&&!r.approved_by)reasons.push("Financial refund has no recorded approving user");
+    if(isRefund&&!["cash","momo","bank","other"].includes(kind))
+      reasons.push("Refund method is missing or unrecognised");
+    if(isRefund&&!String(r.refund_reference||"").trim())
+      reasons.push("Refund reference is missing");
+    for(const reason of reasons){
+      returnIssues.push({return_id:r.id,date:datePart(r.returned_at),
+        issue:reason,refund_amount:money(amount)});
+    }
+  }
   const findings=[];
   function finding(level,area,observation,action,evidenceRef){
     findings.push({priority:level,area,observation,action,evidence:evidenceRef});
@@ -214,6 +234,9 @@ function buildVisualModel(evidence,p,generatedAt){
     sales.exceptions.length+" original sales receipt mathematics require review.",
     "Compare receipt headers against historical item lines and assigned discounts/tax.",
     "Sales and sale_items");
+  finding(returnIssues.length?"HIGH":"INFO","Return controls",
+    returnIssues.length+" return records require approval/method/reference investigation.",
+    "Review refund approvals, original receipt and monetary-out evidence.", "returns");
   finding(negatives.length?"HIGH":"INFO","Stock",
     negatives.length+" current products have negative stock.",
     "Verify physical counts and stock-movement sources before approval.","products.quantity");
@@ -239,7 +262,7 @@ function buildVisualModel(evidence,p,generatedAt){
       ", of which "+gh(overdueTotal)+" has passed its recorded due date. "+
       "Open debt is a snapshot at download time, not new credit sales of this report period."},
     {topic:"Gross margin reliability",explanation:margin==null
-      ? "Historical cost is incomplete, so the report deliberately withholds a gross-profit figure. "+
+      ? "Historical cost or receipt reconciliation is incomplete, so the report withholds a gross-profit figure. "+
         "Recorded cost coverage is "+(costCoverage===null?"not measurable":costCoverage+"%")+"."
       : "Historical gross margin on sold items before returns/expenses is "+gh(margin)+
         ". This is not net profit or an accountant-certified statement."},
@@ -291,6 +314,7 @@ function buildVisualModel(evidence,p,generatedAt){
     ["Low-stock products now",lowStock.length],
     ["Negative-stock products now",negatives.length],
     ["Receipt math exceptions",sales.exceptions.length],
+    ["Return control exceptions",returnIssues.length],
   ];
   const cards=[
     {label:"SALES INCL TAX",value:invoiceTotal,note:"GHS · sale-date",isMoney:true},
@@ -300,7 +324,7 @@ function buildVisualModel(evidence,p,generatedAt){
     {label:"OPEN CUSTOMER DEBT",value:openDebtTotal,note:"GHS · current snapshot",isMoney:true},
     {label:"OVERDUE",value:overdueTotal,note:"GHS · due-date based",isMoney:true},
     {label:"LOW STOCK",value:lowStock.length,note:"Current inventory",isMoney:false},
-    {label:"AUDIT EXCEPTIONS",value:sales.exceptions.length,note:"Receipt math flags",isMoney:false},
+    {label:"AUDIT EXCEPTIONS",value:sales.exceptions.length+returnIssues.length,note:"Receipt and return flags",isMoney:false},
   ];
   const sourceNotes=[
     {basis:"Sales",detail:"Historical receipts dated by sale creation. Tax and discounts allocated across historical lines in pesewas."},
@@ -332,6 +356,8 @@ function buildVisualModel(evidence,p,generatedAt){
     {name:"Restock Watchlist",columns:cols(["id","Product ID"],["name","Product"],
       ["quantity","On hand"],["low_stock_threshold","Reorder threshold"],
       ["cost_price","Catalogue cost"]),rows:lowStock.slice(0,200)},
+    {name:"Return Exceptions",columns:cols(["return_id","Return ID"],["date","Return date"],
+      ["issue","Investigation item"],["refund_amount","Refund amount"]),rows:returnIssues.slice(0,200)},
     {name:"Receipt Exceptions",columns:cols(["type","Record type"],["date","Date"],
       ["receipt","Receipt"],["source_id","Source ID"],["issue","Issue"],
       ["amount","Variance"]),rows:sales.exceptions.slice(0,200)},
@@ -340,7 +366,7 @@ function buildVisualModel(evidence,p,generatedAt){
   return {metrics,cards,charts,sections,narrative,
     summary:{invoiceTotal,pretax,collectedAtSale,debtCollected,refundTotal,collectedNet,
       openDebtTotal,overdueTotal,expenseTotal,inventoryCost,margin,missingHistoricalCosts:missingCost.length,
-      lowStock:lowStock.length,negativeStock:negatives.length},
+      lowStock:lowStock.length,negativeStock:negatives.length,returnIssues:returnIssues.length},
     originalEvents:{sales:active.length,lines:lines.length,
       returns:evidence.refunds.length,debtPayments:evidence.debtPaid.length,
       expenses:activeExpenses.length,openDebts:evidence.openDebts.length},
