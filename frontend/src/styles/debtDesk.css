@@ -28,3 +28,29 @@
 .debt-desk__identity-update label {display:grid;gap:5px;color:#45361d;font-size:13px;font-weight:800;}
 .debt-desk__identity-update input {width:100%;min-height:46px;border-radius:8px;border:1px solid #d5bc85;background:white;padding:10px;font-size:15px;}
 .debt-desk__identity-update>small{color:#a33b2e;font-size:11px;}
+
+
+.debt-desk__missing-identity-callout {
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  margin:16px 0;background:#fffaec;border:1px solid #eac77a;
+  border-left:4px solid #c48e32;padding:16px;border-radius:11px;
+  color:#654b25;
+}
+.debt-desk__missing-identity-callout strong{font-size:15px;font-weight:850;}
+.debt-desk__missing-identity-callout p{margin:6px 0 0;font-size:12px;line-height:1.5;}
+.debt-desk__missing-identity-callout button {
+  border:0;background:#815c20;color:#fff;border-radius:7px;
+  min-height:44px;white-space:nowrap;padding:10px 14px;font-size:12px;font-weight:800;
+  cursor:pointer;
+}
+.debt-desk__needs-id-label{color:#ae6427;font-size:11px;font-weight:850;}
+.debt-desk__legacy-note button{display:inline-block;margin:8px 0 0 11px;padding:8px 12px;min-height:40px;font-size:12px;font-weight:800;border:1px solid #b89152;background:#fff5da;border-radius:7px;color:#664c24;cursor:pointer;}
+.debt-desk__identity-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap;}
+.debt-desk__identity-actions button{min-height:44px;border:1px solid #d6be88;background:#fff;border-radius:8px;padding:9px 14px;color:#5b482b;font-weight:800;cursor:pointer;}
+.debt-desk__identity-actions button[type="submit"]{background:#0b736d;border-color:#0b736d;color:#fff;}
+.debt-desk__identity-actions button:disabled{opacity:.55;cursor:not-allowed;}
+@media(max-width:650px){
+ .debt-desk__missing-identity-callout{align-items:stretch;flex-direction:column;}
+ .debt-desk__missing-identity-callout button{width:100%;}
+ .debt-desk__identity-actions{display:grid;grid-template-columns:1fr 1fr;}
+}
