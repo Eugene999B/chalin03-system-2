@@ -13,6 +13,7 @@ const {
   isOriginalSystemAdministrator,
   loadActivePermissionOverrides,
   normalizeWorkspace,
+  roleDefaultPermissions,
   resolveEffectivePermissions,
   validateOverridePolicy,
 } = require("../services/permissionOverrideService");
@@ -162,7 +163,7 @@ async function permissionState(user, workspaceCode) {
   const workspace = normalizeWorkspace(workspaceCode);
   const session = await targetSession(user, workspace);
   const allowedPermissions = new Set(permissionsForWorkspace(workspace));
-  const roleDefaults = getEffectivePermissions(session).filter((permission) =>
+  const roleDefaults = roleDefaultPermissions(session).filter((permission) =>
     allowedPermissions.has(permission)
   );
   const overrides = await loadActivePermissionOverrides({

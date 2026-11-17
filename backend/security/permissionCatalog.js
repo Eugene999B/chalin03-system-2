@@ -1,4 +1,5 @@
 const { isOriginalSystemAdministrator } = require("./systemAdminIdentity");
+const { SPARE_PARTS_PAGE_CODES } = require("./sparePartsPageCatalog");
 
 const WORKSPACES = Object.freeze({
   SPARE_PARTS: "spare_parts",
@@ -145,6 +146,7 @@ const ALL_PERMISSIONS = Object.freeze([
   "operations.documents.manage",
   "sms.manage",
   "exports.download",
+  ...SPARE_PARTS_PAGE_CODES,
 ]);
 
 const CATEGORY_SHARED_PERMISSIONS = Object.freeze([
@@ -186,6 +188,7 @@ const SPARE_PARTS_CATEGORY_PERMISSIONS = Object.freeze([
   "installments.remind",
   "installments.export",
   "installments.settings",
+  ...SPARE_PARTS_PAGE_CODES,
   "sms.manage",
 ]);
 
