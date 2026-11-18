@@ -40,6 +40,7 @@ function kindLabel(value) {
     return_refund: "Customer Refund",
     sale_edit: "Completed Sale Edit",
     sale_void: "Void Completed Sale",
+    product_price_change: "Product Price Change",
   };
   return labels[value] || value || "Protected Action";
 }
@@ -50,7 +51,7 @@ function executionLabel(request) {
   if (request.execution_status === "failed") return "Execution Failed";
   if (request.execution_status === "rejected") return "Rejected";
   if (request.status === "rejected") return "Rejected";
-  return "Waiting for Admin";
+  return request.approval_kind === "product_price_change" ? "Waiting for Price Approval" : "Waiting for Admin";
 }
 
 function statusClass(request) {
@@ -120,11 +121,13 @@ export default function OperationalApprovalLauncher() {
   ).toLowerCase();
   const visible = Boolean(
     identity.token &&
-      ["admin", "manager"].includes(role) &&
+      ["admin", "manager", "auditor", "cashier", "staff"].includes(role) &&
       workspaceCode === "spare_parts" &&
       !identity.path.startsWith("/login")
   );
   const isAdmin = role === "admin";
+  const canSubmitSaleCorrections = role === "admin" || role === "manager";
+  const canReviewRequest = request => isAdmin || (role === "auditor" && request.approval_kind === "product_price_change");
 
   const pendingCount = useMemo(
     () =>
@@ -224,7 +227,7 @@ export default function OperationalApprovalLauncher() {
     setMessage("");
     setError("");
     loadRequests();
-    if (nextTab === "new") loadSales();
+    if (nextTab === "new" && canSubmitSaleCorrections) loadSales();
   }
 
   function closeCentre() {
@@ -457,7 +460,7 @@ export default function OperationalApprovalLauncher() {
   async function submitReview(event) {
     event.preventDefault();
     if (!reviewTarget || !reviewPassword) {
-      setError("Enter your own administrator password.");
+      setError("Enter your own account password.");
       return;
     }
     if (!reviewNote.trim()) {
@@ -647,7 +650,7 @@ export default function OperationalApprovalLauncher() {
         type="button"
         className="approval-launcher-button"
         onClick={() => showCentre("requests")}
-        title="Open protected admin approvals"
+        title="Open protected pricing and financial approvals"
       >
         <span>🔐 Approval Centre</span>
         {pendingCount > 0 ? (
@@ -667,8 +670,8 @@ export default function OperationalApprovalLauncher() {
                 </small>
                 <h2>Admin Approval Centre</h2>
                 <p>
-                  Managers submit sensitive actions. Any authorized administrator
-                  can review and execute them from their own account.
+                  Staff submit protected price changes. The Boss, System Administrator or Auditor
+                  independently approves product pricing. Other financial requests still require an Administrator.
                 </p>
               </div>
               <button type="button" className="approval-close" onClick={closeCentre}>
@@ -687,7 +690,7 @@ export default function OperationalApprovalLauncher() {
               >
                 Requests {pendingCount ? `(${pendingCount})` : ""}
               </button>
-              <button
+              {canSubmitSaleCorrections && <button
                 type="button"
                 className={tab === "new" ? "active" : ""}
                 onClick={() => {
@@ -696,7 +699,7 @@ export default function OperationalApprovalLauncher() {
                 }}
               >
                 New Sale Edit / Void Request
-              </button>
+              </button>}
             </nav>
 
             <div className="approval-body">
@@ -739,12 +742,19 @@ export default function OperationalApprovalLauncher() {
                           </div>
 
                           <p><strong>Requested by:</strong> {request.requested_by_name || request.requested_by_username || "-"}</p>
-                          <p><strong>Amount / value:</strong> {formatMoney(request.approval_amount)}</p>
+                          {request.approval_kind === "product_price_change" && request.approval_payload ? (
+                            <div className="approval-alert" style={{background:"#fff7ed",color:"#7c2d12",border:"1px solid #fdba74",marginTop:10}}>
+                              <strong>Price comparison</strong>
+                              <p>Cost: {formatMoney(request.approval_payload.before?.cost_price)} → {formatMoney(request.approval_payload.after?.cost_price)}</p>
+                              <p>Selling: {formatMoney(request.approval_payload.before?.selling_price)} → {formatMoney(request.approval_payload.after?.selling_price)}</p>
+                              <small>Only this store's live master price will change upon approval. Old receipts are not rewritten.</small>
+                            </div>
+                          ) : <p><strong>Amount / value:</strong> {formatMoney(request.approval_amount)}</p>}
                           <p><strong>Details:</strong> {request.reason || request.requested_action}</p>
                           {request.review_notes ? <p><strong>Admin note:</strong> {request.review_notes}</p> : null}
                           {request.execution_error ? <p style={{ color: "#991b1b" }}><strong>Execution error:</strong> {request.execution_error}</p> : null}
 
-                          {isAdmin && ["pending", "failed"].includes(request.execution_status) ? (
+                          {canReviewRequest(request) && ["pending", "failed"].includes(request.execution_status) ? (
                             <div className="approval-actions">
                               <button type="button" className="approval-primary" onClick={() => openReview(request, "approve")}>
                                 {request.execution_status === "failed" ? "Review and Retry" : "Approve and Execute"}
@@ -862,7 +872,7 @@ export default function OperationalApprovalLauncher() {
               <textarea style={{ width: "100%", marginTop: 5, padding: 10, borderRadius: 11, border: "1px solid #cbd5e1" }} rows="4" value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} required />
             </label>
             <label style={{ display: "block", fontWeight: 850, marginTop: 12 }}>
-              Your administrator password
+              Your account password
               <input style={{ width: "100%", marginTop: 5, padding: 10, borderRadius: 11, border: "1px solid #cbd5e1" }} type="password" value={reviewPassword} onChange={(event) => setReviewPassword(event.target.value)} autoComplete="current-password" required />
             </label>
             <p style={{ color: "#64748b", fontSize: 12 }}>
