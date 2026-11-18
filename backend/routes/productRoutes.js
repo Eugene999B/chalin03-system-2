@@ -3,6 +3,7 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const {canChangeMasterPriceDirectly,priceSnapshot,changedPriceFields,proposedPriceSnapshot,changeSummary} = require("../services/productPriceApprovalPolicy");
 const {
   buildOwnerAlertContext,
   formatMoney,
@@ -1282,7 +1283,7 @@ router.post(
 router.put(
   "/:id",
   requireAuth,
-  requireRole("admin", "manager"),
+  requireRole("admin", "manager", "auditor"),
   async (req, res) => {
     try {
       const branchId = requireSelectedBranch(req, res);
@@ -1318,6 +1319,20 @@ router.put(
       }
 
       const existingProduct = existingProducts[0];
+      const priorPrice = priceSnapshot(existingProduct);
+      const nextPrice = proposedPriceSnapshot(existingProduct, {
+        cost_price: req.body?.cost_price, selling_price: req.body?.selling_price
+      });
+      const priceFields = changedPriceFields(priorPrice, nextPrice);
+      const directPricing = canChangeMasterPriceDirectly(req.user);
+      if (priceFields.length && directPricing &&
+          String(req.body?.price_change_reason || "").trim().length < 12) {
+        return res.status(400).json({
+          status: "error", code: "PRICE_CHANGE_REASON_REQUIRED",
+          message: "Enter a clear reason of at least 12 characters for this product price change."
+        });
+      }
+
 
       if (!name || !name.trim()) {
         return res.status(400).json({
@@ -1365,8 +1380,8 @@ router.put(
           name = ?,
           size = ?,
           category = ?,
-          cost_price = ?,
-          selling_price = ?,
+          cost_price = CASE WHEN ? THEN ? ELSE cost_price END,
+          selling_price = CASE WHEN ? THEN ? ELSE selling_price END,
           low_stock_threshold = ?,
           barcode = ?,
           image_url = ?,
@@ -1377,7 +1392,9 @@ router.put(
           cleanName,
           nullIfEmpty(size),
           nullIfEmpty(category),
+          directPricing,
           costPrice,
+          directPricing,
           sellingPrice,
           lowStockThreshold,
           nullIfEmpty(barcode),
@@ -1388,6 +1405,19 @@ router.put(
         ]
       );
 
+      if (directPricing && priceFields.length) {
+        await writeAuditEvent({
+          req, branchId, userId: req.user.id,
+          action: "DIRECT_PRODUCT_MASTER_PRICE_CHANGE",
+          details: String(existingProduct.name || cleanName) + ": " +
+            changeSummary(priorPrice, nextPrice) +
+            "; reason: " + String(req.body.price_change_reason).trim().slice(0,1000),
+          workspaceCode: "spare_parts", entityType: "product", entityId: String(id),
+          actionType: "product_price_direct", outcome: "success", severity: "high",
+          metadata: {before: priorPrice, after: nextPrice,
+            reason: String(req.body.price_change_reason).trim().slice(0,1000)}
+        });
+      }
       await logActivity(
         branchId,
         req.user.id,
@@ -1517,6 +1547,15 @@ router.post(
         shouldUpdateCost && receivedUnitCost !== null
           ? Number(receivedUnitCost)
           : oldCostPrice;
+      if (shouldUpdateCost && receivedUnitCost !== null &&
+          !canChangeMasterPriceDirectly(req.user) &&
+          Number(newCostPrice.toFixed(2)) !== Number(oldCostPrice.toFixed(2))) {
+        await connection.rollback();
+        return res.status(409).json({
+          status: "error", code: "RESTOCK_MASTER_COST_NEEDS_APPROVAL",
+          message: "Restock the items without updating master cost, then submit a separate price-change request for approval."
+        });
+      }
 
       await connection.query(
         `UPDATE products
