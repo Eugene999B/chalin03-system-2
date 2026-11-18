@@ -127,7 +127,9 @@ export default function OperationalApprovalLauncher() {
   );
   const isAdmin = role === "admin";
   const canSubmitSaleCorrections = role === "admin" || role === "manager";
-  const canReviewRequest = request => isAdmin || (role === "auditor" && request.approval_kind === "product_price_change");
+  const canReviewRequest = request => request.approval_kind === "product_price_change"
+    ? (canApplyDiscount || role === "auditor")
+    : isAdmin;
 
   const pendingCount = useMemo(
     () =>
