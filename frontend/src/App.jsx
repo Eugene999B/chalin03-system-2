@@ -232,7 +232,7 @@ export default function App() {
 
             <Route
               path="products"
-              element={rolePage(businessWorkRoles, <ProductsPage />)}
+              element={rolePage([...businessWorkRoles, "staff"], <ProductsPage />)}
             />
             <Route
               path="new-sale"
