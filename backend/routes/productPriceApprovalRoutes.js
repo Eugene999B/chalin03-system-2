@@ -3,6 +3,7 @@
 const express = require("express");
 const {pool} = require("../config/db");
 const {writeAuditEvent} = require("../services/auditTrailService");
+const {operationalApprovalExecutionMiddleware} = require("../middleware/operationalApprovalExecutionMiddleware");
 const {createOperationalRequest,hashPayload} = require("../services/operationalApprovalService");
 const {
   canChangeMasterPriceDirectly,priceSnapshot,proposedPriceSnapshot,
@@ -212,7 +213,7 @@ async function applyApprovedPrice(req,res){
 }
 
 router.post("/:id/price-change-request",sendRequest);
-router.post("/:id/approved-price",applyApprovedPrice);
+router.post("/:id/approved-price",operationalApprovalExecutionMiddleware,applyApprovedPrice);
 router.put("/:id",interceptUnapprovedPut);
 
 module.exports={router,queuePriceRequest,interceptUnapprovedPut,applyApprovedPrice};
