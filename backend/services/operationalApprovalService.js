@@ -772,6 +772,14 @@ async function finishOperationalExecution({ requestId, success, result, errorMes
     // that changes stock and money. If so, never downgrade that durable success
     // merely because the internal HTTP response was interrupted afterward.
     if (request.execution_status === "executed") {
+      if (request.approval_kind === "product_price_change") {
+        await connection.query(
+          "UPDATE notifications SET status='resolved',resolved_at=COALESCE(resolved_at,NOW()),"+
+          "resolved_by=COALESCE(resolved_by,?),resolution_note='Approved price applied.' "+
+          "WHERE notification_key=?",
+          [request.reviewed_by||null,"approval."+request.id+".product_price_change.auditor"]
+        ).catch(()=>{});
+      }
       if (request.notification_id) {
         await connection.query(
           `UPDATE notifications
