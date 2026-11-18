@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { writeAuditEvent } = require("./auditTrailService");
+const {canChangeMasterPriceDirectly} = require("./productPriceApprovalPolicy");
 
 const OPERATIONAL_KINDS = new Set([
   "return_refund",
@@ -430,6 +431,14 @@ async function verifyAdminReviewer(connection, req, password, branchId, approval
       (approvalKind === "product_price_change" && reviewer.role === "auditor"))) {
     const error = new Error("This reviewer account is inactive or lacks authority to approve this change.");
     error.statusCode = 403;
+    throw error;
+  }
+
+  if (approvalKind === "product_price_change" &&
+      !(await canChangeMasterPriceDirectly(reviewer, connection))) {
+    const error = new Error("Only the verified Boss, original System Administrator or Auditor may approve product prices.");
+    error.statusCode = 403;
+    error.code = "PRICE_REVIEWER_NOT_AUTHORIZED";
     throw error;
   }
 
