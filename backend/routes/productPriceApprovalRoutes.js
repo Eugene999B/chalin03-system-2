@@ -95,7 +95,7 @@ async function sendRequest(req,res){
 // The regular product handler still updates metadata when prices are unchanged.
 async function interceptUnapprovedPut(req,res,next){
   if(await canChangeMasterPriceDirectly(req.user))return next();
-  if(String(req.user?.role||"").toLowerCase()!=="manager")return next();
+  if(!["admin","manager","auditor"].includes(String(req.user?.role||"").toLowerCase()))return next();
   const branchId=branchIdOf(req),productId=idValue(req.params.id);
   if(!branchId||!productId)return errorResponse(res,400,"STORE_OR_PRODUCT_REQUIRED","Select a valid product and store.");
   const connection=await pool.getConnection();
