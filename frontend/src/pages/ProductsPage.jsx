@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import ProductPriceRequestModal from "../components/ProductPriceRequestModal";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 import { useAuth } from "../context/AuthContext";
 
 function MobilePageFix() {
@@ -251,7 +252,8 @@ export default function ProductsPage() {
 
   const canAddOrEdit = role === "admin" || role === "manager" || role === "auditor";
   const canDelete = role === "admin";
-  const canChangePriceDirectly = role === "admin" || role === "auditor";
+  const canUseVerifiedBossControls = useSaleDiscountPermission(user?.id, branchId);
+  const canChangePriceDirectly = role === "auditor" || canUseVerifiedBossControls;
 
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState(emptyForm);
