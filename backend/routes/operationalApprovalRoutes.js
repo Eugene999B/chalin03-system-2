@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const {canChangeMasterPriceDirectly} = require("../services/productPriceApprovalPolicy");
 const { calculateReturnLimit } = require("../services/sparePartsReturnLimitService");
 const { canApplySaleDiscount, discountApprovalRequired } =
   require("../services/saleDiscountAuthorizationService");
@@ -49,7 +50,20 @@ function requireEmployee(req,res,next) {
 
 async function requireAuthorizedReviewer(req,res,next) {
   const role=getRole(req);
-  if(role==="admin") return next();
+  if(role==="admin") {
+    const requestId=positiveInteger(req.params.id);
+    if(!requestId)return res.status(400).json({status:"error",message:"Select a valid request."});
+    try{
+      const [rows]=await pool.query("SELECT approval_kind FROM audit_unlock_requests WHERE id=? LIMIT 1",[requestId]);
+      if(!rows.length)return res.status(404).json({status:"error",message:"Approval request not found."});
+      if(rows[0].approval_kind==="product_price_change" &&
+         !(await canChangeMasterPriceDirectly(req.user,pool))){
+        return res.status(403).json({status:"error",code:"PRICE_REVIEWER_NOT_AUTHORIZED",
+          message:"Only the verified Boss, System Administrator or Auditor may approve product prices."});
+      }
+      return next();
+    }catch(error){return sendError(res,error,"Could not verify the price reviewer.");}
+  }
   if(role!=="auditor") return res.status(403).json({
     status:"error",code:"PRICE_REVIEWER_ONLY",
     message:"Only a boss/administrator or auditor can approve product price changes."
