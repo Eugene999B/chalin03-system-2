@@ -8,6 +8,7 @@ const OPERATIONAL_KINDS = new Set([
   "return_refund",
   "sale_edit",
   "sale_void",
+  "product_price_change",
 ]);
 const DEFAULT_EXPIRY_HOURS = 72;
 
@@ -88,6 +89,9 @@ function actionRoute(request) {
   }
   if (request.approval_kind === "sale_void" && entityId) {
     return { method: "PATCH", path: `/api/sales/${entityId}/void` };
+  }
+  if (request.approval_kind === "product_price_change" && entityId) {
+    return { method: "POST", path: `/api/products/${entityId}/approved-price` };
   }
   return null;
 }
@@ -398,10 +402,13 @@ async function userCanAccessBranch(connection, user, branchId) {
   return rows.length > 0;
 }
 
-async function verifyAdminReviewer(connection, req, password, branchId) {
+async function verifyAdminReviewer(connection, req, password, branchId, approvalKind = "") {
   const reviewerId = getUserId(req);
-  if (!reviewerId || getRole(req) !== "admin") {
-    const error = new Error("Only an active administrator can approve this request.");
+  const activeRole = getRole(req);
+  const allowedRole = activeRole === "admin" ||
+    (approvalKind === "product_price_change" && activeRole === "auditor");
+  if (!reviewerId || !allowedRole) {
+    const error = new Error("Only an Administrator or (for price changes) an Auditor can review this request.");
     error.statusCode = 403;
     error.code = "ADMIN_APPROVAL_REQUIRED";
     throw error;
@@ -418,8 +425,10 @@ async function verifyAdminReviewer(connection, req, password, branchId) {
   );
   const reviewer = rows[0];
 
-  if (!reviewer || Number(reviewer.is_active) !== 1 || reviewer.role !== "admin") {
-    const error = new Error("The administrator account is inactive or unavailable.");
+  if (!reviewer || Number(reviewer.is_active) !== 1 ||
+    !(["admin"].includes(reviewer.role) ||
+      (approvalKind === "product_price_change" && reviewer.role === "auditor"))) {
+    const error = new Error("This reviewer account is inactive or lacks authority to approve this change.");
     error.statusCode = 403;
     throw error;
   }
@@ -475,7 +484,11 @@ async function listOperationalRequests(req, { status = "", search = "" } = {}) {
     where += " AND aur.branch_id = ?";
     params.push(branchId);
   }
-  if (role !== "admin") {
+  if (role === "auditor") {
+    // Auditors review master-price changes only, not unrelated refunds, voids or edits.
+    where += " AND (aur.approval_kind = 'product_price_change' OR aur.requested_by = ?)";
+    params.push(userId);
+  } else if (role !== "admin") {
     where += " AND aur.requested_by = ?";
     params.push(userId);
   }
@@ -576,7 +589,8 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
       connection,
       req,
       password,
-      request.branch_id
+      request.branch_id,
+      request.approval_kind
     );
 
     const executionToken = crypto.randomBytes(32).toString("hex");
@@ -658,7 +672,8 @@ async function rejectOperationalRequest({ req, requestId, password, reviewNote }
       connection,
       req,
       password,
-      request.branch_id
+      request.branch_id,
+      request.approval_kind
     );
 
     await connection.query(
