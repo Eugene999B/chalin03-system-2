@@ -1285,6 +1285,7 @@ router.put(
   requireAuth,
   requireRole("admin", "manager", "auditor"),
   async (req, res) => {
+    const connection = await pool.getConnection();
     try {
       const branchId = requireSelectedBranch(req, res);
 
@@ -1306,12 +1307,14 @@ router.put(
         is_active,
       } = req.body;
 
-      const [existingProducts] = await pool.query(
-        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
+      await connection.beginTransaction();
+      const [existingProducts] = await connection.query(
+        `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1 FOR UPDATE`,
         [id, branchId]
       );
 
       if (existingProducts.length === 0) {
+        await connection.rollback();
         return res.status(404).json({
           status: "error",
           message: "Product not found in this store.",
@@ -1324,9 +1327,10 @@ router.put(
         cost_price: req.body?.cost_price, selling_price: req.body?.selling_price
       });
       const priceFields = changedPriceFields(priorPrice, nextPrice);
-      const directPricing = await canChangeMasterPriceDirectly(req.user);
+      const directPricing = await canChangeMasterPriceDirectly(req.user, connection);
       if (priceFields.length && directPricing &&
           String(req.body?.price_change_reason || "").trim().length < 12) {
+        await connection.rollback();
         return res.status(400).json({
           status: "error", code: "PRICE_CHANGE_REASON_REQUIRED",
           message: "Enter a clear reason of at least 12 characters for this product price change."
@@ -1335,6 +1339,7 @@ router.put(
 
 
       if (!name || !name.trim()) {
+        await connection.rollback();
         return res.status(400).json({
           status: "error",
           message: "Product name is required.",
@@ -1351,6 +1356,7 @@ router.put(
         sellingPrice === null ||
         lowStockThreshold === null
       ) {
+        await connection.rollback();
         return res.status(400).json({
           status: "error",
           message: "Please check price and low-stock threshold values.",
@@ -1364,6 +1370,7 @@ router.put(
           submittedQuantity === null ||
           submittedQuantity !== Number(existingProduct.quantity || 0)
         ) {
+          await connection.rollback();
           return res.status(409).json({
             status: "error",
             code: "STOCK_CHANGE_REQUIRES_MOVEMENT",
@@ -1374,7 +1381,7 @@ router.put(
         }
       }
 
-      await pool.query(
+      await connection.query(
         `UPDATE products
          SET
           name = ?,
@@ -1407,7 +1414,7 @@ router.put(
 
       if (directPricing && priceFields.length) {
         await writeAuditEvent({
-          req, branchId, userId: req.user.id,
+          req, connection, branchId, userId: req.user.id,
           action: "DIRECT_PRODUCT_MASTER_PRICE_CHANGE",
           details: String(existingProduct.name || cleanName) + ": " +
             changeSummary(priorPrice, nextPrice) +
@@ -1418,14 +1425,15 @@ router.put(
             reason: String(req.body.price_change_reason).trim().slice(0,1000)}
         });
       }
-      await logActivity(
-        branchId,
-        req.user.id,
-        "UPDATE_PRODUCT_DETAILS",
-        `Updated details for product "${cleanName}" with ID ${id}; stock remained ${Number(
-          existingProduct.quantity || 0
-        )}`
-      );
+      await writeAuditEvent({
+        req,connection,branchId,userId:req.user.id,
+        action:"UPDATE_PRODUCT_DETAILS",
+        details:"Updated details for product "+cleanName+" (ID "+id+
+          "); stock remained "+Number(existingProduct.quantity||0),
+        workspaceCode:"spare_parts",entityType:"product",entityId:String(id),
+        actionType:"UPDATE_PRODUCT_DETAILS",outcome:"success",severity:"notice"
+      });
+      await connection.commit();
 
       const [products] = await pool.query(
         `SELECT * FROM products WHERE id = ? AND branch_id = ? LIMIT 1`,
@@ -1439,6 +1447,7 @@ router.put(
         product: products[0],
       });
     } catch (error) {
+      await connection.rollback().catch(()=>{});
       console.error("Update product error:", error);
 
       if (error.code === "ER_DUP_ENTRY") {
@@ -1452,6 +1461,8 @@ router.put(
         status: "error",
         message: "Something went wrong while updating the product.",
       });
+    } finally {
+      connection.release();
     }
   }
 );
