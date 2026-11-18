@@ -3,6 +3,7 @@ const express = require("express");
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
+const {canChangeMasterPriceDirectly} = require("../services/productPriceApprovalPolicy");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validatePurchasePaymentRequest } = require("../validation/financialRequestValidators");
@@ -793,13 +794,14 @@ router.post(
           ]
         );
 
+        // The actual supplier invoice unit cost remains in purchase_items.
+        // Only an administrator/auditor can update the product master cost.
         await connection.query(
-          `UPDATE products
-           SET quantity = quantity + ?,
-               cost_price = ?
-           WHERE id = ?
-           AND branch_id = ?`,
-          [item.quantity, item.cost_price, item.product_id, branchId]
+          "UPDATE products SET quantity=quantity+?," +
+          "cost_price=CASE WHEN ? THEN ? ELSE cost_price END " +
+          "WHERE id=? AND branch_id=?",
+          [item.quantity,await canChangeMasterPriceDirectly(req.user,connection),
+           item.cost_price,item.product_id,branchId]
         );
       }
 

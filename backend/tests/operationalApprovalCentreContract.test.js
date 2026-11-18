@@ -55,7 +55,9 @@ test("stored requests are tamper checked and cannot contain administrator passwo
 test("administrator may self-approve only return refunds and password verification remains mandatory", () => {
   const service = read("backend/services/operationalApprovalService.js");
 
-  assert.match(service, /getRole\(req\) !== "admin"/);
+  assert.match(service, /approvalKind === "product_price_change"/);
+  assert.match(service, /canChangeMasterPriceDirectly\(reviewer, connection\)/);
+  assert.match(service, /activeRole === "admin"/);
   assert.match(service, /const selfApproval =[\s\S]*request\.requested_by[\s\S]*getUserId\(req\)/);
   assert.match(service, /const adminReturnSelfApproval =[\s\S]*getRole\(req\) === "admin"[\s\S]*request\.approval_kind === "return_refund"/);
   assert.match(service, /if \(selfApproval && !adminReturnSelfApproval\)/);
@@ -108,7 +110,7 @@ test("the floating centre supports sale edit, sale void, approve and reject", ()
   assert.match(launcher, /operational\/sale-void/);
   assert.match(launcher, /Approve and Execute Now/);
   assert.match(launcher, /Reject Without Changes/);
-  assert.match(launcher, /Your administrator password/);
+  assert.match(launcher, /Your account password/);
   assert.match(main, /OperationalApprovalLauncher/);
   assert.match(main, /import\.meta\.env\.VITE_CHALIN03_BUILD_ID/);
   assert.match(main, /browser-cache-integrity-v40/);

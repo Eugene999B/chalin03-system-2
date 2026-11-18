@@ -25,7 +25,8 @@ const SPARE_PARTS_PAGES = Object.freeze([
       "admin",
       "manager",
       "cashier",
-      "auditor"
+      "auditor",
+      "staff"
     ],
     "gate": null,
     "permission": "page.spare_parts.products.view"

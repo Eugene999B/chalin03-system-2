@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const {canChangeMasterPriceDirectly} = require("../services/productPriceApprovalPolicy");
 const { calculateReturnLimit } = require("../services/sparePartsReturnLimitService");
 const { canApplySaleDiscount, discountApprovalRequired } =
   require("../services/saleDiscountAuthorizationService");
@@ -38,6 +39,49 @@ function requireAdministrator(req, res, next) {
     status: "error",
     message: "Only an administrator can approve or reject protected actions.",
   });
+}
+
+// Access to the centre is category-scoped by its parent router. Staff see
+// only their own requests; auditors see price approvals in their selected store.
+function requireEmployee(req,res,next) {
+  if (["admin","manager","auditor","cashier","staff"].includes(getRole(req))) return next();
+  return res.status(403).json({status:"error",message:"This staff account cannot access approval requests."});
+}
+
+async function requireAuthorizedReviewer(req,res,next) {
+  const role=getRole(req);
+  if(role==="admin") {
+    const requestId=positiveInteger(req.params.id);
+    if(!requestId)return res.status(400).json({status:"error",message:"Select a valid request."});
+    try{
+      const [rows]=await pool.query("SELECT approval_kind FROM audit_unlock_requests WHERE id=? LIMIT 1",[requestId]);
+      if(!rows.length)return res.status(404).json({status:"error",message:"Approval request not found."});
+      if(rows[0].approval_kind==="product_price_change" &&
+         !(await canChangeMasterPriceDirectly(req.user,pool))){
+        return res.status(403).json({status:"error",code:"PRICE_REVIEWER_NOT_AUTHORIZED",
+          message:"Only the verified Boss, System Administrator or Auditor may approve product prices."});
+      }
+      return next();
+    }catch(error){return sendError(res,error,"Could not verify the price reviewer.");}
+  }
+  if(role!=="auditor") return res.status(403).json({
+    status:"error",code:"PRICE_REVIEWER_ONLY",
+    message:"Only a boss/administrator or auditor can approve product price changes."
+  });
+  const requestId=positiveInteger(req.params.id);
+  if(!requestId)return res.status(400).json({status:"error",message:"Select a valid approval request."});
+  try{
+    const [rows]=await pool.query(
+      "SELECT approval_kind,branch_id FROM audit_unlock_requests WHERE id=? LIMIT 1",
+      [requestId]
+    );
+    if(!rows.length||rows[0].approval_kind!=="product_price_change"||
+       Number(rows[0].branch_id)!==getBranchId(req)){
+      return res.status(403).json({status:"error",code:"AUDITOR_PRICE_ONLY",
+        message:"Auditors may review product price requests for their selected store only."});
+    }
+    return next();
+  }catch(error){return sendError(res,error,"Could not verify price-review authority.");}
 }
 
 function sendError(res, error, fallback) {
@@ -696,7 +740,7 @@ async function executeApprovedRequest(req, res) {
 
 router.get(
   "/operational",
-  requireManagerOrAdmin,
+  requireEmployee,
   async (req, res) => {
     try {
       const requests = await listOperationalRequests(req, {
@@ -741,12 +785,12 @@ router.post(
 );
 router.post(
   "/operational/:id/approve",
-  requireAdministrator,
+  requireAuthorizedReviewer,
   executeApprovedRequest
 );
 router.post(
   "/operational/:id/reject",
-  requireAdministrator,
+  requireAuthorizedReviewer,
   async (req, res) => {
     const requestId = positiveInteger(req.params.id);
     const password = String(req.body?.password || "");

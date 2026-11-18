@@ -49,6 +49,7 @@ const {
 const authRoutes = require("./routes/authRoutes");
 const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
+const {router:productPriceApprovalRoutes} = require("./routes/productPriceApprovalRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
 const {dispatchStaffDebtorIdentityNoticeOnce} = require("./services/debtorIdentityStaffNoticeService");
@@ -300,6 +301,7 @@ app.use(
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/passkeys", passkeyRoutes);
+app.use("/api/products", requireAuth, sparePartsBoundary, productPriceApprovalRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);

@@ -3,11 +3,13 @@ const bcrypt = require("bcryptjs");
 
 const { pool } = require("../config/db");
 const { writeAuditEvent } = require("./auditTrailService");
+const {canChangeMasterPriceDirectly} = require("./productPriceApprovalPolicy");
 
 const OPERATIONAL_KINDS = new Set([
   "return_refund",
   "sale_edit",
   "sale_void",
+  "product_price_change",
 ]);
 const DEFAULT_EXPIRY_HOURS = 72;
 
@@ -89,6 +91,9 @@ function actionRoute(request) {
   if (request.approval_kind === "sale_void" && entityId) {
     return { method: "PATCH", path: `/api/sales/${entityId}/void` };
   }
+  if (request.approval_kind === "product_price_change" && entityId) {
+    return { method: "POST", path: `/api/products/${entityId}/approved-price` };
+  }
   return null;
 }
 
@@ -156,6 +161,33 @@ async function createNotification(connection, request) {
          WHERE id = ?`,
         [notificationId, request.id]
       );
+    }
+    // Price requests must also reach independent auditors. Existing financial
+    // approval notifications remain addressed to administrators only.
+    if (request.approval_kind === "product_price_change") {
+      try {
+        await connection.query(
+          "INSERT INTO notifications ("+
+          "notification_key,workspace_code,branch_id,target_role,category,"+
+          "notification_type,severity,title,message,action_path,source_type,"+
+          "source_reference,status,auto_generated,occurred_at,metadata_json,created_by) "+
+          "VALUES (?,'spare_parts',?,'auditor','approval','approval_request',"+
+          "'high',?,?,'/products','approval_request',?,'active',TRUE,NOW(),?,?) "+
+          "ON DUPLICATE KEY UPDATE title=VALUES(title),message=VALUES(message),"+
+          "status='active',occurred_at=NOW(),metadata_json=VALUES(metadata_json),updated_at=NOW()",
+          [
+            "approval."+request.id+".product_price_change.auditor",
+            request.branch_id,
+            "Product price approval "+request.request_code,
+            request.notification_message,
+            request.request_code,
+            JSON.stringify({approval_request_id:request.id,approval_kind:request.approval_kind}),
+            request.requested_by
+          ]
+        );
+      } catch(error) {
+        console.warn("Auditor price approval notification skipped:",error.message);
+      }
     }
     return notificationId;
   } catch (error) {
@@ -398,10 +430,13 @@ async function userCanAccessBranch(connection, user, branchId) {
   return rows.length > 0;
 }
 
-async function verifyAdminReviewer(connection, req, password, branchId) {
+async function verifyAdminReviewer(connection, req, password, branchId, approvalKind = "") {
   const reviewerId = getUserId(req);
-  if (!reviewerId || getRole(req) !== "admin") {
-    const error = new Error("Only an active administrator can approve this request.");
+  const activeRole = getRole(req);
+  const allowedRole = activeRole === "admin" ||
+    (approvalKind === "product_price_change" && activeRole === "auditor");
+  if (!reviewerId || !allowedRole) {
+    const error = new Error("Only an Administrator or (for price changes) an Auditor can review this request.");
     error.statusCode = 403;
     error.code = "ADMIN_APPROVAL_REQUIRED";
     throw error;
@@ -418,9 +453,19 @@ async function verifyAdminReviewer(connection, req, password, branchId) {
   );
   const reviewer = rows[0];
 
-  if (!reviewer || Number(reviewer.is_active) !== 1 || reviewer.role !== "admin") {
-    const error = new Error("The administrator account is inactive or unavailable.");
+  if (!reviewer || Number(reviewer.is_active) !== 1 ||
+    !(["admin"].includes(reviewer.role) ||
+      (approvalKind === "product_price_change" && reviewer.role === "auditor"))) {
+    const error = new Error("This reviewer account is inactive or lacks authority to approve this change.");
     error.statusCode = 403;
+    throw error;
+  }
+
+  if (approvalKind === "product_price_change" &&
+      !(await canChangeMasterPriceDirectly(reviewer, connection))) {
+    const error = new Error("Only the verified Boss, original System Administrator or Auditor may approve product prices.");
+    error.statusCode = 403;
+    error.code = "PRICE_REVIEWER_NOT_AUTHORIZED";
     throw error;
   }
 
@@ -475,7 +520,11 @@ async function listOperationalRequests(req, { status = "", search = "" } = {}) {
     where += " AND aur.branch_id = ?";
     params.push(branchId);
   }
-  if (role !== "admin") {
+  if (role === "auditor") {
+    // Auditors review master-price changes only, not unrelated refunds, voids or edits.
+    where += " AND (aur.approval_kind = 'product_price_change' OR aur.requested_by = ?)";
+    params.push(userId);
+  } else if (role !== "admin") {
     where += " AND aur.requested_by = ?";
     params.push(userId);
   }
@@ -576,7 +625,8 @@ async function claimOperationalRequest({ req, requestId, password, reviewNote })
       connection,
       req,
       password,
-      request.branch_id
+      request.branch_id,
+      request.approval_kind
     );
 
     const executionToken = crypto.randomBytes(32).toString("hex");
@@ -658,7 +708,8 @@ async function rejectOperationalRequest({ req, requestId, password, reviewNote }
       connection,
       req,
       password,
-      request.branch_id
+      request.branch_id,
+      request.approval_kind
     );
 
     await connection.query(
@@ -678,6 +729,15 @@ async function rejectOperationalRequest({ req, requestId, password, reviewNote }
          WHERE id = ?`,
         [reviewer.id, `Rejected: ${cleanText(reviewNote, 500)}`, request.notification_id]
       ).catch(() => {});
+    }
+
+    if (request.approval_kind === "product_price_change") {
+      await connection.query(
+        "UPDATE notifications SET status='resolved',resolved_at=NOW(),"+
+        "resolved_by=?,resolution_note=? WHERE notification_key=?",
+        [reviewer.id,"Price request rejected: "+cleanText(reviewNote,500),
+          "approval."+request.id+".product_price_change.auditor"]
+      ).catch(()=>{});
     }
 
     await auditApprovalEvent({
@@ -712,6 +772,14 @@ async function finishOperationalExecution({ requestId, success, result, errorMes
     // that changes stock and money. If so, never downgrade that durable success
     // merely because the internal HTTP response was interrupted afterward.
     if (request.execution_status === "executed") {
+      if (request.approval_kind === "product_price_change") {
+        await connection.query(
+          "UPDATE notifications SET status='resolved',resolved_at=COALESCE(resolved_at,NOW()),"+
+          "resolved_by=COALESCE(resolved_by,?),resolution_note='Approved price applied.' "+
+          "WHERE notification_key=?",
+          [request.reviewed_by||null,"approval."+request.id+".product_price_change.auditor"]
+        ).catch(()=>{});
+      }
       if (request.notification_id) {
         await connection.query(
           `UPDATE notifications
@@ -759,6 +827,16 @@ async function finishOperationalExecution({ requestId, success, result, errorMes
          WHERE id = ? AND execution_status = 'executing'`,
         [cleanText(errorMessage, 12000), requestId]
       );
+    }
+
+    if (request.approval_kind === "product_price_change" && success) {
+      await connection.query(
+        "UPDATE notifications SET status='resolved',resolved_at=NOW(),"+
+        "resolved_by=?,resolution_note='Approved price applied.' "+
+        "WHERE notification_key=?",
+        [request.reviewed_by||null,
+          "approval."+request.id+".product_price_change.auditor"]
+      ).catch(()=>{});
     }
 
     await writeAuditEvent({
