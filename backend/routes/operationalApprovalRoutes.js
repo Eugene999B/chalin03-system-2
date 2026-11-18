@@ -40,6 +40,36 @@ function requireAdministrator(req, res, next) {
   });
 }
 
+// Access to the centre is category-scoped by its parent router. Staff see
+// only their own requests; auditors see price approvals in their selected store.
+function requireEmployee(req,res,next) {
+  if (["admin","manager","auditor","cashier","staff"].includes(getRole(req))) return next();
+  return res.status(403).json({status:"error",message:"This staff account cannot access approval requests."});
+}
+
+async function requireAuthorizedReviewer(req,res,next) {
+  const role=getRole(req);
+  if(role==="admin") return next();
+  if(role!=="auditor") return res.status(403).json({
+    status:"error",code:"PRICE_REVIEWER_ONLY",
+    message:"Only a boss/administrator or auditor can approve product price changes."
+  });
+  const requestId=positiveInteger(req.params.id);
+  if(!requestId)return res.status(400).json({status:"error",message:"Select a valid approval request."});
+  try{
+    const [rows]=await pool.query(
+      "SELECT approval_kind,branch_id FROM audit_unlock_requests WHERE id=? LIMIT 1",
+      [requestId]
+    );
+    if(!rows.length||rows[0].approval_kind!=="product_price_change"||
+       Number(rows[0].branch_id)!==getBranchId(req)){
+      return res.status(403).json({status:"error",code:"AUDITOR_PRICE_ONLY",
+        message:"Auditors may review product price requests for their selected store only."});
+    }
+    return next();
+  }catch(error){return sendError(res,error,"Could not verify price-review authority.");}
+}
+
 function sendError(res, error, fallback) {
   const statusCode = Number(error?.statusCode || 500);
   return res.status(statusCode).json({
@@ -696,7 +726,7 @@ async function executeApprovedRequest(req, res) {
 
 router.get(
   "/operational",
-  requireManagerOrAdmin,
+  requireEmployee,
   async (req, res) => {
     try {
       const requests = await listOperationalRequests(req, {
@@ -741,12 +771,12 @@ router.post(
 );
 router.post(
   "/operational/:id/approve",
-  requireAdministrator,
+  requireAuthorizedReviewer,
   executeApprovedRequest
 );
 router.post(
   "/operational/:id/reject",
-  requireAdministrator,
+  requireAuthorizedReviewer,
   async (req, res) => {
     const requestId = positiveInteger(req.params.id);
     const password = String(req.body?.password || "");
