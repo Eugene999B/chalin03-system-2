@@ -162,6 +162,33 @@ async function createNotification(connection, request) {
         [notificationId, request.id]
       );
     }
+    // Price requests must also reach independent auditors. Existing financial
+    // approval notifications remain addressed to administrators only.
+    if (request.approval_kind === "product_price_change") {
+      try {
+        await connection.query(
+          "INSERT INTO notifications ("+
+          "notification_key,workspace_code,branch_id,target_role,category,"+
+          "notification_type,severity,title,message,action_path,source_type,"+
+          "source_reference,status,auto_generated,occurred_at,metadata_json,created_by) "+
+          "VALUES (?,'spare_parts',?,'auditor','approval','approval_request',"+
+          "'high',?,?,'/products','approval_request',?,'active',TRUE,NOW(),?,?) "+
+          "ON DUPLICATE KEY UPDATE title=VALUES(title),message=VALUES(message),"+
+          "status='active',occurred_at=NOW(),metadata_json=VALUES(metadata_json),updated_at=NOW()",
+          [
+            "approval."+request.id+".product_price_change.auditor",
+            request.branch_id,
+            "Product price approval "+request.request_code,
+            request.notification_message,
+            request.request_code,
+            JSON.stringify({approval_request_id:request.id,approval_kind:request.approval_kind}),
+            request.requested_by
+          ]
+        );
+      } catch(error) {
+        console.warn("Auditor price approval notification skipped:",error.message);
+      }
+    }
     return notificationId;
   } catch (error) {
     console.warn("Operational approval notification skipped:", error.message);
@@ -704,6 +731,15 @@ async function rejectOperationalRequest({ req, requestId, password, reviewNote }
       ).catch(() => {});
     }
 
+    if (request.approval_kind === "product_price_change") {
+      await connection.query(
+        "UPDATE notifications SET status='resolved',resolved_at=NOW(),"+
+        "resolved_by=?,resolution_note=? WHERE notification_key=?",
+        [reviewer.id,"Price request rejected: "+cleanText(reviewNote,500),
+          "approval."+request.id+".product_price_change.auditor"]
+      ).catch(()=>{});
+    }
+
     await auditApprovalEvent({
       req,
       connection,
@@ -783,6 +819,16 @@ async function finishOperationalExecution({ requestId, success, result, errorMes
          WHERE id = ? AND execution_status = 'executing'`,
         [cleanText(errorMessage, 12000), requestId]
       );
+    }
+
+    if (request.approval_kind === "product_price_change" && success) {
+      await connection.query(
+        "UPDATE notifications SET status='resolved',resolved_at=NOW(),"+
+        "resolved_by=?,resolution_note='Approved price applied.' "+
+        "WHERE notification_key=?",
+        [request.reviewed_by||null,
+          "approval."+request.id+".product_price_change.auditor"]
+      ).catch(()=>{});
     }
 
     await writeAuditEvent({
