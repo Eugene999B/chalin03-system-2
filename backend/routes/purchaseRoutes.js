@@ -800,7 +800,7 @@ router.post(
           "UPDATE products SET quantity=quantity+?," +
           "cost_price=CASE WHEN ? THEN ? ELSE cost_price END " +
           "WHERE id=? AND branch_id=?",
-          [item.quantity,canChangeMasterPriceDirectly(req.user),
+          [item.quantity,await canChangeMasterPriceDirectly(req.user,connection),
            item.cost_price,item.product_id,branchId]
         );
       }
