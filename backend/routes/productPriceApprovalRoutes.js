@@ -94,7 +94,7 @@ async function sendRequest(req,res){
 // Prevent a manager from laundering a direct price change through PUT /products/:id.
 // The regular product handler still updates metadata when prices are unchanged.
 async function interceptUnapprovedPut(req,res,next){
-  if(canChangeMasterPriceDirectly(req.user))return next();
+  if(await canChangeMasterPriceDirectly(req.user))return next();
   if(String(req.user?.role||"").toLowerCase()!=="manager")return next();
   const branchId=branchIdOf(req),productId=idValue(req.params.id);
   if(!branchId||!productId)return errorResponse(res,400,"STORE_OR_PRODUCT_REQUIRED","Select a valid product and store.");
