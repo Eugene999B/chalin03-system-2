@@ -1324,7 +1324,7 @@ router.put(
         cost_price: req.body?.cost_price, selling_price: req.body?.selling_price
       });
       const priceFields = changedPriceFields(priorPrice, nextPrice);
-      const directPricing = canChangeMasterPriceDirectly(req.user);
+      const directPricing = await canChangeMasterPriceDirectly(req.user);
       if (priceFields.length && directPricing &&
           String(req.body?.price_change_reason || "").trim().length < 12) {
         return res.status(400).json({
@@ -1548,7 +1548,7 @@ router.post(
           ? Number(receivedUnitCost)
           : oldCostPrice;
       if (shouldUpdateCost && receivedUnitCost !== null &&
-          !canChangeMasterPriceDirectly(req.user) &&
+          !(await canChangeMasterPriceDirectly(req.user, connection)) &&
           Number(newCostPrice.toFixed(2)) !== Number(oldCostPrice.toFixed(2))) {
         await connection.rollback();
         return res.status(409).json({
