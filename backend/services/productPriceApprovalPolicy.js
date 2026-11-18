@@ -5,9 +5,14 @@
  * Only Administrators (including the original System Administrator/boss) and
  * Auditors may change a stocked product's master prices directly.
  */
-function canChangeMasterPriceDirectly(user) {
+const {canApplySaleDiscount} = require("./saleDiscountAuthorizationService");
+// Owner and Boss are verified against server-side identity; ordinary admins
+// have NO special master-price authority.
+async function canChangeMasterPriceDirectly(user,connection) {
   const role=String(user?.role || "").trim().toLowerCase();
-  return role==="admin" || role==="auditor";
+  if(role==="auditor") return true;
+  if(role!=="admin") return false;
+  return canApplySaleDiscount(user,connection);
 }
 function normalizePrice(value) {
   if (typeof value === "string" && !/^\d+(?:\.\d{1,2})?$/.test(value.trim())) return null;
