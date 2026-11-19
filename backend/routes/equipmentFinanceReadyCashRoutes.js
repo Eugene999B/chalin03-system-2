@@ -61,9 +61,25 @@ function sendError(res, error) {
     });
   }
   if (["ER_DUP_ENTRY", "ER_SIGNAL_EXCEPTION", "ER_CHECK_CONSTRAINT_VIOLATED"].includes(error?.code)) {
+    // A database business-rule SIGNAL is NOT evidence that a machine was
+    // previously registered. The old generic text incorrectly said it was.
+    const reason = String(error?.sqlMessage || error?.message || "").slice(0, 280);
+    console.warn("Ready Cash database integrity guard rejected checkout:", {
+      code: error.code, sqlState: error.sqlState || null,
+      // Only a database-authored SIGNAL message is logged, never raw SQL,
+      // submitted customer/payment fields or unique-key values.
+      trigger_reason: error.code === "ER_SIGNAL_EXCEPTION" ? reason : null,
+    });
+    const triggerReason = error.code === "ER_SIGNAL_EXCEPTION"
+      && /not available for sale at this Equipment Hire location/i.test(reason);
     return res.status(409).json({
-      status: "error", code: "READY_CASH_CONFLICT",
-      message: "The machine or payment may already be recorded. Refresh the Ready Cash register before retrying.",
+      status: "error",
+      code: triggerReason ? "READY_CASH_PHYSICAL_YARD_GUARD" :
+        error.code === "ER_DUP_ENTRY" ? "READY_CASH_UNIQUE_RECORD_CONFLICT" :
+        "READY_CASH_DATABASE_GUARD",
+      message: triggerReason
+        ? "This excavator's physical yard was rejected by an older Hire sale rule. No new sale was saved. Please refresh the register after the Finance compatibility repair."
+        : "A Finance database rule rejected this checkout. This does not by itself mean the machine was already sold. Check recent sales and reservations before retrying.",
     });
   }
   if (error?.code === "READY_CASH_NUMBERING_UNAVAILABLE") {
