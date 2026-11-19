@@ -15,7 +15,7 @@
 7. Confirm the customer's full-sale terms. Choose **Record full payment & reserve machine** once.
 8. The checkout records a single final-price receipt and asset reservation with a zero outstanding balance, and creates **no** installment application, scheduled repayments, or loan arrears. The machine remains **Paid in Full / Awaiting Handover**.
 9. Use **Download official receipt (PDF)** or the **Receipt PDF** action in the Ready Cash register. If the request response was unclear, check the register first; do not submit a second sale.
-10. A *different authorized Finance manager* signs in. Under **Handover & mark sold**, choose the paid sale, inspect and physically hand over the exact excavator, enter the receiving person's name, actual machine condition, delivery destination and **reference to the signed delivery / ownership document**.
+10. A *different authorized Finance manager* normally signs in. The uniquely verified original System Administrator is allowed to complete their own Ready Cash handover without a second employee; the application records this as an exceptional self-certification in the audit trail. Every user, including that System Administrator, still must provide signed physical-delivery and ownership evidence. Under **Handover & mark sold**, choose the paid sale, inspect and physically hand over the exact excavator, enter the receiving person's name, actual machine condition, delivery destination and **reference to the signed delivery / ownership document**.
 11. Tick the independent signed-handover confirmation and select **Confirm handover & mark machine sold**. Only then does the asset status change to **SOLD**, with an ownership-transfer record.
 12. Review the final sale, original receipt, audit trail, cash reconciliation and sales records.
 
@@ -27,7 +27,7 @@
 - Customer pays full GHS 250,000.00 in the existing payment process
 - Staff confirm evidence and book Ready Cash; agreement paid GHS 250,000.00, outstanding GHS 0.00
 - No credit application or installment schedule; delivery still pending
-- Different authorized Finance manager verifies signed handover; the machine becomes SOLD and ownership transferred
+- Different authorized Finance manager, or the verified original System Administrator, verifies signed handover; the machine becomes SOLD and ownership transferred
 
 ## Controls and accounting semantics
 
@@ -36,7 +36,7 @@
 - A unique checkout UUID prevents duplicate postings. Repeat requests are checked against the exact customer, asset, final price, included tax amount and internal payment reference.
 - The original machine's price, active Hire/Finance reservations and competing sales are checked inside the transaction; an error rolls back sale and payment records.
 - One machine can only be sold once. Stock reservation remains in place until signed handover.
-- Signed delivery and ownership are recorded in one transaction by a different authorized manager after non-voided payment-ledger reconciliation.
+- Signed delivery and ownership are recorded in one transaction by a different authorized manager, or exceptionally by the uniquely verified original System Administrator, after non-voided payment-ledger reconciliation. The System Administrator exception is explicitly audit-recorded, without bypassing delivery documents or financial checks.
 - The PDF receipt is a company-wide Finance document; it does not depend on a Hire-location record.
 - Tax is **not automatically calculated**. A signed-off tax amount is necessary; current v1 does not implement a statutory invoice renderer or tax-jurisdiction engine. Managers must review output for compliance.
 - Never alter an existing customer receipt, create an unverified refund, issue a duplicate sale, or record a real transaction to test this feature.
