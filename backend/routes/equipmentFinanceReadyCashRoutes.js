@@ -7,6 +7,7 @@ const { requirePermission } = require("../middleware/permissionMiddleware");
 const { nextReadyCashDocumentNumbers } = require("../services/equipmentFinanceReadyCashSequenceService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { workspaceRoleFor, isEquipmentAdministrator } = require("../security/equipmentDivisionAccess");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 
 const router = express.Router();
 const MANAGER_ROLES = new Set([
@@ -466,6 +467,9 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
     const userId = id(req.user?.id);
     if (!agreementId) fail(400, "READY_CASH_ID_INVALID", "Select a valid Ready Cash sale.");
     const role = workspaceRoleFor(req.user);
+    // This is the protected, original System Administrator identity from the
+    // authenticated live user record, not a client-supplied role label.
+    const originalSystemAdmin = isOriginalSystemAdministrator(req.user);
     if (!isEquipmentAdministrator(req.user) && !MANAGER_ROLES.has(role)) {
       fail(403, "READY_CASH_HANDOVER_RESTRICTED", "Only an authorized finance manager or administrator may authorize handover.");
     }
@@ -479,7 +483,8 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
     }
 
     // Delivery and transfer have their own idempotently configured counters.
-    // Never bypass the independent reviewer or signed-handover checks.
+    // Signed-handover, payment, machine reservation and ledger checks apply
+    // even when the original System Administrator is the sale recorder.
     const [deliveryNumber, ownershipNumber] =
       await nextReadyCashDocumentNumbers({ userId, stage: "handover" });
     const saved = await transaction(async (connection) => {
@@ -498,9 +503,9 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
         );
         return { duplicate: true, transferNumber: existing[0]?.transfer_number };
       }
-      if (Number(agreement.created_by) === userId) {
+      if (Number(agreement.created_by) === userId && !originalSystemAdmin) {
         fail(403, "READY_CASH_INDEPENDENT_HANDOVER_REQUIRED",
-          "A separate authorized manager must certify delivery and ownership transfer.");
+          "A separate authorized manager must certify delivery and ownership transfer. The verified original System Administrator may complete both stages with signed handover evidence.");
       }
       if (cents(agreement.total_amount) !== cents(agreement.amount_paid) ||
           cents(agreement.outstanding_balance) !== 0) {
@@ -572,11 +577,16 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
            sold_at = NOW(), updated_by = ? WHERE id = ?`,
         [userId, agreement.asset_id]
       );
+      const originalAdminSelfCertification =
+        originalSystemAdmin && Number(agreement.created_by) === userId;
       await audit(connection, req, "EQUIPMENT_READY_CASH_OWNERSHIP_TRANSFERRED", agreementId,
-        "Signed Ready Cash delivery and ownership transfer approved by independent manager.",
+        originalAdminSelfCertification
+          ? "Signed Ready Cash delivery and ownership transfer confirmed by the verified original System Administrator using the audited self-certification exception."
+          : "Signed Ready Cash delivery and ownership transfer approved by an independent authorized manager.",
         { payment_verified: true, delivery_id: delivery.insertId,
           ownership_transfer_id: transfer.insertId, handover_reference: reference,
-          receiver, approved_by: userId });
+          receiver, approved_by: userId, sale_recorded_by: Number(agreement.created_by) || null,
+          original_system_administrator_self_certification: originalAdminSelfCertification });
       return { duplicate: false, transferNumber: ownershipNumber };
     });
     return res.status(saved.duplicate ? 200 : 201).json({
