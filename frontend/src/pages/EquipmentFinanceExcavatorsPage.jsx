@@ -477,6 +477,7 @@ export default function EquipmentFinanceExcavatorsPage() {
                       <dl>
                         <div><dt>Supplied by</dt><dd>{machine.supplier_name || "Supplier not recorded"}</dd></div>
                         <div><dt>Acquisition reference</dt><dd>{machine.acquisition_reference || "Not recorded"}</dd></div>
+                        <div><dt>Acquisition cost</dt><dd>{money(machine.acquisition_cost)}</dd></div>
                         <div><dt>Customer / applicant</dt><dd>{buyerEvidence?.subheading || "Checking customer records"}</dd></div>
                         <div><dt>Finance evidence</dt><dd>{evidence?.agreement_number || evidence?.application_number || (evidence ? "No agreement linked" : "Verifying…")}</dd></div>
                         {evidence?.customer_phone ? <div><dt>Contact</dt><dd>{evidence.customer_phone}</dd></div> : null}
