@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 
 const { pool } = require("../config/db");
+const {ensureDunkwaYard} = require("./equipmentFinanceDunkwaYardService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { getFinanceMachineEditability } = require("./equipmentFinanceTemporaryMachineEditPolicy");
 const { syncActiveAgreementPriceFromMachine } = require("./equipmentFinancePriceVariationService");
@@ -121,6 +122,13 @@ function normalizeMachine(input, { partial = false } = {}) {
   return { output, errors };
 }
 async function machineLocations() {
+  // Startup initializes the requested yard. Retry idempotently on the first
+  // list request if startup could not seed it, without breaking other yards.
+  try {
+    await ensureDunkwaYard(pool);
+  } catch(error) {
+    console.warn("Dunkwa equipment yard verification deferred:",error.message);
+  }
   const [rows] = await pool.query(`SELECT location.id, location.code, location.name, location.address, location.phone FROM business_locations location INNER JOIN business_units unit ON unit.id = location.business_unit_id WHERE unit.code = 'equipment_hire' AND unit.is_enabled = TRUE AND location.is_active = TRUE ORDER BY location.name`);
   return rows;
 }

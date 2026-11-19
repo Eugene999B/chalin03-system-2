@@ -1,6 +1,7 @@
 const express = require("express");
 
 const { pool } = require("../config/db");
+const {bossMachineOwnership,uniqueAssetIds} = require("../services/equipmentFinanceBossMachineOwnershipService");
 const { getFinanceMachineEditability } = require("../services/equipmentFinanceTemporaryMachineEditPolicy");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const {
@@ -109,6 +110,27 @@ router.get("/", requirePermission("fleet.assets.view"), async (req, res) => {
     });
   } catch (error) {
     return sendError(res, error, "Could not load the Finance Machine Register.");
+  }
+});
+
+// Only the server-verified Boss/System Administrator may see the true buyer,
+// installment applicant, source supplier and financial status for each asset.
+// Never infer a buyer from the fleet sale_status or return this to normal staff.
+router.get("/boss-ownership",requirePermission("fleet.assets.view"),async(req,res)=>{
+  try{
+    const raw=String(req.query?.ids||"");
+    const supplied=raw.split(",").filter(Boolean);
+    const ids=uniqueAssetIds(supplied);
+    if(!raw||supplied.length!==ids.length||ids.length>250){
+      return res.status(400).json({
+        status:"error",code:"FINANCE_ASSET_IDS_REQUIRED",
+        message:"Select a valid set of up to 250 excavators to check."
+      });
+    }
+    const summaries=await bossMachineOwnership({user:req.user,assetIds:ids});
+    return res.json({status:"success",count:summaries.length,summaries});
+  }catch(error){
+    return sendError(res,error,"Could not verify excavator buyer and supplier evidence.");
   }
 });
 
