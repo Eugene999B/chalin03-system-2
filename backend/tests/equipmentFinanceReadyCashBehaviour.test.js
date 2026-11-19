@@ -81,10 +81,11 @@ function loadWithFakeLedger(options = {}) {
         }
         if (request === "../services/equipmentFinanceReadyCashSequenceService") {
           return {
-            nextReadyCashDocumentNumbers: async () => [
-              "RCQ-2026-000001", "RCA-2026-000001",
-              "RCP-2026-000001", "RCR-2026-000001",
-            ],
+            nextReadyCashDocumentNumbers: async ({ stage = "checkout" } = {}) =>
+              stage === "handover"
+                ? ["RCD-2026-000001", "RCT-2026-000001"]
+                : ["RCQ-2026-000001", "RCA-2026-000001",
+                   "RCP-2026-000001", "RCR-2026-000001"],
           };
         }
         if (request === "../services/auditTrailService") {
