@@ -4,7 +4,7 @@ const PDFDocument = require("pdfkit");
 const express = require("express");
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
-const { nextDocumentNumber } = require("../services/groupConfigurationService");
+const { nextReadyCashDocumentNumbers } = require("../services/equipmentFinanceReadyCashSequenceService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { workspaceRoleFor, isEquipmentAdministrator } = require("../security/equipmentDivisionAccess");
 
@@ -64,6 +64,11 @@ function sendError(res, error) {
     return res.status(409).json({
       status: "error", code: "READY_CASH_CONFLICT",
       message: "The machine or payment may already be recorded. Refresh the Ready Cash register before retrying.",
+    });
+  }
+  if (error?.code === "READY_CASH_NUMBERING_UNAVAILABLE") {
+    return res.status(503).json({
+      status: "error", code: error.code, message: error.message,
     });
   }
   if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) {
@@ -200,12 +205,10 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
     const userId = id(req.user?.id);
     // Document sequences are allocated separately; gaps after failed transactions
     // are acceptable, but no failed checkout can persist a sale or payment.
-    const [quoteNumber, agreementNumber, paymentNumber, receiptNumber] = await Promise.all([
-      nextDocumentNumber("EQUIPMENT_SALES_QUOTATION", { userId }),
-      nextDocumentNumber("EQUIPMENT_SALE_AGREEMENT", { userId }),
-      nextDocumentNumber("EQUIPMENT_SALE_PAYMENT", { userId }),
-      nextDocumentNumber("EQUIPMENT_SALE_RECEIPT", { userId }),
-    ]);
+    // First use seeds missing Ready Cash-only document counters atomically.
+    // Never reset unrelated Hire or Installment numbers or bypass sale checks.
+    const [quoteNumber, agreementNumber, paymentNumber, receiptNumber] =
+      await nextReadyCashDocumentNumbers({ userId });
 
     const saved = await transaction(async (connection) => {
       const [existing] = await connection.query(
@@ -459,10 +462,10 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
         "Record the receiving person, actual condition and signed handover reference before ownership transfer.");
     }
 
-    const [deliveryNumber, ownershipNumber] = await Promise.all([
-      nextDocumentNumber("EQUIPMENT_SALE_DELIVERY", { userId }),
-      nextDocumentNumber("EQUIPMENT_OWNERSHIP_TRANSFER", { userId }),
-    ]);
+    // Delivery and transfer have their own idempotently configured counters.
+    // Never bypass the independent reviewer or signed-handover checks.
+    const [deliveryNumber, ownershipNumber] =
+      await nextReadyCashDocumentNumbers({ userId, stage: "handover" });
     const saved = await transaction(async (connection) => {
       const [agreements] = await connection.query(
         `SELECT * FROM equipment_sale_agreements
