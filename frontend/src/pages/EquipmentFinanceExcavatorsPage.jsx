@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
+import {asStage,isDelivered,customerEvidence} from "../utils/financeExcavatorOwnershipDisplay";
+import "../styles/financeExcavatorBossEvidence.css";
 import ProtectedFinanceImage, { financeMachineImagePath } from "../components/ProtectedFinanceImage";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
@@ -175,6 +178,9 @@ export default function EquipmentFinanceExcavatorsPage() {
   const canManage =
     effectivePermissions.includes("fleet.assets.manage") ||
     ["admin", "administrator", "manager", "system_administrator", "super_admin"].includes(role);
+  const canSeeBossEvidence = useSaleDiscountPermission(user?.id, user?.branch_id);
+  const [bossEvidence, setBossEvidence] = useState({});
+  const [bossEvidenceError, setBossEvidenceError] = useState("");
   const [machines, setMachines] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -192,12 +198,23 @@ export default function EquipmentFinanceExcavatorsPage() {
     setLoading(true);
     setProblem("");
     try {
-      const [bootstrapResponse, locationResponse] = await Promise.all([
+      const [bootstrapResult, locationResult] = await Promise.allSettled([
         axiosClient.get(BOOTSTRAP_API),
         axiosClient.get(`${MACHINE_API}/locations`),
       ]);
-      setMachines(bootstrapResponse.data?.machines || []);
-      setLocations(locationResponse.data?.locations || []);
+      if (bootstrapResult.status === "fulfilled") {
+        setMachines(bootstrapResult.value.data?.machines || []);
+      } else {
+        setProblem(errorMessage(bootstrapResult.reason, "Could not load excavators."));
+      }
+      if (locationResult.status === "fulfilled") {
+        setLocations(locationResult.value.data?.locations || []);
+      } else {
+        setLocations([]);
+        setProblem((previous) => previous ||
+          errorMessage(locationResult.reason,
+            "Could not load physical yards. Refresh before registering an excavator."));
+      }
     } catch (error) {
       setProblem(errorMessage(error, "Could not load the excavator register."));
     } finally {
@@ -208,6 +225,32 @@ export default function EquipmentFinanceExcavatorsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const machineIds = useMemo(() => machines
+    .map((machine) => Number(machine.id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .join(","), [machines]);
+  useEffect(() => {
+    let active = true;
+    setBossEvidence({});
+    setBossEvidenceError("");
+    if (!canSeeBossEvidence || !machineIds) return () => { active = false; };
+    axiosClient.get(`${MACHINE_API}/boss-ownership`, {
+      params: { ids: machineIds },
+      headers: { "Cache-Control": "no-store" },
+    }).then((response) => {
+      if (active) setBossEvidence(Object.fromEntries(
+        (response.data?.summaries || []).map((summary) => [
+          String(summary.asset_id), summary,
+        ])
+      ));
+    }).catch((error) => {
+      if (active) setBossEvidenceError(
+        errorMessage(error, "Buyer and supplier verification is temporarily unavailable.")
+      );
+    });
+    return () => { active = false; };
+  }, [canSeeBossEvidence, machineIds]);
 
   const visibleMachines = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -221,11 +264,13 @@ export default function EquipmentFinanceExcavatorsPage() {
         machine.serial_number,
         machine.chassis_number,
         machine.registration_number,
+        machine.supplier_name,
+        canSeeBossEvidence ? bossEvidence[String(machine.id)]?.customer_name : "",
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term))
     );
-  }, [machines, search]);
+  }, [machines, search, canSeeBossEvidence, bossEvidence]);
 
   function setValue(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -375,6 +420,12 @@ export default function EquipmentFinanceExcavatorsPage() {
       {problem ? <div className="finance-simple__notice is-error" role="alert">{problem}</div> : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
+      {canSeeBossEvidence && bossEvidenceError ? (
+        <div className="finance-simple__notice is-info" role="status">
+          Customer evidence could not be verified: {bossEvidenceError}.
+          The excavator register remains usable, but no buyer status should be inferred.
+        </div>
+      ) : null}
       <section className="finance-simple__metrics">
         <article className="finance-simple__metric"><span>Registered excavators</span><strong>{machines.length}</strong></article>
         <article className="finance-simple__metric"><span>Finance-ready</span><strong>{machines.filter((item) => item.readiness?.ready).length}</strong></article>
@@ -385,7 +436,7 @@ export default function EquipmentFinanceExcavatorsPage() {
       <section className="finance-simple__section">
         <div className="finance-simple__toolbar">
           <div><p className="finance-simple__eyebrow">Machine register</p><h2>{visibleMachines.length} machine(s)</h2></div>
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search code, make, model, serial or chassis" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search excavator, supplier or customer" />
         </div>
         {loading ? <div className="finance-simple__empty">Loading excavators…</div> : null}
         {!loading && !visibleMachines.length ? <div className="finance-simple__empty">No matching excavator records.</div> : null}
@@ -393,6 +444,8 @@ export default function EquipmentFinanceExcavatorsPage() {
           {visibleMachines.map((machine) => {
             const primary = financeMachineImagePath(machine);
             const canEdit = Boolean(machine.editability?.editable);
+            const evidence = canSeeBossEvidence ? bossEvidence[String(machine.id)] : null;
+            const buyerEvidence = canSeeBossEvidence ? customerEvidence(evidence) : null;
             return (
               <article className="finance-simple__machine" key={machine.id}>
                 <div className="finance-simple__machine-image">
@@ -408,10 +461,44 @@ export default function EquipmentFinanceExcavatorsPage() {
                     <div><span>Sale value</span><strong>{money(machine.target_selling_price)}</strong></div>
                     <div><span>Minimum price</span><strong>{money(machine.minimum_selling_price)}</strong></div>
                     <div><span>Serial / chassis</span><strong>{machine.serial_number || machine.chassis_number || "Missing"}</strong></div>
-                    <div><span>Physical yard</span><strong>{machine.location_name || "Company-wide / not assigned"}</strong></div>
+                    <div><span>Registered physical yard</span><strong>{machine.location_name || "Not assigned — choose actual yard"}</strong></div>
                     <div><span>Photos</span><strong>{machine.media?.length || 0}</strong></div>
                     <div><span>Sale status</span><strong>{label(machine.sale_status)}</strong></div>
                   </div>
+                  {canSeeBossEvidence && (
+                    <section className="finance-boss-evidence"
+                      aria-label={"Excavator supplier and customer: " + machine.asset_name}>
+                      <div className="finance-boss-evidence__heading">
+                        <strong>Boss · Supplier & customer record</strong>
+                        <span className={"finance-boss-evidence__status finance-boss-evidence__status--" + (evidence?.stage || "loading")}>
+                          {evidence ? asStage(evidence.stage) : "Verifying…"}
+                        </span>
+                      </div>
+                      <dl>
+                        <div><dt>Supplied by</dt><dd>{machine.supplier_name || "Supplier not recorded"}</dd></div>
+                        <div><dt>Acquisition reference</dt><dd>{machine.acquisition_reference || "Not recorded"}</dd></div>
+                        <div><dt>Customer / applicant</dt><dd>{buyerEvidence?.subheading || "Checking customer records"}</dd></div>
+                        <div><dt>Finance evidence</dt><dd>{evidence?.agreement_number || evidence?.application_number || (evidence ? "No agreement linked" : "Verifying…")}</dd></div>
+                        {evidence?.customer_phone ? <div><dt>Contact</dt><dd>{evidence.customer_phone}</dd></div> : null}
+                        {evidence?.record_type ? <div><dt>Recorded status</dt><dd>{evidence.agreement_status || evidence.application_status || "Not recorded"}</dd></div> : null}
+                        {evidence?.stage === "on_installment" ? (
+                          <div><dt>Installment balance</dt><dd>{money(evidence.outstanding_balance)} outstanding · {money(evidence.amount_paid)} paid</dd></div>
+                        ) : null}
+                        {evidence?.ownership_status ? <div><dt>Legal ownership status</dt><dd>{label(evidence.ownership_status)}</dd></div> : null}
+                        {evidence?.delivery_status ? <div><dt>Delivery status</dt><dd>{label(evidence.delivery_status)}</dd></div> : null}
+                      </dl>
+                      {evidence && isDelivered(evidence) ? (
+                        <p className="finance-boss-evidence__caution">Machine marked delivered. The registered yard is the last recorded storage yard, not proof of its physical location today.</p>
+                      ) : null}
+                      {evidence?.stage === "previous_sale" ? (
+                        <p className="finance-boss-evidence__caution">Previous completed sale; this machine is currently marked available. Check return and ownership evidence before treating this as a present buyer.</p>
+                      ) : null}
+                      <div className="finance-boss-evidence__links">
+                        {evidence?.agreement_id ? <Link to="/equipment-installment-finance/applications?stage=accounts">Open installment accounts</Link> : null}
+                        {evidence?.application_id ? <Link to="/equipment-installment-finance/applications?stage=inbox">Review application</Link> : null}
+                      </div>
+                    </section>
+                  )}
                   {!machine.readiness?.ready ? <div className="finance-simple__notice is-info">Missing: {(machine.readiness?.missing || []).join(", ")}</div> : null}
                   <div className="finance-simple__card-actions">
                     {machine.media?.map((photo) => (
