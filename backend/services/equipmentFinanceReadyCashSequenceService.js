@@ -19,6 +19,12 @@ const READY_CASH_SEQUENCES = Object.freeze([
   Object.freeze({
     code: "READY_CASH_RECEIPT", name: "Ready Cash payment receipt", prefix: "RCR",
   }),
+  Object.freeze({
+    code: "READY_CASH_DELIVERY", name: "Ready Cash signed delivery", prefix: "RCD",
+  }),
+  Object.freeze({
+    code: "READY_CASH_OWNERSHIP_TRANSFER", name: "Ready Cash transfer of ownership", prefix: "RCT",
+  }),
 ]);
 
 function unavailable(code) {
@@ -38,21 +44,21 @@ async function ensureReadyCashSequences(connectionPool = pool) {
     // One unique primary key per sequence; a retry or another Railway replica
     // can run this safely. ON DUPLICATE does not change an existing counter,
     // prefix, active flag, or administrative configuration.
+    const placeholders = READY_CASH_SEQUENCES.map(
+      () => "(?, 'equipment_installment_finance', ?, ?, 1, 6, 'none', TRUE, FALSE, '-', TRUE)"
+    ).join(", ");
     await connection.query(
       `INSERT INTO document_sequences
-        (sequence_code,workspace_code,document_name,prefix,next_number,
-         padding,reset_policy,include_year,include_month,number_separator,is_active)
-       VALUES
-        (?, 'equipment_installment_finance', ?, ?, 1, 6, 'none', TRUE, FALSE, '-', TRUE),
-        (?, 'equipment_installment_finance', ?, ?, 1, 6, 'none', TRUE, FALSE, '-', TRUE),
-        (?, 'equipment_installment_finance', ?, ?, 1, 6, 'none', TRUE, FALSE, '-', TRUE),
-        (?, 'equipment_installment_finance', ?, ?, 1, 6, 'none', TRUE, FALSE, '-', TRUE)
+         (sequence_code,workspace_code,document_name,prefix,next_number,
+          padding,reset_policy,include_year,include_month,number_separator,is_active)
+       VALUES ${placeholders}
        ON DUPLICATE KEY UPDATE sequence_code = sequence_code`,
       READY_CASH_SEQUENCES.flatMap((row) => [row.code, row.name, row.prefix])
     );
+    const marks = READY_CASH_SEQUENCES.map(() => "?").join(", ");
     const [rows] = await connection.query(
       `SELECT sequence_code,is_active FROM document_sequences
-       WHERE sequence_code IN (?, ?, ?, ?) FOR UPDATE`,
+       WHERE sequence_code IN (${marks}) FOR UPDATE`,
       READY_CASH_SEQUENCES.map((row) => row.code)
     );
     for (const definition of READY_CASH_SEQUENCES) {
@@ -71,13 +77,18 @@ async function ensureReadyCashSequences(connectionPool = pool) {
   }
 }
 
-async function nextReadyCashDocumentNumbers({ userId = null } = {}) {
+async function nextReadyCashDocumentNumbers({ userId = null, stage = "checkout" } = {}) {
+  if (stage !== "checkout" && stage !== "handover") {
+    throw unavailable("invalid stage");
+  }
   await ensureReadyCashSequences();
-  // The existing database-backed sequence service locks the respective
-  // counter FOR UPDATE and commits each allocation. Gaps from a failed sale
-  // are permitted; duplicates are not.
+  // All six counters are verified; only allocate numbers for the requested
+  // stage, so retrying checkout cannot consume delivery/transfer references.
+  const definitions = stage === "checkout"
+    ? READY_CASH_SEQUENCES.slice(0, 4)
+    : READY_CASH_SEQUENCES.slice(4);
   const numbers = [];
-  for (const sequence of READY_CASH_SEQUENCES) {
+  for (const sequence of definitions) {
     numbers.push(await nextDocumentNumber(sequence.code, { userId }));
   }
   return numbers;
