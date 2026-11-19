@@ -462,10 +462,10 @@ router.post("/ready-cash/:agreementId/handover", requirePermission("fleet.assets
         "Record the receiving person, actual condition and signed handover reference before ownership transfer.");
     }
 
-    const [deliveryNumber, ownershipNumber] = await Promise.all([
-      nextDocumentNumber("EQUIPMENT_SALE_DELIVERY", { userId }),
-      nextDocumentNumber("EQUIPMENT_OWNERSHIP_TRANSFER", { userId }),
-    ]);
+    // Delivery and transfer have their own idempotently configured counters.
+    // Never bypass the independent reviewer or signed-handover checks.
+    const [deliveryNumber, ownershipNumber] =
+      await nextReadyCashDocumentNumbers({ userId, stage: "handover" });
     const saved = await transaction(async (connection) => {
       const [agreements] = await connection.query(
         `SELECT * FROM equipment_sale_agreements
