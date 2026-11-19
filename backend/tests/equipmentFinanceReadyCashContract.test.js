@@ -62,9 +62,12 @@ test("One transaction saves a historical cash receipt and asset reservation; no 
   assert.doesNotMatch(readyCash, /INSERT INTO equipment_installment_schedule/);
 });
 
-test("Sold status requires independent manager, signed handover, nonvoided receipt and exact collection reconciliation", () => {
+test("Sold status requires independent manager or verified original System Administrator, signed evidence and reconciled payment", () => {
   assert.match(readyCash, /MANAGER_ROLES\.has\(role\)/);
   assert.match(readyCash, /Number\(agreement\.created_by\) === userId/);
+  assert.match(readyCash, /isOriginalSystemAdministrator\(req\.user\)/);
+  assert.match(readyCash, /Number\(agreement\.created_by\) === userId && !originalSystemAdmin/);
+  assert.match(readyCash, /original_system_administrator_self_certification/);
   assert.match(readyCash, /READY_CASH_INDEPENDENT_HANDOVER_REQUIRED/);
   assert.match(readyCash, /signed_handover_confirmed !== true/);
   assert.match(readyCash, /handover_reference/);
