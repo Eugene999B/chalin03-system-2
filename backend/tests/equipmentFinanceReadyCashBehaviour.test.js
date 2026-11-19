@@ -79,8 +79,13 @@ function loadWithFakeLedger(options = {}) {
         if (request === "../middleware/permissionMiddleware") {
           return { requirePermission: () => (_req, _res, next) => next() };
         }
-        if (request === "../services/groupConfigurationService") {
-          return { nextDocumentNumber: async (name) => "SYNTHETIC-" + name };
+        if (request === "../services/equipmentFinanceReadyCashSequenceService") {
+          return {
+            nextReadyCashDocumentNumbers: async () => [
+              "RCQ-2026-000001", "RCA-2026-000001",
+              "RCP-2026-000001", "RCR-2026-000001",
+            ],
+          };
         }
         if (request === "../services/auditTrailService") {
           return { writeAuditEvent: async () => null };
@@ -149,6 +154,10 @@ test("synthetic Ready Cash checkout records one net-and-tax receipt, zero debt a
   const quote = calls.find((item) => item.sql.includes("INSERT INTO equipment_sales_quotations SET"));
   const payment = calls.find((item) => item.sql.includes("INSERT INTO equipment_sale_payments SET"));
   const agreement = calls.find((item) => item.sql.includes("INSERT INTO equipment_sale_agreements SET"));
+  assert.equal(quote.args.quotation_number, "RCQ-2026-000001");
+  assert.equal(agreement.args.agreement_number, "RCA-2026-000001");
+  assert.equal(payment.args.payment_number, "RCP-2026-000001");
+  assert.equal(payment.args.receipt_number, "RCR-2026-000001");
   assert.equal(quote.args.subtotal, 85);
   assert.equal(quote.args.tax_amount, 15);
   assert.equal(quote.args.total_amount, 100);
