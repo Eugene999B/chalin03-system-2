@@ -45,6 +45,7 @@ if (!express.application[ROUTE_MOUNT_FLAG]) {
 
 require("./equipmentCreditOptionalApprovalBootstrap");
 require("./operationalApprovalBootstrap");
+require("./equipmentFinanceDunkwaYardBootstrap");
 require("./stockLedgerSummaryBootstrap");
 require("./executivePackNotificationDeliveryBootstrap");
 require("./equipmentFinanceBossAlertDeliveryBootstrap");
