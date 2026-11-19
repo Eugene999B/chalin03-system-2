@@ -40,8 +40,9 @@ function CheckoutStatus({ sale, downloadReceipt }) {
     {sale.id && <button className="rc-receipt-action" type="button" onClick={() => downloadReceipt(sale.id)}>Download official receipt (PDF)</button>}
     <p>{money(sale.total_amount)} collected · outstanding {money(sale.outstanding_balance)}</p>
     {!sold && <p className="rc-handover-warning">
-      A different authorized finance manager must verify the signed handover before
-      the asset is marked sold. Payment is already recorded; do not charge again.
+      A different authorized Finance manager must verify the signed handover, unless
+      the verified original System Administrator is completing the sale. Signed evidence
+      is still required. Payment is already recorded; do not charge again.
     </p>}
   </div>;
 }
@@ -336,15 +337,17 @@ export default function EquipmentFinanceReadyCashPage() {
           <button className="rc-primary" type="submit" disabled={!maySell || processing || loading || !customer || !isAvailable(machine) || !fullPaymentConfirmed || !termsAccepted || !paymentReference.trim() || !taxReviewed || !taxAmountValid}>
             {processing ? "Recording…" : "Record full payment & reserve machine"}
           </button>
-          <p className="rc-muted">The full-payment record is created without an installment schedule. The machine is only marked sold after independent signed handover.</p>
+          <p className="rc-muted">The full-payment record is created without an installment schedule. The machine is marked sold only after a signed handover by an independent manager or the verified original System Administrator.</p>
         </form>
         <CheckoutStatus sale={created} downloadReceipt={downloadReceipt} />
       </section>
 
       <section className="rc-card">
         <header><span>02 · Independent confirmation</span><h2>Handover & mark sold</h2>
-          <p>A different authorized manager confirms the physical delivery and signed transfer.
-            The staff member who recorded the full payment cannot approve their own handover.</p></header>
+          <p>A different authorized manager normally confirms delivery and the signed ownership transfer.
+            The verified original System Administrator can complete both stages using the same account.
+            The receiving person's identity, actual machine condition and signed handover reference are
+            still required for everyone.</p></header>
         <form onSubmit={completeHandover}>
           <label>Fully paid sale awaiting handover
             <select value={handOverId} onChange={(e) => setHandOverId(e.target.value)} required>
@@ -371,7 +374,8 @@ export default function EquipmentFinanceReadyCashPage() {
           </label>
           <label className="rc-checkbox">
             <input type="checkbox" checked={signedConfirmed} onChange={(e) => setSignedConfirmed(e.target.checked)} />
-            <span>I independently verified the physical handover, customer identity and signed document.</span>
+            <span>I personally verified the physical handover, customer identity and signed document.
+              If I am also the original sale recorder, I confirm I am the verified original System Administrator.</span>
           </label>
           <button className="rc-primary" type="submit" disabled={processing || loading || !handOverId || !signedConfirmed}>
             {processing ? "Finalizing…" : "Confirm handover & mark machine sold"}
