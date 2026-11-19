@@ -16,7 +16,7 @@ if (!db[FLAG]) {
       try {
         const readiness = await ensureReadyCashSequences();
         initialized = readiness.ready;
-        console.log("Ready Cash document numbering: verified 4 sequences");
+        console.log("Ready Cash document numbering: verified 6 sequences");
       } catch (error) {
         // Do not take down every workspace because of Ready Cash numbering.
         // Its checkout retries this idempotent initialization and reports an
