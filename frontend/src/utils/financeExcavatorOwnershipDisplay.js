@@ -1,4 +1,3 @@
-"use strict";
 function asStage(stage){
   const labels={
     on_installment:"Under installment",
@@ -24,4 +23,4 @@ function customerEvidence(summary){
     detail:summary.agreement_status||summary.application_status||null,
   };
 }
-module.exports={asStage,isDelivered,customerEvidence};
+export {asStage,isDelivered,customerEvidence};
