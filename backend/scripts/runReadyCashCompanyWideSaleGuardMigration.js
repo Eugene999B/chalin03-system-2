@@ -84,11 +84,6 @@ async function applyTrigger(connection,definition){
 }
 async function main(){
  if(process.env.NODE_ENV!=="production")throw Error("This approved repair is production-only.");
- const backup=String(process.env.CHALIN03_SIGNED_BACKUP_CONFIRMED||"").toLowerCase();
- if(!["true","1","yes"].includes(backup)||
-   !/^[a-fA-F0-9]{64}$/.test(String(process.env.MIGRATION_BACKUP_SHA256||"").trim())){
-  throw Error("Signed production backup confirmation and SHA-256 required before altering sale guards.");
- }
  const connection=await mysql.createConnection(config());
  let held=false;
  try{
@@ -98,6 +93,17 @@ async function main(){
   const [[lock]]=await connection.query("SELECT GET_LOCK(?,30) AS acquired",[LOCK]);
   held=Number(lock?.acquired)===1;
   if(!held)throw Error("Could not obtain migration safety lock.");
+  const current=await readTriggers(connection);
+  const alreadyVerified=TRIGGERS.every(t=>
+    current.get(t.name)?.ACTION_STATEMENT?.includes(CORRECTED) &&
+    !current.has(t.shadow));
+  if(!alreadyVerified){
+    const backup=String(process.env.CHALIN03_SIGNED_BACKUP_CONFIRMED||"").toLowerCase();
+    if(!["true","1","yes"].includes(backup)||
+      !/^[a-fA-F0-9]{64}$/.test(String(process.env.MIGRATION_BACKUP_SHA256||"").trim())){
+      throw Error("Signed production backup confirmation and SHA-256 required before changing sale guards.");
+    }
+  }
   const result=[];
   for(const definition of TRIGGERS)result.push({name:definition.name,action:await applyTrigger(connection,definition)});
   const actual=await readTriggers(connection);
