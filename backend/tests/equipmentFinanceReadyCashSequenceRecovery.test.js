@@ -23,7 +23,7 @@ function fakePool({ inactive = null, failure = null } = {}) {
       state.statements.push({ sql, params });
       if (failure && sql.includes(failure)) throw new Error("Synthetic database failure");
       if (sql.includes("INSERT INTO document_sequences")) {
-        assert.equal(params.length, 12, "Four exact Ready Cash sequence definitions");
+        assert.equal(params.length, 18, "Six exact Ready Cash sequence definitions");
         for (let i = 0; i < params.length; i += 3) {
           const [code, name, prefix] = params.slice(i, i+3);
           if (!state.sequenceRows.has(code)) {
@@ -33,7 +33,7 @@ function fakePool({ inactive = null, failure = null } = {}) {
             });
           }
         }
-        return [{ affectedRows: 4 }];
+        return [{ affectedRows: 6 }];
       }
       if (sql.includes("SELECT sequence_code,is_active FROM document_sequences")) {
         return [[...state.sequenceRows.values()].map((row) => ({
@@ -50,8 +50,9 @@ test("each Ready Cash reference has its own stable code, exclusive prefix, and n
   assert.deepEqual(READY_CASH_SEQUENCES.map(x=>x.code), [
     "READY_CASH_QUOTATION","READY_CASH_AGREEMENT",
     "READY_CASH_PAYMENT","READY_CASH_RECEIPT",
+    "READY_CASH_DELIVERY","READY_CASH_OWNERSHIP_TRANSFER",
   ]);
-  assert.deepEqual(READY_CASH_SEQUENCES.map(x=>x.prefix), ["RCQ","RCA","RCP","RCR"]);
+  assert.deepEqual(READY_CASH_SEQUENCES.map(x=>x.prefix), ["RCQ","RCA","RCP","RCR","RCD","RCT"]);
 });
 
 test("missing Ready Cash numbers are initialized atomically without changing receipts or other sequences", async () => {
@@ -61,7 +62,7 @@ test("missing Ready Cash numbers are initialized atomically without changing rec
   assert.equal(fake.state.commits,1);
   assert.equal(fake.state.rollbacks,0);
   assert.equal(fake.state.releases,1);
-  assert.equal(fake.state.sequenceRows.size,4);
+  assert.equal(fake.state.sequenceRows.size,6);
   const inserts=fake.state.statements.filter(x=>x.sql.includes("INSERT"));
   assert.equal(inserts.length,1);
   assert.match(inserts[0].sql,/ON DUPLICATE KEY UPDATE sequence_code = sequence_code/);
@@ -105,6 +106,7 @@ test("ready cash checkout uses its own safe sequences and startup does not post 
   const bootstrap=fs.readFileSync(path.join(__dirname,"../services/equipmentFinanceReadyCashSequenceBootstrap.js"),"utf8");
   const preload=fs.readFileSync(path.join(__dirname,"../services/exportWorkbookSafetyBootstrap.js"),"utf8");
   assert.match(route,/nextReadyCashDocumentNumbers\(\{ userId \}\)/);
+  assert.match(route,/nextReadyCashDocumentNumbers\(\{ userId, stage: "handover" \}\)/);
   assert.doesNotMatch(route,/nextDocumentNumber\("EQUIPMENT_SALES_QUOTATION"/);
   assert.match(bootstrap,/testDatabaseConnection/);
   assert.match(bootstrap,/ensureReadyCashSequences\(\)/);
