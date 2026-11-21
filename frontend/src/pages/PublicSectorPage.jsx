@@ -146,7 +146,7 @@ export default function PublicSectorPage({sector="excavators"}){
    <div><a href="tel:+233540713654">Call us</a><a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us</a></div></div>
   <header className="division__nav">
    <a className="division__logo" href="https://chalin03.com/"><img src="/chalin03-logo.png" width="43" height="43" alt=""/><strong>CHALIN<span>03</span></strong></a>
-   <nav aria-label="Business navigation"><Link to="/shop">Spare parts market</Link><Link to="/excavators">Excavators</Link><Link to="/heavy-machines">Heavy machines</Link><Link to="/help">Help</Link></nav>
+   <nav aria-label="Business navigation"><Link to="/shop">Spare parts market</Link><Link to="/excavators">Excavators</Link><Link to="/heavy-machines">Heavy machines</Link><Link to="/customer-help">Help</Link></nav>
    <Link className="division__nav-cta" to={hrefFor(sector)}>Request a quote ↗</Link>
   </header>
   <section className={"division__hero"+(!data.hero?" division__hero--graphic":"")}>
@@ -191,7 +191,7 @@ export default function PublicSectorPage({sector="excavators"}){
     <div><Link className="division__button division__button--gold" to={hrefFor(sector)}>Send a website enquiry</Link>
      <a className="division__button division__button--line" href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us</a></div>
   </section>
-  <footer className="division__footer"><a href="https://chalin03.com/">CHALIN03 Home</a><Link to="/shop">Spare parts market</Link><Link to="/help">Help & contact</Link>
+  <footer className="division__footer"><a href="https://chalin03.com/">CHALIN03 Home</a><Link to="/shop">Spare parts market</Link><Link to="/customer-help">Help & contact</Link>
    <small>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED · Pictures and listed models do not confirm actual inventory.</small></footer>
   <PublicContactPanel subject={data.title}/>
  </main>;
