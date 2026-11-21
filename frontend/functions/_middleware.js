@@ -4,7 +4,7 @@
  * not /shop stuck on whichever business site they happen to be visiting.
  * Do not forward POST, auth or payment request bodies to another origin.
  */
-const ROOT="https://chalin03.com";
+const ROOT="https://homepage.chalin03.com";
 const HOSTS=Object.freeze({
   "chalin03.com":ROOT,
   "www.chalin03.com":ROOT,
@@ -60,7 +60,7 @@ function targetFor(url){
  if(host==="www.chalin03.com")return ROOT+path+url.search;
  const site=HOSTS[host];
  if(path==="/"){
-  return null;
+  return host==="chalin03.com"?ROOT+"/"+url.search:null;
  }
  if(path==="/login"||path==="/owner-recovery"||path==="/help"||isPrivatePath(path)){
   return site==="https://work.chalin03.com"?null:"https://work.chalin03.com"+path+url.search;
@@ -70,7 +70,7 @@ function targetFor(url){
   const target=SECTOR_SITES[sector]||SECTOR_SITES.general;
   return site===target?null:target+"/enquire"+url.search;
  }
- if(path==="/company"||path==="/company/")return ROOT+url.search;
+ if(path==="/company"||path==="/company/")return ROOT+"/"+url.search;
  if(PATH_SITES[path]){
   const target=PATH_SITES[path];
   return target===site?target+"/"+url.search:target+"/"+url.search;

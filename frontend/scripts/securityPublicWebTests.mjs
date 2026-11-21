@@ -98,10 +98,10 @@ assert.match(serviceWorker, /X-Chalin03-Asset-Mismatch/);
 assert.doesNotMatch(serviceWorker, /manifest\.webmanifest/);
 assert.doesNotMatch(serviceWorker, /chalin03-pwa-(192|512)\.png/);
 
-assert.equal(robots.trim(), "User-agent: *\nAllow: /\n\nSitemap: https://chalin03.com/sitemap.xml");
+assert.equal(robots.trim(), "User-agent: *\nAllow: /\n\nSitemap: https://homepage.chalin03.com/sitemap.xml");
 assert.match(robots, /Allow: \/\n/);
-assert.match(robots, /Sitemap: https:\/\/chalin03\.com\/sitemap\.xml/);
-assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/chalin03\.com\/company\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
+assert.match(robots, /Sitemap: https:\/\/homepage\.chalin03\.com\/sitemap\.xml/);
+assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/homepage\.chalin03\.com\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
 assert.ok(!sitemap.includes("mining-operations"));
 assert.ok(!sitemap.includes("<loc>https://chalin03.com/equipment-hire</loc>"),"Private equipment-hire workspace must not be indexed");
 

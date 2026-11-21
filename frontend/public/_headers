@@ -22,6 +22,10 @@ https://chalin03.com/
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
 
+https://homepage.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
 https://chalin03.com/shop
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
