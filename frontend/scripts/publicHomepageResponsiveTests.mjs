@@ -8,7 +8,6 @@ const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const read=p=>fs.readFileSync(path.join(root,p),"utf8");
 const page=read("src/pages/CompanyExperienceV3.jsx");
 const css=read("src/styles/companyExperienceV3.css");
-const subdomains=read("src/config/officialSites.js");
 const photos=read("src/data/verifiedPublicPhotos.js");
 const e2e=read("e2e/publicHomepageResponsive.spec.js");
 const headers=read("public/_headers");
