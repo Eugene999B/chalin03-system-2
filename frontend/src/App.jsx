@@ -17,6 +17,8 @@ import LoginPage from "./pages/LoginPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import PublicShopPage from "./pages/PublicShopPage";
 import PublicEnquiryPage from "./pages/PublicEnquiryPage";
+import PublicSectorPage from "./pages/PublicSectorPage";
+import PublicHelpPage from "./pages/PublicHelpPage";
 import WebsiteCommerceControlPage from "./pages/WebsiteCommerceControlPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -190,6 +192,25 @@ function RootWorkspaceEntry() {
   const location = useLocation();
   const { isLoggedIn, loading } = useAuth();
 
+  // All public hostnames share the existing Cloudflare Pages SPA and API.
+  // The work hostname retains the protected application and auth routes.
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
+  if (location.pathname === "/") {
+    const divisionHosts = {
+      "excavators.chalin03.com": "excavators",
+      "machines.chalin03.com": "heavy-machines",
+      "motorcycles.chalin03.com": "motorcycles",
+      "automobiles.chalin03.com": "automobiles",
+      "gold.chalin03.com": "gold",
+      "transport.chalin03.com": "machine-transport",
+      "hire.chalin03.com": "equipment-hire"
+    };
+    if (hostname === "homepage.chalin03.com") return safe(<PublicCompanyHomePage />);
+    if (hostname === "spareparts.chalin03.com") return safe(<PublicShopPage />);
+    if (hostname === "help.chalin03.com") return safe(<PublicHelpPage />);
+    if (divisionHosts[hostname]) return safe(<PublicSectorPage sector={divisionHosts[hostname]} />);
+    if (hostname === "work.chalin03.com" && !loading && !isLoggedIn) return <LoginPage />;
+  }
   if (!loading && !isLoggedIn && location.pathname === "/") {
     return safe(<PublicCompanyHomePage />);
   }
@@ -223,6 +244,14 @@ export default function App() {
         <Routes>
           <Route path="/shop" element={<PublicShopPage />} />
           <Route path="/enquire" element={<PublicEnquiryPage />} />
+          <Route path="/excavators" element={<PublicSectorPage sector="excavators" />} />
+          <Route path="/heavy-machines" element={<PublicSectorPage sector="heavy-machines" />} />
+          <Route path="/motorcycles" element={<PublicSectorPage sector="motorcycles" />} />
+          <Route path="/automobiles" element={<PublicSectorPage sector="automobiles" />} />
+          <Route path="/gold" element={<PublicSectorPage sector="gold" />} />
+          <Route path="/machine-transport" element={<PublicSectorPage sector="machine-transport" />} />
+          <Route path="/equipment-hire-services" element={<PublicSectorPage sector="equipment-hire" />} />
+          <Route path="/help" element={<PublicHelpPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
