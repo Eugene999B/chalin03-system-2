@@ -262,7 +262,7 @@ router.get("/staff/requests",requireAuth,requireStaff,async(req,res)=>{
    `SELECT r.id,r.reference_code,r.request_type,r.status,r.customer_name,r.customer_phone,
     r.customer_location,r.customer_email,r.subject,r.message,r.estimated_total,
     r.linked_sale_id,r.payment_method,r.confirmed_at,r.created_at,r.updated_at
-    FROM website_customer_requests r WHERE \${where}
+    FROM website_customer_requests r WHERE ${where}
     ORDER BY FIELD(r.status,'new','contacted','quoted','fulfilled','cancelled'),r.created_at DESC
     LIMIT ?`,[...params,limit]);
   const ids=rows.map(x=>x.id);
@@ -270,7 +270,7 @@ router.get("/staff/requests",requireAuth,requireStaff,async(req,res)=>{
   if(ids.length){
    const [list]=await pool.query(
     `SELECT request_id,product_id,product_name_snapshot,quantity,unit_price_snapshot
-     FROM website_customer_request_items WHERE request_id IN (\${ids.map(()=>"?").join(",")})
+     FROM website_customer_request_items WHERE request_id IN (${ids.map(()=>"?").join(",")})
      ORDER BY id`,ids);
    items=list;
   }
