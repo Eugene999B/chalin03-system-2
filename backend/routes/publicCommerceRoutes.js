@@ -95,21 +95,22 @@ async function auditAction(req,action,id,details){
 }
 function safeProduct(row){
  const group=str(row.category_override)||category(row.name,row.category);
- const ownImage=safeImageUrl(row.catalog_image_url)||safeImageUrl(row.image_url);
- const isStored=Boolean(row.catalog_image_url||row.image_url)&&!ownImage;
+ const hasStoredPhoto=Boolean(Number(row.has_catalog_photo)||Number(row.has_inventory_photo));
  return {
   id:Number(row.id),name:str(row.name,160),size:str(row.size,100),
   category:group,price:Number(row.selling_price)>0?currency(row.selling_price):null,
-  image_url:ownImage||(isStored?"/api/public-commerce/products/"+row.id+"/photo":illustration(group)),
-  image_is_illustrative:!ownImage&&!isStored,
+  image_url:hasStoredPhoto?"/api/public-commerce/products/"+row.id+"/photo":illustration(group),
+  image_is_illustrative:!hasStoredPhoto,
   in_stock:Number(row.quantity)>0 && Number(row.selling_price)>0,
   featured:Boolean(Number(row.is_featured||0)),
  };
 }
 async function catalogueRows(connection=pool){
  const [rows]=await connection.query(
-  `SELECT p.id,p.branch_id,p.name,p.size,p.category,p.selling_price,p.quantity,p.image_url,
-       c.image_url AS catalog_image_url,c.category_override,c.is_featured,c.description
+  `SELECT p.id,p.branch_id,p.name,p.size,p.category,p.selling_price,p.quantity,
+       IF(p.image_url IS NOT NULL AND p.image_url <> '',1,0) AS has_inventory_photo,
+       IF(c.image_url IS NOT NULL AND c.image_url <> '',1,0) AS has_catalog_photo,
+       c.category_override,c.is_featured,c.description
     FROM products p
     LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
     WHERE p.branch_id=? AND p.is_active=1 AND COALESCE(c.is_visible,1)=1
@@ -282,8 +283,10 @@ router.get("/staff/requests",requireAuth,requireStaff,async(req,res)=>{
 router.get("/staff/products",requireAuth,requireAdmin,async(_req,res)=>{
  try{
   const [rows]=await pool.query(
-    `SELECT p.id,p.name,p.size,p.category,p.selling_price,p.quantity,p.is_active,p.image_url,
-     c.is_visible,c.is_featured,c.category_override,c.description,c.image_url AS catalog_image_url
+    `SELECT p.id,p.name,p.size,p.category,p.selling_price,p.quantity,p.is_active,
+     IF(p.image_url IS NOT NULL AND p.image_url <> '',1,0) AS has_inventory_photo,
+     IF(c.image_url IS NOT NULL AND c.image_url <> '',1,0) AS has_catalog_photo,
+     c.is_visible,c.is_featured,c.category_override,c.description
      FROM products p LEFT JOIN website_catalog_controls c
       ON c.product_id=p.id AND c.branch_id=p.branch_id
      WHERE p.branch_id=? ORDER BY p.name`,[MAIN_STORE]);
@@ -292,8 +295,8 @@ router.get("/staff/products",requireAuth,requireAdmin,async(_req,res)=>{
    selling_price:currency(row.selling_price),quantity:Number(row.quantity),is_active:Boolean(row.is_active),
    is_visible:row.is_visible===null?true:Boolean(row.is_visible),is_featured:Boolean(row.is_featured),
    category_override:row.category_override||"",description:row.description||"",
-   image_url:safeImageUrl(row.catalog_image_url)||"",
-   existing_image:!!row.image_url
+   image_url:"",
+   existing_image:Boolean(Number(row.has_catalog_photo)||Number(row.has_inventory_photo))
   }))});
  }catch(error){return res.status(503).json({status:"error",message:"Could not load online publishing controls."});}
 });
