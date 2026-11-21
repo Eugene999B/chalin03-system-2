@@ -1,6 +1,8 @@
 "use strict";
 const express=require("express");
 const crypto=require("node:crypto");
+const sharp=require("sharp");
+const {uploadObject,config:storageConfig}=require("../services/objectStorageService");
 const rateLimit=require("express-rate-limit");
 const {pool}=require("../config/db");
 const {requireAuth}=require("../middleware/authMiddleware");
@@ -94,7 +96,7 @@ async function auditAction(req,action,id,details){
 function safeProduct(row){
  const group=str(row.category_override)||category(row.name,row.category);
  const ownImage=safeImageUrl(row.catalog_image_url)||safeImageUrl(row.image_url);
- const isStored=Boolean(row.image_url)&&!ownImage;
+ const isStored=Boolean(row.catalog_image_url||row.image_url)&&!ownImage;
  return {
   id:Number(row.id),name:str(row.name,160),size:str(row.size,100),
   category:group,price:currency(row.selling_price),
@@ -106,12 +108,12 @@ function safeProduct(row){
 }
 async function catalogueRows(connection=pool){
  const [rows]=await connection.query(
-  \`SELECT p.id,p.branch_id,p.name,p.size,p.category,p.selling_price,p.quantity,p.image_url,
+  `SELECT p.id,p.branch_id,p.name,p.size,p.category,p.selling_price,p.quantity,p.image_url,
        c.image_url AS catalog_image_url,c.category_override,c.is_featured,c.description
     FROM products p
     LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
     WHERE p.branch_id=? AND p.is_active=1 AND COALESCE(c.is_visible,1)=1
-    ORDER BY p.name,p.id\`,[MAIN_STORE]);
+    ORDER BY p.name,p.id`,[MAIN_STORE]);
  return rows;
 }
 router.get("/products",async(req,res)=>{
@@ -143,10 +145,10 @@ router.get("/products/:id/photo",async(req,res)=>{
   const itemId=numberId(req.params.id);
   if(!itemId)return res.sendStatus(404);
   const [rows]=await pool.query(
-   \`SELECT p.image_url FROM products p
+   `SELECT COALESCE(NULLIF(c.image_url,''),p.image_url) AS image_url FROM products p
       LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
      WHERE p.id=? AND p.branch_id=? AND p.is_active=1 AND COALESCE(c.is_visible,1)=1
-     LIMIT 1\`,[itemId,MAIN_STORE]);
+     LIMIT 1`,[itemId,MAIN_STORE]);
   if(!rows.length||!rows[0].image_url)return res.sendStatus(404);
   const value=rows[0].image_url;
   if(safeImageUrl(value))return res.sendStatus(404);
@@ -204,10 +206,10 @@ router.post("/requests",limiter,async(req,res)=>{
   if(selected.length){
    for(const item of selected){
     const [rows]=await conn.query(
-     \`SELECT p.id,p.name,p.selling_price,p.quantity FROM products p
+     `SELECT p.id,p.name,p.selling_price,p.quantity FROM products p
         LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
        WHERE p.id=? AND p.branch_id=? AND p.is_active=1 AND COALESCE(c.is_visible,1)=1
-       LIMIT 1 FOR UPDATE\`,[item.productId,MAIN_STORE]);
+       LIMIT 1 FOR UPDATE`,[item.productId,MAIN_STORE]);
     if(!rows.length||Number(rows[0].quantity)<item.qty){
      await conn.rollback();
      return res.status(409).json({status:"error",code:"WEB_STOCK_CHANGED",
@@ -220,16 +222,16 @@ router.post("/requests",limiter,async(req,res)=>{
   }
   const reference="WEB-"+crypto.randomBytes(8).toString("hex").toUpperCase();
   const [r]=await conn.query(
-    \`INSERT INTO website_customer_requests
+    `INSERT INTO website_customer_requests
       (reference_code,client_key,request_type,customer_name,customer_phone,customer_location,
        customer_email,subject,message,branch_id,estimated_total)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)\`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     [reference,clientKey,type,name,contact,location,email||null,subject||null,message||null,MAIN_STORE,total]);
   for(const item of savedItems){
    await conn.query(
-    \`INSERT INTO website_customer_request_items
+    `INSERT INTO website_customer_request_items
       (request_id,product_id,product_name_snapshot,quantity,unit_price_snapshot)
-     VALUES (?,?,?,?,?)\`,[r.insertId,item.id,item.name,item.qty,item.price]);
+     VALUES (?,?,?,?,?)`,[r.insertId,item.id,item.name,item.qty,item.price]);
   }
   await conn.commit();
   return res.status(201).json({status:"success",reference,request_type:type,
@@ -252,19 +254,19 @@ router.get("/staff/requests",requireAuth,requireStaff,async(req,res)=>{
   if(search){where+=" AND (r.reference_code LIKE ? OR r.customer_name LIKE ? OR r.customer_phone LIKE ? OR r.subject LIKE ?)";
    const pattern="%"+search+"%";params.push(pattern,pattern,pattern,pattern);}
   const [rows]=await pool.query(
-   \`SELECT r.id,r.reference_code,r.request_type,r.status,r.customer_name,r.customer_phone,
+   `SELECT r.id,r.reference_code,r.request_type,r.status,r.customer_name,r.customer_phone,
     r.customer_location,r.customer_email,r.subject,r.message,r.estimated_total,
     r.linked_sale_id,r.payment_method,r.confirmed_at,r.created_at,r.updated_at
     FROM website_customer_requests r WHERE \${where}
     ORDER BY FIELD(r.status,'new','contacted','quoted','fulfilled','cancelled'),r.created_at DESC
-    LIMIT ?\`,[...params,limit]);
+    LIMIT ?`,[...params,limit]);
   const ids=rows.map(x=>x.id);
   let items=[];
   if(ids.length){
    const [list]=await pool.query(
-    \`SELECT request_id,product_id,product_name_snapshot,quantity,unit_price_snapshot
+    `SELECT request_id,product_id,product_name_snapshot,quantity,unit_price_snapshot
      FROM website_customer_request_items WHERE request_id IN (\${ids.map(()=>"?").join(",")})
-     ORDER BY id\`,ids);
+     ORDER BY id`,ids);
    items=list;
   }
   const map=new Map(rows.map(row=>[Number(row.id),{...row,items:[]}]));
@@ -276,11 +278,11 @@ router.get("/staff/requests",requireAuth,requireStaff,async(req,res)=>{
 router.get("/staff/products",requireAuth,requireAdmin,async(_req,res)=>{
  try{
   const [rows]=await pool.query(
-    \`SELECT p.id,p.name,p.size,p.category,p.selling_price,p.quantity,p.is_active,p.image_url,
+    `SELECT p.id,p.name,p.size,p.category,p.selling_price,p.quantity,p.is_active,p.image_url,
      c.is_visible,c.is_featured,c.category_override,c.description,c.image_url AS catalog_image_url
      FROM products p LEFT JOIN website_catalog_controls c
       ON c.product_id=p.id AND c.branch_id=p.branch_id
-     WHERE p.branch_id=? ORDER BY p.name\`,[MAIN_STORE]);
+     WHERE p.branch_id=? ORDER BY p.name`,[MAIN_STORE]);
   return res.json({status:"success",products:rows.map(row=>({
    id:row.id,name:row.name,size:row.size,category:category(row.name,row.category),
    selling_price:currency(row.selling_price),quantity:Number(row.quantity),is_active:Boolean(row.is_active),
@@ -303,12 +305,12 @@ router.patch("/staff/products/:id",requireAuth,requireAdmin,async(req,res)=>{
   const [found]=await pool.query("SELECT id FROM products WHERE id=? AND branch_id=? LIMIT 1",[id,MAIN_STORE]);
   if(!found.length)return res.status(404).json({status:"error",message:"Product not found in MAIN store."});
   await pool.query(
-   \`INSERT INTO website_catalog_controls
+   `INSERT INTO website_catalog_controls
      (product_id,branch_id,is_visible,is_featured,category_override,description,image_url,updated_by)
     VALUES (?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE is_visible=VALUES(is_visible),is_featured=VALUES(is_featured),
     category_override=VALUES(category_override),description=VALUES(description),
-    image_url=VALUES(image_url),updated_by=VALUES(updated_by)\`,
+    image_url=VALUES(image_url),updated_by=VALUES(updated_by)`,
    [id,MAIN_STORE,b.is_visible?1:0,b.is_featured?1:0,
      categoryOverride||null,description||null,imageUrl||null,req.user.id]);
   await auditAction(req,"WEBSITE_CATALOG_PUBLISHING_UPDATED",id,
@@ -322,8 +324,8 @@ router.patch("/staff/requests/:id/status",requireAuth,requireManager,async(req,r
   return res.status(400).json({status:"error",message:"Choose Contacted, Quoted or Cancelled."});
  try{
   const [result]=await pool.query(
-   \`UPDATE website_customer_requests SET status=?,reviewed_by=?,reviewed_at=NOW()
-     WHERE id=? AND branch_id=? AND linked_sale_id IS NULL AND status!='fulfilled'\`,
+   `UPDATE website_customer_requests SET status=?,reviewed_by=?,reviewed_at=NOW()
+     WHERE id=? AND branch_id=? AND linked_sale_id IS NULL AND status!='fulfilled'`,
    [status,req.user.id,id,MAIN_STORE]);
   if(!result.affectedRows)return res.status(409).json({status:"error",message:"This request is already fulfilled or no longer editable."});
   await auditAction(req,"WEBSITE_REQUEST_STATUS_CHANGED",id,"Online request marked "+status);
@@ -356,9 +358,9 @@ router.post("/staff/requests/:id/fulfill",requireAuth,requireManager,async(req,r
       message:"This order already has a recorded POS sale.",sale_id:request.linked_sale_id});
   }
   const [saleRows]=await c.query(
-   \`SELECT id,branch_id,customer_phone,total,amount_paid,balance,payment_type,sale_status,
+   `SELECT id,branch_id,customer_phone,total,amount_paid,balance,payment_type,sale_status,
           COALESCE(is_voided,0) AS is_voided
-     FROM sales WHERE id=? AND branch_id=? LIMIT 1 FOR UPDATE\`,[saleId,MAIN_STORE]);
+     FROM sales WHERE id=? AND branch_id=? LIMIT 1 FOR UPDATE`,[saleId,MAIN_STORE]);
   const sale=saleRows[0];
   if(!sale||sale.is_voided||sale.sale_status!=="completed"||
     Number(sale.balance)>0||Number(sale.amount_paid)+0.001<Number(sale.total)||
@@ -381,9 +383,9 @@ router.post("/staff/requests/:id/fulfill",requireAuth,requireManager,async(req,r
     message:"The POS sale products or quantities do not exactly match this website order."});
   }
   await c.query(
-   \`UPDATE website_customer_requests
+   `UPDATE website_customer_requests
      SET status='fulfilled',linked_sale_id=?,payment_method=?,confirmed_by=?,confirmed_at=NOW()
-     WHERE id=? AND branch_id=? AND linked_sale_id IS NULL\`,
+     WHERE id=? AND branch_id=? AND linked_sale_id IS NULL`,
    [saleId,declared,req.user.id,requestId,MAIN_STORE]);
   await c.commit();
   await auditAction(req,"WEBSITE_ORDER_LINKED_TO_PAID_POS_SALE",requestId,
