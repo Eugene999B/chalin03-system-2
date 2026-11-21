@@ -22,6 +22,8 @@ test("real product categories cover different spare-parts classes",()=>{
  assert.equal(category("Excavator Hydraulic Oil","Lubricant & Oil"),"Oils, grease & fluids");
  assert.equal(category("Hammer 4 lb","Spanner"),"Tools & workshop");
  assert.equal(category("Engine piston","Engine"),"Engines & components");
+ assert.equal(category("15W-40 ENGINE OIL","Oil"),"Oils, grease & fluids");
+ assert.equal(category("ENGINE AIR FILTER","Filter"),"Filters & servicing");
  assert.equal(category("Excavator track shoe","Undercarriage"),"Undercarriage & ground-engaging");
  assert.equal(category("Electric starter","Electrical"),"Electrical & starting");
 });
@@ -32,7 +34,11 @@ test("public product format hides stock counts, cost and unknown or zero price",
  assert.equal(result.in_stock,true);
  assert.equal(result.featured,true);
  assert.equal(result.image_is_illustrative,true);
- assert.ok(result.image_url.startsWith("/images/home/"));
+ assert.equal(result.image_url,null);
+ assert.equal(result.has_photo,false);
+ const photographed=safeProduct({...row,has_inventory_photo:1});
+ assert.equal(photographed.image_url,"/api/public-commerce/products/41/photo");
+ assert.equal(photographed.has_photo,true);
  assert.equal("quantity" in result,false);
  assert.equal("cost_price" in result,false);
  const zero=safeProduct({...row,selling_price:0});
@@ -98,4 +104,12 @@ test("website staff request SQL interpolates clauses rather than escaped literal
  assert.equal(route.includes(escaped+'ids.map(()=>"?").join(",")}'),false);
  assert.ok(route.includes('WHERE ${where}'));
  assert.ok(route.includes('IN (${ids.map(()=>"?").join(",")})'));
+});
+
+test("marketplace only presents actual item-specific photos and supports filters",()=>{
+ const route=read("routes/publicCommerceRoutes.js");
+ assert.ok(route.includes('image_url:hasStoredPhoto?"/api/public-commerce/products/"+row.id+"/photo":null'));
+ assert.ok(route.includes("terms.every"));
+ assert.ok(route.includes("onlyWithPhoto"));
+ assert.ok(route.includes("onlyInStock"));
 });

@@ -36,9 +36,14 @@ assert.match(page, /aria-controls="ch-home-menu"/);
 assert.match(page, /menuOpen \? " is-open" : ""/);
 assert.match(page, /onClick=\{closeMenu\}/);
 for (const target of ["excavators", "spare-parts", "hire", "contact"]) {
-  assert.ok(page.includes('id="' + target + '"') || page.includes('id: "' + target + '"'));
-  assert.ok(page.includes('href="#' + target + '"'));
+  assert.ok(page.includes('id="' + target + '"') || page.includes('id: "' + target + '"'), "Missing homepage section: "+target);
 }
+assert.ok(page.includes('href="/excavators"'));
+assert.ok(page.includes('href="/shop"'));
+assert.ok(page.includes('href="/equipment-hire-services"'));
+assert.match(page,/href="#contact"/);
+assert.match(page,/ch-home__market-showcase/);
+assert.match(page,/PublicContactPanel/);
 assert.match(page, /href="\/login"/);
 assert.match(page, /tel:\s*"?\s*\+\s*PHONE|tel:" \+ PHONE/);
 assert.match(page, /https:\/\/wa\.me\/233249469080/);

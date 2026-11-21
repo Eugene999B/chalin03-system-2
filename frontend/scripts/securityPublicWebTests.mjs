@@ -102,7 +102,8 @@ assert.equal(robots.trim(), "User-agent: *\nAllow: /\n\nSitemap: https://chalin0
 assert.match(robots, /Allow: \/\n/);
 assert.match(robots, /Sitemap: https:\/\/chalin03\.com\/sitemap\.xml/);
 assert.match(sitemap, /<urlset[^>]*>[\s\S]*<url>[\s\S]*https:\/\/chalin03\.com\/company\/[\s\S]*<\/url>[\s\S]*<\/urlset>/);
-assert.doesNotMatch(sitemap, /mining-operations|equipment-hire/);
+assert.ok(!sitemap.includes("mining-operations"));
+assert.ok(!sitemap.includes("<loc>https://chalin03.com/equipment-hire</loc>"),"Private equipment-hire workspace must not be indexed");
 
 assert.match(companyPage, /name="robots" content="index, follow, max-image-preview:large"/);
 assert.match(companyPage, /rel="canonical" href="https:\/\/chalin03\.com\/company\//);

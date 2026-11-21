@@ -20,4 +20,12 @@
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
+  <url><loc>https://chalin03.com/excavators</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/heavy-machines</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/motorcycles</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/automobiles</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/gold</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/machine-transport</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/equipment-hire-services</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://chalin03.com/customer-help</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>
