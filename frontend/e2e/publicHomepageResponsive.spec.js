@@ -63,13 +63,12 @@ test("public homepage mobile menu, contacts and tap targets work at 390px", asyn
   await expect(page.getByRole("button", { name: "Close navigation" })).toHaveAttribute("aria-expanded", "true");
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   await expect(navigation).toBeVisible();
-  await tapTarget(navigation.getByRole("link", { name: "Spare parts" }));
-  await navigation.getByRole("link", { name: "Spare parts" }).click();
-  await expect(page.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator("#spare-parts")).toBeInViewport();
   await expect(page.locator(".ch-home__service-card")).toHaveCount(3);
-  const partsEnquiryUrl = await page.getByRole("link", { name: /Find a part/i }).getAttribute("href");
-  expect(partsEnquiryUrl).toContain("https://wa.me/233249469080?text=");
+  await tapTarget(navigation.getByRole("link", { name: "Spare parts market" }));
+  await navigation.getByRole("link", { name: "Spare parts market" }).click();
+  await expect(page).toHaveURL(/\\/shop$/);
+  await expect(page.getByRole("heading", { level: 1, name: /Find the right part/i })).toBeVisible();
+  await expect(page.locator(".pc-catalogue")).toBeVisible();
   await noHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("public-homepage-mobile.png"), fullPage: true });
 });
