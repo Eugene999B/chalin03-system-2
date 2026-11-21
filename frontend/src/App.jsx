@@ -19,6 +19,7 @@ import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
 import IndependentPartsMarket from "./pages/IndependentPartsMarket";
 import IndependentDivisionWebsite from "./pages/IndependentDivisionWebsite";
 import IndependentHelpCentre from "./pages/IndependentHelpCentre";
+import IndependentQuotePage from "./pages/IndependentQuotePage";
 import PublicShopPage from "./pages/PublicShopPage";
 import PublicEnquiryPage from "./pages/PublicEnquiryPage";
 import PublicSectorPage from "./pages/PublicSectorPage";
@@ -247,7 +248,7 @@ export default function App() {
         <BrowserRouter>
         <Routes>
           <Route path="/shop" element={<IndependentPartsMarket />} />
-          <Route path="/enquire" element={<PublicEnquiryPage />} />
+          <Route path="/enquire" element={<IndependentQuotePage />} />
           <Route path="/excavators" element={<IndependentDivisionWebsite sector="excavators" />} />
           <Route path="/heavy-machines" element={<IndependentDivisionWebsite sector="heavy-machines" />} />
           <Route path="/motorcycles" element={<IndependentDivisionWebsite sector="motorcycles" />} />
