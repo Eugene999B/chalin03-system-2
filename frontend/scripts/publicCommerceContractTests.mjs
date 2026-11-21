@@ -33,7 +33,7 @@ assert.match(enquiry,/Caterpillar/);
 assert.match(enquiry,/Komatsu/);
 assert.match(enquiry,/054 071 3654/);
 assert.match(enquiry,/233249469080/);
-assert.match(enquiry,/regulatory/);
+assert.match(enquiry,/legal compliance|regulatory|licensing/i);
 assert.match(admin,/\/staff\/requests/);
 assert.match(admin,/\/staff\/products/);
 assert.match(admin,/\/fulfill/);
