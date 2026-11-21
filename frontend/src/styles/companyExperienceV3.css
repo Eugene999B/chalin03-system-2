@@ -11,7 +11,7 @@
 .ce-brand strong span{color:#c99524}.ce-brand small{color:#728088;font-weight:800;letter-spacing:.13em;font-size:9px}
 .ce-brand--light{color:#fff}.ce-brand--light small{color:#9cb8bd}
 .ce-header nav{display:flex;align-items:center;gap:clamp(11px,2vw,31px)}
-.ce-header nav>a{font-size:12px;font-weight:820;color:#29434b;white-space:nowrap}
+.ce-header nav>a{font-size:12px;font-weight:820;color:#29434b;white-space:nowrap;min-height:48px;display:inline-flex;align-items:center}
 .ce-header nav>a:hover{color:#aa7411}
 .ce-header .ce-work-link{background:#102d37;color:white;border-radius:5px;padding:13px 15px}
 .ce-menu-button{display:none}
