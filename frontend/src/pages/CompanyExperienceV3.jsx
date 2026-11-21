@@ -78,9 +78,9 @@ export default function CompanyExperienceV3(){
     <p>Each division has its own dedicated website with relevant information and a direct route to our team. Images represent the type of equipment shown, not verified CHALIN03 stock.</p>
    </div>
    <div className="ce-division-grid">{divisions.map(d=><article className="ce-division" key={d.id}>
-     <a className="ce-division__media" href={siteHref(d.site)} aria-label={"Go to "+d.title+" website"}>
+     <div className="ce-division__media">
       <RealPhoto photo={d.photo}/><span className="ce-division__number">{d.index}</span>
-     </a>
+     </div>
      <div className="ce-division__body">
       <span>{d.label}</span><h3>{d.title}</h3><p>{d.description}</p>
       <a href={siteHref(d.site)}>{d.cta} <span aria-hidden="true">↗</span></a>
