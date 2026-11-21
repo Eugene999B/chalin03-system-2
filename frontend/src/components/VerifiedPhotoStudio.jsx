@@ -12,10 +12,12 @@ export default function VerifiedPhotoStudio({products=[],onChanged,onClose}){
  const [busy,setBusy]=useState(false);
  const [notice,setNotice]=useState("");
  const [error,setError]=useState("");
+ const [owner,setOwner]=useState("");
+ const [license,setLicense]=useState("");
  const urls=useRef([]);
  useEffect(()=>()=>{urls.current.forEach(u=>URL.revokeObjectURL(u));urls.current=[];},[]);
  const stats=useMemo(()=>{
-  const published=products.filter(p=>p.is_visible!==false);
+  const published=products.filter(p=>p.is_active!==false&&p.is_visible!==false);
   return {published:published.length,
     withPhoto:published.filter(p=>p.existing_image).length,
     missing:published.filter(p=>!p.existing_image).length};
@@ -51,7 +53,7 @@ export default function VerifiedPhotoStudio({products=[],onChanged,onClose}){
  function confirm(key,checked){setQueue(old=>old.map(x=>x.key===key?{...x,confirmed:checked}:x))}
  function update(key,patch){setQueue(old=>old.map(x=>x.key===key?{...x,...patch}:x))}
  async function upload(){
-  if(busy||!ready.length)return;
+  if(busy||!ready.length||!owner.trim()||!license.trim())return;
   setBusy(true);setNotice("");setError("");
   let uploaded=0,failed=0;
   // A confirmed file is sent only to its exact product ID; the user reviews the
@@ -61,9 +63,14 @@ export default function VerifiedPhotoStudio({products=[],onChanged,onClose}){
     try{
       const image_data_url=await compressProductPhoto(item.file);
       update(item.key,{status:"uploading"});
-      await axiosClient.post("/public-commerce/staff/products/"+item.id+"/photo",{image_data_url},{timeout:45000});
+      const {data}=await axiosClient.post("/public-commerce/staff/products/"+item.id+"/photo",{
+       image_data_url,photo_status:"verified_exact",photo_confirmed:true,
+       photo_owner:owner,photo_license:license,
+       photo_evidence:"Staff matched the photograph to SKU #"+item.id+" "+item.product.name+
+        (item.product.size?" ("+item.product.size+")":"")+" and confirmed the visible part and stock identity."
+      },{timeout:45000});
       update(item.key,{status:"uploaded",confirmed:false,error:""});
-      onChanged?.(item.id);
+      onChanged?.(item.id,data.photo);
       uploaded++;
     }catch(err){
       update(item.key,{status:"pending",error:note(err,"Photo could not be uploaded. Check and retry individually."),confirmed:false});
@@ -111,6 +118,10 @@ export default function VerifiedPhotoStudio({products=[],onChanged,onClose}){
    <div className="photo-studio__review-header"><div><h3>Review each image match</h3>
     <p>A similar-looking part is not enough. Compare the actual product and manufacturer markings before approving.</p></div>
     <span>{ready.length} selected for upload · {finished} saved</span></div>
+   <div className="photo-studio__rights">
+    <label>Copyright owner<input maxLength={180} value={owner} disabled={busy} onChange={e=>setOwner(e.target.value)}/></label>
+    <label>Reuse permission for this batch<input maxLength={300} value={license} disabled={busy} onChange={e=>setLicense(e.target.value)}/></label>
+   </div>
    <div className="photo-studio__list">
     {queue.map(item=><article className={"photo-studio__item"+(item.error?" has-error":"")} key={item.key}>
      <div className="photo-studio__preview">{item.url?<img src={item.url} alt={"Review actual item photograph "+item.file.name} loading="lazy"/>:<span>Photo preview unavailable</span>}</div>
@@ -130,7 +141,7 @@ export default function VerifiedPhotoStudio({products=[],onChanged,onClose}){
    </div>
    <div className="photo-studio__footer">
     <p>Only manually approved photographs will upload. Existing photos cannot be silently overwritten in a batch.</p>
-    <button type="button" disabled={busy||!ready.length} onClick={upload}>
+    <button type="button" disabled={busy||!ready.length||!owner.trim()||!license.trim()} onClick={upload}>
      {busy?"Uploading verified photographs…":"Upload "+ready.length+" verified photo"+(ready.length===1?"":"s")}
     </button>
    </div>

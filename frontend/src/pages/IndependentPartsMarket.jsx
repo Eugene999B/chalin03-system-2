@@ -1,11 +1,12 @@
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {useSearchParams} from "react-router";
 import axiosClient from "../api/axiosClient";
 import {API_BASE_URL} from "../api/apiBaseUrl";
 import PublicPageMeta from "../components/PublicPageMeta";
 import PublicContactPanel from "../components/PublicContactPanel";
 import RealPhoto from "../components/RealPhoto";
-import {PHOTO_LIBRARY,SPAREPARTS_SKU_REFERENCE_PHOTOS} from "../data/verifiedPublicPhotos";
+import {PHOTO_LIBRARY} from "../data/verifiedPublicPhotos";
+import {photoNeedsReview,referenceSkuPhoto} from "../data/catalogueReferencePhotos";
 import {siteHref,sectorHref} from "../config/officialSites";
 import "../styles/independentPartsMarket.css";
 
@@ -14,7 +15,52 @@ const keygen=()=>globalThis.crypto?.randomUUID?.()||"e95f9365-6ca0-44a3-8661-"+M
 const emptyCustomer={customer_name:"",customer_phone:"",customer_location:"",customer_email:"",message:""};
 const photosrc=src=>String(src||"").startsWith("/api/")?API_BASE_URL.replace(/\/api$/,"")+src:src||"";
 const shortCategory=name=>String(name||"Parts").replace(/ & /g," + ");
-const CURATED_PHOTO_PRODUCTS=[{"id":20,"name":"Oil Filter (LF3349)"},{"id":35,"name":"China Oil Filter"},{"id":21,"name":"Fuel Filter (FF5544)"},{"id":115,"name":"Hand Grease Gun Long"},{"id":200,"name":"Hammer"},{"id":138,"name":"Shovel"},{"id":656,"name":"Bucket"},{"id":192,"name":"Spanner 13"},{"id":193,"name":"Spanner 11"},{"id":183,"name":"Box Spanner Tool Set"},{"id":201,"name":"Piston Set"},{"id":97,"name":"Black Hose"},{"id":378,"name":"BATTERY-BIG AVATAR"}];
+const REFERENCE_LABEL="REAL REFERENCE PHOTO — EXACT STOCK ITEM TO CONFIRM";
+function displayPhoto(product){
+ if(product.image_url&&["verified_exact","honest_reference"].includes(product.photo_status)){
+  return {src:photosrc(product.image_url),reference:product.photo_status==="honest_reference",
+   credit:product.photo_credit,license:product.photo_license,source:product.photo_source_url};
+ }
+ const photo=referenceSkuPhoto(product);
+ return photo?{...photo,src:photo.localSrc,reference:true}:null;
+}
+function PhotoCredit({photo}){
+ const credit=[photo.credit,photo.license].filter(Boolean).join(" · ");
+ if(!credit)return null;
+ return <small className="pm-product__credit">
+  {photo.licenseUrl?<><a href={photo.source} target="_blank" rel="noreferrer">{photo.credit}</a>{" · "}
+   <a href={photo.licenseUrl} target="_blank" rel="noreferrer">{photo.license}</a>{" · "+photo.changes}</>:
+   photo.source?<a href={photo.source} target="_blank" rel="noreferrer">{credit}</a>:credit}
+ </small>;
+}
+function ProductPhoto({product,photo,onOpen}){
+ const [failed,setFailed]=useState(false);
+ const description=photo?.alt||[product.name,product.size].filter(Boolean).join(" · ");
+ if(!photo||failed)return <div className="pm-product__no-photo">
+  <small>{failed?"Photo temporarily unavailable":photoNeedsReview(product)?"Photo under review":"Stock photo unavailable"}</small>
+ </div>;
+ return <>
+  <button className="pm-product__photo-button" type="button" aria-label={"Enlarge photo of "+product.name}
+   onClick={()=>onOpen({product,photo,description})}>
+   <img className={photo.reference?"pm-product__reference-photo":undefined}
+    src={photo.src} srcSet={photo.srcSet} sizes="(max-width: 530px) 92vw, 360px"
+    alt={description} loading="lazy" decoding="async" width="420" height="320"
+    onError={()=>setFailed(true)}/>
+  </button>
+  {photo.reference?<span className="pm-product__reference-badge">{REFERENCE_LABEL}</span>:null}
+ </>;
+}
+function PhotoDialog({selection,onClose}){
+ const dialog=useRef(null);
+ useEffect(()=>{dialog.current.showModal();},[]);
+ const {product,photo,description}=selection;
+ return <dialog ref={dialog} className="pm-photo-dialog" aria-labelledby="pm-photo-title" onClose={onClose}>
+  <header><h2 id="pm-photo-title">{product.name}</h2><form method="dialog"><button type="submit">Close</button></form></header>
+  {photo.reference?<p>{REFERENCE_LABEL}</p>:null}
+  <img src={photo.src} alt={description}/>
+  <PhotoCredit photo={photo}/>
+ </dialog>;
+}
 function MarketBrand(){
  return <a className="pm-brand" href={siteHref("parts")}>
   <img src="/chalin03-logo.png" width="42" height="42" alt=""/>
@@ -37,6 +83,7 @@ export default function IndependentPartsMarket(){
  const [requestKey,setRequestKey]=useState(keygen);
  const [sending,setSending]=useState(false),[orderError,setOrderError]=useState(""),[reference,setReference]=useState("");
  const [mobileFilters,setMobileFilters]=useState(false);
+ const [selectedPhoto,setSelectedPhoto]=useState(null);
  const basketItems=useMemo(()=>Object.values(basket),[basket]);
  const basketUnits=basketItems.reduce((n,p)=>n+p.qty,0);
  const subtotal=basketItems.reduce((n,p)=>n+p.qty*Number(p.price||0),0);
@@ -84,7 +131,7 @@ export default function IndependentPartsMarket(){
   }catch(e){setOrderError(e.response?.data?.message||"Order not sent. Please retry or WhatsApp us.");}
   finally{setSending(false)}
  }
- const askPhoto=product=>"https://wa.me/233540713654?text="+encodeURIComponent("Hello CHALIN03, please send me the ACTUAL product photo and fitment details for "+product.name+(product.size?" ("+product.size+")":"")+" — Product #"+product.id+".");
+ const askPhoto=product=>"https://wa.me/233540713654?text="+encodeURIComponent("Hello CHALIN03, please confirm availability, fitment and the stock photo for "+product.name+(product.size?" ("+product.size+")":"")+" — Product #"+product.id+".");
  return <main className="pm-site">
   <PublicPageMeta title="CHALIN03 Spare Parts Shop | Filters, Oils, Excavator Parts & Tools" description="Dedicated CHALIN03 online spare-parts shop in Ghana. Search products, compare live Main Store selling prices, filter by department and send an order for staff confirmation." canonicalPath="/shop"/>
   <div className="pm-mini-header"><span>CHALIN03 MAIN STORE · DUNKWA POLICE BARRIER</span><span><a href="tel:+233540713654">054 071 3654</a> · <a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WHATSAPP US</a></span></div>
@@ -105,20 +152,6 @@ export default function IndependentPartsMarket(){
     <div className="pm-hero__promises"><span>Live selling prices</span><span>Staff-confirmed orders</span><span>Secure enquiry only</span></div>
    </div><div className="pm-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.hoses} eager/>
     <div className="pm-hero__seal">REAL PARTS.<br/><strong>RIGHT FIT.</strong></div>
-   </div>
-  </section>
-  <section className="pm-real-photo-shelf" aria-labelledby="pm-real-photo-heading">
-   <div className="pm-real-photo-shelf__head"><div>
-    <span>PHOTOGRAPHED PART TYPES</span>
-    <h2 id="pm-real-photo-heading">Real parts. Real photographs.</h2>
-    <p>Different photographs of real filters, tools and equipment parts — not AI images or repeated category art. These are visual references; our team confirms the exact size, manufacturer and physical stock item before sale.</p>
-   </div><a href="#pm-products">Browse all Main Store products</a></div>
-   <div className="pm-real-photo-shelf__scroll">
-    {CURATED_PHOTO_PRODUCTS.map(p=><article className="pm-real-photo-shelf__card" key={p.id}>
-     <RealPhoto photo={SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]}/>
-     <div><span>REAL REFERENCE PHOTO · MODEL TO CONFIRM</span><h3>{p.name}</h3>
-      <a href={siteHref("parts","",new URLSearchParams({q:p.name}).toString())}>View part and live price ↗</a></div>
-    </article>)}
    </div>
   </section>
   <section className="pm-find" id="pm-products">
@@ -143,25 +176,26 @@ export default function IndependentPartsMarket(){
     <div className="pm-sidebar__help"><strong>Need a specific part?</strong><p>Send the make, model and part number. Our team can check the exact item for you.</p><a href={sectorHref("spare-parts")}>Ask our team ↗</a></div>
    </aside>
    <div className="pm-listings">
-    <div className="pm-listings__toolbar"><div><span>{category||"All departments"}</span><strong>{count} products</strong></div><span>Actual stock photos take priority. Real part-type reference images are labelled separately.</span></div>
+    <div className="pm-listings__toolbar"><div><span>{category||"All departments"}</span><strong>{count} products</strong></div></div>
     {error?<div className="pm-error" role="alert">{error}<button type="button" onClick={()=>{setPage(1);setQuery(search.trim())}}>Retry</button></div>:null}
     {busy?<div className="pm-loading" role="status">Loading the latest catalogue…</div>:null}
-    {!busy&&products.length?<div className="pm-grid">{products.map(p=><article key={p.id} className="pm-product">
+    {!busy&&products.length?<div className="pm-grid">{products.map(p=>{
+     const photo=displayPhoto(p);
+     return <article key={p.id} className="pm-product">
       <div className="pm-product__photo">
-       {p.image_url?<img src={photosrc(p.image_url)} alt={p.name+" actual stock photo"} loading="lazy" decoding="async" width="420" height="320" onError={e=>{e.currentTarget.hidden=true;e.currentTarget.nextElementSibling?.removeAttribute("hidden")}}/>:null}
-       {!p.image_url&&SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]?<RealPhoto photo={SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]} className="pm-product__reference-photo"/>:null}
-       <div className="pm-product__no-photo" hidden={Boolean(p.image_url||SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id])}><span>CHALIN03 PRODUCT #{p.id}</span><strong>{p.name}</strong><small>Actual item photograph needed</small></div>
-       {!p.image_url&&SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]?<span className="pm-product__reference-badge">REAL PART-TYPE PHOTO · ACTUAL STOCK TO CONFIRM</span>:null}
+       <ProductPhoto key={photo?.src||p.id} product={p} photo={photo} onOpen={setSelectedPhoto}/>
        {p.featured?<span className="pm-product__featured">FEATURED</span>:null}
       </div>
-      <div className="pm-product__body"><span className="pm-product__category">{p.category}</span><h3>{p.name}</h3>
+      <div className="pm-product__body"><span className="pm-product__category">{p.category} · SKU {p.id}</span><h3>{p.name}</h3>
        <p className="pm-product__size">{p.size&&p.size.toLowerCase()!=="none"?p.size:"Confirm exact machine fitment"}</p>
+       {p.description?<p className="pm-product__size">{p.description}</p>:null}
+       {photo?<PhotoCredit photo={photo}/>:null}
        <strong className="pm-product__price">{money(p.price)}</strong>
-       <small className={p.in_stock?"pm-availability":"pm-availability pm-availability--out"}>{p.in_stock?"Enquire to confirm stock":"Availability on request"}</small>
-       <div className="pm-product__actions"><button type="button" disabled={!p.in_stock} onClick={()=>addItem(p)}>{p.in_stock?"Add to basket +":"Request availability"}</button>
-       {!p.image_url?<a href={askPhoto(p)} target="_blank" rel="noopener noreferrer">Request actual photo</a>:null}</div>
+       <small className={p.in_stock?"pm-availability":"pm-availability pm-availability--out"}>{p.in_stock?"In stock · confirm with staff":"Availability on request"}</small>
+       <div className="pm-product__actions">{p.in_stock?<button type="button" onClick={()=>addItem(p)}>Add to basket</button>:null}
+       <a href={askPhoto(p)} target="_blank" rel="noopener noreferrer">Enquire</a></div>
       </div>
-     </article>)}</div>:null}
+     </article>})}</div>:null}
     {!busy&&!products.length&&!error?<div className="pm-empty"><h3>No matching parts found</h3><p>Try a different term or ask our team to source your exact item.</p><button type="button" onClick={resetFilters}>Clear filters</button></div>:null}
     <div className="pm-pagination"><button type="button" disabled={busy||page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>← Previous</button>
      <span>Page {page} of {pages}</span><button type="button" disabled={busy||page>=pages} onClick={()=>setPage(p=>p+1)}>Next →</button></div>
@@ -189,5 +223,6 @@ export default function IndependentPartsMarket(){
     </form></>}
   </aside></div>:null}
   <PublicContactPanel subject="CHALIN03 spare-parts shop customer help"/>
+  {selectedPhoto?<PhotoDialog selection={selectedPhoto} onClose={()=>setSelectedPhoto(null)}/>:null}
  </main>;
 }

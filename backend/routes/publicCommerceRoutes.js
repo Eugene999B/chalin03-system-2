@@ -96,26 +96,61 @@ async function auditAction(req,action,id,details){
 }
 function safeProduct(row){
  const group=str(row.category_override)||category(row.name,row.category);
- const hasStoredPhoto=Boolean(Number(row.has_catalog_photo)||Number(row.has_inventory_photo));
+ const photo=photoDetails(row);
  return {
   id:Number(row.id),name:str(row.name,160),size:str(row.size,100),
+  description:str(row.description,600),
   category:group,price:Number(row.selling_price)>0?currency(row.selling_price):null,
-  // Never display an unrelated photograph as if it identifies this exact SKU.
-  image_url:hasStoredPhoto?"/api/public-commerce/products/"+row.id+"/photo":null,
-  image_is_illustrative:!hasStoredPhoto,
-  has_photo:hasStoredPhoto,
+  image_url:photo.url,
+  image_is_illustrative:photo.status!=="verified_exact",
+  has_photo:photo.status==="verified_exact",
+  photo_status:photo.status,
+  photo_credit:photo.owner,
+  photo_license:photo.license,
+  photo_source_url:photo.source_url,
   in_stock:Number(row.quantity)>0 && Number(row.selling_price)>0,
   featured:Boolean(Number(row.is_featured||0)),
  };
+}
+const PHOTO_STATUSES=new Set(["verified_exact","honest_reference"]);
+function photoDetails(row){
+ if(!PHOTO_STATUSES.has(row.photo_status)){
+  const legacy=Boolean(Number(row.has_catalog_photo)||Number(row.has_inventory_photo));
+  return {status:legacy?"needs_review":"missing",url:null};
+ }
+ return {
+  status:row.photo_status,source_url:row.photo_source_url,owner:row.photo_owner,
+  license:row.photo_license,evidence:row.photo_evidence,
+  url:"/api/public-commerce/products/"+row.id+"/photo?v="+row.photo_sha256
+ };
+}
+const photoColumns=`photo.status AS photo_status,photo.source_url AS photo_source_url,
+    photo.owner AS photo_owner,photo.license AS photo_license,
+    photo.evidence AS photo_evidence,photo.sha256 AS photo_sha256`;
+const photoJoin="LEFT JOIN website_catalog_photos photo ON photo.product_id=p.id AND photo.branch_id=p.branch_id";
+function photoSubmission(body){
+ const status=body?.photo_status;
+ const owner=str(body?.photo_owner,180),license=str(body?.photo_license,300);
+ const evidence=str(body?.photo_evidence,600),source=str(body?.photo_source_url,1000);
+ if(!PHOTO_STATUSES.has(status)||!owner||!license||!evidence||body?.photo_confirmed!==true)return null;
+ if(status==="honest_reference"&&!source)return null;
+ if(source){
+  try{
+   const url=new URL(source);
+   if(url.protocol!=="https:"||url.username||url.password)return null;
+  }catch{return null;}
+ }
+ return {status,owner,license,evidence,source:source||null};
 }
 async function catalogueRows(connection=pool){
  const [rows]=await connection.query(
   `SELECT p.id,p.branch_id,p.name,p.size,p.category,p.selling_price,p.quantity,
        IF(p.image_url IS NOT NULL AND p.image_url <> '',1,0) AS has_inventory_photo,
        IF(c.image_url IS NOT NULL AND c.image_url <> '',1,0) AS has_catalog_photo,
-       c.category_override,c.is_featured,c.description
+       c.category_override,c.is_featured,c.description,${photoColumns}
     FROM products p
     LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
+    ${photoJoin}
     WHERE p.branch_id=? AND p.is_active=1 AND COALESCE(c.is_visible,1)=1
     ORDER BY p.name,p.id`,[MAIN_STORE]);
  return rows;
@@ -164,17 +199,17 @@ router.get("/products/:id/photo",async(req,res)=>{
   const itemId=numberId(req.params.id);
   if(!itemId)return res.sendStatus(404);
   const [rows]=await pool.query(
-   `SELECT COALESCE(NULLIF(c.image_url,''),p.image_url) AS image_url FROM products p
+   `SELECT photo.image_url,photo.sha256 FROM products p
       LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
+      INNER JOIN website_catalog_photos photo ON photo.product_id=p.id AND photo.branch_id=p.branch_id
      WHERE p.id=? AND p.branch_id=? AND p.is_active=1 AND COALESCE(c.is_visible,1)=1
      LIMIT 1`,[itemId,MAIN_STORE]);
-  if(!rows.length||!rows[0].image_url)return res.sendStatus(404);
+  if(!rows.length||(req.query.v&&req.query.v!==rows[0].sha256))return res.sendStatus(404);
   const value=rows[0].image_url;
-  if(safeImageUrl(value))return res.sendStatus(404);
   const image=await normalizeStoredImage(value);
   res.setHeader("Content-Type",image.mimeType);
   res.setHeader("Content-Length",image.buffer.length);
-  res.setHeader("Cache-Control","public,max-age=90");
+  res.setHeader("Cache-Control","public,max-age=90,stale-while-revalidate=60");
   res.setHeader("X-Content-Type-Options","nosniff");
   return res.status(200).send(image.buffer);
  }catch(error){return res.sendStatus(404);}
@@ -304,9 +339,10 @@ router.get("/staff/products",requireAuth,requireAdmin,async(_req,res)=>{
     `SELECT p.id,p.name,p.size,p.category,p.selling_price,p.quantity,p.is_active,
      IF(p.image_url IS NOT NULL AND p.image_url <> '',1,0) AS has_inventory_photo,
      IF(c.image_url IS NOT NULL AND c.image_url <> '',1,0) AS has_catalog_photo,
-     c.is_visible,c.is_featured,c.category_override,c.description
+     c.is_visible,c.is_featured,c.category_override,c.description,${photoColumns}
      FROM products p LEFT JOIN website_catalog_controls c
       ON c.product_id=p.id AND c.branch_id=p.branch_id
+     ${photoJoin}
      WHERE p.branch_id=? ORDER BY p.name`,[MAIN_STORE]);
   return res.json({status:"success",products:rows.map(row=>({
    id:row.id,name:row.name,size:row.size,category:category(row.name,row.category),
@@ -314,7 +350,8 @@ router.get("/staff/products",requireAuth,requireAdmin,async(_req,res)=>{
    is_visible:row.is_visible===null?true:Boolean(row.is_visible),is_featured:Boolean(row.is_featured),
    category_override:row.category_override||"",description:row.description||"",
    image_url:"",
-   existing_image:Boolean(Number(row.has_catalog_photo)||Number(row.has_inventory_photo))
+   existing_image:photoDetails(row).status==="verified_exact",
+   photo:photoDetails(row)
   }))});
  }catch(error){return res.status(503).json({status:"error",message:"Could not load online publishing controls."});}
 });
@@ -343,12 +380,29 @@ router.patch("/staff/products/:id",requireAuth,requireAdmin,async(req,res)=>{
   return res.json({status:"success",message:"Online display saved. Inventory and price remained unchanged."});
  }catch(error){return res.status(503).json({status:"error",message:"Online display could not be saved."});}
 });
-// Product-specific photos must come from the actual item, not generic retailer images.
+router.get("/staff/products/:id/photo",requireAuth,requireAdmin,async(req,res)=>{
+ try{
+  const id=numberId(req.params.id);
+  if(!id)return res.sendStatus(404);
+  const [rows]=await pool.query(
+   `SELECT COALESCE(photo.image_url,NULLIF(c.image_url,''),p.image_url) AS image_url
+    FROM products p LEFT JOIN website_catalog_controls c ON c.product_id=p.id AND c.branch_id=p.branch_id
+    ${photoJoin} WHERE p.id=? AND p.branch_id=? LIMIT 1`,[id,MAIN_STORE]);
+  const value=rows[0]?.image_url;
+  if(!value||safeImageUrl(value))return res.sendStatus(404);
+  const image=await normalizeStoredImage(value);
+  res.setHeader("Cache-Control","private,no-store");
+  res.setHeader("X-Content-Type-Options","nosniff");
+  return res.type(image.mimeType).send(image.buffer);
+ }catch{return res.sendStatus(404);}
+});
 router.post("/staff/products/:id/photo",requireAuth,requireAdmin,async(req,res)=>{
  const id=numberId(req.params.id);
+ const details=photoSubmission(req.body);
  const raw=String(req.body?.image_data_url||"").trim();
  const match=raw.length<=1300000?raw.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/):null;
  if(!id||!match)return res.status(400).json({status:"error",message:"Choose a JPEG, PNG or WebP item photo under 1 MB."});
+ if(!details)return res.status(400).json({status:"error",message:"Record the photo match, copyright owner, reuse rights, and evidence. Reference photos also require an HTTPS source."});
  try{
   const [existing]=await pool.query("SELECT id FROM products WHERE id=? AND branch_id=? LIMIT 1",[id,MAIN_STORE]);
   if(!existing.length)return res.status(404).json({status:"error",message:"Main Store product not found."});
@@ -356,18 +410,49 @@ router.post("/staff/products/:id/photo",requireAuth,requireAdmin,async(req,res)=
   if(original.length<100||original.length>900000)return res.status(400).json({status:"error",message:"Choose a valid product photo under 900 KB."});
   const converted=await sharp(original,{failOn:"error",limitInputPixels:30000000}).rotate()
    .resize(1000,1000,{fit:"inside",withoutEnlargement:true}).webp({quality:78,effort:4}).toBuffer();
+  const sha=crypto.createHash("sha256").update(converted).digest("hex");
+  const [duplicate]=await pool.query("SELECT product_id FROM website_catalog_photos WHERE branch_id=? AND sha256=? AND product_id<>? LIMIT 1",[MAIN_STORE,sha,id]);
+  if(duplicate.length)return res.status(409).json({status:"error",message:"The same photo is already assigned to SKU #"+duplicate[0].product_id+"."});
   let stored="data:image/webp;base64,"+converted.toString("base64");
   if(storageConfig().enabled){
-   const sha=crypto.createHash("sha256").update(converted).digest("hex");
    const key="chalin03/website/catalogue/"+id+"/"+sha+".webp";
    await uploadObject({key,buffer:converted,contentType:"image/webp"});
    stored="bucket://"+key;
   }
-  await pool.query("INSERT INTO website_catalog_controls(product_id,branch_id,image_url,updated_by) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE image_url=VALUES(image_url),updated_by=VALUES(updated_by)",
-   [id,MAIN_STORE,stored,req.user.id]);
-  await auditAction(req,"WEBSITE_PRODUCT_IMAGE_UPDATED",id,"Product-specific photo updated; no stock or price change.");
-  return res.json({status:"success",message:"Actual product photo uploaded.",photo_url:"/api/public-commerce/products/"+id+"/photo"});
+  const values=[stored,details.status,details.source,details.owner,details.license,details.evidence,sha,req.user.id];
+  const connection=await pool.getConnection();
+  try{
+   await connection.beginTransaction();
+   const [product]=await connection.query("SELECT id FROM products WHERE id=? AND branch_id=? FOR UPDATE",[id,MAIN_STORE]);
+   if(!product.length){
+    await connection.rollback();
+    return res.status(404).json({status:"error",message:"Main Store product not found."});
+   }
+   const [current]=await connection.query("SELECT product_id FROM website_catalog_photos WHERE product_id=? AND branch_id=?",[id,MAIN_STORE]);
+   if(current.length){
+    if(req.body.replace_photo!==true){
+     await connection.rollback();
+     return res.status(409).json({status:"error",message:"This SKU already has a photo. Use its individual catalogue editor to replace it."});
+    }
+    await connection.query(
+     `UPDATE website_catalog_photos SET image_url=?,status=?,source_url=?,owner=?,license=?,evidence=?,sha256=?,updated_by=?
+      WHERE product_id=? AND branch_id=?`,[...values,id,MAIN_STORE]);
+   }else{
+    await connection.query(
+     `INSERT INTO website_catalog_photos(product_id,branch_id,image_url,status,source_url,owner,license,evidence,sha256,updated_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`,[id,MAIN_STORE,...values]);
+   }
+   await connection.commit();
+  }catch(error){
+   await connection.rollback().catch(()=>{});
+   throw error;
+  }finally{connection.release();}
+  await auditAction(req,"WEBSITE_PRODUCT_IMAGE_UPDATED",id,"Catalogue photo updated as "+details.status+".");
+  const photo={status:details.status,owner:details.owner,license:details.license,evidence:details.evidence,
+   source_url:details.source,url:"/api/public-commerce/products/"+id+"/photo?v="+sha};
+  return res.json({status:"success",message:"Catalogue photo saved.",photo});
  }catch(error){console.error("Online photo upload:",error.code||error.message);
+  if(error.code==="ER_DUP_ENTRY")return res.status(409).json({status:"error",message:"This photo was already assigned to another SKU."});
   return res.status(503).json({status:"error",message:"Photo could not be saved; please choose another image."});}
 });
 router.patch("/staff/requests/:id/status",requireAuth,requireManager,async(req,res)=>{
@@ -451,4 +536,4 @@ router.post("/staff/requests/:id/fulfill",requireAuth,requireManager,async(req,r
   return res.status(503).json({status:"error",message:"Could not verify the completed sale. No order was marked fulfilled."});
  }finally{c.release();}
 });
-module.exports={router,category,safeImageUrl,safeProduct,samePhone,MAIN_STORE};
+module.exports={router,category,safeImageUrl,safeProduct,samePhone,photoSubmission,MAIN_STORE};

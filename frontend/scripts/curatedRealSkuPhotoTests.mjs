@@ -1,26 +1,28 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
-import {fileURLToPath} from "node:url";
-import {SPAREPARTS_SKU_REFERENCE_PHOTOS,PHOTO_LIBRARY} from "../src/data/verifiedPublicPhotos.js";
+import {createHash} from "node:crypto";
+import {readFileSync} from "node:fs";
+import photos from "../src/data/catalogueReferencePhotos.json" with {type:"json"};
+import {referenceSkuPhoto} from "../src/data/catalogueReferencePhotos.js";
 
-const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const site=fs.readFileSync(path.join(root,"src/pages/IndependentPartsMarket.jsx"),"utf8");
-const style=fs.readFileSync(path.join(root,"src/styles/independentPartsMarket.css"),"utf8");
-const refs=Object.entries(SPAREPARTS_SKU_REFERENCE_PHOTOS);
-assert.equal(refs.length,13,"Only the manually reviewed real reference-photo matches may be prepublished");
-assert.equal(new Set(refs.map(([id])=>id)).size,refs.length);
-assert.equal(new Set(refs.map(([,p])=>p.src)).size,refs.length,"Do not repeat a photo across different Main Store SKUs");
-for(const [id,photo] of refs){
- assert.ok(/^[1-9]\d{0,9}$/.test(id));
- assert.equal(new URL(photo.src).hostname,"upload.wikimedia.org");
+const hashes=new Set();
+for(const [id,photo] of Object.entries(photos)){
+ assert.equal(referenceSkuPhoto({id,name:photo.name,size:photo.size}),photo);
+ assert.equal(referenceSkuPhoto({id,name:photo.name,size:"a different fitment"}),null);
+ assert.equal(referenceSkuPhoto({id,name:"a different product",size:photo.size}),null);
  assert.equal(new URL(photo.source).hostname,"commons.wikimedia.org");
- assert.ok(photo.license&&photo.credit&&photo.alt&&photo.localSrc,"Each real photo needs source, license, author and caption");
- assert.ok(Object.values(PHOTO_LIBRARY).includes(photo),"Only accepted licensed photographs from source library may appear");
+ assert.equal(new URL(photo.licenseUrl).hostname,"creativecommons.org");
+ assert.ok(photo.credit&&photo.license&&photo.alt&&photo.evidence&&photo.changes);
+ assert.match(photo.localSrc,new RegExp("^/images/catalogue/"+id+"-960[.]webp$"));
+ const bytes=readFileSync(new URL("../public"+photo.localSrc,import.meta.url));
+ assert.equal(bytes.toString("ascii",8,12),"WEBP");
+ const hash=createHash("sha256").update(bytes).digest("hex");
+ assert.ok(!hashes.has(hash),"Do not repeat a photo across Main Store SKUs");
+ hashes.add(hash);
 }
-assert.ok(site.indexOf("p.image_url?<img")<site.indexOf("!p.image_url&&SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]"),"Actual SKU photo must take precedence over example");
-assert.ok(site.includes("REAL PART-TYPE PHOTO · ACTUAL STOCK TO CONFIRM"));
-assert.ok(site.includes('!p.image_url?<a href={askPhoto(p)}'));
-assert.ok(style.includes(".pm-product__reference-photo"));
-assert.ok(style.includes(".pm-product__reference-badge"));
-console.log("CHALIN03 13 unique genuine licensed parts reference photos never replace verified Main Store inventory photographs.");
+for(const id of [20,21,192,193,378]){
+ assert.equal(photos[id],undefined,"The mismatched reference must remain unpublished");
+}
+const site=readFileSync(new URL("../src/pages/IndependentPartsMarket.jsx",import.meta.url),"utf8");
+assert.ok(site.includes("REAL REFERENCE PHOTO — EXACT STOCK ITEM TO CONFIRM"));
+assert.ok(site.includes('product.photo_status==="honest_reference"'));
+console.log("SKU references passed identity, rights, asset format and duplicate checks.");
