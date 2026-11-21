@@ -14,6 +14,7 @@ const keygen=()=>globalThis.crypto?.randomUUID?.()||"e95f9365-6ca0-44a3-8661-"+M
 const emptyCustomer={customer_name:"",customer_phone:"",customer_location:"",customer_email:"",message:""};
 const photosrc=src=>String(src||"").startsWith("/api/")?API_BASE_URL.replace(/\/api$/,"")+src:src||"";
 const shortCategory=name=>String(name||"Parts").replace(/ & /g," + ");
+const CURATED_PHOTO_PRODUCTS=[{"id":20,"name":"Oil Filter (LF3349)"},{"id":35,"name":"China Oil Filter"},{"id":21,"name":"Fuel Filter (FF5544)"},{"id":115,"name":"Hand Grease Gun Long"},{"id":200,"name":"Hammer"},{"id":138,"name":"Shovel"},{"id":656,"name":"Bucket"},{"id":192,"name":"Spanner 13"},{"id":193,"name":"Spanner 11"},{"id":183,"name":"Box Spanner Tool Set"},{"id":201,"name":"Piston Set"},{"id":97,"name":"Black Hose"},{"id":378,"name":"BATTERY-BIG AVATAR"}];
 function MarketBrand(){
  return <a className="pm-brand" href={siteHref("parts")}>
   <img src="/chalin03-logo.png" width="42" height="42" alt=""/>
@@ -104,6 +105,20 @@ export default function IndependentPartsMarket(){
     <div className="pm-hero__promises"><span>Live selling prices</span><span>Staff-confirmed orders</span><span>Secure enquiry only</span></div>
    </div><div className="pm-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.hoses} eager/>
     <div className="pm-hero__seal">REAL PARTS.<br/><strong>RIGHT FIT.</strong></div>
+   </div>
+  </section>
+  <section className="pm-real-photo-shelf" aria-labelledby="pm-real-photo-heading">
+   <div className="pm-real-photo-shelf__head"><div>
+    <span>PHOTOGRAPHED PART TYPES</span>
+    <h2 id="pm-real-photo-heading">Real parts. Real photographs.</h2>
+    <p>Different photographs of real filters, tools and equipment parts — not AI images or repeated category art. These are visual references; our team confirms the exact size, manufacturer and physical stock item before sale.</p>
+   </div><a href="#pm-products">Browse all Main Store products</a></div>
+   <div className="pm-real-photo-shelf__scroll">
+    {CURATED_PHOTO_PRODUCTS.map(p=><article className="pm-real-photo-shelf__card" key={p.id}>
+     <RealPhoto photo={SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]}/>
+     <div><span>REAL REFERENCE PHOTO · MODEL TO CONFIRM</span><h3>{p.name}</h3>
+      <a href={siteHref("parts","",new URLSearchParams({q:p.name}).toString())}>View part and live price ↗</a></div>
+    </article>)}
    </div>
   </section>
   <section className="pm-find" id="pm-products">
