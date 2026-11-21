@@ -9,8 +9,7 @@ function read(...parts) { return fs.readFileSync(path.join(root, ...parts), "utf
 test("Controlled maintenance retains date-evidence repair without automatic deployment mutation", () => {
   const railway = JSON.parse(read("backend", "package.json")).scripts["maintenance:legacy-predeploy-repairs"];
   assert.deepEqual(JSON.parse(read("railway.json")).deploy.preDeployCommand,
-    ["node scripts/runReadyCashCompanyWideSaleGuardMigration.js",
-      "node scripts/migratePublicCommerceSchema.js"]);
+    ["node scripts/runPublicCommerceProductionPredeploy.js"]);
   assert.match(railway, /runEquipmentFinanceDateEvidenceRepairV3\.js/);
   assert.match(railway, /runEquipmentFinanceRuntimeContractRepairV2\.js/);
 });
