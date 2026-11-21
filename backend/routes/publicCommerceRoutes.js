@@ -310,13 +310,40 @@ router.patch("/staff/products/:id",requireAuth,requireAdmin,async(req,res)=>{
     VALUES (?,?,?,?,?,?,?,?)
     ON DUPLICATE KEY UPDATE is_visible=VALUES(is_visible),is_featured=VALUES(is_featured),
     category_override=VALUES(category_override),description=VALUES(description),
-    image_url=VALUES(image_url),updated_by=VALUES(updated_by)`,
+    image_url=COALESCE(VALUES(image_url),image_url),updated_by=VALUES(updated_by)`,
    [id,MAIN_STORE,b.is_visible?1:0,b.is_featured?1:0,
      categoryOverride||null,description||null,imageUrl||null,req.user.id]);
   await auditAction(req,"WEBSITE_CATALOG_PUBLISHING_UPDATED",id,
    "Online product display updated; master selling price and stock were not modified.");
   return res.json({status:"success",message:"Online display saved. Inventory and price remained unchanged."});
  }catch(error){return res.status(503).json({status:"error",message:"Online display could not be saved."});}
+});
+// Product-specific photos must come from the actual item, not generic retailer images.
+router.post("/staff/products/:id/photo",requireAuth,requireAdmin,async(req,res)=>{
+ const id=numberId(req.params.id);
+ const raw=String(req.body?.image_data_url||"").trim();
+ const match=raw.length<=1300000?raw.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/):null;
+ if(!id||!match)return res.status(400).json({status:"error",message:"Choose a JPEG, PNG or WebP item photo under 1 MB."});
+ try{
+  const [existing]=await pool.query("SELECT id FROM products WHERE id=? AND branch_id=? LIMIT 1",[id,MAIN_STORE]);
+  if(!existing.length)return res.status(404).json({status:"error",message:"Main Store product not found."});
+  const original=Buffer.from(match[2],"base64");
+  if(original.length<100||original.length>900000)return res.status(400).json({status:"error",message:"Choose a valid product photo under 900 KB."});
+  const converted=await sharp(original,{failOn:"error",limitInputPixels:30000000}).rotate()
+   .resize(1000,1000,{fit:"inside",withoutEnlargement:true}).webp({quality:78,effort:4}).toBuffer();
+  let stored="data:image/webp;base64,"+converted.toString("base64");
+  if(storageConfig().enabled){
+   const sha=crypto.createHash("sha256").update(converted).digest("hex");
+   const key="chalin03/website/catalogue/"+id+"/"+sha+".webp";
+   await uploadObject({key,buffer:converted,contentType:"image/webp"});
+   stored="bucket://"+key;
+  }
+  await pool.query("INSERT INTO website_catalog_controls(product_id,branch_id,image_url,updated_by) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE image_url=VALUES(image_url),updated_by=VALUES(updated_by)",
+   [id,MAIN_STORE,stored,req.user.id]);
+  await auditAction(req,"WEBSITE_PRODUCT_IMAGE_UPDATED",id,"Product-specific photo updated; no stock or price change.");
+  return res.json({status:"success",message:"Actual product photo uploaded.",photo_url:"/api/public-commerce/products/"+id+"/photo"});
+ }catch(error){console.error("Online photo upload:",error.code||error.message);
+  return res.status(503).json({status:"error",message:"Photo could not be saved; please choose another image."});}
 });
 router.patch("/staff/requests/:id/status",requireAuth,requireManager,async(req,res)=>{
  const id=numberId(req.params.id),status=str(req.body?.status,24);
