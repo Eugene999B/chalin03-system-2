@@ -381,7 +381,7 @@ router.get("/ready-cash/:agreementId/receipt.pdf", requirePermission("fleet.asse
     const agreementId = id(req.params.agreementId);
     if (!agreementId) fail(400, "READY_CASH_ID_INVALID", "Select a valid Ready Cash agreement.");
     const [rows] = await pool.query(
-      \`SELECT a.id, a.asset_id, a.agreement_number,
+      `SELECT a.id, a.asset_id, a.agreement_number,
               a.customer_name_snapshot, a.customer_phone_snapshot,
               a.customer_location_snapshot,
               a.asset_code_snapshot, a.asset_name_snapshot,
@@ -400,7 +400,7 @@ router.get("/ready-cash/:agreementId/receipt.pdf", requirePermission("fleet.asse
            AND a.hire_location_id IS NULL
            AND a.agreement_notes LIKE 'READY_CASH:%'
          ORDER BY p.payment_date ASC, p.id ASC
-         LIMIT 1\`,
+         LIMIT 1`,
       [agreementId]
     );
     const receipt = rows[0];
