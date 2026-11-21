@@ -4,6 +4,7 @@ import "../styles/publicCompanyHome.css";
 
 const PHONE = "+233249469080";
 const DISPLAY_PHONE = "+233 24 946 9080";
+const SALES_PHONE = "+233540713654";
 // Versioned WebP files live on CHALIN03's Cloudflare Pages domain.
 const PHOTO = {
   hero: "/images/home/v1/hero-desktop.webp",
@@ -96,7 +97,7 @@ export default function PublicCompanyHomePage() {
         >
           <a href="#excavators" onClick={closeMenu}>Excavators</a>
           <a href="#spare-parts" onClick={closeMenu}>Spare parts</a>
-          <a href="#hire" onClick={closeMenu}>Hiring</a>
+          <a href="#hire" onClick={closeMenu}>Hiring</a><a href="/shop" onClick={closeMenu}>Shop prices</a>
           <a href="#about" onClick={closeMenu}>About</a>
           <a href="#contact" onClick={closeMenu}>Contact</a>
           <a className="ch-home__staff-link" href="/login" onClick={closeMenu}>Staff login <span aria-hidden="true">↗</span></a>
@@ -154,11 +155,37 @@ export default function PublicCompanyHomePage() {
         </div>
       </section>
 
+      <section className="ch-home__industry" id="industries">
+       <div className="ch-home__industry-heading"><div>
+        <span className="ch-home__section-tag">CHALIN03 BUSINESS DIVISIONS</span>
+        <h2>Built to move every kind of business.</h2>
+        <p>From finding the right excavator to transport and vehicle sourcing, our team helps you plan the next step. Machine photographs are illustrative; ask us to verify actual stock, condition and availability.</p>
+       </div><a href="/enquire">Explore all our sectors →</a></div>
+       <div className="ch-home__industry-grid">
+        {[
+         ["Excavators for sale","Browse model examples from Caterpillar, Komatsu, Hitachi, Volvo, Hyundai, SANY and others. Ask about actual machines and private quotations.","excavators",PHOTO.equipment],
+         ["Heavy-duty machinery","Find loaders, bulldozers, graders, rollers, backhoes and other heavy construction equipment for demanding work.","heavy-machines",PHOTO.hire],
+         ["Lift & transport excavators","Ask about excavator lifting, loading, low-bed haulage and delivery between construction sites and towns.","machine-transport",PHOTO.hire],
+         ["Cars & automobiles","Explore requests for pickups, SUVs, saloons, commercial vehicles and other automobiles.","automobiles",PHOTO.hero],
+         ["Motorcycles","Discuss available motorcycles, sourcing, documentation and accessories.","motorcycles",PHOTO.parts],
+         ["Gold buying & refining","Send gold-sector enquiries. All transactions require applicable Ghana regulatory compliance, identity and verification.","gold",PHOTO.hero],
+         ["Equipment hire & site support","Enquire about excavator hire for earthworks, foundation work and mining or road projects.","equipment-hire",PHOTO.hire],
+         ["Oils, workshop tools & parts","View live prices and order filters, oils, hammers, spanners, hydraulic and engine components from our main shop.","spare-parts",PHOTO.parts],
+        ].map(([name,description,sector,image])=><article className="ch-home__industry-card" key={sector}>
+          <img src={image} loading="lazy" decoding="async" alt={"Illustrative "+name.toLowerCase()}/>
+          <div><h3>{name}</h3><p>{description}</p>
+          <a href={sector==="spare-parts"?"/shop":"/enquire?sector="+sector}>
+           {sector==="spare-parts"?"Shop priced products":"Find out more & enquire"} ↗</a></div>
+         </article>)}
+       </div>
+      </section>
+
       <section className="ch-home__parts-strip" aria-labelledby="ch-home-parts-title">
         <div>
           <span className="ch-home__section-tag">SPARE PARTS</span>
           <h2 id="ch-home-parts-title">Got a part number?</h2>
-          <p>Send it to us with your machine model. We’ll help you check the right part.</p>
+          <p>Explore real Main Store prices for filters, oil, hammers, spanners and excavator spares, then send an order to our team for confirmation.</p>
+          <a className="ch-home__text-link" href="/shop">Browse priced products & order ↗</a>
           <a className="ch-home__text-link" href={whatsApp(ENQUIRIES.parts)} target="_blank" rel="noopener noreferrer">
             Ask about a part <span aria-hidden="true">↗</span>
           </a>
@@ -172,7 +199,8 @@ export default function PublicCompanyHomePage() {
         <div className="ch-home__about-copy">
           <span className="ch-home__section-tag">ABOUT CHALIN03</span>
           <h2>Here when the job needs to get done.</h2>
-          <p>We work with customers looking for machinery, spare parts and practical support. If you're unsure what you need, get in touch and tell us about the job.</p>
+          <p>We help customers with excavators, spare parts, heavy machinery, machine transport, motorcycles and cars. Gold-sector buying and refining enquiries require appropriate regulatory compliance and verification. Share your specifications and we will help you find the next step.</p>
+          <a href="/enquire?sector=excavators" className="ch-home__text-link">Explore excavator makes & models ↗</a>
           <a href={"tel:" + PHONE} className="ch-home__text-link">Speak with our team <span aria-hidden="true">↗</span></a>
         </div>
         <div className="ch-home__about-image">
@@ -184,10 +212,16 @@ export default function PublicCompanyHomePage() {
       <section className="ch-home__contact" id="contact">
         <span className="ch-home__section-tag">LET'S TALK</span>
         <h2>Tell us what you're looking for.</h2>
-        <p>An excavator, a spare part or a machine for hire — give us a call or send a message.</p>
+        <p>An excavator, spare part, car, motorcycle, machine transportation or gold-sector enquiry — give us a call or send a message.</p>
         <div className="ch-home__contact-actions">
           <a className="ch-home__button ch-home__button--gold" href={"tel:" + PHONE}>Call {DISPLAY_PHONE}</a>
           <a className="ch-home__button ch-home__button--outline" href={whatsApp(ENQUIRIES.general)} target="_blank" rel="noopener noreferrer">Send an enquiry <span aria-hidden="true">↗</span></a>
+        </div>
+        <div className="ch-home__extra-contacts">
+         <a href={"tel:" + SALES_PHONE}>Call sales: 054 071 3654</a>
+         <a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp sales: 054 071 3654</a>
+         <a href="https://wa.me/233249469080" target="_blank" rel="noopener noreferrer">WhatsApp Boss</a>
+         <a href="/enquire">Send a website enquiry</a>
         </div>
         <span className="ch-home__contact-location">Dunkwa Police Barrier · Ghana</span>
       </section>
@@ -196,11 +230,11 @@ export default function PublicCompanyHomePage() {
         <div className="ch-home__footer-top">
           <div>
             <strong>CHALIN<span>03</span></strong>
-            <p>Excavators · Spare parts · Equipment hire</p>
+            <p>Excavators · Spare parts · Heavy equipment · Transport · Cars · Motorcycles</p>
           </div>
           <nav aria-label="Footer navigation">
             <a href="#excavators">Excavators</a>
-            <a href="#spare-parts">Spare parts</a>
+            <a href="#spare-parts">Spare parts</a><a href="/shop">Shop</a><a href="/enquire">Enquiries</a>
             <a href="#hire">Hiring</a>
             <a href="/login">Staff login</a>
           </nav>
