@@ -19,10 +19,6 @@ const enabled=process.env.CF_PAGES_BRANCH==="production"
 const featuredPhotos=[
  PHOTO_LIBRARY.homepageExcavator,PHOTO_LIBRARY.excavators,PHOTO_LIBRARY.hoses,
  PHOTO_LIBRARY.filters,PHOTO_LIBRARY.oilFilter,
- PHOTO_LIBRARY.skuFuelFilter,PHOTO_LIBRARY.skuGreaseGun,PHOTO_LIBRARY.skuHammer,
- PHOTO_LIBRARY.skuShovel,PHOTO_LIBRARY.skuExcavatorBucket,PHOTO_LIBRARY.skuSpannerAssortment,
- PHOTO_LIBRARY.skuSpannerSingle,PHOTO_LIBRARY.skuSocketSet,PHOTO_LIBRARY.skuDieselPiston,
- PHOTO_LIBRARY.skuCrimpedHose,PHOTO_LIBRARY.skuCarBattery
 ].filter(Boolean);
 const items=[...new Map([...featuredPhotos,...Object.values(PHOTO_LIBRARY)].map(p=>[p.localSrc,p])).values()];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
