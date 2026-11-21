@@ -251,7 +251,7 @@ export default function App() {
           <Route path="/gold" element={<PublicSectorPage sector="gold" />} />
           <Route path="/machine-transport" element={<PublicSectorPage sector="machine-transport" />} />
           <Route path="/equipment-hire-services" element={<PublicSectorPage sector="equipment-hire" />} />
-          <Route path="/help" element={<PublicHelpPage />} />
+          <Route path="/customer-help" element={<PublicHelpPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
