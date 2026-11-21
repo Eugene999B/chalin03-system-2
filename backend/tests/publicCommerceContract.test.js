@@ -50,6 +50,11 @@ test("customer phone validation matches local Ghana and international forms",()=
  assert.equal(samePhone("0200000000","0240000000"),false);
 });
 test("new website schema is isolated from core accounting tables",()=>{
+ const script=read("scripts/migratePublicCommerceSchema.js");
+ assert.match(script,/mysql\.createConnection\(expected\)/);
+ assert.doesNotMatch(script,/pool\.getConnection/);
+ assert.match(script,/CHALIN03_SIGNED_BACKUP_CONFIRMED/);
+ assert.match(script,/MIGRATION_BACKUP_SHA256/);
  assert.equal(schema.length,3);
  assert.ok(schema.every(statement=>/^CREATE TABLE IF NOT EXISTS website_/i.test(statement)));
  assert.match(schema[1],/UNIQUE KEY uq_web_request_client_key/);
