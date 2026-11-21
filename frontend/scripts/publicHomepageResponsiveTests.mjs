@@ -38,9 +38,9 @@ assert.match(page, /onClick=\{closeMenu\}/);
 for (const target of ["excavators", "spare-parts", "hire", "contact"]) {
   assert.ok(page.includes('id="' + target + '"') || page.includes('id: "' + target + '"'), "Missing homepage section: "+target);
 }
-assert.match(page,/href="\\/excavators"/);
-assert.match(page,/href="\\/shop"/);
-assert.match(page,/href="\\/equipment-hire-services"/);
+assert.ok(page.includes('href="/excavators"'));
+assert.ok(page.includes('href="/shop"'));
+assert.ok(page.includes('href="/equipment-hire-services"'));
 assert.match(page,/href="#contact"/);
 assert.match(page,/ch-home__market-showcase/);
 assert.match(page,/PublicContactPanel/);
