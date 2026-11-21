@@ -152,7 +152,7 @@ const cachedPhotoSource = fs.readFileSync(
 for (const guard of [
   'CF_PAGES_BRANCH==="production"',
   'SAFE_OUTPUT_DIR=path.resolve(root,"public/images/verified-reference")',
-  '/^\\/images\\/verified-reference\\/[a-z0-9-]+\\.jpg$/',
+  'Invalid local photo destination',
   'imageUrl.protocol!=="https:"',
   'imageUrl.hostname!=="upload.wikimedia.org"',
   'creditUrl.hostname!=="commons.wikimedia.org"',
