@@ -17,7 +17,7 @@ const questions=[
 ];
 export default function PublicHelpPage(){
  return <main className="division help-public">
-  <PublicPageMeta title="Help & Contact | CHALIN03 Ghana" description="Get answers about spare-parts orders, excavator sales, machinery, transport, vehicles, gold enquiries and contacting CHALIN03." canonicalPath="/help"/>
+  <PublicPageMeta title="Help & Contact | CHALIN03 Ghana" description="Get answers about spare-parts orders, excavator sales, machinery, transport, vehicles, gold enquiries and contacting CHALIN03." canonicalPath="/customer-help"/>
   <div className="division__topbar"><span>CHALIN03 CUSTOMER HELP · DUNKWA POLICE BARRIER</span>
    <div><a href="tel:+233540713654">Call us</a><a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us</a></div></div>
   <header className="division__nav"><a className="division__logo" href="https://chalin03.com/"><img src="/chalin03-logo.png" alt="" width="43" height="43"/><strong>CHALIN<span>03</span></strong></a>
