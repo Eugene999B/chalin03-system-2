@@ -205,7 +205,7 @@ function RootWorkspaceEntry() {
       "transport.chalin03.com": "machine-transport",
       "hire.chalin03.com": "equipment-hire"
     };
-    if (hostname === "homepage.chalin03.com") return safe(<PublicCompanyHomePage />);
+    if (["chalin03.com","www.chalin03.com","homepage.chalin03.com"].includes(hostname)) return safe(<PublicCompanyHomePage />);
     if (hostname === "spareparts.chalin03.com") return safe(<PublicShopPage />);
     if (hostname === "help.chalin03.com") return safe(<PublicHelpPage />);
     if (divisionHosts[hostname]) return safe(<PublicSectorPage sector={divisionHosts[hostname]} />);
