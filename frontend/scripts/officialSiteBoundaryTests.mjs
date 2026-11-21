@@ -15,6 +15,10 @@ assert.equal(sectorHref("heavy-machines","wheel loader"),"https://machines.chali
 assert.equal(redirect("https://chalin03.com/shop?category=Filters"),"https://spareparts.chalin03.com/?category=Filters");
 assert.equal(redirect("https://chalin03.com/excavators"),"https://excavators.chalin03.com/");
 assert.equal(redirect("https://chalin03.com/online-orders"),"https://work.chalin03.com/online-orders");
+assert.equal(redirect("https://chalin03.com/expenses?month=11"),"https://work.chalin03.com/expenses?month=11");
+assert.equal(redirect("https://work.chalin03.com/expenses?month=11"),null);
+assert.equal(redirect("https://work.chalin03.com/group-executive-control/summary"),null);
+assert.equal(redirect("https://spareparts.chalin03.com/payroll"),"https://work.chalin03.com/payroll");
 assert.equal(redirect("https://chalin03.com/login"),"https://work.chalin03.com/login");
 assert.equal(redirect("https://spareparts.chalin03.com/online-orders"),"https://work.chalin03.com/online-orders");
 assert.equal(redirect("https://excavators.chalin03.com/enquire?sector=excavators"),null);
