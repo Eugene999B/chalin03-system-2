@@ -6,3 +6,8 @@
 .real-photo figcaption a:hover{text-decoration:underline!important}
 .real-photo:has(img:not([src])){display:none}
 @media(max-width:560px){.real-photo figcaption{font-size:8px}.real-photo img{min-height:160px}}
+
+.real-photo__unavailable{width:100%;height:100%;min-height:180px;display:flex;flex-direction:column;justify-content:center;gap:11px;background:linear-gradient(130deg,#dfe9e7,#cbdad7);color:#193d45;padding:clamp(18px,2.4vw,36px);overflow:hidden}
+.real-photo__unavailable span{color:#66827c;font-size:9px;font-weight:900;letter-spacing:.16em}
+.real-photo__unavailable strong{font-size:clamp(18px,2.3vw,32px);line-height:1.25;font-weight:900;letter-spacing:-.05em;overflow-wrap:anywhere}
+.real-photo__unavailable small{color:#597570;font-size:11px;line-height:1.5}

@@ -65,3 +65,13 @@
 .wc-order-card{padding:13px}.wc-order-card>header{flex-direction:column;gap:9px}
 .wc-pos-link{display:grid}.wc-pos-link input,.wc-pos-link select{max-width:100%;width:100%}
 .wc-modal{padding:17px}}
+
+
+/* Actual POS-SKU photograph preview in the Boss online catalogue. */
+.wc-product-identification{display:flex;align-items:center;gap:15px;min-width:0}
+.wc-product-identification>div:last-child{min-width:0;overflow-wrap:anywhere}
+.wc-product-thumb{flex:0 0 84px;height:84px;display:grid;place-items:center;border:1px solid #d9e5df;border-radius:9px;background:#edf3ef;overflow:hidden}
+.wc-product-thumb img{display:block;width:100%;height:100%;object-fit:contain;background:#fff}
+.wc-product-thumb span{text-align:center;font-size:9px;line-height:1.45;font-weight:950;letter-spacing:.13em;color:#77918d}
+.wc-photo-approval{background:#edf6f0;padding:14px 16px;border:1px solid #c8ded2;border-radius:8px;font-size:12px;line-height:1.65}
+@media(max-width:540px){.wc-product-identification{gap:9px}.wc-product-thumb{flex-basis:60px;width:60px;height:60px}.wc-product-thumb span{font-size:8px}}
