@@ -104,11 +104,10 @@ test("website staff request SQL interpolates clauses rather than escaped literal
  assert.ok(route.includes('IN (${ids.map(()=>"?").join(",")})'));
 });
 
-test("marketplace never invents an exact product photo when none is stored",()=>{
+test("marketplace only presents actual item-specific photos and supports filters",()=>{
  const route=read("routes/publicCommerceRoutes.js");
- assert.match(route,/hasStoredPhoto\\?"\\/api\\/public-commerce\\/products\\/"/);
- assert.match(route,/image_url:hasStoredPhoto/);
- assert.match(route,/terms\\.every/);
- assert.match(route,/onlyWithPhoto/);
- assert.match(route,/onlyInStock/);
+ assert.ok(route.includes('image_url:hasStoredPhoto?"/api/public-commerce/products/"+row.id+"/photo":null'));
+ assert.ok(route.includes("terms.every"));
+ assert.ok(route.includes("onlyWithPhoto"));
+ assert.ok(route.includes("onlyInStock"));
 });
