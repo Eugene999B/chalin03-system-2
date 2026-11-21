@@ -99,8 +99,10 @@ function safeProduct(row){
  return {
   id:Number(row.id),name:str(row.name,160),size:str(row.size,100),
   category:group,price:Number(row.selling_price)>0?currency(row.selling_price):null,
-  image_url:hasStoredPhoto?"/api/public-commerce/products/"+row.id+"/photo":illustration(group),
+  // Never display an unrelated photograph as if it identifies this exact SKU.
+  image_url:hasStoredPhoto?"/api/public-commerce/products/"+row.id+"/photo":null,
   image_is_illustrative:!hasStoredPhoto,
+  has_photo:hasStoredPhoto,
   in_stock:Number(row.quantity)>0 && Number(row.selling_price)>0,
   featured:Boolean(Number(row.is_featured||0)),
  };
@@ -126,11 +128,26 @@ router.get("/products",async(req,res)=>{
   const limit=Math.min(60,Math.max(1,Number.parseInt(req.query.limit,10)||24));
   const data=(await catalogueRows()).map(safeProduct);
   const groups=Array.from(new Set(data.map(p=>p.category))).sort();
-  let results=data.filter(p=>(!search||[p.name,p.size,p.category].some(v=>v.toLowerCase().includes(search)))&&(!group||p.category===group));
+  const terms=search.split(/\\s+/).filter(Boolean).slice(0,8);
+  const onlyInStock=req.query.stock==="only";
+  const onlyWithPhoto=req.query.photo==="only";
+  let results=data.filter(p=>{
+    const indexed=[p.name,p.size,p.category].join(" ").toLowerCase();
+    return terms.every(term=>indexed.includes(term)) &&
+      (!group||p.category===group) &&
+      (!onlyInStock||p.in_stock) &&
+      (!onlyWithPhoto||p.has_photo);
+  });
+  const relevance=p=>{
+    if(!terms.length)return 0;
+    const name=p.name.toLowerCase(),size=p.size.toLowerCase();
+    return terms.reduce((score,term)=>score+
+      (name===term?120:name.startsWith(term)?45:name.includes(term)?25:size.includes(term)?12:4),0);
+  };
   results.sort((a,b)=>{
-   if(sort==="price_asc")return a.price-b.price||a.name.localeCompare(b.name);
-   if(sort==="price_desc")return b.price-a.price||a.name.localeCompare(b.name);
-   if(sort==="featured")return Number(b.featured)-Number(a.featured)||Number(b.in_stock)-Number(a.in_stock)||a.name.localeCompare(b.name);
+   if(sort==="price_asc")return (a.price??Infinity)-(b.price??Infinity)||a.name.localeCompare(b.name);
+   if(sort==="price_desc")return (b.price??-1)-(a.price??-1)||a.name.localeCompare(b.name);
+   if(sort==="featured")return relevance(b)-relevance(a)||Number(b.featured)-Number(a.featured)||Number(b.in_stock)-Number(a.in_stock)||a.name.localeCompare(b.name);
    return a.name.localeCompare(b.name);
   });
   res.setHeader("Cache-Control","public,max-age=30,stale-while-revalidate=60");
