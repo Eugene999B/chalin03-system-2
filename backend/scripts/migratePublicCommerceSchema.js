@@ -1,7 +1,21 @@
 "use strict";
 // Railway pre-deploy, create-only public commerce schema. The POS, product
 // quantity, receipts and financial tables are intentionally NEVER modified.
-const {pool}=require("../config/db");
+const mysql=require("mysql2/promise");
+require("dotenv").config();
+// Controlled PREDEPLOY migration intentionally opens a direct DDL connection.
+// The production runtime pool suppresses CREATE TABLE IF NOT EXISTS and must
+// never be used to apply schema changes.
+function configuration(){
+ const val=(primary,secondary)=>process.env[primary]||process.env[secondary];
+ const host=val("DB_HOST","MYSQLHOST"),user=val("DB_USER","MYSQLUSER");
+ const password=val("DB_PASSWORD","MYSQLPASSWORD"),database=val("DB_NAME","MYSQLDATABASE");
+ if(!host||!user||!password||!database)throw Error("Approved migration database identity unavailable.");
+ const ssl=String(process.env.DB_SSL||"").toLowerCase()==="true"?
+   process.env.DB_SSL_CA_BASE64?{ca:Buffer.from(process.env.DB_SSL_CA_BASE64,"base64").toString("utf8"),rejectUnauthorized:true}:
+   {rejectUnauthorized:!["false","0","off","no"].includes(String(process.env.DB_SSL_REJECT_UNAUTHORIZED||"true").toLowerCase())}:undefined;
+ return {host,user,password,database,ssl,port:Number(val("DB_PORT","MYSQLPORT")||3306),connectTimeout:15000};
+}
 const schema=[
 `CREATE TABLE IF NOT EXISTS website_catalog_controls (
  product_id INT NOT NULL PRIMARY KEY,
@@ -64,10 +78,11 @@ async function run(){
  const digest=String(process.env.MIGRATION_BACKUP_SHA256||"").trim();
  if(process.env.NODE_ENV==="production"&&(!["true","yes","1"].includes(backup)||!/^[a-f0-9]{64}$/i.test(digest)))
   throw Error("Public commerce schema requires the existing confirmed signed production backup.");
- const c=await pool.getConnection();
+ const expected=configuration();
+ const c=await mysql.createConnection(expected);
  try{
   const [[db]]=await c.query("SELECT DATABASE() AS name");
-  if(!db?.name)throw Error("Website commerce database unavailable.");
+  if(!db?.name||db.name!==expected.database)throw Error("Website commerce migration database identity mismatch.");
   const [[lock]]=await c.query("SELECT GET_LOCK(?,30) AS acquired",["chalin03:website-commerce-schema-v1"]);
   if(Number(lock?.acquired)!==1)throw Error("Website commerce schema migration lock unavailable.");
   try{
@@ -78,7 +93,7 @@ async function run(){
    if(tables.length!==3)throw Error("Website commerce schema verification did not find all 3 tables.");
    console.log("CHALIN03 public commerce schema verified: 3 tables. Existing sales/stock unchanged.");
   }finally{await c.query("SELECT RELEASE_LOCK(?)",["chalin03:website-commerce-schema-v1"]);}
- }finally{c.release();await pool.end();}
+ }finally{await c.end();}
 }
 if(require.main===module)run().catch(error=>{console.error("Public commerce predeploy failed:",error.message);process.exitCode=1;});
 module.exports={schema,run};
