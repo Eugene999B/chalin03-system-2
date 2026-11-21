@@ -4,6 +4,7 @@
  */
 export const OFFICIAL_SITES=Object.freeze({
   company:"https://chalin03.com",
+  homepage:"https://homepage.chalin03.com",
   parts:"https://spareparts.chalin03.com",
   excavators:"https://excavators.chalin03.com",
   machines:"https://machines.chalin03.com",
@@ -16,7 +17,7 @@ export const OFFICIAL_SITES=Object.freeze({
   work:"https://work.chalin03.com",
 });
 export const PATH_ON_PREVIEW=Object.freeze({
-  company:"/",parts:"/shop",excavators:"/excavators",machines:"/heavy-machines",
+  company:"/",homepage:"/",parts:"/shop",excavators:"/excavators",machines:"/heavy-machines",
   motorcycles:"/motorcycles",automobiles:"/automobiles",gold:"/gold",
   transport:"/machine-transport",hire:"/equipment-hire-services",
   help:"/customer-help",work:"/login",
