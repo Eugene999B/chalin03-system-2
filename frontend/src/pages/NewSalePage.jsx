@@ -736,6 +736,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
     if (!confirmed) return;
 
+    sessionStorage.removeItem("chalin03_web_order_checkout");
     setCart([]);
     setSelectedProductId("");
     setProductSearch("");
@@ -919,6 +920,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
             sessionStorage.removeItem("chalin03_web_order_checkout");
           }
         } catch(linkError) {
+          sessionStorage.removeItem("chalin03_web_order_checkout");
           setError("Sale was recorded and stock deducted. Website order linking needs review: "+
             (linkError.response?.data?.message||"Open Online Orders and enter this POS sale ID.")+
             " POS sale #"+savedReceipt.sale_id+". Do not record payment again.");
