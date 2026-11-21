@@ -90,7 +90,7 @@ export default function PublicShopPage(){
   <header className="pc-header">
    <Link to="/" className="pc-logo"><img src="/chalin03-logo.png" alt=""/>
     <span><b>CHALIN<span>03</span></b><small>Online Spare Parts Store</small></span></Link>
-   <nav aria-label="Store navigation"><Link to="/">Home</Link><Link to="/enquire">Enquire</Link><Link to="/help">Help</Link>
+   <nav aria-label="Store navigation"><Link to="/">Home</Link><Link to="/enquire">Enquire</Link><Link to="/customer-help">Help</Link>
     <Link to="/login">Staff login</Link></nav>
    <button type="button" className="pc-cart-button" onClick={()=>setCartOpen(!cartOpen)}>
     Basket <strong>{totalQuantity}</strong></button>
