@@ -16,7 +16,15 @@ const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const SAFE_OUTPUT_DIR=path.resolve(root,"public/images/verified-reference");
 const enabled=process.env.CF_PAGES_BRANCH==="production"
   || process.env.CHALIN03_DOWNLOAD_REAL_PHOTOS==="1";
-const items=[...new Map(Object.values(PHOTO_LIBRARY).map(p=>[p.localSrc,p])).values()];
+const featuredPhotos=[
+ PHOTO_LIBRARY.homepageExcavator,PHOTO_LIBRARY.excavators,PHOTO_LIBRARY.hoses,
+ PHOTO_LIBRARY.filters,PHOTO_LIBRARY.oilFilter,
+ PHOTO_LIBRARY.skuFuelFilter,PHOTO_LIBRARY.skuGreaseGun,PHOTO_LIBRARY.skuHammer,
+ PHOTO_LIBRARY.skuShovel,PHOTO_LIBRARY.skuExcavatorBucket,PHOTO_LIBRARY.skuSpannerAssortment,
+ PHOTO_LIBRARY.skuSpannerSingle,PHOTO_LIBRARY.skuSocketSet,PHOTO_LIBRARY.skuDieselPiston,
+ PHOTO_LIBRARY.skuCrimpedHose,PHOTO_LIBRARY.skuCarBattery
+].filter(Boolean);
+const items=[...new Map([...featuredPhotos,...Object.values(PHOTO_LIBRARY)].map(p=>[p.localSrc,p])).values()];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const MAX_BYTES=2_500_000;
 const ATTEMPTS=3;
@@ -57,7 +65,11 @@ async function downloadOne(photo){
         },
         signal:AbortSignal.timeout(TIMEOUT_MS),
       });
-      if(!response.ok)throw new Error("HTTP "+response.status);
+      if(!response.ok){
+        const upstream=new Error("HTTP "+response.status);
+        upstream.httpStatus=response.status;
+        throw upstream;
+      }
       const contentType=response.headers.get("content-type")||"";
       if(!contentType.toLowerCase().startsWith("image/jpeg"))
         throw new Error("Source did not return JPEG: "+contentType);
@@ -87,7 +99,7 @@ async function downloadOne(photo){
       return {ok:true,bytes:bytes.length};
     }catch(error){
       if(attempt===ATTEMPTS)return {ok:false,reason:String(error?.message||error).slice(0,130)};
-      await sleep(650*attempt);
+      await sleep(error.httpStatus===429?3500*attempt:650*attempt);
     }
   }
   return {ok:false,reason:"Unexpected image fetch issue"};
@@ -106,7 +118,7 @@ export async function cacheVerifiedReferencePhotos(){
       const result=await downloadOne(photo);
       output.push({...result,local:photo.localSrc});
       if(!result.ok)console.warn("Reference source unavailable: "+photo.localSrc+" ("+result.reason+"); browser CDN fallback retained");
-      await sleep(160);
+      await sleep(950);
     }
   }
   await Promise.all([worker(),worker()]);
