@@ -61,8 +61,7 @@ test("new website schema is isolated from core accounting tables",()=>{
  assert.match(schema[1],/UNIQUE KEY uq_web_request_sale/);
  assert.match(schema[2],/FOREIGN KEY\(request_id\)/);
  const predeploy=JSON.parse(fs.readFileSync(path.resolve(root,"../railway.json"),"utf8")).deploy.preDeployCommand;
- assert.deepEqual(predeploy,["node scripts/runReadyCashCompanyWideSaleGuardMigration.js",
-   "node scripts/migratePublicCommerceSchema.js"]);
+ assert.deepEqual(predeploy,["node scripts/runPublicCommerceProductionPredeploy.js"]);
 });
 test("a website request never decrements store stock or inserts POS sales",()=>{
  const r=read("routes/publicCommerceRoutes.js");
