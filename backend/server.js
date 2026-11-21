@@ -49,6 +49,7 @@ const {
 const authRoutes = require("./routes/authRoutes");
 const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
+const {router:publicCommerceRoutes} = require("./routes/publicCommerceRoutes");
 const {router:productPriceApprovalRoutes} = require("./routes/productPriceApprovalRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
@@ -257,6 +258,9 @@ app.get("/api", (req, res) => {
   Branch routes are registered before auth and user routes because login needs
   to load the store list before the user has a token.
 */
+// Public catalogue and enquiry routes stay accessible without staff login;
+// their staff subpaths enforce authenticated store and role checks individually.
+app.use("/api/public-commerce", publicCommerceRoutes);
 app.use("/api/branches", branchRoutes);
 
 app.use("/api/auth/login", loginLimiter);
