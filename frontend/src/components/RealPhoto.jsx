@@ -11,7 +11,7 @@ export default function RealPhoto({photo:image,className="",eager=false}){
     <small>Verified photo temporarily unavailable</small>
    </div>:
    <img src={image.src} alt={image.alt} loading={eager?"eager":"lazy"} decoding="async"
-    fetchPriority={eager?"high":"auto"} referrerPolicy="no-referrer" width="960" height="640"
+    fetchPriority={eager?"high":"auto"} width="960" height="640"
     onError={()=>setFailed(true)}/>}
   {!failed?<figcaption><a href={image.source} rel="noopener noreferrer" target="_blank">
    Real photo · {image.credit} · {image.license}</a></figcaption>:null}
