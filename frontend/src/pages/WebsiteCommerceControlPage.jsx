@@ -20,6 +20,7 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
  const [edit,setEdit]=useState(null);
  const [saleInputs,setSaleInputs]=useState({});
  const [paymentInputs,setPaymentInputs]=useState({});
+ const [uploading,setUploading]=useState(false);
  const isCatalog=mode==="catalogue";
  async function reload(){
   setLoading(true);setError("");
@@ -68,6 +69,26 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
    setMessage(data.message);await reload();
   }catch(e){setError(messageOf(e,"Could not verify the paid POS sale."));}
   finally{setSaving("")}
+ }
+ async function uploadPhoto(file){
+  if(!file||!edit)return;
+  if(file.size>2800000){setError("Choose a photo under 2.8 MB.");return}
+  setUploading(true);setError("");
+  const source=URL.createObjectURL(file);
+  try{
+   const image=new Image();
+   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=source;});
+   const ratio=Math.min(1,1000/Math.max(image.width,image.height));
+   const canvas=document.createElement("canvas");
+   canvas.width=Math.max(1,Math.round(image.width*ratio));
+   canvas.height=Math.max(1,Math.round(image.height*ratio));
+   canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
+   const image_data_url=canvas.toDataURL("image/jpeg",0.77);
+   const {data}=await axiosClient.post("/public-commerce/staff/products/"+edit.id+"/photo",
+    {image_data_url},{timeout:30000});
+   setMessage(data.message);setEdit(x=>({...x,existing_image:true}));
+  }catch(error){setError(messageOf(error,"Product photo upload failed."));}
+  finally{URL.revokeObjectURL(source);setUploading(false)}
  }
  async function saveCatalogue(){
   if(!edit)return;
@@ -166,7 +187,12 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
       placeholder={edit.category}/></label>
      <label>Short product description<textarea rows={3} value={edit.description||""}
       onChange={e=>setEdit(v=>({...v,description:e.target.value}))}/></label>
-     <label>Specific item photo URL (approved HTTPS source)<input value={edit.image_url||""}
+     <label>Upload the actual item photo (recommended)
+      <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading}
+        onChange={event=>uploadPhoto(event.target.files?.[0])}/>
+      {uploading?<small>Uploading the photograph…</small>:null}
+     </label>
+     <label>Optional existing approved photo URL<input value={edit.image_url||""}
       placeholder="https://images.unsplash.com/… or CHALIN03 image path"
       onChange={e=>setEdit(v=>({...v,image_url:e.target.value}))}/></label>
      <p className="wc-photo-note">Use a real photograph of the exact stock item where possible. Otherwise the website clearly labels its existing category illustration.</p>
