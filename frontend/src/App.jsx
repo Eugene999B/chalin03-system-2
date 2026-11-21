@@ -15,6 +15,11 @@ import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
+import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
+import IndependentPartsMarket from "./pages/IndependentPartsMarket";
+import IndependentDivisionWebsite from "./pages/IndependentDivisionWebsite";
+import IndependentHelpCentre from "./pages/IndependentHelpCentre";
+import IndependentQuotePage from "./pages/IndependentQuotePage";
 import PublicShopPage from "./pages/PublicShopPage";
 import PublicEnquiryPage from "./pages/PublicEnquiryPage";
 import PublicSectorPage from "./pages/PublicSectorPage";
@@ -205,14 +210,14 @@ function RootWorkspaceEntry() {
       "transport.chalin03.com": "machine-transport",
       "hire.chalin03.com": "equipment-hire"
     };
-    if (hostname === "homepage.chalin03.com") return safe(<PublicCompanyHomePage />);
-    if (hostname === "spareparts.chalin03.com") return safe(<PublicShopPage />);
-    if (hostname === "help.chalin03.com") return safe(<PublicHelpPage />);
-    if (divisionHosts[hostname]) return safe(<PublicSectorPage sector={divisionHosts[hostname]} />);
+    if (["chalin03.com","www.chalin03.com","homepage.chalin03.com"].includes(hostname)) return safe(<CompanyExperienceV3 />);
+    if (hostname === "spareparts.chalin03.com") return safe(<IndependentPartsMarket />);
+    if (hostname === "help.chalin03.com") return safe(<IndependentHelpCentre />);
+    if (divisionHosts[hostname]) return safe(<IndependentDivisionWebsite sector={divisionHosts[hostname]} />);
     if (hostname === "work.chalin03.com" && !loading && !isLoggedIn) return <LoginPage />;
   }
   if (!loading && !isLoggedIn && location.pathname === "/") {
-    return safe(<PublicCompanyHomePage />);
+    return safe(<CompanyExperienceV3 />);
   }
 
   return (
@@ -242,16 +247,16 @@ export default function App() {
       <WorkspaceContextProvider>
         <BrowserRouter>
         <Routes>
-          <Route path="/shop" element={<PublicShopPage />} />
-          <Route path="/enquire" element={<PublicEnquiryPage />} />
-          <Route path="/excavators" element={<PublicSectorPage sector="excavators" />} />
-          <Route path="/heavy-machines" element={<PublicSectorPage sector="heavy-machines" />} />
-          <Route path="/motorcycles" element={<PublicSectorPage sector="motorcycles" />} />
-          <Route path="/automobiles" element={<PublicSectorPage sector="automobiles" />} />
-          <Route path="/gold" element={<PublicSectorPage sector="gold" />} />
-          <Route path="/machine-transport" element={<PublicSectorPage sector="machine-transport" />} />
-          <Route path="/equipment-hire-services" element={<PublicSectorPage sector="equipment-hire" />} />
-          <Route path="/customer-help" element={<PublicHelpPage />} />
+          <Route path="/shop" element={<IndependentPartsMarket />} />
+          <Route path="/enquire" element={<IndependentQuotePage />} />
+          <Route path="/excavators" element={<IndependentDivisionWebsite sector="excavators" />} />
+          <Route path="/heavy-machines" element={<IndependentDivisionWebsite sector="heavy-machines" />} />
+          <Route path="/motorcycles" element={<IndependentDivisionWebsite sector="motorcycles" />} />
+          <Route path="/automobiles" element={<IndependentDivisionWebsite sector="automobiles" />} />
+          <Route path="/gold" element={<IndependentDivisionWebsite sector="gold" />} />
+          <Route path="/machine-transport" element={<IndependentDivisionWebsite sector="machine-transport" />} />
+          <Route path="/equipment-hire-services" element={<IndependentDivisionWebsite sector="equipment-hire" />} />
+          <Route path="/customer-help" element={<IndependentHelpCentre />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
