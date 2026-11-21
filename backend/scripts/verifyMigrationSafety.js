@@ -141,6 +141,32 @@ function fileExists(repoRoot, filePath) {
   return fs.existsSync(path.join(repoRoot, normalizePath(filePath)));
 }
 
+// During a main/production history reconciliation, git may report an already
+// deployed production migration as newly added relative to the older main.
+// Never rewrite that historical SQL: only exempt the exact byte-identical file
+// already committed on the production branch. Every genuinely new migration
+// remains subject to the full additive/backup/verification requirements.
+function isPreviouslyReleasedProductionMigration({ repoRoot, filePath }) {
+  const normalized = normalizePath(filePath);
+  if (!isMigrationSql(normalized)) return false;
+  try {
+    const existing = execFileSync(
+      "git",
+      ["show", `refs/remotes/origin/production:${normalized}`],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        maxBuffer: 16 * 1024 * 1024,
+      }
+    );
+    return existing === readRepositoryFile(repoRoot, normalized);
+  } catch {
+    // Missing production ref or any content mismatch fails closed.
+    return false;
+  }
+}
+
 function addError(errors, filePath, code, message) {
   errors.push({
     file: normalizePath(filePath),
@@ -308,6 +334,9 @@ function validateChangedEntries({ repoRoot = process.cwd(), entries }) {
     }
 
     if (entry.status === "A") {
+      if (isPreviouslyReleasedProductionMigration({ repoRoot, filePath: entry.path })) {
+        continue;
+      }
       validateNewMigration({ repoRoot, filePath: entry.path, errors });
     }
   }
@@ -399,6 +428,7 @@ module.exports = {
   formatErrors,
   isMigrationSql,
   isProductionExecutionFile,
+  isPreviouslyReleasedProductionMigration,
   isVerifyMigration,
   listChangedEntries,
   normalizePath,

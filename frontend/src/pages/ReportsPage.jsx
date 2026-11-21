@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import ExecutiveReportingStudio from "../components/ExecutiveReportingStudio";
 import { useAuth } from "../context/AuthContext";
 
 function MobilePageFix() {
@@ -432,9 +433,19 @@ export default function ReportsPage() {
       note: "Store costs",
     },
     {
+      label: "Refunds",
+      value: summary?.total_refunds,
+      note: "Deducted from profit; date of return",
+    },
+    {
+      label: "Returned Stock Cost",
+      value: summary?.recovered_return_cost,
+      note: "Recovered merchandise cost added back",
+    },
+    {
       label: "Net Profit",
       value: summary?.net_profit,
-      note: "Final profit",
+      note: "Gross profit − expenses − refunds + returned stock cost",
     },
   ];
 
@@ -459,33 +470,8 @@ export default function ReportsPage() {
   return (
     <div className="boss-mobile-fix" style={styles.page}>
       <MobilePageFix />
-      <section style={styles.hero}>
-        <div style={styles.heroPattern} />
-
-        <div style={styles.heroContent}>
-          <div>
-            <p style={styles.eyebrow}>Management Report Room • {currentStoreCode}</p>
-
-            <h1 style={styles.heroTitle}>Reports</h1>
-
-            <p style={styles.heroSubtitle}>
-              Review sales, discounts, profit, debts, stock adjustments,
-              transfers, top products and low-stock risks for{" "}
-              <strong>{currentStoreName}</strong>
-              {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
-              This page is designed as a boardroom-style management report.
-            </p>
-          </div>
-
-          <div style={styles.scoreCard}>
-            <span>📊</span>
-            <div>
-              <strong>{managementScore.value}%</strong>
-              <small>{managementScore.label}</small>
-            </div>
-          </div>
-        </div>
-      </section>
+      <ExecutiveReportingStudio context="reports" storeCode={currentStoreCode}
+        storeKey={branchId} from={from} to={to} />
 
       <div style={styles.storeNotice}>
         <span style={styles.noticeIcon}>🏬</span>
@@ -586,6 +572,10 @@ export default function ReportsPage() {
         <section style={styles.moneyFlowPanel}>
           <p style={styles.eyebrowDark}>Money Flow</p>
           <h2>Profit Pipeline</h2>
+          <p style={{ ...styles.panelSubtitle, marginTop: 6 }}>
+            Sales, expenses and refunds all follow the selected date range. No transactions
+            means zero profit; refunds or expenses on a closed day still count.
+          </p>
 
           <div style={styles.pipeline}>
             {moneyFlow.map((item) => (

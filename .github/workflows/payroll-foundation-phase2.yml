@@ -1,0 +1,47 @@
+name: Payroll Foundation Phase 2
+
+on:
+  push:
+    branches:
+      - feature/payroll-financial-foundation-phase2-20260810
+  pull_request:
+    branches:
+      - feature/equipment-finance-phase1-integrity-verification-20260807
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: payroll-foundation-phase2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Syntax check
+        run: npm run syntax-check
+      - name: Payroll foundation contract
+        run: node --test tests/payrollFinancialFoundation20260810.test.js
+      - name: Complete backend regression suite
+        run: npm test
+      - name: Additive migration safety
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          base_sha="$(git merge-base HEAD origin/main)"
+          node scripts/verifyMigrationSafety.js --repo-root .. --base "$base_sha" --head HEAD

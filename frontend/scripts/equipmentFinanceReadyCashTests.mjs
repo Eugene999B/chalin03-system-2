@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const frontend = dirname(dirname(fileURLToPath(import.meta.url)));
+const read = (path) => readFileSync(join(frontend, path), "utf8");
+const page = read("src/pages/EquipmentFinanceReadyCashPage.jsx");
+const css = read("src/styles/equipmentFinanceReadyCash.css");
+const entry = read("src/pages/EquipmentSalesWorkspacePage.jsx");
+const nav = read("src/layouts/InstallmentFinanceLayout.jsx");
+
+assert.match(entry, /stage === "ready-cash"/);
+assert.match(nav, /Ready Cash · Full Payment/);
+assert.match(page, /phase-one\/bootstrap/);
+assert.match(page, /ready-cash\/recent/);
+assert.match(page, /ready-cash\/checkout/);
+assert.match(page, /\/handover/);
+assert.match(page, /isAvailable\(machine\)/);
+assert.match(page, /sale_option: "ready_cash"/);
+assert.match(page, /full_payment_confirmed: true/);
+assert.match(page, /full_payment_reference/);
+assert.match(page, /tax_amount_included: Number\(taxIncluded\)\.toFixed\(2\)/);
+assert.match(page, /tax_treatment_reviewed: true/);
+assert.match(page, /taxAmountValid/);
+assert.match(page, /taxReviewed/);
+assert.match(page, /receipt\.pdf/);
+assert.match(page, /Download official receipt \(PDF\)/);
+assert.match(page, /customer_terms_accepted: true/);
+assert.match(page, /idempotency_key: key/);
+assert.match(page, /fullPaymentConfirmed/);
+assert.doesNotMatch(page, /cash_shift_reference/);
+assert.doesNotMatch(page, /payment_method: "cash"/);
+assert.match(page, /signedConfirmed/);
+assert.match(page, /ownership_status === "transferred"/);
+assert.match(page, /No installments are created/);
+assert.match(css, /@media\(max-width:650px\)/);
+console.log("Ready Cash UI contract passed.");

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import ProductPriceRequestModal from "../components/ProductPriceRequestModal";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 import { useAuth } from "../context/AuthContext";
 
 function MobilePageFix() {
@@ -248,8 +250,10 @@ export default function ProductsPage() {
     user?.selected_branch?.location ||
     "";
 
-  const canAddOrEdit = role === "admin" || role === "manager";
+  const canAddOrEdit = role === "admin" || role === "manager" || role === "auditor";
   const canDelete = role === "admin";
+  const canUseVerifiedBossControls = useSaleDiscountPermission(user?.id, branchId);
+  const canChangePriceDirectly = role === "auditor" || canUseVerifiedBossControls;
 
   const [products, setProducts] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -257,6 +261,8 @@ export default function ProductsPage() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingProductId, setEditingProductId] = useState(null);
+  const [priceRequestProduct, setPriceRequestProduct] = useState(null);
+  const [priceChangeReason, setPriceChangeReason] = useState("");
 
   const [restockProduct, setRestockProduct] = useState(null);
   const [restockQuantity, setRestockQuantity] = useState("");
@@ -559,6 +565,7 @@ export default function ProductsPage() {
 
     setIsEditing(true);
     setEditingProductId(product.id);
+    setPriceChangeReason("");
 
     setForm({
       name: product.name || "",
@@ -582,6 +589,7 @@ export default function ProductsPage() {
     setIsEditing(false);
     setEditingProductId(null);
     setForm(emptyForm);
+    setPriceChangeReason("");
     setMessage("");
     setError("");
   }
@@ -638,6 +646,7 @@ export default function ProductsPage() {
       cost_price: Number(form.cost_price),
       selling_price: Number(form.selling_price),
       low_stock_threshold: Number(form.low_stock_threshold),
+      price_change_reason: priceChangeReason.trim(),
     };
 
     if (!isEditing) {
@@ -664,6 +673,7 @@ export default function ProductsPage() {
       setForm(emptyForm);
       setIsEditing(false);
       setEditingProductId(null);
+      setPriceChangeReason("");
       await refreshPageData();
     } catch (error) {
       setError(
@@ -1138,9 +1148,11 @@ export default function ProductsPage() {
 
             {isEditing && (
               <div className="warning-box">
-                Edit Product changes the name, category, prices and settings only.
-                Stock stays at <strong>{form.quantity || 0}</strong>. Use Receive /
-                Restock for new stock or Adjust / Correct for a verified correction.
+                Editing product details does not change stock.
+                <strong> {canChangePriceDirectly
+                  ? "Boss, Administrator and Auditor price changes are direct and audited."
+                  : "Changes to existing cost or selling prices require Boss, Administrator or Auditor approval."}</strong>
+                Stock remains {form.quantity || 0}. Use Receive / Restock or Adjust / Correct for verified stock movement.
               </div>
             )}
 
@@ -1204,6 +1216,18 @@ export default function ProductsPage() {
                 />
               </label>
             </div>
+
+            {isEditing && (
+              <label>
+                Reason for a price change (at least 12 characters when changing prices)
+                <textarea rows={2} maxLength={1000} value={priceChangeReason}
+                  onChange={event=>setPriceChangeReason(event.target.value)}
+                  placeholder="Explain the cost, margin or market reason; leave blank if prices are unchanged." />
+                <small>{canChangePriceDirectly
+                  ? "Approved roles change prices directly; every change is audit-recorded."
+                  : "A proposed price edit creates a pending approval; the current prices remain live."}</small>
+              </label>
+            )}
 
             <div style={styles.formGridTwo}>
               {!isEditing ? (
@@ -1407,6 +1431,8 @@ export default function ProductsPage() {
                 product={product}
                 canAddOrEdit={canAddOrEdit}
                 canDelete={canDelete}
+                canRequestPrice={!canChangePriceDirectly}
+                openPriceRequest={setPriceRequestProduct}
                 formatMoney={formatMoney}
                 getProductStockStatus={getProductStockStatus}
                 getProfitMarginPercent={getProfitMarginPercent}
@@ -1420,6 +1446,12 @@ export default function ProductsPage() {
           </div>
         )}
       </section>
+
+      {priceRequestProduct && (
+        <ProductPriceRequestModal product={priceRequestProduct}
+          onClose={()=>setPriceRequestProduct(null)}
+          onSubmitted={data=>setMessage(data.message||"Price change sent for approval.")} />
+      )}
 
       {canAddOrEdit && (
         <section style={styles.adjustmentPanel}>
@@ -2081,6 +2113,8 @@ function ProductCard({
   product,
   canAddOrEdit,
   canDelete,
+  canRequestPrice,
+  openPriceRequest,
   formatMoney,
   getProductStockStatus,
   getProfitMarginPercent,
@@ -2140,8 +2174,14 @@ function ProductCard({
         </div>
       </div>
 
-      {(canAddOrEdit || canDelete) && (
+      {(canAddOrEdit || canDelete || canRequestPrice) && (
         <div style={styles.productActions}>
+          {canRequestPrice && (
+            <button type="button" style={styles.smallPrimaryButton}
+              onClick={()=>openPriceRequest(product)}>
+              Request Price Change
+            </button>
+          )}
           {canAddOrEdit && (
             <>
               <button

@@ -17,6 +17,7 @@ const {
   validateUserCategoryAccess,
 } = require("../services/categoryIsolationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const { canApplySaleDiscount } = require("../services/saleDiscountAuthorizationService");
 const {
   createSession,
   revokeSession,
@@ -1325,6 +1326,22 @@ router.post(
     }
   }
 );
+
+// Current authenticated user's discount permission, available in all workspaces.
+router.get("/discount-permission", requireAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const allowed = await canApplySaleDiscount(req.user);
+    return res.json({ status: "success", can_apply_discount: allowed });
+  } catch (error) {
+    console.error("Authenticated discount policy unavailable:", error);
+    return res.status(503).json({
+      status: "error",
+      code: "DISCOUNT_PERMISSION_UNAVAILABLE",
+      message: "Discount authority could not be verified.",
+    });
+  }
+});
 
 router.commandGateAuth = Object.freeze({
   buildUserSelectByWhere,

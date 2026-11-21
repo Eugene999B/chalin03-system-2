@@ -314,9 +314,8 @@ function buildPaymentGroups(salesTransactions) {
       : "mixed";
     const group = groups.get(paymentType);
 
-    const grossBeforeDiscount = toMoney(
-      Number(sale.total || 0) + Number(sale.discount_amount || 0)
-    );
+    // Source sale subtotal is the gross amount before discount, excluding tax.
+    const grossBeforeDiscount = toMoney(sale.subtotal);
 
     group.transaction_count += 1;
     group.gross_before_discount = toMoney(
@@ -796,7 +795,7 @@ async function calculateClosingSummary(branchId, closingDate, cashControlSource 
   const salesTotal = toMoney(
     salesTransactions.reduce((sum, sale) => sum + Number(sale.total || 0), 0)
   );
-  const grossBeforeDiscount = toMoney(salesTotal + discountTotal);
+  const grossBeforeDiscount = salesSubtotal;
   const salesReceived = toMoney(
     salesTransactions.reduce(
       (sum, sale) => sum + Number(sale.amount_paid || 0),

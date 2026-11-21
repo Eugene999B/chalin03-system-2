@@ -1,9 +1,61 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "./ExportsPage.css";
 
 const REPORTS = [
+  {
+    key: "business-intelligence",
+    title: "Complete Spare Parts Business Review",
+    category: "Intelligence",
+    icon: "📈",
+    endpoint: "/exports/business-intelligence",
+    description: "One connected report for sales, collections, debts, returns, expenses, stock and audit findings. Visual charts and clear management actions.",
+    dateFilter: true,
+    featured: true,
+    deepReport: true,
+  },
+  {
+    key: "collections-intelligence",
+    title: "Credit, Debtors & Collections",
+    category: "Intelligence",
+    icon: "💰",
+    endpoint: "/exports/collections-intelligence",
+    description: "Find overdue balances, follow-up priorities and collection trends. See what was received at sale and what customers paid later.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
+    key: "audit-intelligence",
+    title: "Accounting & Audit Investigation",
+    category: "Intelligence",
+    icon: "🛡️",
+    endpoint: "/exports/audit-intelligence",
+    description: "Receipt checks, unusual entries, financial control warnings and suggested investigations. Built around source evidence.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
+    key: "supplier-intelligence",
+    title: "Purchases & Supplier Liabilities",
+    category: "Intelligence",
+    icon: "🚚",
+    endpoint: "/exports/supplier-intelligence",
+    description: "See purchases, suppliers, payments made and unpaid invoices. Separate amounts purchased from cash actually paid.",
+    dateFilter: true,
+    deepReport: true,
+  },
+  {
+    key: "stock-intelligence",
+    title: "Stock, Sales & Restock Intelligence",
+    category: "Intelligence",
+    icon: "📦",
+    endpoint: "/exports/stock-intelligence",
+    description: "See top-selling items, low-stock risks, stock values and clear restock priorities.",
+    dateFilter: true,
+    deepReport: true,
+  },
   {
     key: "products",
     title: "Products and Inventory",
@@ -62,6 +114,27 @@ const REPORTS = [
     endpoint: "/exports/daily-closings",
     description:
       "Advanced period summary, sales mix, channel reconciliation, counted money, variances and closing controls.",
+    dateFilter: true,
+    featured: true,
+  },
+  {
+    key: "discount-audit",
+    title: "Discount Downloads — Staff Investigation",
+    category: "Sales",
+    icon: "🔍",
+    endpoint: "/exports/discount-audit",
+    description: "Clear Excel investigation report with purchased products, quantities, staff, customer, and actual discount amounts in Ghana cedis. Separate worksheets show full purchased-item prices, staff totals and audit references. Clear dates for all history.",
+    dateFilter: true,
+    featured: true,
+    adminOnly: true,
+  },
+  {
+    key: "transaction-history",
+    title: "Transaction History, Returns & Reconciliation",
+    category: "Sales",
+    icon: "🔬",
+    endpoint: "/exports/transaction-history",
+    description: "Investigate every sale, return, refund and collection in a premium Excel workbook with an executive dashboard, payment and tax reconciliation, expense analysis and clearly flagged exceptions. Each event follows its own recorded date.",
     dateFilter: true,
     featured: true,
   },
@@ -131,11 +204,24 @@ const FORMAT_OPTIONS = [
   { key: "xlsx", label: "Excel", icon: "📊", extension: "xlsx" },
   { key: "pdf", label: "PDF", icon: "📄", extension: "pdf" },
   { key: "doc", label: "Word", icon: "📝", extension: "doc" },
+  { key: "csv", label: "CSV", icon: "📋", extension: "csv" },
 ];
 
 function toLocalIsoDate(date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+function extractFilename(headers, fallback) {
+  const disposition = headers?.["content-disposition"] || "";
+  const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (utfMatch?.[1]) {
+    return decodeURIComponent(utfMatch[1].replace(/["']/g, ""));
+  }
+
+  const normalMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return normalMatch?.[1] || fallback;
 }
 
 export default function ExportsPage() {
@@ -170,6 +256,8 @@ export default function ExportsPage() {
   const [busyKey, setBusyKey] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [intelligencePreview, setIntelligencePreview] = useState(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
   const categories = useMemo(
     () => ["All", ...new Set(REPORTS.map((report) => report.category))],
@@ -180,6 +268,7 @@ export default function ExportsPage() {
     const query = search.trim().toLowerCase();
 
     return REPORTS.filter((report) => {
+      if (report.adminOnly && !["admin", "auditor"].includes(role)) return false;
       const matchesCategory = category === "All" || report.category === category;
       const matchesSearch =
         !query ||
@@ -189,7 +278,7 @@ export default function ExportsPage() {
 
       return matchesCategory && matchesSearch;
     });
-  }, [category, search]);
+  }, [category, search, role]);
 
   function makeSafeFileName(value) {
     return String(value || "store")
@@ -201,14 +290,49 @@ export default function ExportsPage() {
 
   function buildStoreFileName(reportKey, format) {
     const option = FORMAT_OPTIONS.find((item) => item.key === format);
-    const extension = option?.extension || "xlsx";
+    const extension = format === "word" || format === "docx" ? "docx" : option?.extension || "xlsx";
+    const periodPart =
+      from || to
+        ? `-${from || "earliest"}-to-${to || "latest"}`
+        : "";
 
-    return `chalin03-${makeSafeFileName(currentStoreCode)}-${reportKey}.${extension}`;
+    return `chalin03-${makeSafeFileName(
+      currentStoreCode
+    )}-${reportKey}${periodPart}.${extension}`;
   }
 
-  function validateDates(report) {
-    if (!report.dateFilter) return true;
+  useEffect(() => {
+    // A report for yesterday or another store must not remain on screen after
+    // switching dates or the selected Spare Parts branch.
+    setIntelligencePreview(null);
+  }, [from, to, currentStoreCode]);
 
+  const currency = (value) => "GHS " + Number(value || 0).toLocaleString("en-GH", {
+    minimumFractionDigits: 2, maximumFractionDigits: 2
+  });
+
+  async function loadIntelligencePreview() {
+    if (!validateDates()) return;
+    setPreviewBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data } = await axiosClient.get("/exports/business-intelligence/preview", {
+        params: {
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+        }
+      });
+      setIntelligencePreview(data);
+    } catch (error) {
+      setIntelligencePreview(null);
+      setError(error?.response?.data?.message || "Business analysis could not be loaded.");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  function validateDates() {
     if (from && to && from > to) {
       setError("The From Date cannot be later than the To Date.");
       return false;
@@ -217,8 +341,8 @@ export default function ExportsPage() {
     return true;
   }
 
-  async function readExportError(error) {
-    const data = error?.response?.data;
+  async function readExportError(errorValue) {
+    const data = errorValue?.response?.data;
 
     try {
       if (data instanceof Blob) {
@@ -227,14 +351,14 @@ export default function ExportsPage() {
         return parsed?.message || text;
       }
 
-      return data?.message || error?.message || "Export failed.";
+      return data?.message || errorValue?.message || "Export failed.";
     } catch {
-      return error?.message || "Export failed.";
+      return errorValue?.message || "Export failed.";
     }
   }
 
   async function downloadReport(report, format) {
-    if (!validateDates(report)) return;
+    if (!validateDates()) return;
 
     const requestKey = `${report.key}-${format}`;
     setBusyKey(requestKey);
@@ -245,23 +369,34 @@ export default function ExportsPage() {
       const response = await axiosClient.get(report.endpoint, {
         params: {
           format,
-          ...(report.dateFilter ? { from, to } : {}),
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
         },
         responseType: "blob",
       });
 
+      const fallbackFilename = buildStoreFileName(report.key, format);
+      const filename = extractFilename(response.headers, fallbackFilename);
       const fileUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = fileUrl;
-      link.setAttribute("download", buildStoreFileName(report.key, format));
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(fileUrl);
 
       const formatLabel =
-        FORMAT_OPTIONS.find((option) => option.key === format)?.label || format;
-      setNotice(`${report.title} ${formatLabel} export downloaded successfully.`);
+        (format === "word" ? "Word" : FORMAT_OPTIONS.find((option) => option.key === format)?.label) || format;
+      const selectedPeriod =
+        from || to
+          ? ` for ${from || "the earliest available date"} to ${
+              to || "the latest available date"
+            }`
+          : "";
+      setNotice(
+        `${report.title} ${formatLabel} export${selectedPeriod} downloaded successfully.`
+      );
     } catch (downloadError) {
       const message = await readExportError(downloadError);
       setError(
@@ -303,7 +438,7 @@ export default function ExportsPage() {
     setTo("");
   }
 
-  if (!['admin', 'manager', 'auditor'].includes(role)) {
+  if (!["admin", "manager", "auditor"].includes(role)) {
     return (
       <div className="export-center-v3">
         <div className="page-header">
@@ -323,23 +458,114 @@ export default function ExportsPage() {
     );
   }
 
+  const presentationReports = visibleReports.filter((report) => report.deepReport);
+  const operationalReports = visibleReports.filter((report) => !report.deepReport);
+
   return (
-    <div className="export-center-v3">
-      <section className="ec-hero">
+    <div className="export-center-v3 ec-publishing-studio">
+      <section className="ec-hero ec-publishing-hero">
         <div>
-          <span className="ec-eyebrow">REPORTING AND DOCUMENT CENTRE</span>
-          <h1>Professional Export Centre</h1>
+          <span className="ec-eyebrow">CHALIN03 / REPORTING PUBLICATIONS</span>
+          <h1>Business reports. Built to explain.</h1>
           <p>
-            Download every business report as a professionally arranged Excel
-            workbook, print-ready PDF or editable Microsoft Word document.
+            Present the business, not just the numbers. Download financial stories,
+            operational analysis and audit evidence for real management decisions.
           </p>
+          <div className="ec-publishing-hero-links">
+            <a href="#ec-intelligence-reports">Management editions ↗</a>
+            <a href="#ec-operational-library">Operational downloads ↗</a>
+            <Link to="/advanced-accounting-intelligence">Accounting ↗</Link>
+          </div>
         </div>
 
-        <div className="ec-hero-badge" aria-label="Available export formats">
-          <strong>3 formats</strong>
-          <span>Excel • PDF • Word</span>
+        <div className="ec-report-cover-art" aria-hidden="true">
+          <div className="ec-cover-header"><span>CHALIN03</span><small>INTERNAL / MANAGEMENT EDITION</small></div>
+          <div className="ec-cover-title">THE BUSINESS<br/><em>IN FOCUS.</em></div>
+          <div className="ec-cover-viz">
+            <span style={{height:"28%"}}/><span style={{height:"46%"}}/><span style={{height:"37%"}}/>
+            <span style={{height:"68%"}}/><span style={{height:"54%"}}/><span style={{height:"82%"}}/>
+            <span style={{height:"63%"}}/><span style={{height:"94%"}}/>
+          </div>
+          <div className="ec-cover-footer">FINANCIAL REVIEW <strong>01 / 05</strong></div>
         </div>
       </section>
+
+      <section className="ec-intelligence-intro">
+        <div>
+          <span className="ec-eyebrow">LIVE / EVIDENCE-BASED ANALYSIS</span>
+          <h2>See the store before you publish.</h2>
+          <p>Review recorded sales, actual collections and open debt. See the trends, follow the exceptions and then choose the report you need.</p>
+        </div>
+        <button type="button" disabled={previewBusy || Boolean(busyKey)}
+          onClick={loadIntelligencePreview}>
+          {previewBusy ? "Analysing store…" : "Analyse this store"}
+        </button>
+      </section>
+
+      {intelligencePreview?.status === "success" && (
+        <section className="ec-intelligence-live" aria-label="Live Spare Parts intelligence">
+          <div className="ec-intelligence-live-head">
+            <div>
+              <span className="ec-eyebrow">STORE INTELLIGENCE / LIVE EVIDENCE</span>
+              <h2>{intelligencePreview.scope.branch}</h2>
+              <p>Activity: {intelligencePreview.scope.from} to {intelligencePreview.scope.to} ·
+                Open debts and stock are current snapshots.</p>
+            </div>
+            <button type="button" onClick={() => setIntelligencePreview(null)}>Close analysis</button>
+          </div>
+          <div className="ec-intelligence-kpis">
+            {[
+              ["Sales incl. tax", intelligencePreview.summary.invoiceTotal, "GHS"],
+              ["At-sale collections", intelligencePreview.summary.collectedAtSale, "GHS"],
+              ["Later debt payments", intelligencePreview.summary.debtCollected, "GHS"],
+              ["Current open debt", intelligencePreview.summary.openDebtTotal, "GHS"],
+              ["Refunds paid out", intelligencePreview.summary.refundTotal, "GHS"],
+              ["Overdue debt", intelligencePreview.summary.overdueTotal, "GHS"],
+            ].map(([label, value, unit]) => (
+              <div key={label} className="ec-intelligence-kpi">
+                <span>{label}</span>
+                <strong>{unit === "GHS" ? currency(value) : value}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="ec-live-chart-grid">
+            {intelligencePreview.charts.slice(0, 4).map((chart) => {
+              const points = chart.points.slice(0, 12);
+              const maxValue = Math.max(1, ...points.map(point => Number(point.value) || 0));
+              return <div key={chart.title} className="ec-live-chart">
+                <h3>{chart.title}</h3>
+                <p>{chart.note}</p>
+                {points.length ? points.map((point, index) => (
+                  <div className="ec-live-chart-row" key={chart.title + index}>
+                    <span title={point.label}>{point.label}</span>
+                    <div className="ec-live-bar-track" aria-label={point.label + ": " + currency(point.value)}>
+                      <div style={{ width: Math.max(0, Math.min(100,
+                        (Number(point.value) || 0) / maxValue * 100)) + "%" }} />
+                    </div>
+                    <strong>{Number(point.value || 0).toLocaleString("en-GH", {
+                      maximumFractionDigits: 0
+                    })}</strong>
+                  </div>
+                )) : <div className="ec-no-chart-data">No records for this view.</div>}
+              </div>;
+            })}
+          </div>
+          <div className="ec-intelligence-findings">
+            <h3>What needs attention</h3>
+            {intelligencePreview.findings.slice(0, 6).map((item, index) => (
+              <article key={index} className="ec-intelligence-finding">
+                <strong>{item.priority} · {item.area}</strong>
+                <p>{item.observation}</p>
+                <small>{item.action}</small>
+              </article>
+            ))}
+          </div>
+          <p className="ec-intelligence-disclosure">{intelligencePreview.warning}
+            Download the Excel, PDF or Word report below for full charts, data tables and calculation notes.</p>
+        </section>
+      )}
+
+      <section className="ec-feature-path"><div><strong>New: Blind Stock Audit</strong><span>Count physical items first, reveal stock variances after submission, and download detailed investigations.</span></div><Link to="/stock-count">Open Blind Count →</Link></section>
 
       <section className="ec-store-banner">
         <div className="ec-store-icon">🏪</div>
@@ -356,15 +582,17 @@ export default function ExportsPage() {
       {error && <div className="error-box ec-message">{error}</div>}
       {notice && <div className="success-box ec-message">{notice}</div>}
 
-      <section className="ec-controls-card">
+      <section className="ec-controls-card" id="ec-report-period">
         <div className="ec-control-heading">
           <div>
             <span className="ec-eyebrow">REPORT PERIOD</span>
             <h2>Choose the reporting dates</h2>
           </div>
           <p>
-            Date-sensitive reports use this period. Products, low stock and open
-            debts always export their current store records.
+            Every download prints the exact selected From and To dates.
+            Date-sensitive reports also filter their rows; products, low stock
+            and open debts remain current snapshots prepared for that selected
+            reporting period.
           </p>
         </div>
 
@@ -398,9 +626,9 @@ export default function ExportsPage() {
 
       <section className="ec-library-heading">
         <div>
-          <span className="ec-eyebrow">REPORT LIBRARY</span>
-          <h2>Select a report and format</h2>
-          <p>{visibleReports.length} report(s) currently displayed.</p>
+          <span className="ec-eyebrow">THE REPORT COLLECTION</span>
+          <h2>Choose your publication.</h2>
+          <p>{presentationReports.length} management editions · {operationalReports.length} operational downloads shown.</p>
         </div>
 
         <div className="ec-library-filters">
@@ -428,11 +656,59 @@ export default function ExportsPage() {
         </div>
       </section>
 
-      <div className="ec-report-grid">
-        {visibleReports.map((report) => (
+      {presentationReports.length > 0 && (
+        <section className="ec-report-publications" id="ec-intelligence-reports" aria-label="Management intelligence publications">
+          <div className="ec-publications-heading">
+            <div><span className="ec-eyebrow">01 / INTELLIGENCE SERIES</span>
+              <h2>For directors, finance and audit teams.</h2>
+              <p>Five focused publications with charts, written analysis and the original accounting basis.</p>
+            </div><span>PDF · EXCEL · WORD</span>
+          </div>
+          <div className="ec-publication-grid">
+            {presentationReports.map((report,index) => (
+              <article key={report.key} className="ec-publication">
+                <div className={"ec-publication-cover ec-cover-" + report.key}>
+                  <div className="ec-publication-cover-top"><span>CHALIN03</span><small>ANALYSIS / {String(index+1).padStart(2,"0")}</small></div>
+                  <strong>{report.title}</strong>
+                  <div className="ec-publication-cover-visual" aria-hidden="true">
+                    <i/><i/><i/><i/><i/><i/><i/>
+                  </div>
+                  <div className="ec-publication-cover-bottom"><span>MANAGEMENT REPORT</span><span>INTERNAL</span></div>
+                </div>
+                <div className="ec-publication-description">
+                  <div className="ec-publication-label"><span>{String(index+1).padStart(2,"0")} / REPORT SERIES</span><small>{report.category}</small></div>
+                  <h3>{report.title}</h3>
+                  <p>{report.description}</p>
+                  <div className="ec-publication-includes">
+                    <span>Visual analysis</span><span>Management interpretation</span><span>Audit basis</span>
+                  </div>
+                  <div className="ec-publication-formats" aria-label={"Download " + report.title}>
+                    {FORMAT_OPTIONS.filter(option=>option.key!=="csv").map(format=>{
+                      const key=report.key+"-"+format.key;
+                      return <button key={key} type="button"
+                        disabled={Boolean(busyKey)}
+                        onClick={()=>downloadReport(report,format.key==="doc"?"word":format.key)}
+                        aria-label={"Download "+report.title+" as "+format.label}>
+                        <strong>{busyKey===key?"Preparing…":format.label}</strong>
+                        <span aria-hidden="true">↓</span>
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      <div className="ec-operational-heading" id="ec-operational-library">
+        <div><span className="ec-eyebrow">02 / SOURCE DOCUMENTS</span><h2>Operational downloads.</h2>
+          <p>Original records and supporting evidence for detailed reviews.</p></div>
+      </div>
+      <div className="ec-report-grid ec-operational-grid">
+        {operationalReports.map((report) => (
           <article
             key={report.key}
-            className={`ec-report-card${report.featured ? " is-featured" : ""}`}
+            className={`ec-report-card${report.featured ? " is-featured" : ""}${report.key === "transaction-history" ? " ec-transaction-report" : ""}`}
           >
             <div className="ec-report-topline">
               <div className="ec-report-icon" aria-hidden="true">{report.icon}</div>
@@ -445,13 +721,43 @@ export default function ExportsPage() {
             <h3>{report.title}</h3>
             <p>{report.description}</p>
 
+            {report.key === "transaction-history" && (
+              <div className="ec-transaction-period" aria-label="Selected transaction history date range">
+                <div className="ec-transaction-period-label">TRANSACTION PERIOD IN DOWNLOAD</div>
+                <div className="ec-transaction-period-dates">
+                  <span><small>From Date</small><strong>{from || "Earliest available"}</strong></span>
+                  <span aria-hidden="true">→</span>
+                  <span><small>To Date</small><strong>{to || "Latest available"}</strong></span>
+                </div>
+                <a href="#ec-report-period">Change reporting dates</a>
+              </div>
+            )}
+
+            {report.key === "transaction-history" && (
+              <div className="ec-workbook-preview" aria-label="Excel workbook report highlights">
+                <strong>Inside the Excel workbook</strong>
+                <div>
+                  <span>Executive dashboard</span>
+                  <span>Returns &amp; refunds</span>
+                  <span>Money reconciliation</span>
+                  <span>Highlighted audit issues</span>
+                </div>
+              </div>
+            )}
+
             <div className="ec-report-meta">
-              <span>{report.dateFilter ? "Uses selected dates" : "Current records"}</span>
+              <span>
+                {report.deepReport
+                  ? "Activity by date · open debt & stock now"
+                  : report.dateFilter
+                    ? "Filters rows by selected dates"
+                    : "Current snapshot • selected period shown"}
+              </span>
               <span>{currentStoreCode}</span>
             </div>
 
             <div className="ec-format-actions">
-              {FORMAT_OPTIONS.map((format) => {
+              {FORMAT_OPTIONS.filter((format) => format.key !== "csv" || report.key === "transaction-history").map((format) => {
                 const requestKey = `${report.key}-${format.key}`;
                 const isBusy = busyKey === requestKey;
 

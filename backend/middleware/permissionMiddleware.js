@@ -4,6 +4,7 @@ const {
   hasEveryPermission,
   normalizeCode,
 } = require("../security/permissionCatalog");
+const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
 const { resolveEffectivePermissions } = require("../services/permissionOverrideService");
 
 async function attachEffectivePermissions(req, res, next) {
@@ -41,6 +42,12 @@ function requirePermission(...permissions) {
       });
     }
 
+    // Defense in depth: the protected owner account cannot be blocked by a
+    // stale token permission list or a historical override row.
+    if (isOriginalSystemAdministrator(req.user)) {
+      return next();
+    }
+
     req.user.effective_permissions =
       req.user.effective_permissions || getEffectivePermissions(req.user);
 
@@ -63,6 +70,12 @@ function requireAnyPermission(...permissions) {
         message: "Authentication required.",
         request_id: req.requestId || null,
       });
+    }
+
+    // Keep the original System Administrator fail-open for permission checks
+    // after identity has already been verified by requireAuth.
+    if (isOriginalSystemAdministrator(req.user)) {
+      return next();
     }
 
     req.user.effective_permissions =

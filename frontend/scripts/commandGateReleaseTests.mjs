@@ -18,6 +18,11 @@ const biometricRoutes = read("../backend/routes/biometricRoutes.js");
 
 assert.match(loginEntry, /LoginPageGroupOperations/);
 assert.match(loginEntry, /unlockPasswordOnFirstTap/);
+assert.match(loginEntry, /if \(isLoggedIn\)/);
+assert.match(loginEntry, /getWorkspaceHomeRoute\(workspaceCode\)/);
+assert.match(loginEntry, /Restoring your secure Chalin 03 session/);
+assert.doesNotMatch(loginEntry, /clearStoredSession|void logout\(|localStorage\.removeItem\(/);
+
 assert.match(loginPage, /Chalin 03 Group Operations/);
 assert.match(loginPage, /Three connected businesses/);
 assert.match(loginPage, /GroupOperationsMap/);

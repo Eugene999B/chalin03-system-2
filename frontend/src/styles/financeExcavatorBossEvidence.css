@@ -1,0 +1,84 @@
+/* Readable, source-backed Boss-only customer/supplier evidence on every excavator. */
+.finance-boss-evidence {
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid #cddbf0;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f8fafc, #edf4ff);
+  color: #10233e;
+  min-width: 0;
+}
+.finance-boss-evidence__heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.finance-boss-evidence__heading strong {font-size: 13px; letter-spacing: .01em;}
+.finance-boss-evidence__status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #bacbe3;
+  border-radius: 999px;
+  background: #e1eaf7;
+  color: #18416e;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  text-wrap: balance;
+}
+.finance-boss-evidence__status--on_installment,
+.finance-boss-evidence__status--sale_in_progress {background:#fef3c7;color:#92400e;border-color:#fcd34d}
+.finance-boss-evidence__status--sold {background:#dcfce7;color:#166534;border-color:#86efac}
+.finance-boss-evidence__status--previous_sale {background:#f1f5f9;color:#475569}
+.finance-boss-evidence__status--application_pending,
+.finance-boss-evidence__status--agreement_pending {background:#dbeafe;color:#1d4ed8}
+.finance-boss-evidence dl {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin:0;
+}
+.finance-boss-evidence dl>div {
+  background:#fff;
+  border:1px solid #e2e8f0;
+  border-radius:11px;
+  padding:9px 11px;
+  min-width:0;
+}
+.finance-boss-evidence dt {color:#5c6b83;font-size:11px;line-height:1.4;font-weight:700}
+.finance-boss-evidence dd {margin:4px 0 0;font-size:13px;font-weight:800;overflow-wrap:anywhere;line-height:1.45}
+.finance-boss-evidence__caution {
+  margin:10px 0 0;
+  padding:10px;
+  border-left:3px solid #d97706;
+  background:#fff7ed;
+  color:#92400e;
+  border-radius:7px;
+  font-size:12px;
+  line-height:1.5;
+}
+.finance-boss-evidence__links {display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+.finance-boss-evidence__links a {
+  display:inline-flex;
+  align-items:center;
+  border:1px solid #bed0e8;
+  border-radius:10px;
+  padding:9px 12px;
+  min-height:42px;
+  background:#fff;
+  color:#0f4b7a;
+  font-size:12px;
+  font-weight:800;
+  text-decoration:none;
+}
+@media(max-width:720px){
+  .finance-boss-evidence{padding:12px;margin-top:12px}
+  .finance-boss-evidence dl{grid-template-columns:minmax(0,1fr)}
+  .finance-boss-evidence__heading{flex-direction:column;align-items:stretch}
+  .finance-boss-evidence__status{align-self:flex-start}
+  .finance-boss-evidence__links{display:grid;grid-template-columns:1fr}
+  .finance-boss-evidence__links a{width:100%;justify-content:center}
+}

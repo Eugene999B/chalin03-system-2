@@ -1,0 +1,34 @@
+
+/* Equipment catalogue: always show the complete machine photo. */
+.equipment-catalogue .equipment-card__image img,
+.equipment-catalogue .equipment-detail__cover img,
+.equipment-catalogue .equipment-detail__gallery article img {
+  object-fit: contain;
+  object-position: center;
+}
+
+.equipment-catalogue .equipment-card__image img {
+  padding: 10px;
+  background: #eef3f7;
+}
+
+.equipment-catalogue .equipment-detail__cover {
+  grid-template-columns: 1fr;
+}
+
+.equipment-catalogue .equipment-detail__cover img {
+  width: 100%;
+  height: clamp(320px, 52vh, 620px);
+  min-height: 320px;
+  padding: 18px;
+  background: #071d35;
+}
+
+.equipment-catalogue .equipment-detail__cover > div {
+  padding: 22px 24px 26px;
+}
+
+.equipment-catalogue .equipment-detail__gallery article img {
+  padding: 4px;
+  background: #eef3f7;
+}

@@ -1,0 +1,21 @@
+.help-public__hero{padding:100px clamp(18px,7vw,110px);background:radial-gradient(circle at 85% 20%,#3f5562 0%,transparent 43%),linear-gradient(120deg,#071923,#173947);color:#fff}
+.help-public__hero .division__eyebrow{color:#efb946}
+.help-public__hero h1{font-size:clamp(46px,7vw,96px);line-height:1.04;letter-spacing:-.08em;max-width:850px;margin:15px 0 20px}
+.help-public__hero p{font-size:clamp(15px,1.6vw,20px);line-height:1.7;color:#ccdde3;max-width:720px}
+.help-public__hero>div{display:flex;gap:14px;flex-wrap:wrap;margin-top:30px}
+.help-public__main{display:grid;grid-template-columns:1fr 2fr;gap:60px;padding:90px clamp(18px,7vw,110px)}
+.help-public__main h2{font-size:clamp(36px,5vw,65px);line-height:1.07;letter-spacing:-.06em;margin:15px 0}
+.help-public__main>div:first-child>p{color:#6b8087;font-size:14px}
+.help-public__faq{display:grid;gap:12px;align-content:start}
+.help-public__faq details{border:1px solid #dbe5e6;border-radius:12px;background:#f9fbfa;padding:0 20px}
+.help-public__faq summary{cursor:pointer;list-style:none;font-size:16px;font-weight:850;line-height:1.4;padding:19px 25px 19px 0;position:relative}
+.help-public__faq summary:after{content:"+";position:absolute;right:0;color:#bd8518;font-size:23px;top:12px}
+.help-public__faq details[open] summary:after{content:"−"}
+.help-public__faq details p{padding:0 0 19px;color:#53676e;font-size:14px;line-height:1.8;margin:0}
+.help-public__actions{padding:0 clamp(18px,7vw,110px) 100px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.help-public__actions article{background:#0d303a;border-radius:13px;padding:27px;color:#fff;display:flex;flex-direction:column;gap:8px}
+.help-public__actions article>span{color:#f6bf44;font-size:12px;font-weight:900}
+.help-public__actions h3{font-size:22px;letter-spacing:-.04em;margin:8px 0 0}
+.help-public__actions p{color:#c0d2d6;font-size:13px;line-height:1.6}
+.help-public__actions a{color:#f2c65a;font-size:13px;font-weight:900;margin-top:auto}
+@media(max-width:800px){.help-public__main{grid-template-columns:1fr;gap:24px;padding-top:60px}.help-public__actions{grid-template-columns:1fr}.help-public__hero{padding-top:65px;padding-bottom:65px}}

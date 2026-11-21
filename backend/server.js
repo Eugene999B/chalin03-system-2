@@ -37,6 +37,9 @@ const {
   requireSparePartsBranchContext,
 } = require("./middleware/sparePartsBranchContextMiddleware");
 const {
+  reconcileCreditReturnDebts,
+} = require("./middleware/creditReturnDebtReconciliationMiddleware");
+const {
   requireWorkspaceCategory,
 } = require("./services/categoryIsolationService");
 const {
@@ -46,8 +49,11 @@ const {
 const authRoutes = require("./routes/authRoutes");
 const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
+const {router:publicCommerceRoutes} = require("./routes/publicCommerceRoutes");
+const {router:productPriceApprovalRoutes} = require("./routes/productPriceApprovalRoutes");
 const saleRoutes = require("./routes/saleRoutes");
 const debtRoutes = require("./routes/debtRoutes");
+const {dispatchStaffDebtorIdentityNoticeOnce} = require("./services/debtorIdentityStaffNoticeService");
 const customerDebtConsolidationRoutes = require("./routes/customerDebtConsolidationRoutes");
 const debtReminderRoutes = require("./routes/debtReminderRoutes");
 const reportRoutes = require("./routes/reportRoutes");
@@ -60,9 +66,12 @@ const expenseRoutes = require("./routes/expenseRoutes");
 const purchaseRoutes = require("./routes/purchaseRoutes");
 const returnRoutes = require("./routes/returnRoutes");
 const exportRoutes = require("./routes/exportRoutes");
+const sparePartsTransactionExportRoutes = require("./routes/sparePartsTransactionExportRoutes");
+const sparePartsBlindCountRoutes = require("./routes/sparePartsBlindCountRoutes");
 const activityRoutes = require("./routes/activityRoutes");
 const receiptRoutes = require("./routes/receiptRoutes");
 const delegatedBackupRoutes = require("./routes/delegatedBackupRoutes");
+const backupOwnerStreamingRoutes = require("./routes/backupOwnerStreamingRoutes");
 const backupRoutes = require("./routes/backupRoutes");
 const dailyClosingRoutes = require("./routes/dailyClosingRoutes");
 const customerStatementRoutes = require("./routes/customerStatementRoutes");
@@ -99,6 +108,8 @@ const workspaceAdminRoutes = require("./routes/workspaceAdminRoutes");
 const workspaceContextRoutes = require("./routes/workspaceContextRoutes");
 const systemRoutes = require("./routes/systemRoutes");
 const installmentRoutes = require("./routes/installmentRoutes");
+const payrollFoundationRoutes = require("./routes/payrollFoundationRoutes");
+const payrollProcessingRoutes = require("./routes/payrollProcessingRoutes");
 const { startInstallmentReminderScheduler } = require("./services/installmentReminderService");
 const { startDebtReminderScheduler } = require("./services/debtReminderService");
 const {
@@ -112,6 +123,7 @@ const sparePartsBoundary = requireWorkspaceCategory("spare_parts");
 const miningBoundary = requireWorkspaceCategory("mining");
 const hireBoundary = requireWorkspaceCategory("equipment_hire");
 const fleetBoundary = requireWorkspaceCategory("mining", "equipment_hire");
+const payrollBoundary = requireWorkspaceCategory("spare_parts", "mining", "equipment_hire");
 
 const app = express();
 
@@ -123,6 +135,17 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://chalin03.com",
   "https://www.chalin03.com",
+  "https://homepage.chalin03.com",
+  "https://spareparts.chalin03.com",
+  "https://excavators.chalin03.com",
+  "https://machines.chalin03.com",
+  "https://motorcycles.chalin03.com",
+  "https://automobiles.chalin03.com",
+  "https://gold.chalin03.com",
+  "https://transport.chalin03.com",
+  "https://hire.chalin03.com",
+  "https://help.chalin03.com",
+  "https://work.chalin03.com",
   process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_ALT,
 ]
@@ -160,7 +183,10 @@ app.use(
         return callback(null, true);
       }
 
-      return callback(new Error(`Not allowed by CORS: ${origin}`));
+      const corsError = new Error("The request origin is not authorised for this API.");
+      corsError.statusCode = 403;
+      corsError.code = "CHALIN03_CORS_ORIGIN_NOT_ALLOWED";
+      return callback(corsError);
     },
     credentials: true,
   })
@@ -234,6 +260,7 @@ app.get("/api", (req, res) => {
       "/api/release2-final/standalone-hr",
       "/api/release2-final/document-signature",
       "/api/workspace-admin",
+      "/api/payroll",
     ],
   });
 });
@@ -242,6 +269,9 @@ app.get("/api", (req, res) => {
   Branch routes are registered before auth and user routes because login needs
   to load the store list before the user has a token.
 */
+// Public catalogue and enquiry routes stay accessible without staff login;
+// their staff subpaths enforce authenticated store and role checks individually.
+app.use("/api/public-commerce", publicCommerceRoutes);
 app.use("/api/branches", branchRoutes);
 
 app.use("/api/auth/login", loginLimiter);
@@ -260,6 +290,7 @@ app.use("/api/user-permissions", sensitiveAdminLimiter);
 app.use("/api/delegated-administration", sensitiveAdminLimiter);
 app.use("/api/workspace-admin", sensitiveAdminLimiter);
 app.use("/api/group-configuration", sensitiveAdminLimiter);
+app.use("/api/payroll", sensitiveAdminLimiter);
 
 app.use(
   "/api/release2-final/backups/history",
@@ -285,12 +316,33 @@ app.use(
 app.use("/api", systemRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/auth/passkeys", passkeyRoutes);
+app.use("/api/products", requireAuth, sparePartsBoundary, productPriceApprovalRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);
 app.use("/api/sales", requireAuth, sparePartsBoundary, saleRoutes);
 app.use("/api/installments", requireAuth, sparePartsBoundary, installmentRoutes);
-app.use("/api/debts", requireAuth, sparePartsBoundary, debtRoutes);
-app.use("/api/debt-customers", requireAuth, sparePartsBoundary, customerDebtConsolidationRoutes);
-app.use("/api/debt-reminders", requireAuth, sparePartsBoundary, debtReminderRoutes);
+app.use("/api/payroll", requireAuth, payrollBoundary, payrollFoundationRoutes);
+app.use("/api/payroll", requireAuth, payrollBoundary, payrollProcessingRoutes);
+app.use(
+  "/api/debts",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  debtRoutes
+);
+app.use(
+  "/api/debt-customers",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  customerDebtConsolidationRoutes
+);
+app.use(
+  "/api/debt-reminders",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  debtReminderRoutes
+);
 app.use("/api/reports", requireAuth, sparePartsBoundary, reportRoutes);
 app.use(
   "/api/users",
@@ -317,6 +369,8 @@ app.use(
 );
 app.use("/api/purchases", requireAuth, sparePartsBoundary, purchaseRoutes);
 app.use("/api/returns", requireAuth, sparePartsBoundary, returnRoutes);
+app.use("/api/exports", requireAuth, sparePartsBoundary, sparePartsTransactionExportRoutes);
+app.use("/api/spare-parts/stock-counts", requireAuth, sparePartsBoundary, sparePartsBlindCountRoutes);
 app.use("/api/exports", exportRoutes);
 app.use(
   "/api/activity-log",
@@ -326,6 +380,7 @@ app.use(
 );
 app.use("/api/receipts", requireAuth, sparePartsBoundary, receiptRoutes);
 app.use("/api/backups", delegatedBackupRoutes);
+app.use("/api/backups", backupOwnerStreamingRoutes);
 app.use("/api/backups", backupRoutes);
 app.use(
   "/api/daily-closing",
@@ -334,17 +389,25 @@ app.use(
   requireSparePartsBranchContext,
   dailyClosingRoutes
 );
-app.use("/api/customer-statements", requireAuth, sparePartsBoundary, customerStatementRoutes);
+app.use(
+  "/api/customer-statements",
+  requireAuth,
+  sparePartsBoundary,
+  reconcileCreditReturnDebts,
+  customerStatementRoutes
+);
 app.use(
   "/api/customer-debt-reports",
   requireAuth,
   sparePartsBoundary,
+  reconcileCreditReturnDebts,
   customerDebtReportRoutes
 );
 app.use(
   "/api/customer-statement-workspace",
   requireAuth,
   sparePartsBoundary,
+  reconcileCreditReturnDebts,
   customerStatementWorkspaceRoutes
 );
 app.use("/api/maintenance", requireAuth, sparePartsBoundary, maintenanceRoutes);
@@ -430,6 +493,15 @@ async function startServer() {
       startSmsDeliveryStatusSync();
       startInstallmentReminderScheduler();
       startDebtReminderScheduler();
+      // Nonblocking, one-time internal staff notice. SMS provider logs each
+      // recipient before submission; a restart never sends a duplicate.
+      // All authenticated accounts also receive the in-app announcement.
+      setImmediate(()=>{
+        void dispatchStaffDebtorIdentityNoticeOnce().catch(error=>{
+          console.warn("Debtor identity staff policy SMS unavailable:",
+            error?.code||error?.message||"UNKNOWN");
+        });
+      });
       startNotificationSyncScheduler();
     });
   } catch (error) {

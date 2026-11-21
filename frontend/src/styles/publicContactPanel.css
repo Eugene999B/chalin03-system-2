@@ -1,0 +1,25 @@
+.public-contact{position:fixed;right:clamp(12px,2.5vw,32px);bottom:clamp(12px,2.5vw,32px);z-index:100;font-family:Inter,"Segoe UI",system-ui,sans-serif;color:#182d36}
+.public-contact *{box-sizing:border-box}
+.public-contact__trigger{display:flex;align-items:center;gap:11px;background:#0b2631;color:#fff;border:2px solid #e8b446;border-radius:999px;padding:13px 22px;font-weight:800;box-shadow:0 15px 35px #09253136;cursor:pointer}
+.public-contact__trigger span:first-child{font-size:21px}
+.public-contact__trigger:focus-visible,.public-contact button:focus-visible,.public-contact input:focus-visible,.public-contact textarea:focus-visible{outline:3px solid #f9c654;outline-offset:3px}
+.public-contact__panel{position:absolute;bottom:calc(100% + 12px);right:0;width:min(390px,calc(100vw - 28px));max-height:min(76vh,670px);overflow:auto;background:#fff;border-radius:19px;box-shadow:0 27px 70px #071d2d4c;border:1px solid #d9e3e2}
+.public-contact__head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;background:#0c2e36;color:white;padding:20px}
+.public-contact__head span{color:#f4c35e;font-size:10px;letter-spacing:.18em;font-weight:800}
+.public-contact__head strong{display:block;font-size:24px;margin-top:7px;letter-spacing:-.04em}
+.public-contact__head p{font-size:12px;line-height:1.6;color:#d4e3e5;margin:9px 0 0}
+.public-contact__head button{background:transparent;border:0;color:white;font-size:29px;cursor:pointer}
+.public-contact form{display:grid;gap:12px;padding:18px}
+.public-contact form label{font-weight:700;font-size:12px;display:grid;gap:6px}
+.public-contact input,.public-contact textarea{width:100%;border:1px solid #bfcfd1;border-radius:8px;padding:10px 12px;font:inherit;font-size:13px;background:#fff;color:#142c34}
+.public-contact__honeypot{position:absolute!important;left:-99999px;height:0;overflow:hidden}
+.public-contact__submit,.public-contact__success button{background:#edb746;color:#10242f;border:0;border-radius:9px;padding:13px;font-size:13px;font-weight:900;cursor:pointer}
+.public-contact__submit:disabled{opacity:.5}
+.public-contact form small{font-size:11px;color:#667a81;line-height:1.55}
+.public-contact__error{font-size:12px;line-height:1.5;color:#a72227;margin:0}
+.public-contact__success{display:grid;gap:11px;padding:20px}
+.public-contact__success strong{color:#176047;font-size:18px}
+.public-contact__success p{color:#435d66;font-size:13px;line-height:1.5}
+.public-contact__links{display:flex;gap:9px;padding:0 18px 18px}
+.public-contact__links a{text-align:center;flex:1;border:1px solid #b9cccf;border-radius:8px;color:#0b4858;padding:11px 6px;text-decoration:none;font-size:12px;font-weight:800}
+@media(max-width:580px){.public-contact{right:11px;bottom:11px}.public-contact__panel{max-height:calc(100dvh - 98px)}.public-contact__trigger{padding:11px 15px;font-size:12px}}

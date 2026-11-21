@@ -1,0 +1,958 @@
+/*
+ * Equipment Installment Finance — deterministic three-page design layer.
+ *
+ * InstallmentFinanceLayout stamps exactly one presentation-only class on <body>
+ * for the three routes below. This avoids styling by DOM guesses and guarantees
+ * these rules cannot leak into another Finance screen or another business unit.
+ */
+
+body.finance-installment-page--start,
+body.finance-installment-page--applications,
+body.finance-installment-page--excavators {
+  --three-deep: #061a12;
+  --three-deep-2: #0b3324;
+  --three-green: #0e5a3b;
+  --three-green-bright: #17875a;
+  --three-gold: #d6b250;
+  --three-gold-soft: #ead99d;
+  --three-ink: #12271c;
+  --three-muted: #6c7c73;
+  --three-paper: #f7f7f1;
+  --three-line: rgba(14, 80, 54, 0.12);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple,
+body.finance-installment-page--applications .bwl-theme-finance-signature .bwl-content > .finance-simple,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .bwl-content > .finance-simple {
+  position: relative;
+  max-width: 1480px;
+  padding: clamp(0.7rem, 1.55vw, 1.3rem);
+  isolation: isolate;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple::before,
+body.finance-installment-page--applications .bwl-theme-finance-signature .bwl-content > .finance-simple::before,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .bwl-content > .finance-simple::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 84% 8%, rgba(214, 178, 80, 0.1), transparent 30rem),
+    radial-gradient(circle at 14% 86%, rgba(23, 135, 90, 0.07), transparent 34rem),
+    linear-gradient(180deg, #f6f7f1, #f1f1e9);
+}
+
+/* Shared cinematic hero grammar, with a different composition per page. */
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 230px;
+  align-items: flex-end;
+  border: 0;
+  border-radius: 2rem;
+  padding: clamp(1.45rem, 3vw, 2.65rem);
+  color: #fff;
+  box-shadow: 0 30px 72px rgba(5, 29, 20, 0.22);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero {
+  background:
+    linear-gradient(108deg, rgba(4, 23, 16, 0.995) 0 53%, rgba(9, 66, 43, 0.95) 100%),
+    var(--three-deep);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero {
+  background:
+    linear-gradient(118deg, rgba(4, 20, 13, 0.995), rgba(8, 48, 32, 0.98) 62%, rgba(17, 95, 62, 0.93)),
+    var(--three-deep);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero {
+  min-height: 255px;
+  background:
+    radial-gradient(circle at 82% 21%, rgba(214, 178, 80, 0.17), transparent 15rem),
+    linear-gradient(116deg, #051810, #0d3f2b 72%, #09291d);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero::before,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero::before,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero::before {
+  position: absolute;
+  z-index: 2;
+  top: 1.4rem;
+  right: 1.55rem;
+  color: rgba(235, 217, 157, 0.8);
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.21em;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero::before {
+  content: "01  •  BUILD THE DEAL";
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero::before {
+  content: "UNDERWRITING  /  DECISION CONTROL";
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero::before {
+  content: "MACHINE VAULT  /  SALE INVENTORY";
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero::after,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero::after,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero::after {
+  content: "";
+  position: absolute;
+  right: -5rem;
+  bottom: -8rem;
+  width: 28rem;
+  height: 28rem;
+  pointer-events: none;
+  border: 1px solid rgba(214, 178, 80, 0.2);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3rem rgba(214, 178, 80, 0.025),
+    0 0 0 6rem rgba(214, 178, 80, 0.018),
+    0 0 0 9rem rgba(214, 178, 80, 0.012);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero::after {
+  top: -9rem;
+  bottom: auto;
+  border-radius: 0;
+  transform: rotate(26deg);
+  background:
+    repeating-linear-gradient(90deg, transparent 0 23px, rgba(214, 178, 80, 0.025) 24px 25px),
+    repeating-linear-gradient(0deg, transparent 0 23px, rgba(214, 178, 80, 0.025) 24px 25px);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero > div,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero > div,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero > div {
+  position: relative;
+  z-index: 3;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero p,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero p,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero p {
+  margin-bottom: 0.55rem;
+  color: var(--three-gold-soft);
+  letter-spacing: 0.15em;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero h1,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero h1,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero h1 {
+  max-width: 850px;
+  color: #fff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.25rem, 5vw, 4.7rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.96;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero h1 {
+  font-size: clamp(2.7rem, 6vw, 5.5rem);
+  line-height: 0.9;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero span,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero span,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero span {
+  max-width: 720px;
+  color: rgba(237, 247, 242, 0.74);
+  font-size: clamp(0.92rem, 1.5vw, 1.05rem);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero-actions,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero-actions,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero-actions {
+  justify-content: flex-end;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero-actions > *,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero-actions > *,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero-actions > * {
+  border-color: rgba(235, 217, 157, 0.31);
+  background: rgba(255, 255, 255, 0.065);
+  color: #fff;
+  backdrop-filter: blur(14px);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero-actions .is-primary,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero-actions .is-primary {
+  border-color: var(--three-gold);
+  background: linear-gradient(135deg, #cfa742, #ead482);
+  color: #13241a;
+}
+
+/* ==================================================================
+   START NEW INSTALLMENT — private transaction studio
+   ================================================================== */
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin: 1.35rem 0 1.1rem;
+  overflow: hidden;
+  border: 1px solid var(--three-line);
+  border-radius: 1.2rem;
+  padding: 0.4rem;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 15px 38px rgba(18, 48, 35, 0.08);
+  backdrop-filter: blur(14px);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step {
+  position: relative;
+  justify-content: center;
+  min-height: 68px;
+  border: 0;
+  border-radius: 0.9rem;
+  background: transparent;
+  color: #6c7a72;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 1px;
+  height: 34px;
+  transform: translateY(-50%);
+  background: rgba(14, 90, 59, 0.12);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step b {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border: 1px solid rgba(14, 90, 59, 0.14);
+  background: #edf2ed;
+  color: #65736b;
+  font-size: 0.78rem;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step.is-active {
+  background: linear-gradient(135deg, #093825, #0f6040);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(8, 59, 39, 0.2);
+  transform: translateY(-2px);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step.is-active b {
+  border-color: var(--three-gold);
+  background: var(--three-gold);
+  color: #13251a;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step.is-done:not(.is-active) {
+  color: var(--three-green);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__panel {
+  position: relative;
+  overflow: hidden;
+  margin-top: 1.2rem;
+  border: 1px solid var(--three-line);
+  border-radius: 1.65rem;
+  padding: clamp(1.1rem, 2.4vw, 2rem);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 28px 80px rgba(7, 35, 25, 0.11);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 7px;
+  background: linear-gradient(180deg, var(--three-gold), var(--three-green));
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__section-header {
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(14, 90, 59, 0.09);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__section-header h2 {
+  color: var(--three-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.45rem, 3vw, 2.25rem);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__field > span {
+  color: #244033;
+  font-size: 0.75rem;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature input,
+body.finance-installment-page--start .bwl-theme-finance-signature select,
+body.finance-installment-page--start .bwl-theme-finance-signature textarea {
+  min-height: 50px;
+  border: 1px solid rgba(16, 78, 52, 0.16);
+  border-radius: 0.9rem;
+  background: #f9faf5;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature input:focus,
+body.finance-installment-page--start .bwl-theme-finance-signature select:focus,
+body.finance-installment-page--start .bwl-theme-finance-signature textarea:focus {
+  border-color: var(--three-green-bright);
+  outline: 4px solid rgba(23, 135, 90, 0.1);
+  background: #fff;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__customer-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__customer-grid > button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  column-gap: 0.85rem;
+  min-height: 108px;
+  align-items: center;
+  border: 1px solid var(--three-line);
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  background: linear-gradient(145deg, #fff, #f4f7f2);
+  text-align: left;
+  box-shadow: 0 8px 22px rgba(13, 52, 35, 0.05);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__customer-grid > button::before {
+  content: "";
+  grid-row: 1 / 4;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 50% 34%, #f1dda0 0 5px, transparent 6px),
+    radial-gradient(ellipse at 50% 72%, #f1dda0 0 10px, transparent 11px),
+    linear-gradient(135deg, #0b3d29, #16704b);
+  box-shadow: 0 8px 20px rgba(11, 63, 41, 0.18);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__customer-grid > button > * {
+  grid-column: 2;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__customer-grid > button.is-selected {
+  border-color: var(--three-green-bright);
+  background: linear-gradient(145deg, #effaf3, #fff);
+  box-shadow: 0 0 0 3px rgba(23, 135, 90, 0.11), 0 14px 30px rgba(12, 68, 43, 0.1);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.8fr) minmax(0, 1.2fr);
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--three-line);
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(13, 52, 35, 0.08);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 22px 45px rgba(13, 52, 35, 0.13);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards .finance-simple__machine-image {
+  height: 100%;
+  min-height: 240px;
+  aspect-ratio: auto;
+  background: linear-gradient(135deg, #0c2c20, #173e2d);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards .finance-simple__machine-image img {
+  object-fit: cover;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__sticky-actions {
+  bottom: 0.75rem;
+  border: 1px solid rgba(214, 178, 80, 0.28);
+  border-radius: 1.2rem;
+  background: rgba(6, 27, 20, 0.95);
+  color: #dce9e2;
+  box-shadow: 0 -10px 40px rgba(5, 25, 18, 0.18);
+  backdrop-filter: blur(16px);
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__sticky-actions button {
+  border-color: rgba(214, 178, 80, 0.3);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__sticky-actions button.is-primary {
+  border-color: var(--three-gold);
+  background: linear-gradient(135deg, #d6b250, #efdc9d);
+  color: #122319;
+}
+
+/* ==================================================================
+   APPLICATIONS & APPROVALS — underwriting command board
+   ================================================================== */
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metrics {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--three-line);
+  border-radius: 1.3rem;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 18px 42px rgba(9, 46, 31, 0.09);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metric {
+  position: relative;
+  min-height: 108px;
+  border: 0;
+  border-radius: 0;
+  padding: 1rem 1.15rem;
+  background: transparent;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metric:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 19px;
+  right: 0;
+  bottom: 19px;
+  width: 1px;
+  background: rgba(14, 77, 52, 0.09);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metric span {
+  color: #718078;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metric strong {
+  color: #103925;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.45rem, 2.8vw, 2.2rem);
+  font-weight: 500;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple > .finance-simple__section {
+  border: 0;
+  border-radius: 1.55rem;
+  padding: clamp(1rem, 2vw, 1.45rem);
+  background: rgba(248, 248, 244, 0.97);
+  box-shadow: inset 0 0 0 1px rgba(18, 66, 46, 0.08), 0 20px 52px rgba(8, 36, 25, 0.075);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar {
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid rgba(14, 77, 52, 0.075);
+  border-radius: 1.05rem;
+  padding: 0.9rem;
+  background: #fff;
+  box-shadow: 0 9px 24px rgba(10, 45, 31, 0.055);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar h2 {
+  color: var(--three-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar input,
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar select {
+  min-height: 46px;
+  border: 1px solid rgba(14, 77, 52, 0.13);
+  border-radius: 0.82rem;
+  background: #f7f8f4;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards {
+  grid-template-columns: 1fr;
+  gap: 0.82rem;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  min-height: 192px;
+  overflow: hidden;
+  border: 1px solid rgba(14, 77, 52, 0.1);
+  border-radius: 1.15rem;
+  background: #fff;
+  box-shadow: 0 11px 28px rgba(9, 43, 29, 0.065);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, var(--three-gold), var(--three-green-bright));
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 42px rgba(9, 43, 29, 0.11);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards .finance-simple__machine-image {
+  height: 100%;
+  min-height: 192px;
+  aspect-ratio: auto;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(226, 194, 102, 0.16), transparent 3.5rem),
+    linear-gradient(145deg, #0a2419, #123e2b);
+  color: #e2c86f;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-body {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem 1.1rem;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-head h3 {
+  margin-top: 0.14rem;
+  color: #123524;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.2rem, 2.2vw, 1.65rem);
+  font-weight: 500;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__facts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.35rem 0;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__facts > div {
+  min-height: 62px;
+  border: 1px solid rgba(14, 77, 52, 0.07);
+  border-radius: 0.72rem;
+  padding: 0.58rem 0.65rem;
+  background: #f5f6f2;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-actions {
+  align-items: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(14, 77, 52, 0.08);
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-actions button {
+  min-height: 40px;
+  border-radius: 999px;
+  padding-inline: 0.92rem;
+}
+
+body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__dialog {
+  border: 1px solid rgba(214, 178, 80, 0.22);
+  border-radius: 1.55rem;
+  box-shadow: 0 45px 110px rgba(2, 18, 11, 0.36);
+}
+
+/* ==================================================================
+   EXCAVATORS — premium machine showroom / asset vault
+   ================================================================== */
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metrics {
+  position: relative;
+  z-index: 3;
+  gap: 0.65rem;
+  margin-top: -1.1rem;
+  padding: 0 1rem;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metric {
+  min-height: 108px;
+  border: 1px solid var(--three-line);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 16px 36px rgba(8, 43, 28, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metric span {
+  color: #728079;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metric strong {
+  color: #0d3d29;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.35rem, 2.6vw, 2rem);
+  font-weight: 500;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple > .finance-simple__section {
+  margin-top: 1rem;
+  border: 0;
+  border-radius: 1.6rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  background: #f7f7f2;
+  box-shadow: inset 0 0 0 1px rgba(15, 86, 56, 0.08), 0 18px 48px rgba(8, 40, 27, 0.08);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__toolbar {
+  align-items: center;
+  border-radius: 1rem;
+  padding: 0.95rem 1rem;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(8, 40, 27, 0.06);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__toolbar h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__toolbar input {
+  min-width: min(100%, 390px);
+  min-height: 48px;
+  border: 1px solid rgba(15, 86, 56, 0.13);
+  border-radius: 999px;
+  padding-inline: 1.1rem;
+  background: #f6f7f2;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.15rem;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.95fr) minmax(0, 1.05fr);
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 86, 56, 0.1);
+  border-radius: 1.35rem;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(8, 42, 28, 0.09);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 26px 54px rgba(8, 42, 28, 0.14);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine > .finance-simple__machine-image {
+  height: 100%;
+  min-height: 360px;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: linear-gradient(180deg, rgba(8, 26, 18, 0.08), rgba(8, 26, 18, 0.22)), #102b20;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine > .finance-simple__machine-image img {
+  object-fit: cover;
+  background: #102b20;
+  transition: transform 350ms ease;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine:hover > .finance-simple__machine-image img {
+  transform: scale(1.025);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine-body {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.05rem;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine h3 {
+  color: #113825;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+  font-weight: 500;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine .finance-simple__facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  flex: 1;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine .finance-simple__facts > div {
+  border: 1px solid rgba(15, 86, 56, 0.07);
+  border-radius: 0.75rem;
+  padding: 0.58rem;
+  background: #f5f6f1;
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__card-actions {
+  margin-top: auto;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(15, 86, 56, 0.08);
+}
+
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__card-actions button,
+body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__card-actions .finance-simple__button {
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.79rem;
+}
+
+/* ==================================================================
+   Purpose-built tablet / phone layouts
+   ================================================================== */
+@media (max-width: 1050px) {
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  body.finance-installment-page--start .bwl-theme-finance-signature .bwl-content > .finance-simple,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .bwl-content > .finance-simple,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .bwl-content > .finance-simple {
+    padding: 0.2rem;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero {
+    min-height: 238px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    border-radius: 1.35rem;
+    padding: 1.3rem 1.05rem;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero::before,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero::before,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero::before {
+    top: 0.9rem;
+    right: 0.9rem;
+    max-width: 62%;
+    text-align: right;
+    font-size: 0.52rem;
+    letter-spacing: 0.12em;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero h1,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero h1,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero h1 {
+    font-size: clamp(2.2rem, 12vw, 3.55rem);
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero-actions,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero-actions,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__hero-actions > *,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__hero-actions > *,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__hero-actions > * {
+    flex: 1 1 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__steps {
+    display: flex;
+    overflow-x: auto;
+    padding: 0.35rem;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__steps::-webkit-scrollbar,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metrics::-webkit-scrollbar,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metrics::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step {
+    flex: 0 0 min(78vw, 260px);
+    justify-content: flex-start;
+    scroll-snap-align: start;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__step::after {
+    display: none;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__panel {
+    border-radius: 1.1rem;
+    padding: 0.9rem;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__customer-grid,
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards > .finance-simple__card,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple__cards .finance-simple__machine-image {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple > .finance-simple__section,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple > .finance-simple__section {
+    border-radius: 1.05rem;
+    padding: 0.35rem;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0.7rem;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar .finance-simple__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar .finance-simple__actions > :first-child,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar .finance-simple__actions > :nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metrics,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metrics {
+    display: flex;
+    gap: 0.6rem;
+    overflow-x: auto;
+    border: 0;
+    padding: 0.2rem 0.05rem 0.55rem;
+    background: transparent;
+    box-shadow: none;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metric,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metric {
+    flex: 0 0 min(72vw, 250px);
+    border: 1px solid var(--three-line);
+    border-radius: 1rem;
+    background: #fff;
+    scroll-snap-align: start;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__metric::after {
+    display: none;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__cards .finance-simple__machine-image {
+    height: 82px;
+    min-height: 82px;
+    aspect-ratio: auto;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-body {
+    padding: 0.75rem;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__facts,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine .finance-simple__facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__metrics {
+    margin-top: -0.7rem;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine > .finance-simple__machine-image {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+}
+
+@media (max-width: 480px) {
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar .finance-simple__actions,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__facts,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__card-actions,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple__machine .finance-simple__facts {
+    grid-template-columns: 1fr;
+  }
+
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple__toolbar .finance-simple__actions > * {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.finance-installment-page--start .bwl-theme-finance-signature .finance-simple *,
+  body.finance-installment-page--applications .bwl-theme-finance-signature .finance-simple *,
+  body.finance-installment-page--excavators .bwl-theme-finance-signature .finance-simple * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

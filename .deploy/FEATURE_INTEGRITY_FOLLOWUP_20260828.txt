@@ -1,0 +1,10 @@
+CHALIN 03 FEATURE INTEGRITY FOLLOW-UP
+
+Purpose: make restored feature integrations explicit in the production build rather than relying on Vite import substitution.
+
+Scope:
+- Users & Settings route
+- Login presentation
+- Executive intelligence controls
+
+No production business data changes.

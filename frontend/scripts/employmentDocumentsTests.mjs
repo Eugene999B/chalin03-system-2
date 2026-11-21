@@ -13,10 +13,12 @@ function read(relativePath) {
 const employmentPage = read("src/pages/EmploymentDocumentsPage.jsx");
 const signaturePage = read("src/pages/DocumentSignatureSettingsPage.jsx");
 const signatureStyles = read("src/styles/documentSignatureSettings.css");
+const workforcePage = read("src/pages/EquipmentBusinessWorkforcePage.jsx");
 const app = read("src/App.jsx");
 const spareLayout = read("src/components/Layout.jsx");
 const miningLayout = read("src/layouts/MiningLayout.jsx");
 const hireLayout = read("src/layouts/EquipmentHireLayout.jsx");
+const financeLayout = read("src/layouts/InstallmentFinanceLayout.jsx");
 
 assert.match(employmentPage, /standalone-hr\/documents/);
 assert.match(employmentPage, /Approve & Sign/);
@@ -43,6 +45,9 @@ assert.match(app, /EmploymentDocumentsPage/);
 assert.match(app, /DocumentSignatureSettingsPage/);
 assert.match(spareLayout, /Employment & HR Documents/);
 assert.match(miningLayout, /Employment & HR Documents/);
-assert.match(hireLayout, /Hire Employment Documents/);
+assert.match(hireLayout, /title: "Staff & Workforce"/);
+assert.match(financeLayout, /title: "Staff & Workforce"/);
+assert.match(workforcePage, /EmploymentDocumentsPage/);
+assert.match(workforcePage, /tab === "documents"/);
 
-console.log("Standalone employment documents and signature frontend checks passed.");
+console.log("Standalone employment documents and grouped workforce navigation checks passed.");

@@ -5,13 +5,19 @@ on:
   push:
     branches:
       - production
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "database/**"
+      - "railway.json"
+      - ".github/workflows/version-3-production-smoke.yml"
 
 permissions:
   contents: read
 
 concurrency:
   group: version-3-production-smoke
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   live-production:
@@ -20,12 +26,28 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Wait for the approved production release
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p smoke-output
+          # A merge commit has two parents. Compare the previous production
+          # commit with the new release; git diff-tree -r alone reports no
+          # paths on merge commits, incorrectly skipping the backend wait.
+          backend_release_required=false
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -E '^(backend/|database/|railway\.json$)' >/dev/null; then
+            backend_release_required=true
+          fi
+          echo "backend_release_required=$backend_release_required" | tee smoke-output/release-scope.txt
+          frontend_release_required=false
+          if git diff --name-only "${GITHUB_SHA}^1" "$GITHUB_SHA" | grep -E '^(frontend/)' >/dev/null; then
+            frontend_release_required=true
+          fi
+          echo "frontend_release_required=$frontend_release_required" | tee -a smoke-output/release-scope.txt
+
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error --location \
               --dump-header smoke-output/api-health.headers \
@@ -34,10 +56,18 @@ jobs:
               if jq -e '
                 .status == "success" and
                 .service == "Chalin 03 Group Operations Platform" and
-                .version == "3.0.0"
+                .version == "3.0.0" and
+                .deployment.provider == "railway"
               ' smoke-output/api-health.json >/dev/null; then
-                echo "Production API is ready after attempt ${attempt}."
-                exit 0
+                if [ "$backend_release_required" = "true" ]; then
+                  if jq -e '.deployment.commit_sha == env.GITHUB_SHA' smoke-output/api-health.json >/dev/null; then
+                    echo "Production API is ready on the expected backend release after attempt ${attempt}."
+                    exit 0
+                  fi
+                else
+                  echo "Production API is ready; this release does not change backend/database/Railway code."
+                  exit 0
+                fi
               fi
             fi
             sleep 15
@@ -59,10 +89,13 @@ jobs:
             --output smoke-output/api-readiness.json \
             https://api.chalin03.com/api/readiness
 
-          jq -e '
+          backend_release_required="$(grep '^backend_release_required=' smoke-output/release-scope.txt | cut -d= -f2)"
+          jq -e --arg backend_release_required "$backend_release_required" '
             .status == "success" and
             .ready == true and
             .version == "3.0.0" and
+            .deployment.provider == "railway" and
+            ($backend_release_required == "false" or .deployment.commit_sha == env.GITHUB_SHA) and
             .checks.database == "ready" and
             .checks.schema == "ready" and
             .checks.configuration == "ready"
@@ -80,10 +113,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location \
-            --dump-header smoke-output/login.headers \
-            --output smoke-output/login.html \
-            https://chalin03.com/login
+          # Backend and Pages deploy independently; wait for the matching bundle.
+          frontend_release_required="$(grep '^frontend_release_required=' smoke-output/release-scope.txt | cut -d= -f2)"
+          frontend_ready=false
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error \
+              --dump-header smoke-output/login.headers \
+              --output smoke-output/login.html https://chalin03.com/login; then
+              bundle_path="$(grep -oE 'src="/assets/[^" ]+\.js"' smoke-output/login.html | head -n 1 | cut -d'"' -f2 || true)"
+              if [ -n "$bundle_path" ] &&
+                 curl --fail --silent --show-error \
+                   --output smoke-output/application-bundle.js "https://chalin03.com$bundle_path" &&
+                 { [ "$frontend_release_required" != "true" ] || grep -q "$GITHUB_SHA" smoke-output/application-bundle.js; }; then
+                frontend_ready=true
+                break
+              fi
+            fi
+            sleep 15
+          done
+          test "$frontend_ready" = "true"
 
           grep -qi '^strict-transport-security: max-age=31536000' smoke-output/login.headers
           grep -qi '^x-frame-options: DENY' smoke-output/login.headers
@@ -95,13 +143,15 @@ jobs:
           curl --fail --silent --show-error --location \
             --output smoke-output/application-bundle.js \
             "https://chalin03.com${bundle_path}"
-          grep -q 'Version Three' smoke-output/application-bundle.js
-          grep -q '3.0.0' smoke-output/application-bundle.js
+          if [ "$frontend_release_required" = "true" ]; then
+            grep -q "$GITHUB_SHA" smoke-output/application-bundle.js
+          fi
 
           curl --fail --silent --show-error --location \
             --output smoke-output/service-worker.js \
             https://chalin03.com/sw.js
-          grep -qE 'const CACHE_NAME = "chalin03-[^"]+"' smoke-output/service-worker.js
+          grep -q 'const CACHE_PREFIX = "chalin03-"' smoke-output/service-worker.js
+          grep -q 'app-shell-' smoke-output/service-worker.js
           grep -q 'url.origin !== self.location.origin' smoke-output/service-worker.js
           grep -q 'url.pathname.startsWith("/api")' smoke-output/service-worker.js
           grep -q '/site.webmanifest' smoke-output/service-worker.js
@@ -115,6 +165,46 @@ jobs:
             (.icons | length) >= 2
           ' smoke-output/site.webmanifest
 
+      - name: Verify live public SEO and indexing surface
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/home.headers \
+            --output smoke-output/home.html \
+            https://chalin03.com/
+
+          grep -qi '^x-robots-tag:.*index' smoke-output/home.headers
+          grep -qi '^strict-transport-security:' smoke-output/home.headers
+          grep -qi '<title>Chalin 03 Company Limited | Ghana</title>' smoke-output/home.html
+          grep -qi 'name="robots" content="index, follow"' smoke-output/home.html
+          grep -qi 'rel="canonical" href="https://chalin03.com/"' smoke-output/home.html
+          grep -qi 'Chalin 03 Company Limited' smoke-output/home.html
+
+          curl --fail --silent --show-error --location \
+            --dump-header smoke-output/company.headers \
+            --output smoke-output/company.html \
+            https://chalin03.com/company/
+
+          grep -qi '^x-robots-tag:.*index' smoke-output/company.headers
+          grep -qi 'name="robots" content="index, follow, max-image-preview:large"' smoke-output/company.html
+          grep -qi 'rel="canonical" href="https://chalin03.com/company/"' smoke-output/company.html
+          grep -qi 'Chalin 03 Company Limited' smoke-output/company.html
+
+          curl --fail --silent --show-error --location \
+            --output smoke-output/robots.txt \
+            https://chalin03.com/robots.txt
+          grep -q '^User-agent: \*' smoke-output/robots.txt
+          grep -q '^Allow: /' smoke-output/robots.txt
+          grep -q '^Sitemap: https://chalin03.com/sitemap.xml' smoke-output/robots.txt
+
+          curl --fail --silent --show-error --location \
+            --output smoke-output/sitemap.xml \
+            https://chalin03.com/sitemap.xml
+          grep -q 'https://chalin03.com/' smoke-output/sitemap.xml
+          grep -q 'https://chalin03.com/company/' smoke-output/sitemap.xml
+
       - name: Preserve live smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,4 +212,4 @@ jobs:
           name: version-3-live-production-smoke
           path: smoke-output
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7

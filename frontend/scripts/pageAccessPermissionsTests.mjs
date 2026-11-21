@@ -1,0 +1,36 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import {createRequire} from "node:module";
+import {fileURLToPath} from "node:url";
+import {SPARE_PARTS_PAGES,actualPageAccess,getSparePartsPageByPath} from "../src/security/sparePartsPageAccess.js";
+
+const here=path.dirname(fileURLToPath(import.meta.url));
+const root=path.resolve(here,"../..");
+const require=createRequire(import.meta.url);
+const backend=require("../../backend/security/sparePartsPageCatalog.js");
+assert.deepEqual(SPARE_PARTS_PAGES,backend.SPARE_PARTS_PAGES,"Frontend and backend page catalogs must match exactly");
+assert.equal(getSparePartsPageByPath("/reports/")?.id,"reports");
+assert.equal(getSparePartsPageByPath("/activity-log")?.id,"activity_log");
+assert.equal(getSparePartsPageByPath("/missing"),null);
+const page=getSparePartsPageByPath("/debts");
+const state={effective_permissions:[page.permission,"spare_parts.read"]};
+assert.equal(actualPageAccess(page,state,"auditor").allowed,true);
+assert.equal(actualPageAccess(page,{effective_permissions:[]},"auditor").allowed,false);
+assert.equal(actualPageAccess(getSparePartsPageByPath("/users-settings"),{
+  effective_permissions:["page.spare_parts.users_settings.view"]},"auditor").allowed,false);
+const layout=fs.readFileSync(path.join(root,"frontend/src/components/Layout.jsx"),"utf8");
+const manager=fs.readFileSync(path.join(root,"frontend/src/pages/UserPermissionManagerPage.jsx"),"utf8");
+const matrix=fs.readFileSync(path.join(root,"frontend/src/components/PageAccessMatrix.jsx"),"utf8");
+const css=fs.readFileSync(path.join(root,"frontend/src/styles/pageAccessMatrix.css"),"utf8");
+assert.match(layout,/PageAccessProtectedOutlet/);
+assert.match(layout,/hasPermission\(page.permission\)/);
+assert.match(layout,/section\.items\.filter/);
+assert.match(manager,/PageAccessMatrix/);
+assert.match(manager,/Advanced permissions/);
+assert.match(matrix,/onAllow\(page.permission\)/);
+assert.match(matrix,/onBlock\(page.permission\)/);
+assert.match(matrix,/onReset\(page.permission\)/);
+assert.match(css,/@media\(max-width:620px\)/);
+assert.match(css,/min-height:44px/);
+console.log("Spare Parts page access catalog, role gates, responsive UI and navigation checks passed.");

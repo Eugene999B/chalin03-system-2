@@ -1,0 +1,215 @@
+body.installment-finance-mobile {
+  overflow-x: hidden;
+}
+
+body.installment-finance-mobile .finance-simple,
+body.installment-finance-mobile .finance-flow,
+body.installment-finance-mobile .installment-completion {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+body.installment-finance-mobile .finance-simple *,
+body.installment-finance-mobile .finance-flow *,
+body.installment-finance-mobile .installment-completion * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.installment-photo-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.45rem;
+}
+
+.installment-photo-picker__button {
+  min-height: 48px;
+  border: 1px solid #bfd0c3;
+  border-radius: 0.8rem;
+  padding: 0.75rem 0.9rem;
+  background: #fff;
+  color: #183d27;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.installment-photo-picker__button.is-primary {
+  border-color: #1f5b36;
+  background: #1f5b36;
+  color: #fff;
+}
+
+.installment-photo-picker__helper {
+  grid-column: 1 / -1;
+  color: #657268;
+  line-height: 1.45;
+}
+
+@media (max-width: 767px) {
+  body.installment-finance-mobile .finance-simple,
+  body.installment-finance-mobile .finance-flow,
+  body.installment-finance-mobile .installment-completion {
+    padding: 0.65rem;
+  }
+
+  body.installment-finance-mobile .finance-simple__hero,
+  body.installment-finance-mobile .finance-flow__hero,
+  body.installment-finance-mobile .installment-completion__hero,
+  body.installment-finance-mobile .finance-simple__section-header,
+  body.installment-finance-mobile .finance-simple__toolbar,
+  body.installment-finance-mobile .finance-simple__card-head,
+  body.installment-finance-mobile .finance-flow__section-head,
+  body.installment-finance-mobile .installment-completion__section-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.installment-finance-mobile .finance-simple__grid,
+  body.installment-finance-mobile .finance-simple__grid.is-three,
+  body.installment-finance-mobile .finance-simple__cards,
+  body.installment-finance-mobile .finance-simple__machine-grid,
+  body.installment-finance-mobile .finance-simple__customer-grid,
+  body.installment-finance-mobile .finance-simple__guide-grid,
+  body.installment-finance-mobile .finance-simple__metrics,
+  body.installment-finance-mobile .finance-simple__summary,
+  body.installment-finance-mobile .finance-simple__facts,
+  body.installment-finance-mobile .finance-flow__summary,
+  body.installment-finance-mobile .finance-flow__steps,
+  body.installment-finance-mobile .finance-flow__accounts,
+  body.installment-finance-mobile .installment-completion__metrics,
+  body.installment-finance-mobile .installment-completion__workflow,
+  body.installment-finance-mobile .installment-completion__facts,
+  body.installment-finance-mobile .installment-completion__toolbar,
+  body.installment-finance-mobile .installment-completion__case-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.installment-finance-mobile .finance-simple__hero-actions,
+  body.installment-finance-mobile .finance-simple__hero-actions > *,
+  body.installment-finance-mobile .finance-simple__actions > *,
+  body.installment-finance-mobile .finance-flow__actions > *,
+  body.installment-finance-mobile .installment-completion__actions > *,
+  body.installment-finance-mobile .installment-completion__card-actions > *,
+  body.installment-finance-mobile .finance-simple__card-actions > * {
+    width: 100%;
+  }
+
+  body.installment-finance-mobile .finance-simple input,
+  body.installment-finance-mobile .finance-simple select,
+  body.installment-finance-mobile .finance-simple textarea,
+  body.installment-finance-mobile .finance-flow input,
+  body.installment-finance-mobile .finance-flow select,
+  body.installment-finance-mobile .finance-flow textarea,
+  body.installment-finance-mobile .installment-completion input,
+  body.installment-finance-mobile .installment-completion select,
+  body.installment-finance-mobile .installment-completion textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  body.installment-finance-mobile .finance-simple__dialog-backdrop {
+    padding: 0;
+    place-items: end stretch;
+  }
+
+  body.installment-finance-mobile .finance-simple__dialog {
+    width: 100%;
+    max-width: none;
+    max-height: 94dvh;
+    padding: 0.85rem;
+    border-radius: 1rem 1rem 0 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.installment-finance-mobile .finance-simple__photo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.installment-finance-mobile .finance-simple__photo-preview {
+    min-height: 0;
+  }
+
+  body.installment-finance-mobile .finance-simple__sticky-actions {
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: -0.85rem;
+    margin-right: -0.85rem;
+    margin-bottom: -0.85rem;
+    border-radius: 0;
+  }
+
+  body.installment-finance-mobile .finance-simple__sticky-actions > div,
+  body.installment-finance-mobile .finance-simple__sticky-actions a,
+  body.installment-finance-mobile .finance-simple__sticky-actions button {
+    width: 100%;
+  }
+
+  body.installment-finance-mobile .finance-simple__table-wrap {
+    margin-left: -0.2rem;
+    margin-right: -0.2rem;
+  }
+
+  body.installment-finance-mobile .finance-simple table {
+    min-width: 640px;
+  }
+
+  body.installment-finance-mobile .installment-completion__machine {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  body.installment-finance-mobile .installment-completion__machine-image,
+  body.installment-finance-mobile .installment-completion__machine-image img {
+    min-height: 12rem;
+    max-height: 20rem;
+  }
+
+  body.installment-finance-mobile .finance-simple__machine-image {
+    aspect-ratio: 16 / 10;
+  }
+
+  body.installment-finance-mobile .finance-simple__machine-body,
+  body.installment-finance-mobile .finance-simple__card-body,
+  body.installment-finance-mobile .finance-simple__customer-body {
+    padding: 0.85rem;
+  }
+
+  body.installment-finance-mobile .finance-simple__section,
+  body.installment-finance-mobile .finance-simple__panel,
+  body.installment-finance-mobile .installment-completion__hero,
+  body.installment-finance-mobile .installment-completion__panel,
+  body.installment-finance-mobile .installment-completion__case-summary,
+  body.installment-finance-mobile .installment-completion__payment-guide {
+    border-radius: 0.95rem;
+    padding: 0.85rem;
+  }
+
+  body.installment-finance-mobile .installment-photo-picker {
+    grid-template-columns: 1fr;
+  }
+
+  body.installment-finance-mobile .installment-photo-picker__helper {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 420px) {
+  body.installment-finance-mobile .finance-simple__photo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.installment-finance-mobile .finance-simple h1 {
+    font-size: 1.5rem;
+  }
+
+  body.installment-finance-mobile .finance-simple h2,
+  body.installment-finance-mobile .installment-completion h2,
+  body.installment-finance-mobile .finance-flow h2 {
+    font-size: 1.18rem;
+  }
+}
