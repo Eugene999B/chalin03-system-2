@@ -91,8 +91,7 @@ test("hotfix is pre-deploy DDL only, not request-time mutation",()=>{
  const server=fs.readFileSync(path.join(root,"backend/server.js"),"utf8");
  const route=fs.readFileSync(path.join(root,"backend/routes/equipmentFinanceReadyCashRoutes.js"),"utf8");
  const migration=fs.readFileSync(path.join(root,"backend/scripts/runReadyCashCompanyWideSaleGuardMigration.js"),"utf8");
- assert.deepEqual(railway.deploy.preDeployCommand,["node scripts/runReadyCashCompanyWideSaleGuardMigration.js",
-    "node scripts/migratePublicCommerceSchema.js"]);
+ assert.deepEqual(railway.deploy.preDeployCommand,["node scripts/runPublicCommerceProductionPredeploy.js"]);
  assert.match(migration,/CHALIN03_SIGNED_BACKUP_CONFIRMED/);
  assert.match(migration,/GET_LOCK/);
  assert.match(migration,/MIGRATION_BACKUP_SHA256/);

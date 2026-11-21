@@ -55,14 +55,18 @@ test("new website schema is isolated from core accounting tables",()=>{
  assert.doesNotMatch(script,/pool\.getConnection/);
  assert.match(script,/CHALIN03_SIGNED_BACKUP_CONFIRMED/);
  assert.match(script,/MIGRATION_BACKUP_SHA256/);
+ const orchestrator=read("scripts/runPublicCommerceProductionPredeploy.js");
+ assert.match(orchestrator,/runReadyCashCompanyWideSaleGuardMigration\.js/);
+ assert.match(orchestrator,/migratePublicCommerceSchema\.js/);
+ assert.match(orchestrator,/spawnSync\(process\.execPath/);
+ assert.match(orchestrator,/result\.status!==0/);
  assert.equal(schema.length,3);
  assert.ok(schema.every(statement=>/^CREATE TABLE IF NOT EXISTS website_/i.test(statement)));
  assert.match(schema[1],/UNIQUE KEY uq_web_request_client_key/);
  assert.match(schema[1],/UNIQUE KEY uq_web_request_sale/);
  assert.match(schema[2],/FOREIGN KEY\(request_id\)/);
  const predeploy=JSON.parse(fs.readFileSync(path.resolve(root,"../railway.json"),"utf8")).deploy.preDeployCommand;
- assert.deepEqual(predeploy,["node scripts/runReadyCashCompanyWideSaleGuardMigration.js",
-   "node scripts/migratePublicCommerceSchema.js"]);
+ assert.deepEqual(predeploy,["node scripts/runPublicCommerceProductionPredeploy.js"]);
 });
 test("a website request never decrements store stock or inserts POS sales",()=>{
  const r=read("routes/publicCommerceRoutes.js");
