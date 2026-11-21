@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {PHOTO_LIBRARY,EXACT_MODEL_PHOTOS,REAL_TYPE_PHOTOS} from "../src/data/verifiedPublicPhotos.js";
+import {verifyReferencePhoto} from "./cacheVerifiedReferencePhotos.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
@@ -9,6 +10,9 @@ const urls=new Set();
 for(const [key,photo] of Object.entries(PHOTO_LIBRARY)){
  const image=new URL(photo.src),original=new URL(photo.original),source=new URL(photo.source);
  assert.equal(image.hostname,"upload.wikimedia.org","Broken direct photo CDN for "+key);
+ assert.equal(verifyReferencePhoto(photo),true);
+ assert.ok(photo.localSrc.startsWith("/images/verified-reference/"));
+ assert.ok(photo.localSrc.endsWith(".jpg"));
  assert.equal(original.hostname,"upload.wikimedia.org","Missing direct original fallback for "+key);
  assert.equal(source.hostname,"commons.wikimedia.org","Photographer credit must have a source for "+key);
  assert.match(image.pathname,/^\/wikipedia\/commons\/thumb\/[a-f0-9]\/([a-f0-9]{2})\/.+\/960px-.+\.(?:jpg|JPG)$/i);
@@ -34,4 +38,13 @@ const headers=fs.readFileSync(path.join(root,"public/_headers"),"utf8");
 // an empty Referer. Keep the existing origin-only default Referrer-Policy.
 assert.ok(!render.includes('referrerPolicy="no-referrer"'),"Wikimedia thumbs must receive the page origin referrer");
 assert.match(headers,/Referrer-Policy: strict-origin-when-cross-origin/);
+assert.throws(()=>verifyReferencePhoto({...PHOTO_LIBRARY.excavators,localSrc:"../../secrets.jpg"}),/Invalid local photo destination/);
+assert.throws(()=>verifyReferencePhoto({...PHOTO_LIBRARY.excavators,src:"https://evil.example/attack.jpg"}),/verified HTTPS Wikimedia Commons/);
+assert.throws(()=>verifyReferencePhoto({...PHOTO_LIBRARY.excavators,src:"http://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Caterpillar_320.jpg/960px-Caterpillar_320.jpg"}),/verified HTTPS Wikimedia Commons/);
+const component=fs.readFileSync(path.join(root,"src/components/RealPhoto.jsx"),"utf8");
+assert.ok(component.includes("image.localSrc"),"First-party photo delivery missing");
+assert.ok(component.includes("image.src"),"Official remote fallback missing");
+const packageJson=JSON.parse(fs.readFileSync(path.join(root,"package.json"),"utf8"));
+assert.equal(packageJson.scripts.build,"vite build");
+assert.ok(packageJson.scripts.prebuild.includes("cacheVerifiedReferencePhotos.mjs"),"Production image cache missing");
 console.log("All "+urls.size+" unique real equipment photo CDNs have direct 960px routes and source attribution.");
