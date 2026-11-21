@@ -24,12 +24,16 @@ assert.equal(redirect("https://spareparts.chalin03.com/online-orders"),"https://
 assert.equal(redirect("https://excavators.chalin03.com/enquire?sector=excavators"),null);
 assert.equal(redirect("https://spareparts.chalin03.com/enquire?sector=spare-parts"),null);
 assert.equal(redirect("https://chalin03.com/enquire?sector=gold"),"https://gold.chalin03.com/enquire?sector=gold");
-assert.equal(redirect("https://chalin03.com/"),null);
+assert.equal(redirect("https://chalin03.com/"),"https://homepage.chalin03.com/");
+assert.equal(redirect("https://homepage.chalin03.com/"),null);
+assert.equal(redirect("https://chalin03.com/company"),"https://homepage.chalin03.com/");
 assert.equal(redirect("https://work.chalin03.com/"),null);
 assert.equal(redirect("https://spareparts.chalin03.com/"),null);
 assert.equal(redirect("https://spareparts.chalin03.com/api/public-commerce/products"),null);
 assert.equal(redirect("https://spareparts.chalin03.com/assets/index.js"),null);
-assert.equal(redirect("https://www.chalin03.com/"),"https://chalin03.com/");
+assert.equal(redirect("https://www.chalin03.com/"),"https://homepage.chalin03.com/");
+assert.equal(siteHref("company"),"https://homepage.chalin03.com/");
+assert.equal(siteForHostname("homepage.chalin03.com"),"company");
 let nextCalls=0;
 const next=()=>{nextCalls+=1;return new Response("ok")};
 const allowed=await onRequest({request:new Request("https://spareparts.chalin03.com/api/public-commerce/products"),next});
