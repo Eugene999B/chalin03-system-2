@@ -286,6 +286,31 @@ async function loadAssetProtectedImage({ assetId: inputAssetId, photoId }) {
   }
 }
 
+// Server-side PDF rendering uses the same protected photo source as the
+// authenticated Finance machine screen. Never dereference arbitrary URLs.
+async function loadPreferredAssetProtectedImage(inputAssetId) {
+  const assetId = positiveId(inputAssetId);
+  if (!assetId) {
+    throw new FinanceProtectedImageError(
+      400, "Invalid excavator reference.",
+      "INVALID_FINANCE_PROTECTED_IMAGE_REFERENCE"
+    );
+  }
+  const connection = await pool.getConnection();
+  try {
+    const value = await preferredAssetImageValue(connection, assetId);
+    if (!value) {
+      throw new FinanceProtectedImageError(
+        404, "No protected image is saved for this excavator.",
+        "FINANCE_PROTECTED_IMAGE_NOT_FOUND"
+      );
+    }
+    return normalizeStoredImage(value);
+  } finally {
+    connection.release();
+  }
+}
+
 async function loadApplicationProtectedImage(inputApplicationId) {
   const applicationId = positiveId(inputApplicationId);
   if (!applicationId) {
@@ -343,5 +368,6 @@ module.exports = {
   bufferFromStoredValue,
   loadApplicationProtectedImage,
   loadAssetProtectedImage,
+  loadPreferredAssetProtectedImage,
   normalizeStoredImage,
 };
