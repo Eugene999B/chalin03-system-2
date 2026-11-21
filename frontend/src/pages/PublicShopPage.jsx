@@ -205,8 +205,8 @@ export default function PublicShopPage(){
    </aside>
   </div>:null}
   <footer className="pc-footer"><Link to="/">← CHALIN03 home</Link>
-   <div><a href="tel:+233249469080">Boss: +233 24 946 9080</a>
-    <a href="https://wa.me/233540713654" target="_blank" rel="noreferrer">WhatsApp: 054 071 3654</a></div>
+   <div><a href="tel:+233249469080">Call us: +233 24 946 9080</a>
+    <a href="https://wa.me/233540713654" target="_blank" rel="noreferrer">WhatsApp us: 054 071 3654</a></div>
    <span>© {new Date().getFullYear()} CHALIN 03 COMPANY LIMITED</span></footer>
  <PublicContactPanel subject="Spare parts market customer help"/>
  </main>;
