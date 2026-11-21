@@ -46,8 +46,8 @@ for(const term of ['ce-market','ce-division','siteHref("parts")','siteHref("exca
  assert.ok(homepage.includes(term),"Missing redesigned company feature "+term);
 }
 const seo=read("public/sitemap.xml");
-assert.ok(seo.includes("chalin03.com/shop"));
-assert.ok(seo.includes("chalin03.com/enquire"));
+assert.ok(seo.includes("spareparts.chalin03.com/"));
+assert.ok(seo.includes("help.chalin03.com/"));
 for(const file of ["src/styles/independentPartsMarket.css","src/styles/websiteCommerceStaff.css"]){
  const css=read(file);assert.ok(css.includes("@media(max-width:"));assert.ok(css.includes("min-width:0"));
 }
