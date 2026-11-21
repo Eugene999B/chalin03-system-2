@@ -118,6 +118,7 @@ export default function Layout() {
       ? [
           { title: "Dashboard", description: "Store performance and operational summary", path: "/", icon: "🏠", keywords: "dashboard summary" },
           { title: "Products", description: "Search, manage and review spare-part stock", path: "/products", icon: "📦", keywords: "products inventory stock" },
+          { title: "Online Orders & Messages", description: "Review website customer orders and enquiries", path: "/online-orders", icon: "🛍️", keywords: "online website enquiries messages orders sales" },
           { title: "New Sale", description: "Record an authorised Spare Parts transaction", path: "/new-sale", icon: "🛒", keywords: "record sale receipt" },
           { title: "Installment Sales", description: "Review and manage Spare Parts installment records", path: "/installments", icon: "📅", keywords: "installments finance collections" },
           { title: "Debts", description: "Review and manage customer debt records", path: "/debts", icon: "📒", keywords: "debts collection" },
@@ -165,6 +166,13 @@ export default function Layout() {
             icon: "📦",
             keywords:
               "products inventory stock spare parts excavator barcode quantity ledger adjustment",
+          },
+          {
+            title: "Online Orders & Messages",
+            description: "Receive and follow up public website orders, quotes and messages",
+            path: "/online-orders",
+            icon: "🛍️",
+            keywords: "website online shop customer orders enquiries messages payment POS",
           },
           {
             title: "New Sale",
@@ -409,6 +417,13 @@ export default function Layout() {
     if (isAdmin) {
       const adminItems = [
         {
+          title: "Online Catalogue Control",
+          description: "Publish, hide and feature live store products and photos",
+          path: "/online-catalogue",
+          icon: "🖼️",
+          keywords: "website catalogue photos products online visibility pricing",
+        },
+        {
           title: "Users & Settings",
           description: "Manage staff, roles and business settings",
           path: "/users-settings",
@@ -581,9 +596,9 @@ export default function Layout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleLogout() {
-    logout();
-    navigate("/login");
+  async function handleLogout() {
+    const cleared = await logout();
+    if (cleared) navigate("/", { replace: true });
   }
 
   function closeMobileMenu() {

@@ -15,6 +15,9 @@ import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
+import PublicShopPage from "./pages/PublicShopPage";
+import PublicEnquiryPage from "./pages/PublicEnquiryPage";
+import WebsiteCommerceControlPage from "./pages/WebsiteCommerceControlPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
 import NewSalePage from "./pages/NewSalePage";
@@ -218,6 +221,8 @@ export default function App() {
       <WorkspaceContextProvider>
         <BrowserRouter>
         <Routes>
+          <Route path="/shop" element={<PublicShopPage />} />
+          <Route path="/enquire" element={<PublicEnquiryPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
@@ -234,6 +239,10 @@ export default function App() {
               path="products"
               element={rolePage([...businessWorkRoles, "staff"], <ProductsPage />)}
             />
+            <Route path="online-orders"
+              element={rolePage([...businessWorkRoles, "staff"], <WebsiteCommerceControlPage mode="orders" />)} />
+            <Route path="online-catalogue"
+              element={rolePage(["admin"], <WebsiteCommerceControlPage mode="catalogue" />)} />
             <Route
               path="new-sale"
               element={rolePage(businessWorkRoles, <NewSalePage />)}
