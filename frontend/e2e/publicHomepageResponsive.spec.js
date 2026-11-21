@@ -72,3 +72,50 @@ test("real excavator and parts photos load from the approved direct CDN, not red
  await expect(page.locator(".ce-hero__photo .real-photo__unavailable")).toHaveCount(0);
  await expect(page.locator(".ce-market__primary .real-photo__unavailable")).toHaveCount(0);
 });
+
+
+const TEST_PART={id:11,name:"Shell Oil 1L",size:"1L",category:"Oils & lubricants",
+ price:75,in_stock:true,photo_status:"missing",image_url:null,featured:false};
+const TEST_RESPONSE={status:"success",source:"live_spare_parts_main_store",
+ count:1,page:1,limit:24,pages:1,categories:["Oils & lubricants"],products:[TEST_PART]};
+function catalogueResponse(status){
+ return {status,headers:{"access-control-allow-origin":"*","content-type":"application/json"},
+  body:JSON.stringify(status===200?TEST_RESPONSE:{status:"error",message:"The store catalogue is temporarily unavailable."})};
+}
+test("spare parts market automatically recovers from a transient 503 and displays the product",async({page})=>{
+ test.setTimeout(30000);
+ let calls=0;
+ await page.route("**/public-commerce/products**",async route=>{
+  if(route.request().method()==="OPTIONS"){
+   await route.fulfill({status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET, OPTIONS","access-control-allow-headers":"*"}});
+   return;
+  }
+  calls+=1;
+  await route.fulfill(catalogueResponse(calls===1?503:200));
+ });
+ await page.goto("/shop");
+ await expect(page.getByText(/Temporary connection issue.*retrying the catalogue automatically/i)).toBeVisible();
+ await expect(page.locator(".pm-product")).toHaveCount(1,{timeout:15000});
+ await expect(page.getByRole("heading",{name:"Shell Oil 1L"})).toBeVisible();
+ expect(calls).toBe(2);
+ await expect(page.getByRole("button",{name:"Retry loading products"})).toHaveCount(0);
+});
+test("manual Retry loads products again when filters and page have not changed",async({page})=>{
+ test.setTimeout(30000);
+ let calls=0;
+ await page.route("**/public-commerce/products**",async route=>{
+  if(route.request().method()==="OPTIONS"){
+   await route.fulfill({status:204,headers:{"access-control-allow-origin":"*","access-control-allow-methods":"GET, OPTIONS","access-control-allow-headers":"*"}});
+   return;
+  }
+  calls+=1;
+  await route.fulfill(catalogueResponse(calls<=2?503:200));
+ });
+ await page.goto("/shop");
+ const retry=page.getByRole("button",{name:"Retry loading products"});
+ await expect(retry).toBeVisible({timeout:15000});
+ await retry.click();
+ await expect(page.locator(".pm-product")).toHaveCount(1,{timeout:12000});
+ expect(calls).toBe(3);
+ await expect(retry).toHaveCount(0);
+});
