@@ -42,7 +42,7 @@ const workerHrLettersCss = read(
 );
 
 assert.match(indexHtml, /Chalin 03 Company Limited/);
-assert.match(indexHtml, /rel="canonical" href="https:\/\/chalin03\.com\/"/);
+assert.match(indexHtml, /rel="canonical" href="https:\/\/homepage\.chalin03\.com\/"/);
 assert.match(app, /SystemOperationsPage/);
 assert.match(app, /system-operations/);
 assert.match(app, /PermissionRoute/);

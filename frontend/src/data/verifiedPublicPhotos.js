@@ -14,6 +14,7 @@
  */
 const VERIFIED_COMMONS_PATHS=Object.freeze({
   "Caterpillar 320.jpg":"a/a2",
+  "Caterpillar 321D LCR on dirt lot in Campbell.jpg":"d/db",
   "Hydraulic hose fittings.JPG":"f/fc",
   "Caterpillar dozer.jpg":"4/4e",
   "Honda CG125.jpg":"4/43",
@@ -50,6 +51,7 @@ function photo(file,credit,license,alt){
  });
 }
 export const PHOTO_LIBRARY=Object.freeze({
+  homepageExcavator:photo("Caterpillar 321D LCR on dirt lot in Campbell.jpg","Grendelkhan","CC BY-SA 4.0","Real Caterpillar 321D LCR excavator on an open construction yard beneath a clear blue sky"),
   excavators:photo("Caterpillar 320.jpg","Bene Riobó","CC BY-SA 4.0","Real Caterpillar 320 excavator at work"),
   parts:photo("Hydraulic hose fittings.JPG","Jstapko / Wikimedia Commons","See source","Real hydraulic hose fittings"),
   machines:photo("Caterpillar dozer.jpg","Srđan Popović","CC BY-SA 4.0","Real Caterpillar bulldozer"),
