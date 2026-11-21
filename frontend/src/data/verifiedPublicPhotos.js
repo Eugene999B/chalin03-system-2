@@ -40,8 +40,10 @@ function photo(file,credit,license,alt){
  const directory=VERIFIED_COMMONS_PATHS[file];
  if(!directory)throw new Error("Unverified photo not allowed: "+file);
  const encoded=encodeURIComponent(file.replace(/ /g,"_"));
+ const slug=file.replace(/\.[^.]+$/,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")+".jpg";
  return Object.freeze({
   src:"https://upload.wikimedia.org/wikipedia/commons/thumb/"+directory+"/"+encoded+"/960px-"+encoded,
+  localSrc:"/images/verified-reference/"+slug,
   original:"https://upload.wikimedia.org/wikipedia/commons/"+directory+"/"+encoded,
   source:"https://commons.wikimedia.org/wiki/File:"+encoded,
   credit,license,alt
