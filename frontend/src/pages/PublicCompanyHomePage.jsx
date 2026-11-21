@@ -113,7 +113,7 @@ export default function PublicCompanyHomePage() {
           <a href="/excavators" onClick={closeMenu}>Excavators</a>
           <a href="/shop" onClick={closeMenu}>Spare parts market</a>
           <a href="/equipment-hire-services" onClick={closeMenu}>Equipment hire</a><a href="/shop" onClick={closeMenu}>Shop prices</a>
-          <a href="#about" onClick={closeMenu}>About</a><a href="/help" onClick={closeMenu}>Help</a>
+          <a href="#about" onClick={closeMenu}>About</a><a href="/customer-help" onClick={closeMenu}>Help</a>
           <a href="#contact" onClick={closeMenu}>Contact</a>
           <a className="ch-home__staff-link" href="/login" onClick={closeMenu}>Staff login <span aria-hidden="true">↗</span></a>
         </nav>
@@ -251,7 +251,7 @@ export default function PublicCompanyHomePage() {
           <nav aria-label="Footer navigation">
             <a href="/excavators">Excavators</a>
             <a href="/shop">Spare parts market</a><a href="/shop">Shop</a><a href="/enquire">Enquiries</a>
-            <a href="/equipment-hire-services">Hiring</a><a href="/help">Help centre</a>
+            <a href="/equipment-hire-services">Hiring</a><a href="/customer-help">Help centre</a>
             <a href="/login">Staff login</a>
           </nav>
         </div>
