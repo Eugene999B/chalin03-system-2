@@ -44,5 +44,6 @@ const component=fs.readFileSync(path.join(root,"src/components/RealPhoto.jsx"),"
 assert.ok(component.includes("image.localSrc"),"First-party photo delivery missing");
 assert.ok(component.includes("image.src"),"Official remote fallback missing");
 const packageJson=JSON.parse(fs.readFileSync(path.join(root,"package.json"),"utf8"));
-assert.ok(packageJson.scripts.build.includes("cacheVerifiedReferencePhotos.mjs"),"Production image cache missing");
+assert.equal(packageJson.scripts.build,"vite build");
+assert.ok(packageJson.scripts.prebuild.includes("cacheVerifiedReferencePhotos.mjs"),"Production image cache missing");
 console.log("All "+urls.size+" unique real equipment photo CDNs have direct 960px routes and source attribution.");
