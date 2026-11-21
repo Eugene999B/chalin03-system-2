@@ -18,6 +18,7 @@ import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
 import IndependentPartsMarket from "./pages/IndependentPartsMarket";
 import IndependentDivisionWebsite from "./pages/IndependentDivisionWebsite";
+import IndependentHelpCentre from "./pages/IndependentHelpCentre";
 import PublicShopPage from "./pages/PublicShopPage";
 import PublicEnquiryPage from "./pages/PublicEnquiryPage";
 import PublicSectorPage from "./pages/PublicSectorPage";
@@ -210,7 +211,7 @@ function RootWorkspaceEntry() {
     };
     if (["chalin03.com","www.chalin03.com","homepage.chalin03.com"].includes(hostname)) return safe(<CompanyExperienceV3 />);
     if (hostname === "spareparts.chalin03.com") return safe(<IndependentPartsMarket />);
-    if (hostname === "help.chalin03.com") return safe(<PublicHelpPage />);
+    if (hostname === "help.chalin03.com") return safe(<IndependentHelpCentre />);
     if (divisionHosts[hostname]) return safe(<IndependentDivisionWebsite sector={divisionHosts[hostname]} />);
     if (hostname === "work.chalin03.com" && !loading && !isLoggedIn) return <LoginPage />;
   }
@@ -254,7 +255,7 @@ export default function App() {
           <Route path="/gold" element={<IndependentDivisionWebsite sector="gold" />} />
           <Route path="/machine-transport" element={<IndependentDivisionWebsite sector="machine-transport" />} />
           <Route path="/equipment-hire-services" element={<IndependentDivisionWebsite sector="equipment-hire" />} />
-          <Route path="/customer-help" element={<PublicHelpPage />} />
+          <Route path="/customer-help" element={<IndependentHelpCentre />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
