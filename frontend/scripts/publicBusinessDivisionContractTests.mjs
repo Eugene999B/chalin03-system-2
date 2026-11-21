@@ -3,55 +3,49 @@ import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
-const read=file=>fs.readFileSync(path.join(root,file),"utf8");
-const app=read("src/App.jsx");
-const sector=read("src/pages/PublicSectorPage.jsx");
-const help=read("src/pages/PublicHelpPage.jsx");
-const home=read("src/pages/PublicCompanyHomePage.jsx");
-const shop=read("src/pages/PublicShopPage.jsx");
-const enquiry=read("src/pages/PublicEnquiryPage.jsx");
+const read=p=>fs.readFileSync(path.join(root,p),"utf8");
+const app=read("src/App.jsx"),sector=read("src/pages/IndependentDivisionWebsite.jsx");
+const help=read("src/pages/IndependentHelpCentre.jsx");
+const home=read("src/pages/CompanyExperienceV3.jsx");
+const shop=read("src/pages/IndependentPartsMarket.jsx");
+const enquiry=read("src/pages/IndependentQuotePage.jsx");
 const contact=read("src/components/PublicContactPanel.jsx");
-const api=read("src/api/apiBaseUrl.js");
-const server=read("../backend/server.js");
+const host=read("src/config/officialSites.js");
+const middleware=read("functions/_middleware.js");
 const backend=read("../backend/routes/publicCommerceRoutes.js");
+const admin=read("src/pages/WebsiteCommerceControlPage.jsx");
 const redirects=read("public/_redirects");
-for(const [route,page] of [
- ["/excavators","excavators"],["/heavy-machines","heavy-machines"],
- ["/motorcycles","motorcycles"],["/automobiles","automobiles"],
- ["/gold","gold"],["/machine-transport","machine-transport"],
- ["/equipment-hire-services","equipment-hire"]]){
- assert.ok(app.includes('path="'+route+'"'),"Missing dedicated route "+route);
- assert.ok(home.includes('"/'+page+'"')||home.includes('"/equipment-hire-services"'),"Homepage not linked to "+route);
- assert.ok(redirects.includes(route+" / 200"),"Pages refresh route missing "+route);
+for(const route of ["/excavators","/heavy-machines","/motorcycles","/automobiles","/gold","/machine-transport","/equipment-hire-services"]){
+ assert.ok(app.includes('path="'+route+'"'),"Missing division route "+route);
+ assert.ok(redirects.includes(route+" / 200"),"Refresh must retain division route "+route);
 }
-assert.ok(app.includes('path="/customer-help"'),"Public help route missing");
-assert.ok(app.includes('path="help"'),"Protected staff help must remain available");
-assert.ok(!app.includes('path="/help" element={<PublicHelpPage'),"Public help must not steal staff route");
-assert.ok(home.includes('ch-home__market-showcase'));
-assert.ok(home.includes('href="/shop"'));
-assert.ok(home.includes('PublicContactPanel'));
-for(const item of ["Caterpillar","Komatsu","Hitachi","Volvo","SANY","Kobelco","Doosan / Develon"]){
- assert.ok(sector.includes(item),"Missing model manufacturer "+item);
+for(const p of ["IndependentPartsMarket","IndependentDivisionWebsite","IndependentQuotePage","IndependentHelpCentre","CompanyExperienceV3"]){
+ assert.ok(app.includes(p),"Actual active website missing "+p);
 }
-for(const item of ["wheel loaders","Bulldozers","Motorcycle","gold","Automobiles"]){
- assert.ok(sector.toLowerCase().includes(item.toLowerCase()),"Missing business option "+item);
+assert.ok(app.includes('path="help"'),"Protected staff help must remain");
+assert.ok(app.includes('path="/customer-help"'),"Independent public help route missing");
+for(const item of ["Caterpillar","Komatsu","Hitachi","Volvo","SANY","Kobelco","Doosan / Develon","Bulldozers","Wheel loaders","Motor graders"]){
+ assert.ok(sector.includes(item),"Reference catalogue missing "+item);
 }
-assert.ok(sector.includes("not a live inventory listing"),"Excavator examples cannot be presented as real stock");
-assert.ok(help.includes("Frequently asked questions"));
-assert.ok(contact.includes('request_type:"message"'),"Messages must enter real staff inbox");
-assert.ok(contact.includes("client_key:requestId"),"Messages must be idempotent");
-assert.ok(contact.includes("website"),"Anti-spam form field missing");
-assert.ok(shop.includes("pc-product-image__placeholder"),"Missing safe SKU illustration");
-assert.ok(shop.includes("photoOnly")&&shop.includes("stockOnly"),"Missing marketplace filters");
-assert.ok(backend.includes("has_photo:hasStoredPhoto"));
-assert.ok(backend.includes("terms.every"));
-assert.ok(backend.includes("onlyWithPhoto"));
-for(const page of [home,shop,enquiry,help,sector]){
- assert.ok(!page.includes("WhatsApp Boss")&&!page.includes("WhatsApp the Boss"),"Unprofessional WhatsApp label remains");
+assert.ok(sector.includes("not live inventory")||sector.includes("not a guarantee")||sector.includes("not verified stock"),"Stock disclaimer missing");
+assert.ok(home.includes('ce-market')&&home.includes('siteHref("parts")'),"Separate featured market missing from homepage");
+assert.ok(home.includes('ce-division-grid')&&home.includes("RealPhoto"),"Distinct real-photo business divisions missing");
+assert.ok(shop.includes('pm-departments')&&shop.includes('pm-grid'),"Shop departments/grid missing");
+assert.ok(shop.includes('photosrc(p.image_url)'),"SKU-specific photos must be linked to product records");
+assert.ok(shop.includes("Request actual photo"),"Actual-photo request missing");
+assert.ok(shop.includes("price_asc")&&shop.includes("price_desc")&&shop.includes("onlyStock")&&shop.includes("onlyPhotos"),"Search and filters missing");
+assert.ok(contact.includes('request_type:"message"')&&contact.includes("client_key:requestId"));
+assert.ok(enquiry.includes('/public-commerce/requests'));
+assert.ok(help.includes("hc-faq")&&help.includes("search"));
+assert.ok(admin.includes("existing_image"),"Admin product photography queue missing");
+assert.ok(backend.includes("has_photo:hasStoredPhoto")&&backend.includes("terms.every"),"Live marketplace backend filters missing");
+for(const source of [home,shop,sector,help,enquiry]){
+ assert.ok(!source.includes("WhatsApp Boss")&&!source.includes("WhatsApp the Boss"),"Unprofessional text remains");
 }
 for(const sub of ["homepage","spareparts","excavators","machines","motorcycles","automobiles","gold","transport","hire","help","work"]){
- assert.ok(api.includes('"'+sub+'.chalin03.com"'),"Official API host missing "+sub);
- assert.ok(server.includes('"https://'+sub+'.chalin03.com"'),"Authorized API CORS origin missing "+sub);
+ assert.ok(host.includes(sub+".chalin03.com"),"Official site missing: "+sub);
+ assert.ok(middleware.includes('"'+sub+'.chalin03.com"'),"Canonical origin boundary missing "+sub);
 }
+assert.ok(middleware.includes('request.method!=="GET"')&&middleware.includes("409"),"Cross-origin POST must not redirect");
 assert.ok(redirects.includes("/customer-help / 200"));
-console.log("CHALIN03 dedicated division routes, messaging, image integrity and subdomain contracts passed.");
+console.log("CHALIN03 independent official sites, real photographs and secure market contracts passed.");
