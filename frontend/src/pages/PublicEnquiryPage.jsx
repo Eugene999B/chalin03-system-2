@@ -63,7 +63,7 @@ export default function PublicEnquiryPage(){
   setSector("excavators");setModel(brand+" "+value);
   document.getElementById("pc-enquiry-form")?.scrollIntoView({behavior:"smooth",block:"start"});
  }
- const selected=sectors.find(s=>s.id===sector);
+
  return <main className="pc-site pc-enquiry-site">
   <PublicPageMeta title="Excavators, Cars, Gold Sector, Haulage & More | CHALIN03"
    description="Ask CHALIN03 about excavator sales, heavy equipment, motorcycles, cars, machine lifting and transport, or gold-sector services in Ghana."
