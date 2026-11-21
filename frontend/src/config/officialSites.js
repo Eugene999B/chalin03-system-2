@@ -39,7 +39,7 @@ export function siteHref(site,path="",query=""){
  const key=Object.hasOwn(OFFICIAL_SITES,site)?site:"company";
  const hostname=typeof window==="undefined"?"":window.location.hostname;
  const preview=previewHost(hostname);
- const relative=String(path||"").replace(/^\\/+/, "");
+ const relative=String(path||"").replace(/^\/+/, "");
  const finalUrl=preview ? (relative?"/"+relative:PATH_ON_PREVIEW[key]) : (OFFICIAL_SITES[key]+"/"+relative);
  const qs=String(query||"").replace(/^\?/,"");
  return qs?finalUrl+(finalUrl.includes("?")?"&":"?")+qs:finalUrl;
