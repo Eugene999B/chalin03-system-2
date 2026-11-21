@@ -33,8 +33,8 @@ assert.ok(!page.includes("🚜")&&!page.includes("🏗️"),"Cartoon category il
 assert.ok(photos.includes("commons.wikimedia.org"));
 assert.ok(photos.includes("EXACT_MODEL_PHOTOS"));
 assert.ok(photos.includes("PHOTO_LIBRARY"));
-assert.ok(subdomains.includes('"spareparts.chalin03.com"'));
-assert.ok(subdomains.includes('"work.chalin03.com"'));
+assert.ok(subdomains.includes('spareparts.chalin03.com'));
+assert.ok(subdomains.includes('work.chalin03.com'));
 for(const breakpoint of ["1160px","980px","760px","520px"]){
  assert.ok(css.includes("max-width:"+breakpoint),"Missing breakpoint: "+breakpoint);
 }
