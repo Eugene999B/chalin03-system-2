@@ -81,7 +81,13 @@ test("Sold status requires independent manager or verified original System Admin
 
 test("downloadable full payment PDF is not dependent on a Hire location", () => {
   assert.match(readyCash, /"\/ready-cash\/:agreementId\/receipt\.pdf"/);
-  assert.match(readyCash, /new PDFDocument\(/);
+  assert.match(readyCash, /loadReadyCashExcavatorPhoto\(receipt\)/);
+  assert.match(readyCash, /renderReadyCashReceiptPdf\(receipt, \{ photo \}\)/);
+  assert.match(readyCash, /X-Chalin03-Receipt-Photo/);
+  assert.match(readyCash, /Cache-Control", "private, no-store"/);
+  assert.match(readyCash, /a\.main_image_url_snapshot/);
+  assert.match(readyCash, /a\.asset_id/);
+  assert.match(readyCash, /Content-Length/);
   assert.match(readyCash, /Content-Type", "application\/pdf"/);
   assert.match(readyCash, /p\.is_voided = FALSE/);
   assert.match(readyCash, /a\.hire_location_id IS NULL/);
