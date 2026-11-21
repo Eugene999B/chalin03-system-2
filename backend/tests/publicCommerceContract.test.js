@@ -91,10 +91,11 @@ test("staff catalogue photo upload is restricted and does not overwrite master i
  assert.match(server,/app\.use\("\/api\/public-commerce", publicCommerceRoutes\)/);
 });
 
-test("website staff request list interpolates SQL clauses rather than printing backslash-escaped placeholders",()=>{
+test("website staff request SQL interpolates clauses rather than escaped literals",()=>{
  const route=read("routes/publicCommerceRoutes.js");
- assert.equal(route.includes(String.raw`\\${where}`),false);
- assert.equal(route.includes(String.raw`\\${ids.map(()=>"?").join(",")}`),false);
+ const escaped=String.fromCharCode(92)+"$"+"{";
+ assert.equal(route.includes(escaped+"where}"),false);
+ assert.equal(route.includes(escaped+'ids.map(()=>"?").join(",")}'),false);
  assert.ok(route.includes('WHERE ${where}'));
  assert.ok(route.includes('IN (${ids.map(()=>"?").join(",")})'));
 });
