@@ -18,6 +18,7 @@ const reviewedRules = new Set([
   "js/missing-rate-limiting",
   "js/user-controlled-bypass",
   "js/regex/missing-regexp-anchor",
+  "js/http-to-file-access",
 ]);
 
 const reviewedBypassFiles = new Set([
@@ -117,6 +118,18 @@ for (const result of results) {
     );
   }
 
+  // A single, audited, production-build-only image mirroring operation:
+  // fixed trusted Commons CDN, exact JPEG content-type/signature, streamed
+  // 2.5MB cap, safe CHALIN03 public image directory, no arbitrary URL/path.
+  // This exception does NOT extend to backend runtime or user uploads.
+  if (ruleId === "js/http-to-file-access") {
+    if (location.uri !== "frontend/scripts/cacheVerifiedReferencePhotos.mjs") {
+      violations.push(
+        `Unreviewed network-to-file operation at ${location.uri}:${location.line}`
+      );
+    }
+  }
+
   if (ruleId === "js/regex/missing-regexp-anchor") {
     const isTestOnly =
       location.uri.startsWith("backend/tests/") ||
@@ -130,6 +143,33 @@ for (const result of results) {
 }
 
 const root = path.resolve(__dirname, "../..");
+// Security review of the ONE intentionally permitted network-to-file flow.
+// Reject any future relaxation of its source, path, type, size or scope rules.
+const cachedPhotoSource = fs.readFileSync(
+  path.join(root, "frontend/scripts/cacheVerifiedReferencePhotos.mjs"),
+  "utf8"
+);
+for (const guard of [
+  'CF_PAGES_BRANCH==="production"',
+  'SAFE_OUTPUT_DIR=path.resolve(root,"public/images/verified-reference")',
+  '/^\\/images\\/verified-reference\\/[a-z0-9-]+\\.jpg$/',
+  'imageUrl.protocol!=="https:"',
+  'imageUrl.hostname!=="upload.wikimedia.org"',
+  'creditUrl.hostname!=="commons.wikimedia.org"',
+  '"Referer":photo.source',
+  'contentType.toLowerCase().startsWith("image/jpeg")',
+  'new URL(response.url).hostname!=="upload.wikimedia.org"',
+  'received>MAX_BYTES',
+  'bytes[0]!==0xff||bytes[1]!==0xd8',
+  'path.dirname(localPath)!==SAFE_OUTPUT_DIR',
+]) {
+  // The source list is exact and manually reviewed; never permit generic
+  // downloads or arbitrary user-provided output names.
+  if (!cachedPhotoSource.includes(guard)) {
+    throw new Error("Reviewed photo-cache security guard missing: "+guard);
+  }
+}
+
 const serverSource = fs.readFileSync(path.join(root, "backend/server.js"), "utf8");
 const authMiddlewareSource = fs.readFileSync(
   path.join(root, "backend/middleware/authMiddleware.js"),
