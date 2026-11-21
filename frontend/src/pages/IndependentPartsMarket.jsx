@@ -5,7 +5,7 @@ import {API_BASE_URL} from "../api/apiBaseUrl";
 import PublicPageMeta from "../components/PublicPageMeta";
 import PublicContactPanel from "../components/PublicContactPanel";
 import RealPhoto from "../components/RealPhoto";
-import {PHOTO_LIBRARY} from "../data/verifiedPublicPhotos";
+import {PHOTO_LIBRARY,SPAREPARTS_SKU_REFERENCE_PHOTOS} from "../data/verifiedPublicPhotos";
 import {siteHref,sectorHref} from "../config/officialSites";
 import "../styles/independentPartsMarket.css";
 
@@ -14,6 +14,7 @@ const keygen=()=>globalThis.crypto?.randomUUID?.()||"e95f9365-6ca0-44a3-8661-"+M
 const emptyCustomer={customer_name:"",customer_phone:"",customer_location:"",customer_email:"",message:""};
 const photosrc=src=>String(src||"").startsWith("/api/")?API_BASE_URL.replace(/\/api$/,"")+src:src||"";
 const shortCategory=name=>String(name||"Parts").replace(/ & /g," + ");
+const CURATED_PHOTO_PRODUCTS=[{"id":20,"name":"Oil Filter (LF3349)"},{"id":35,"name":"China Oil Filter"},{"id":21,"name":"Fuel Filter (FF5544)"},{"id":115,"name":"Hand Grease Gun Long"},{"id":200,"name":"Hammer"},{"id":138,"name":"Shovel"},{"id":656,"name":"Bucket"},{"id":192,"name":"Spanner 13"},{"id":193,"name":"Spanner 11"},{"id":183,"name":"Box Spanner Tool Set"},{"id":201,"name":"Piston Set"},{"id":97,"name":"Black Hose"},{"id":378,"name":"BATTERY-BIG AVATAR"}];
 function MarketBrand(){
  return <a className="pm-brand" href={siteHref("parts")}>
   <img src="/chalin03-logo.png" width="42" height="42" alt=""/>
@@ -106,6 +107,20 @@ export default function IndependentPartsMarket(){
     <div className="pm-hero__seal">REAL PARTS.<br/><strong>RIGHT FIT.</strong></div>
    </div>
   </section>
+  <section className="pm-real-photo-shelf" aria-labelledby="pm-real-photo-heading">
+   <div className="pm-real-photo-shelf__head"><div>
+    <span>PHOTOGRAPHED PART TYPES</span>
+    <h2 id="pm-real-photo-heading">Real parts. Real photographs.</h2>
+    <p>Different photographs of real filters, tools and equipment parts — not AI images or repeated category art. These are visual references; our team confirms the exact size, manufacturer and physical stock item before sale.</p>
+   </div><a href="#pm-products">Browse all Main Store products</a></div>
+   <div className="pm-real-photo-shelf__scroll">
+    {CURATED_PHOTO_PRODUCTS.map(p=><article className="pm-real-photo-shelf__card" key={p.id}>
+     <RealPhoto photo={SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]}/>
+     <div><span>REAL REFERENCE PHOTO · MODEL TO CONFIRM</span><h3>{p.name}</h3>
+      <a href={siteHref("parts","",new URLSearchParams({q:p.name}).toString())}>View part and live price ↗</a></div>
+    </article>)}
+   </div>
+  </section>
   <section className="pm-find" id="pm-products">
    <div className="pm-heading"><div><span className="pm-eyebrow pm-eyebrow--dark">BROWSE OUR MAIN STORE</span>
     <h2>The parts catalogue</h2><p>{busy?"Checking latest listings…":count.toLocaleString()+" matching products"} · Main Store prices in Ghana cedis</p></div>
@@ -128,13 +143,15 @@ export default function IndependentPartsMarket(){
     <div className="pm-sidebar__help"><strong>Need a specific part?</strong><p>Send the make, model and part number. Our team can check the exact item for you.</p><a href={sectorHref("spare-parts")}>Ask our team ↗</a></div>
    </aside>
    <div className="pm-listings">
-    <div className="pm-listings__toolbar"><div><span>{category||"All departments"}</span><strong>{count} products</strong></div><span>Actual item photos are shown only when matched to that exact record.</span></div>
+    <div className="pm-listings__toolbar"><div><span>{category||"All departments"}</span><strong>{count} products</strong></div><span>Actual stock photos take priority. Real part-type reference images are labelled separately.</span></div>
     {error?<div className="pm-error" role="alert">{error}<button type="button" onClick={()=>{setPage(1);setQuery(search.trim())}}>Retry</button></div>:null}
     {busy?<div className="pm-loading" role="status">Loading the latest catalogue…</div>:null}
     {!busy&&products.length?<div className="pm-grid">{products.map(p=><article key={p.id} className="pm-product">
       <div className="pm-product__photo">
-       {p.image_url?<img src={photosrc(p.image_url)} alt={p.name+" actual item photo"} loading="lazy" decoding="async" width="420" height="320" onError={e=>{e.currentTarget.hidden=true;e.currentTarget.nextElementSibling?.removeAttribute("hidden")}}/>:null}
-       <div className="pm-product__no-photo" hidden={Boolean(p.image_url)}><span>CHALIN03 PRODUCT #{p.id}</span><strong>{p.name}</strong><small>Item photograph being verified</small></div>
+       {p.image_url?<img src={photosrc(p.image_url)} alt={p.name+" actual stock photo"} loading="lazy" decoding="async" width="420" height="320" onError={e=>{e.currentTarget.hidden=true;e.currentTarget.nextElementSibling?.removeAttribute("hidden")}}/>:null}
+       {!p.image_url&&SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]?<RealPhoto photo={SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]} className="pm-product__reference-photo"/>:null}
+       <div className="pm-product__no-photo" hidden={Boolean(p.image_url||SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id])}><span>CHALIN03 PRODUCT #{p.id}</span><strong>{p.name}</strong><small>Actual item photograph needed</small></div>
+       {!p.image_url&&SPAREPARTS_SKU_REFERENCE_PHOTOS[p.id]?<span className="pm-product__reference-badge">REAL PART-TYPE PHOTO · ACTUAL STOCK TO CONFIRM</span>:null}
        {p.featured?<span className="pm-product__featured">FEATURED</span>:null}
       </div>
       <div className="pm-product__body"><span className="pm-product__category">{p.category}</span><h3>{p.name}</h3>
