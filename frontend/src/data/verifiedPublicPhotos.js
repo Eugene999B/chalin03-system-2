@@ -33,12 +33,22 @@ export const PHOTO_LIBRARY=Object.freeze({
   honda:photo("Honda CG125.jpg","SEDJRO SETONDJI","CC BY-SA 4.0","Real Honda CG125"),
   komatsu:photo("Komatsu PC200.jpg","Wikimedia Commons","See source","Real Komatsu PC200 excavator"),
   cat320:photo("CAT 320.excavator.jpg","Justin Smith","CC BY-SA 3.0","Real Caterpillar 320 excavator"),
-  volvo:photo("Volvo EC210B.JPG","Ghostrider / Wikimedia Commons","See source","Real Volvo EC210B excavator")
+  volvo:photo("Volvo EC210B.JPG","Ghostrider / Wikimedia Commons","See source","Real Volvo EC210B excavator"),
+  hitachiZX210:photo("Hitachi ZX 210 LC p1.JPG","Alf van Beem / Wikimedia Commons","CC0 1.0","Real Hitachi ZX210 LC excavator"),
+  kobelcoSK210:photo("Kobelco SK210LC Dynamic Acera.JPG","AlfvanBeem / Wikimedia Commons","CC0 1.0","Real Kobelco SK210LC Dynamic Acera excavator"),
+  komatsuPC210:photo("Komatsu PC210LC p1.JPG","AlfvanBeem / Wikimedia Commons","CC0 1.0","Real Komatsu PC210LC excavator"),
+  kubotaU35:photo("Kubota U35 and truck, Aulich utca drainage ditch construction, 2019 Isaszeg.jpg","Globetrotter19 / Wikimedia Commons","CC BY-SA 3.0","Real Kubota U35 mini excavator at a worksite"),
+  kobelcoSK350:photo("KobelcoSK350LC-10-1.jpg","Wikimedia Commons / CC0 contributor","CC0 1.0","Real Kobelco SK350LC-10 crawler excavator")
 });
 export const EXACT_MODEL_PHOTOS=Object.freeze({
   "Caterpillar|CAT 320":PHOTO_LIBRARY.cat320,
   "Komatsu|PC200":PHOTO_LIBRARY.komatsu,
-  "Volvo|EC210":PHOTO_LIBRARY.volvo
+  "Volvo|EC210":PHOTO_LIBRARY.volvo,
+  "Hitachi|ZX210":PHOTO_LIBRARY.hitachiZX210,
+  "Kobelco|SK210":PHOTO_LIBRARY.kobelcoSK210,
+  "Komatsu|PC210":PHOTO_LIBRARY.komatsuPC210,
+  "Kubota|U35":PHOTO_LIBRARY.kubotaU35,
+  "Kobelco|SK350":PHOTO_LIBRARY.kobelcoSK350
 });
 export const REAL_TYPE_PHOTOS=Object.freeze({
   "Bulldozers":PHOTO_LIBRARY.dozer,
