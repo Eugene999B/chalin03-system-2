@@ -128,7 +128,7 @@ router.get("/products",async(req,res)=>{
   const limit=Math.min(60,Math.max(1,Number.parseInt(req.query.limit,10)||24));
   const data=(await catalogueRows()).map(safeProduct);
   const groups=Array.from(new Set(data.map(p=>p.category))).sort();
-  const terms=search.split(/\\s+/).filter(Boolean).slice(0,8);
+  const terms=search.split(/\s+/).filter(Boolean).slice(0,8);
   const onlyInStock=req.query.stock==="only";
   const onlyWithPhoto=req.query.photo==="only";
   let results=data.filter(p=>{
