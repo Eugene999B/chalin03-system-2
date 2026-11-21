@@ -32,7 +32,11 @@ test("public product format hides stock counts, cost and unknown or zero price",
  assert.equal(result.in_stock,true);
  assert.equal(result.featured,true);
  assert.equal(result.image_is_illustrative,true);
- assert.ok(result.image_url.startsWith("/images/home/"));
+ assert.equal(result.image_url,null);
+ assert.equal(result.has_photo,false);
+ const photographed=safeProduct({...row,has_inventory_photo:1});
+ assert.equal(photographed.image_url,"/api/public-commerce/products/41/photo");
+ assert.equal(photographed.has_photo,true);
  assert.equal("quantity" in result,false);
  assert.equal("cost_price" in result,false);
  const zero=safeProduct({...row,selling_price:0});
@@ -98,4 +102,13 @@ test("website staff request SQL interpolates clauses rather than escaped literal
  assert.equal(route.includes(escaped+'ids.map(()=>"?").join(",")}'),false);
  assert.ok(route.includes('WHERE ${where}'));
  assert.ok(route.includes('IN (${ids.map(()=>"?").join(",")})'));
+});
+
+test("marketplace never invents an exact product photo when none is stored",()=>{
+ const route=read("routes/publicCommerceRoutes.js");
+ assert.match(route,/hasStoredPhoto\\?"\\/api\\/public-commerce\\/products\\/"/);
+ assert.match(route,/image_url:hasStoredPhoto/);
+ assert.match(route,/terms\\.every/);
+ assert.match(route,/onlyWithPhoto/);
+ assert.match(route,/onlyInStock/);
 });
