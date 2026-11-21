@@ -59,6 +59,9 @@ assert.match(homepage,/Gold buying & refining/);
 assert.match(homepage,/Cars & automobiles/);
 assert.match(homepage,/Lift & transport excavators/);
 assert.match(homepage,/className="ch-home__service-card"/);
+const seo=read("public/sitemap.xml");
+assert.match(seo,/chalin03\.com\/shop/);
+assert.match(seo,/chalin03\.com\/enquire/);
 assert.match(homepage,/Photography is illustrative/);
 for(const file of ["src/styles/publicCommerce.css","src/styles/websiteCommerceStaff.css"]){
  const css=read(file);assert.match(css,/@media\(max-width:/);
