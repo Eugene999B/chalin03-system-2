@@ -66,7 +66,7 @@ test("public homepage mobile menu, contacts and tap targets work at 390px", asyn
   await expect(page.locator(".ch-home__service-card")).toHaveCount(3);
   await tapTarget(navigation.getByRole("link", { name: "Spare parts market" }));
   await navigation.getByRole("link", { name: "Spare parts market" }).click();
-  await expect(page).toHaveURL(/\\/shop$/);
+  await expect(page).toHaveURL(/\/shop$/);
   await expect(page.getByRole("heading", { level: 1, name: /Find the right part/i })).toBeVisible();
   await expect(page.locator(".pc-catalogue")).toBeVisible();
   await noHorizontalOverflow(page);
