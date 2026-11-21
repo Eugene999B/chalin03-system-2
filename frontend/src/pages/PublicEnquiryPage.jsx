@@ -71,7 +71,7 @@ export default function PublicEnquiryPage(){
    canonicalPath="/enquire"/>
   <header className="pc-header"><Link to="/" className="pc-logo"><img src="/chalin03-logo.png" alt=""/>
     <span><b>CHALIN<span>03</span></b><small>Business Enquiries</small></span></Link>
-   <nav aria-label="Enquiry navigation"><Link to="/">Home</Link><Link to="/shop">Shop spare parts</Link><Link to="/excavators">Excavators</Link><Link to="/help">Help</Link><Link to="/login">Staff login</Link></nav>
+   <nav aria-label="Enquiry navigation"><Link to="/">Home</Link><Link to="/shop">Shop spare parts</Link><Link to="/excavators">Excavators</Link><Link to="/customer-help">Help</Link><Link to="/login">Staff login</Link></nav>
   </header>
   <section className="pc-enquiry-hero"><div><span className="pc-eyebrow">CHALIN03 · DUNKWA · GHANA</span>
     <h1>Big jobs.<br/><em>Real conversations.</em></h1>
