@@ -13,7 +13,6 @@ import {fileURLToPath} from "node:url";
 import {PHOTO_LIBRARY} from "../src/data/verifiedPublicPhotos.js";
 
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const targetPrefix="/images/verified-reference/";
 const enabled=process.env.CF_PAGES_BRANCH==="production"
   || process.env.CHALIN03_DOWNLOAD_REAL_PHOTOS==="1";
 const items=[...new Map(Object.values(PHOTO_LIBRARY).map(p=>[p.localSrc,p])).values()];
