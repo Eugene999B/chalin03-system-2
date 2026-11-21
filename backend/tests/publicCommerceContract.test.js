@@ -22,6 +22,8 @@ test("real product categories cover different spare-parts classes",()=>{
  assert.equal(category("Excavator Hydraulic Oil","Lubricant & Oil"),"Oils, grease & fluids");
  assert.equal(category("Hammer 4 lb","Spanner"),"Tools & workshop");
  assert.equal(category("Engine piston","Engine"),"Engines & components");
+ assert.equal(category("15W-40 ENGINE OIL","Oil"),"Oils, grease & fluids");
+ assert.equal(category("ENGINE AIR FILTER","Filter"),"Filters & servicing");
  assert.equal(category("Excavator track shoe","Undercarriage"),"Undercarriage & ground-engaging");
  assert.equal(category("Electric starter","Electrical"),"Electrical & starting");
 });
