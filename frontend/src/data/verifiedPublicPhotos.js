@@ -14,17 +14,6 @@
  */
 const VERIFIED_COMMONS_PATHS=Object.freeze({
   "Caterpillar 320.jpg":"a/a2",
-  "Small fuel filter.jpg":"1/1f",
-  "Grease gun and attachment.jpg":"3/3d",
-  "Claw hammer.JPG":"4/4f",
-  "Shovel.jpg":"f/f4",
-  "Excavator bucket.jpg":"a/a7",
-  "Spanners.jpg":"1/16",
-  "Spanner 2.jpg":"0/0d",
-  "Socket wrench and sockets.JPG":"0/00",
-  "Cummins Diesel engine piston head 10deg.jpg":"c/c7",
-  "Crimped hose ends.JPG":"0/03",
-  "Car battery.jpg":"4/4c",
   "Caterpillar 321D LCR on dirt lot in Campbell.jpg":"d/db",
   "Hydraulic hose fittings.JPG":"f/fc",
   "Caterpillar dozer.jpg":"4/4e",
@@ -62,17 +51,6 @@ function photo(file,credit,license,alt){
  });
 }
 export const PHOTO_LIBRARY=Object.freeze({
-  skuFuelFilter:photo("Small fuel filter.jpg","Cjp24","CC BY-SA 3.0","Real fuel filter reference; verify FF5544 part number before purchase"),
-  skuGreaseGun:photo("Grease gun and attachment.jpg","Bryn Pinzgauer","CC BY 2.0","Real grease gun reference; confirm exact stocked model"),
-  skuHammer:photo("Claw hammer.JPG","ایران پتک / Iran Potk","CC BY-SA 4.0","Real claw hammer reference; not proof of stocked hammer"),
-  skuShovel:photo("Shovel.jpg","Rasbak","CC BY-SA 3.0","Real shovel reference; actual stock design may differ"),
-  skuExcavatorBucket:photo("Excavator bucket.jpg","DeWitt Clinton","CC BY 2.0","Real excavator digging bucket reference; confirm Liugong fitment"),
-  skuSpannerAssortment:photo("Spanners.jpg","ProjectManhattan","CC BY-SA 3.0","Real workshop spanners; size 13 not verified by photograph"),
-  skuSpannerSingle:photo("Spanner 2.jpg","Zephyris","CC BY-SA 3.0","Real spanner; size 11 not verified by photograph"),
-  skuSocketSet:photo("Socket wrench and sockets.JPG","Kae","CC BY-SA 3.0","Real socket wrench set reference; actual brand and contents may differ"),
-  skuDieselPiston:photo("Cummins Diesel engine piston head 10deg.jpg","S. Diddy","CC BY 2.0","Real diesel engine piston reference; confirm actual piston set"),
-  skuCrimpedHose:photo("Crimped hose ends.JPG","Jstapko","CC BY-SA 3.0","Real hydraulic hose reference; confirm actual hose type and dimensions"),
-  skuCarBattery:photo("Car battery.jpg","Azorbli","CC BY-SA 4.0","Real automotive battery reference; not an Avatar battery"),
   homepageExcavator:photo("Caterpillar 321D LCR on dirt lot in Campbell.jpg","Grendelkhan","CC BY-SA 4.0","Real Caterpillar 321D LCR excavator on an open construction yard beneath a clear blue sky"),
   excavators:photo("Caterpillar 320.jpg","Bene Riobó","CC BY-SA 4.0","Real Caterpillar 320 excavator at work"),
   parts:photo("Hydraulic hose fittings.JPG","Jstapko / Wikimedia Commons","See source","Real hydraulic hose fittings"),
@@ -121,24 +99,4 @@ export const REAL_TYPE_PHOTOS=Object.freeze({
   "Commuter motorcycles":PHOTO_LIBRARY.honda,
   "Delivery motorcycles":PHOTO_LIBRARY.bajaj,
   "Pickups & 4×4s":PHOTO_LIBRARY.hilux
-});
-
-
-// Individually curated, different real photographs ONLY for the specific
-// pictured part TYPE. Never claim they show the exact CHALIN03 stock SKU.
-// Actual staff-uploaded photographs always take precedence in the shop.
-export const SPAREPARTS_SKU_REFERENCE_PHOTOS=Object.freeze({
-  20:PHOTO_LIBRARY.filters,             // Oil Filter LF3349 (model unverified)
-  35:PHOTO_LIBRARY.oilFilter,           // China Oil Filter (Sany model unverified)
-  21:PHOTO_LIBRARY.skuFuelFilter,      // Fuel Filter FF5544 (model unverified)
-  115:PHOTO_LIBRARY.skuGreaseGun,      // Hand Grease Gun Long
-  200:PHOTO_LIBRARY.skuHammer,         // Hammer
-  138:PHOTO_LIBRARY.skuShovel,         // Shovel
-  656:PHOTO_LIBRARY.skuExcavatorBucket,// Bucket - Liugong
-  192:PHOTO_LIBRARY.skuSpannerAssortment, // Spanner 13
-  193:PHOTO_LIBRARY.skuSpannerSingle,    // Spanner 11
-  183:PHOTO_LIBRARY.skuSocketSet,      // Box Spanner Tool Set
-  201:PHOTO_LIBRARY.skuDieselPiston,   // Piston Set
-  97:PHOTO_LIBRARY.skuCrimpedHose,     // Black Hose
-  378:PHOTO_LIBRARY.skuCarBattery,     // Battery Big Avatar (brand not verified)
 });

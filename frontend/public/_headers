@@ -170,3 +170,7 @@ https://help.chalin03.com/
 /images/home/v1/*
   Cache-Control: public, max-age=31536000, immutable
   X-Content-Type-Options: nosniff
+
+/images/catalogue/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+  X-Content-Type-Options: nosniff

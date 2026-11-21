@@ -71,6 +71,20 @@ const schema=[
  KEY idx_web_request_item_product(product_id),
  CONSTRAINT fk_web_request_item_parent FOREIGN KEY(request_id)
  REFERENCES website_customer_requests(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+`CREATE TABLE IF NOT EXISTS website_catalog_photos (
+ product_id INT NOT NULL PRIMARY KEY,
+ branch_id INT NOT NULL,
+ image_url MEDIUMTEXT NOT NULL,
+ status ENUM('verified_exact','honest_reference') NOT NULL,
+ source_url VARCHAR(1000) NULL,
+ owner VARCHAR(180) NOT NULL,
+ license VARCHAR(300) NOT NULL,
+ evidence VARCHAR(600) NOT NULL,
+ sha256 CHAR(64) NOT NULL,
+ updated_by INT NOT NULL,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_web_catalog_photo_hash (branch_id,sha256)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 ];
 async function run(){
@@ -88,10 +102,10 @@ async function run(){
   try{
    for(const statement of schema)await c.query(statement);
    const [tables]=await c.query(
-    "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('website_catalog_controls','website_customer_requests','website_customer_request_items')"
+    "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('website_catalog_controls','website_customer_requests','website_customer_request_items','website_catalog_photos')"
    );
-   if(tables.length!==3)throw Error("Website commerce schema verification did not find all 3 tables.");
-   console.log("CHALIN03 public commerce schema verified: 3 tables. Existing sales/stock unchanged.");
+   if(tables.length!==schema.length)throw Error("Website commerce schema verification did not find all required tables.");
+   console.log("CHALIN03 public commerce schema verified. Existing sales and stock unchanged.");
   }finally{await c.query("SELECT RELEASE_LOCK(?)",["chalin03:website-commerce-schema-v1"]);}
  }finally{await c.end();}
 }

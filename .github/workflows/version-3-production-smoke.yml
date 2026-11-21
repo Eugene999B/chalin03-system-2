@@ -119,11 +119,11 @@ jobs:
           for attempt in $(seq 1 20); do
             if curl --fail --silent --show-error \
               --dump-header smoke-output/login.headers \
-              --output smoke-output/login.html https://chalin03.com/login; then
+              --output smoke-output/login.html https://work.chalin03.com/login; then
               bundle_path="$(grep -oE 'src="/assets/[^" ]+\.js"' smoke-output/login.html | head -n 1 | cut -d'"' -f2 || true)"
               if [ -n "$bundle_path" ] &&
                  curl --fail --silent --show-error \
-                   --output smoke-output/application-bundle.js "https://chalin03.com$bundle_path" &&
+                   --output smoke-output/application-bundle.js "https://work.chalin03.com$bundle_path" &&
                  { [ "$frontend_release_required" != "true" ] || grep -q "$GITHUB_SHA" smoke-output/application-bundle.js; }; then
                 frontend_ready=true
                 break
@@ -142,14 +142,14 @@ jobs:
           test -n "$bundle_path"
           curl --fail --silent --show-error --location \
             --output smoke-output/application-bundle.js \
-            "https://chalin03.com${bundle_path}"
+            "https://work.chalin03.com${bundle_path}"
           if [ "$frontend_release_required" = "true" ]; then
             grep -q "$GITHUB_SHA" smoke-output/application-bundle.js
           fi
 
           curl --fail --silent --show-error --location \
             --output smoke-output/service-worker.js \
-            https://chalin03.com/sw.js
+            https://work.chalin03.com/sw.js
           grep -q 'const CACHE_PREFIX = "chalin03-"' smoke-output/service-worker.js
           grep -q 'app-shell-' smoke-output/service-worker.js
           grep -q 'url.origin !== self.location.origin' smoke-output/service-worker.js
@@ -158,7 +158,7 @@ jobs:
 
           curl --fail --silent --show-error --location \
             --output smoke-output/site.webmanifest \
-            https://chalin03.com/site.webmanifest
+            https://work.chalin03.com/site.webmanifest
           jq -e '
             .name == "Chalin 03 Group Operations Platform" and
             .short_name == "Chalin 03" and
@@ -170,40 +170,35 @@ jobs:
         run: |
           set -euo pipefail
 
-          curl --fail --silent --show-error --location \
+          home_url="$(curl --fail --silent --show-error --location \
             --dump-header smoke-output/home.headers \
             --output smoke-output/home.html \
-            https://chalin03.com/
+            --write-out '%{url_effective}' https://chalin03.com/)"
+          test "$home_url" = "https://homepage.chalin03.com/"
 
           grep -qi '^x-robots-tag:.*index' smoke-output/home.headers
           grep -qi '^strict-transport-security:' smoke-output/home.headers
           grep -qi '<title>Chalin 03 Company Limited | Ghana</title>' smoke-output/home.html
           grep -qi 'name="robots" content="index, follow"' smoke-output/home.html
-          grep -qi 'rel="canonical" href="https://chalin03.com/"' smoke-output/home.html
+          grep -qi 'rel="canonical" href="https://homepage.chalin03.com/"' smoke-output/home.html
           grep -qi 'Chalin 03 Company Limited' smoke-output/home.html
 
-          curl --fail --silent --show-error --location \
-            --dump-header smoke-output/company.headers \
-            --output smoke-output/company.html \
-            https://chalin03.com/company/
-
-          grep -qi '^x-robots-tag:.*index' smoke-output/company.headers
-          grep -qi 'name="robots" content="index, follow, max-image-preview:large"' smoke-output/company.html
-          grep -qi 'rel="canonical" href="https://chalin03.com/company/"' smoke-output/company.html
-          grep -qi 'Chalin 03 Company Limited' smoke-output/company.html
+          company_url="$(curl --fail --silent --show-error --location \
+            --output /dev/null --write-out '%{url_effective}' https://chalin03.com/company/)"
+          test "$company_url" = "https://homepage.chalin03.com/"
 
           curl --fail --silent --show-error --location \
             --output smoke-output/robots.txt \
-            https://chalin03.com/robots.txt
+            https://homepage.chalin03.com/robots.txt
           grep -q '^User-agent: \*' smoke-output/robots.txt
           grep -q '^Allow: /' smoke-output/robots.txt
-          grep -q '^Sitemap: https://chalin03.com/sitemap.xml' smoke-output/robots.txt
+          grep -q '^Sitemap: https://homepage.chalin03.com/sitemap.xml' smoke-output/robots.txt
 
           curl --fail --silent --show-error --location \
             --output smoke-output/sitemap.xml \
-            https://chalin03.com/sitemap.xml
-          grep -q 'https://chalin03.com/' smoke-output/sitemap.xml
-          grep -q 'https://chalin03.com/company/' smoke-output/sitemap.xml
+            https://homepage.chalin03.com/sitemap.xml
+          grep -q 'https://homepage.chalin03.com/' smoke-output/sitemap.xml
+          grep -q 'https://spareparts.chalin03.com/' smoke-output/sitemap.xml
 
       - name: Preserve live smoke evidence
         if: always()
