@@ -57,3 +57,20 @@ test("a broken catalogue image falls back without claiming a stock photo",async(
  await expect(reference.getByText("Photo temporarily unavailable")).toBeVisible();
  await expect(reference.getByRole("link",{name:"Enquire"})).toBeVisible();
 });
+
+test("catalogue retries a temporary error and Retry reloads unchanged filters",async({page})=>{
+ let requests=0;
+ await page.route("**/api/public-commerce/products?**",route=>{
+  requests++;
+  if(requests<=3)return route.fulfill({status:503,json:{message:"The store catalogue is temporarily unavailable."}});
+  return route.fulfill({json:{products:[part],count:1,pages:1}});
+ });
+ await page.goto("/shop");
+ const alert=page.locator(".pm-error");
+ await expect(alert).toContainText("temporarily unavailable");
+ expect(requests).toBe(2);
+ await alert.getByRole("button",{name:"Retry"}).click();
+ await expect(page.getByRole("heading",{name:part.name,exact:true})).toBeVisible();
+ await expect(alert).toHaveCount(0);
+ expect(requests).toBe(4);
+});
