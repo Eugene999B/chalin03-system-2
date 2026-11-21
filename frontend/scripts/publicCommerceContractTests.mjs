@@ -5,35 +5,25 @@ import {fileURLToPath} from "node:url";
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const read=p=>fs.readFileSync(path.join(root,p),"utf8");
 const app=read("src/App.jsx");
-const shop=read("src/pages/PublicShopPage.jsx");
-const enquiry=read("src/pages/PublicEnquiryPage.jsx");
+const shop=read("src/pages/IndependentPartsMarket.jsx");
+const enquiry=read("src/pages/IndependentQuotePage.jsx");
 const admin=read("src/pages/WebsiteCommerceControlPage.jsx");
-const homepage=read("src/pages/PublicCompanyHomePage.jsx");
+const homepage=read("src/pages/CompanyExperienceV3.jsx");
 const layout=read("src/components/Layout.jsx");
 const pos=read("src/pages/NewSalePage.jsx");
 const frontCatalog=read("src/security/sparePartsPageAccess.js");
 const backendCatalog=read("../backend/security/sparePartsPageCatalog.js");
-assert.match(app,/path="\/shop" element=\{<PublicShopPage \/>/);
-assert.match(app,/path="\/enquire" element=\{<PublicEnquiryPage \/>/);
-assert.match(app,/path="online-orders"/);
-assert.match(app,/path="online-catalogue"/);
-assert.match(shop,/\/public-commerce\/products/);
-assert.match(shop,/\/public-commerce\/requests/);
-assert.match(shop,/Featured \/ in stock/);
-assert.match(shop,/Price: low to high/);
-assert.match(shop,/customer_email/);
-assert.match(shop,/customer_location/);
-assert.match(shop,/client_key/);
-assert.match(shop,/No online payment/);
-assert.match(enquiry,/Gold buying & refining enquiries/);
-assert.match(enquiry,/Cars & automobiles/);
-assert.match(enquiry,/Motorcycles/);
-assert.match(enquiry,/machine-transport/);
-assert.match(enquiry,/Caterpillar/);
-assert.match(enquiry,/Komatsu/);
-assert.match(enquiry,/054 071 3654/);
-assert.match(enquiry,/233249469080/);
-assert.match(enquiry,/legal compliance|regulatory|licensing/i);
+assert.ok(app.includes('path="/shop" element={<IndependentPartsMarket />} />'));
+assert.ok(app.includes('path="/enquire" element={<IndependentQuotePage />} />'));
+assert.ok(app.includes('path="online-orders"'));
+assert.ok(app.includes('path="online-catalogue"'));
+for(const term of ["/public-commerce/products","/public-commerce/requests","price_asc","price_desc","onlyPhotos","onlyStock","customer_email","customer_location","client_key:requestKey","No online payment"]){
+ assert.ok(shop.includes(term),"Missing market feature: "+term);
+}
+for(const term of ["Gold buying & refining","Automobiles","Motorcycles","machine-transport","054 071 3654"]){
+ assert.ok(enquiry.includes(term),"Missing quote option: "+term);
+}
+assert.match(enquiry,/licensing|regulatory|verification/i);
 assert.match(admin,/\/staff\/requests/);
 assert.match(admin,/\/staff\/products/);
 assert.match(admin,/\/fulfill/);
@@ -52,19 +42,13 @@ for(const code of ["page.spare_parts.online_orders.view","page.spare_parts.onlin
  assert.ok(frontCatalog.includes(code));
  assert.ok(backendCatalog.includes(code));
 }
-assert.match(homepage,/\/shop/);
-assert.match(homepage,/\/enquire/);
-assert.match(homepage,/054 071 3654/);
-assert.match(homepage,/Gold buying & refining/);
-assert.match(homepage,/Cars & automobiles/);
-assert.match(homepage,/Lift & transport excavators/);
-assert.match(homepage,/className="ch-home__service-card"/);
+for(const term of ['ce-market','ce-division','siteHref("parts")','siteHref("excavators")','siteHref("work")','PublicContactPanel']){
+ assert.ok(homepage.includes(term),"Missing redesigned company feature "+term);
+}
 const seo=read("public/sitemap.xml");
-assert.match(seo,/chalin03\.com\/shop/);
-assert.match(seo,/chalin03\.com\/enquire/);
-assert.match(homepage,/Photography is illustrative/);
-for(const file of ["src/styles/publicCommerce.css","src/styles/websiteCommerceStaff.css"]){
- const css=read(file);assert.match(css,/@media\(max-width:/);
- assert.match(css,/min-width:0/);
+assert.ok(seo.includes("chalin03.com/shop"));
+assert.ok(seo.includes("chalin03.com/enquire"));
+for(const file of ["src/styles/independentPartsMarket.css","src/styles/websiteCommerceStaff.css"]){
+ const css=read(file);assert.ok(css.includes("@media(max-width:"));assert.ok(css.includes("min-width:0"));
 }
 console.log("CHALIN03 public shop, enquiry, staff controls, stock safety and homepage contracts passed.");
