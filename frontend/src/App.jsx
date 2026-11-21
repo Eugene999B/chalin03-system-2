@@ -15,6 +15,7 @@ import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
+import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
 import PublicShopPage from "./pages/PublicShopPage";
 import PublicEnquiryPage from "./pages/PublicEnquiryPage";
 import PublicSectorPage from "./pages/PublicSectorPage";
@@ -205,14 +206,14 @@ function RootWorkspaceEntry() {
       "transport.chalin03.com": "machine-transport",
       "hire.chalin03.com": "equipment-hire"
     };
-    if (["chalin03.com","www.chalin03.com","homepage.chalin03.com"].includes(hostname)) return safe(<PublicCompanyHomePage />);
+    if (["chalin03.com","www.chalin03.com","homepage.chalin03.com"].includes(hostname)) return safe(<CompanyExperienceV3 />);
     if (hostname === "spareparts.chalin03.com") return safe(<PublicShopPage />);
     if (hostname === "help.chalin03.com") return safe(<PublicHelpPage />);
     if (divisionHosts[hostname]) return safe(<PublicSectorPage sector={divisionHosts[hostname]} />);
     if (hostname === "work.chalin03.com" && !loading && !isLoggedIn) return <LoginPage />;
   }
   if (!loading && !isLoggedIn && location.pathname === "/") {
-    return safe(<PublicCompanyHomePage />);
+    return safe(<CompanyExperienceV3 />);
   }
 
   return (
