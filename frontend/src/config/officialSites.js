@@ -3,7 +3,7 @@
  * Production cross-division navigation must NOT use /shop on the current host.
  */
 export const OFFICIAL_SITES=Object.freeze({
-  company:"https://chalin03.com",
+  company:"https://homepage.chalin03.com",
   homepage:"https://homepage.chalin03.com",
   parts:"https://spareparts.chalin03.com",
   excavators:"https://excavators.chalin03.com",
@@ -34,7 +34,7 @@ function previewHost(hostname){
 export function siteForHostname(hostname){
  const host=String(hostname||"").toLowerCase().replace(/:\d+$/,"");
  const found=Object.entries(OFFICIAL_SITES).find(([,origin])=>new URL(origin).hostname===host);
- return found?.[0]|| (host==="www.chalin03.com"?"company":null);
+ return found?.[0]|| (host==="chalin03.com"||host==="www.chalin03.com"?"company":null);
 }
 export function siteHref(site,path="",query=""){
  const key=Object.hasOwn(OFFICIAL_SITES,site)?site:"company";
