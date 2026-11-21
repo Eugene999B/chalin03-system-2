@@ -5,6 +5,7 @@ const sharp=require("sharp");
 const {uploadObject,config:storageConfig}=require("../services/objectStorageService");
 const rateLimit=require("express-rate-limit");
 const {pool}=require("../config/db");
+const {readCatalogueWithTransientRetry}=require("../services/publicCatalogueTransientRetry");
 const {requireAuth}=require("../middleware/authMiddleware");
 const {writeAuditEvent}=require("../services/auditTrailService");
 const {normalizeStoredImage}=require("../services/equipmentFinanceProtectedImageService");
@@ -162,7 +163,10 @@ router.get("/products",async(req,res)=>{
   const sort=SORTS.has(req.query.sort)?req.query.sort:"featured";
   const page=Math.min(1000,Math.max(1,Number.parseInt(req.query.page,10)||1));
   const limit=Math.min(60,Math.max(1,Number.parseInt(req.query.limit,10)||24));
-  const data=(await catalogueRows()).map(safeProduct);
+  const data=(await readCatalogueWithTransientRetry(
+    ()=>catalogueRows(),
+    {onRetry:code=>console.warn("Public catalogue temporary DB connection: retrying read",code)}
+   )).map(safeProduct);
   const groups=Array.from(new Set(data.map(p=>p.category))).sort();
   const terms=search.split(/\s+/).filter(Boolean).slice(0,8);
   const onlyInStock=req.query.stock==="only";
