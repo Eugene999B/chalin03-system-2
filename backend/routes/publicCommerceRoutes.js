@@ -41,9 +41,10 @@ function samePhone(a,b){const x=phone(a),y=phone(b);return Boolean(x&&y&&x.repla
 function category(name,value){
  const v=(str(name,150)+" "+str(value,110)).toLowerCase();
  if(/motor ?bike|motorcycle|scooter/.test(v))return "Motorcycles & accessories";
- if(/engine|piston|liner|injector|turbo|cylinder|gasket/.test(v))return "Engines & components";
+ // Match specific consumables before general engine components.
  if(/filter|air cleaner|separator/.test(v))return "Filters & servicing";
  if(/oil|lubricant|grease|coolant|hydraulic fluid|atf/.test(v))return "Oils, grease & fluids";
+ if(/engine|piston|liner|injector|turbo|cylinder|gasket/.test(v))return "Engines & components";
  if(/spanner|hammer|wrench|socket|screwdriver|pliers|tool|welding/.test(v))return "Tools & workshop";
  if(/hydraulic|hose|pump|valve|seal|o-ring|oring|pipe/.test(v))return "Hydraulics & seals";
  if(/track|idler|roller|teeth|tooth|sprocket|undercarriage|bush|pin|spacer/.test(v))return "Undercarriage & ground-engaging";
