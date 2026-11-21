@@ -78,6 +78,7 @@ export default function IndependentPartsMarket(){
  const [products,setProducts]=useState([]),[categories,setCategories]=useState([]);
  const [count,setCount]=useState(0),[pages,setPages]=useState(1);
  const [busy,setBusy]=useState(true),[error,setError]=useState("");
+ const [catalogueReload,setCatalogueReload]=useState(0),[retryingCatalogue,setRetryingCatalogue]=useState(false);
  const [basket,setBasket]=useState({}),[basketOpen,setBasketOpen]=useState(false);
  const [customer,setCustomer]=useState(emptyCustomer);
  const [requestKey,setRequestKey]=useState(keygen);
@@ -96,17 +97,41 @@ export default function IndependentPartsMarket(){
   setParams(qs,{replace:true});
  },[query,category,sort,onlyStock,onlyPhotos,page,setParams]);
  useEffect(()=>{
-  let alive=true;const controller=new AbortController();
-  setBusy(true);setError("");
-  axiosClient.get("/public-commerce/products",{
-   params:{search:query,category,sort,stock:onlyStock?"only":"",photo:onlyPhotos?"only":"",page,limit:24},
-   signal:controller.signal,timeout:17000
-  }).then(({data})=>{if(!alive)return;setProducts(data.products||[]);
-    setCategories(data.categories||[]);setCount(Number(data.count||0));setPages(Math.max(1,Number(data.pages||1)));})
-    .catch(e=>{if(alive&&e?.code!=="ERR_CANCELED")setError(e.response?.data?.message||"We could not load the latest product catalogue. Please retry or contact our team.");})
-    .finally(()=>{if(alive)setBusy(false)});
-  return()=>{alive=false;controller.abort()};
- },[query,category,sort,onlyStock,onlyPhotos,page]);
+  let alive=true;let retryTimer=null;
+  const controller=new AbortController();
+  const filters={search:query,category,sort,stock:onlyStock?"only":"",photo:onlyPhotos?"only":"",page,limit:24};
+  setBusy(true);setError("");setRetryingCatalogue(false);
+  async function fetchCatalogue(attempt=0){
+   try{
+    const {data}=await axiosClient.get("/public-commerce/products",{
+     params:filters,signal:controller.signal,timeout:17000
+    });
+    if(!alive)return;
+    setProducts(data.products||[]);setCategories(data.categories||[]);
+    setCount(Number(data.count||0));setPages(Math.max(1,Number(data.pages||1)));
+    setError("");setRetryingCatalogue(false);
+   }catch(e){
+    if(!alive||e?.code==="ERR_CANCELED")return;
+    const temporary=[502,503,504].includes(e.response?.status)||
+     ["ERR_NETWORK","ECONNABORTED","ETIMEDOUT"].includes(e?.code);
+    if(temporary&&attempt===0){
+     setRetryingCatalogue(true);
+     retryTimer=setTimeout(()=>{retryTimer=null;if(alive)void fetchCatalogue(1);},1300);
+     return;
+    }
+    setProducts([]);setCount(0);setPages(1);setRetryingCatalogue(false);
+    setError(e.response?.data?.message||"We could not load the latest product catalogue. Please retry or contact our team.");
+   }finally{
+    if(alive&&retryTimer===null)setBusy(false);
+   }
+  }
+  void fetchCatalogue();
+  return()=>{alive=false;clearTimeout(retryTimer);controller.abort();};
+ },[query,category,sort,onlyStock,onlyPhotos,page,catalogueReload]);
+ function retryCatalogue(){
+  setError("");setRetryingCatalogue(false);
+  setCatalogueReload(version=>version+1);
+ }
  function resetFilters(){setSearch("");setQuery("");setCategory("");setOnlyStock(false);setOnlyPhotos(false);setSort("featured");setPage(1);}
  function addItem(product){
   if(!product.in_stock||product.price==null)return;
@@ -177,8 +202,8 @@ export default function IndependentPartsMarket(){
    </aside>
    <div className="pm-listings">
     <div className="pm-listings__toolbar"><div><span>{category||"All departments"}</span><strong>{count} products</strong></div></div>
-    {error?<div className="pm-error" role="alert">{error}<button type="button" onClick={()=>{setPage(1);setQuery(search.trim())}}>Retry</button></div>:null}
-    {busy?<div className="pm-loading" role="status">Loading the latest catalogue…</div>:null}
+    {error?<div className="pm-error" role="alert">{error}<button type="button" onClick={retryCatalogue}>Retry loading products</button><a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">Ask us on WhatsApp</a></div>:null}
+    {busy?<div className="pm-loading" role="status">{retryingCatalogue?"Temporary connection issue — retrying the catalogue automatically…":"Loading the latest catalogue…"}</div>:null}
     {!busy&&products.length?<div className="pm-grid">{products.map(p=>{
      const photo=displayPhoto(p);
      return <article key={p.id} className="pm-product">
