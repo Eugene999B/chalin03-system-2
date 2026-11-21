@@ -442,6 +442,39 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setCustomerMatches([]);
   }, [branchId]);
 
+  // A website order is an enquiry until the authorised POS creates the
+  // genuine sale. Prefill only product, contact and quantities — never payment.
+  useEffect(() => {
+    if (!products.length || Number(branchId)!==1) return;
+    const raw=sessionStorage.getItem("chalin03_web_order_prefill");
+    if (!raw) return;
+    let intake;
+    try { intake=JSON.parse(raw); } catch { sessionStorage.removeItem("chalin03_web_order_prefill"); return; }
+    if (!intake?.id || Number(intake.branch_id)!==1 || !Array.isArray(intake.items)) return;
+    const selected=intake.items.map(line=>{
+      const product=products.find(p=>Number(p.id)===Number(line.product_id));
+      const quantity=Number(line.quantity);
+      if (!product || !Number.isSafeInteger(quantity) || quantity<1 || quantity>Number(product.quantity)) return null;
+      return {...product,quantity};
+    });
+    if (selected.some(line=>!line) || !selected.length) {
+      setError("Website order quantities are no longer available. Check stock before making a sale; the customer has not been charged.");
+      sessionStorage.removeItem("chalin03_web_order_prefill");
+      return;
+    }
+    setCart(selected);
+    setCustomerName(intake.customer_name||"");
+    setCustomerPhone(intake.customer_phone||"");
+    setCustomerLocation(intake.customer_location||"");
+    setCustomerSearch(intake.customer_phone||"");
+    setPaymentType("cash");
+    setAmountPaid("");
+    setPaymentAllocations({cash:"",momo:"",bank:"",other:""});
+    setMessage("Website order "+intake.reference+" loaded. Call the customer, verify actual stock, choose the genuine payment method and only then record the sale.");
+    sessionStorage.setItem("chalin03_web_order_checkout",JSON.stringify(intake));
+    sessionStorage.removeItem("chalin03_web_order_prefill");
+  }, [products,branchId]);
+
   useEffect(() => {
     loadProducts();
     // Reload available products when the selected store changes.
@@ -703,6 +736,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
     if (!confirmed) return;
 
+    sessionStorage.removeItem("chalin03_web_order_checkout");
     setCart([]);
     setSelectedProductId("");
     setProductSearch("");
@@ -870,6 +904,29 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       });
 
       const savedReceipt = response.data.receipt || {};
+      // The POS has already created the financial receipt, stock movement,
+      // Daily Sales and Daily Closing entry. Attach that verified receipt
+      // to the website order exactly once; failure must NEVER retry payment.
+      let websiteOrderLinked=false;
+      const websiteCheckout=sessionStorage.getItem("chalin03_web_order_checkout");
+      if (websiteCheckout && savedReceipt.sale_id && Number(branchId)===1) {
+        try {
+          const original=JSON.parse(websiteCheckout);
+          if (original?.id) {
+            await axiosClient.post("/public-commerce/staff/requests/"+original.id+"/fulfill",{
+              sale_id:Number(savedReceipt.sale_id),payment_method:paymentType,
+            });
+            websiteOrderLinked=true;
+            sessionStorage.removeItem("chalin03_web_order_checkout");
+          }
+        } catch(linkError) {
+          sessionStorage.removeItem("chalin03_web_order_checkout");
+          setError("Sale was recorded and stock deducted. Website order linking needs review: "+
+            (linkError.response?.data?.message||"Open Online Orders and enter this POS sale ID.")+
+            " POS sale #"+savedReceipt.sale_id+". Do not record payment again.");
+        }
+      }
+
 
       setReceipt({
         ...savedReceipt,
@@ -900,7 +957,8 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 ? ` — ${response.data.installment.agreement_number}`
                 : ""
             }.`
-          : "Sale recorded successfully."
+          : websiteOrderLinked ? "Paid POS sale recorded; website order confirmed and inventory updated once."
+            : "Sale recorded successfully."
       );
       setLockedPeriod(null);
 

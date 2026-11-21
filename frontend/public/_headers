@@ -22,6 +22,14 @@ https://chalin03.com/
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
 
+https://chalin03.com/shop
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/enquire
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
 /sw.js
   Cache-Control: no-store, max-age=0, must-revalidate
 

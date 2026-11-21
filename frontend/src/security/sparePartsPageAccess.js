@@ -16,6 +16,24 @@ export const SPARE_PARTS_PAGES = Object.freeze([
     "permission": "page.spare_parts.dashboard.view"
   },
   {
+    "id": "online_orders",
+    "label": "Online Orders & Messages",
+    "path": "/online-orders",
+    "group": "Sales and stock",
+    "roles": ["admin","manager","cashier","auditor","staff"],
+    "gate": null,
+    "permission": "page.spare_parts.online_orders.view"
+  },
+  {
+    "id": "online_catalogue",
+    "label": "Online Catalogue Control",
+    "path": "/online-catalogue",
+    "group": "Administration",
+    "roles": ["admin"],
+    "gate": null,
+    "permission": "page.spare_parts.online_catalogue.view"
+  },
+  {
     "id": "products",
     "label": "Products",
     "path": "/products",
