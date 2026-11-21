@@ -3,10 +3,46 @@
  * the per-image credit links. They represent model/type references, NOT live
  * CHALIN03 stock, and never replace SKU-specific product photos.
  */
+/**
+ * Each filename/path has been checked against a real Wikimedia file and its
+ * direct 960px thumbnail was loaded in a real production browser, 2026-11-21.
+ * Thumb URLs avoid Special:FilePath redirects that had caused broken images.
+ *
+ * IMPORTANT: Model photographs illustrate genuine equipment types only.
+ * They do NOT assert actual CHALIN03 stock or replace POS SKU photographs.
+ * Preserve the linked Commons source + copyright/author attribution.
+ */
+const VERIFIED_COMMONS_PATHS=Object.freeze({
+  "Caterpillar 320.jpg":"a/a2",
+  "Hydraulic hose fittings.JPG":"f/fc",
+  "Caterpillar dozer.jpg":"4/4e",
+  "Honda CG125.jpg":"4/43",
+  "20200517 Toyota Hilux.jpg":"b/b3",
+  "Gold bullion bars.jpg":"a/af",
+  "Excavator On A Truck Bed.jpg":"a/aa",
+  "Komatsu PC200.jpg":"2/2a",
+  "Oil filter.JPG":"2/23",
+  "Engine oil filter.JPG":"c/cb",
+  "John Deere 624G Wheel Loader.jpg":"0/02",
+  "Caterpillar 24h.jpg":"4/4d",
+  "Road Roller.jpg":"4/46",
+  "Hilux.jpg":"0/04",
+  "Bajaj Boxer BM 150.jpg":"8/8e",
+  "CAT 320.excavator.jpg":"8/8c",
+  "Volvo EC210B.JPG":"0/0f",
+  "Hitachi ZX 210 LC p1.JPG":"e/e5",
+  "Kobelco SK210LC Dynamic Acera.JPG":"4/46",
+  "Komatsu PC210LC p1.JPG":"4/46",
+  "Kubota U35 and truck, Aulich utca drainage ditch construction, 2019 Isaszeg.jpg":"9/90",
+  "KobelcoSK350LC-10-1.jpg":"5/5f"
+});
 function photo(file,credit,license,alt){
+ const directory=VERIFIED_COMMONS_PATHS[file];
+ if(!directory)throw new Error("Unverified photo not allowed: "+file);
  const encoded=encodeURIComponent(file.replace(/ /g,"_"));
  return Object.freeze({
-  src:"https://commons.wikimedia.org/wiki/Special:FilePath/"+encoded+"?width=960",
+  src:"https://upload.wikimedia.org/wikipedia/commons/thumb/"+directory+"/"+encoded+"/960px-"+encoded,
+  original:"https://upload.wikimedia.org/wikipedia/commons/"+directory+"/"+encoded,
   source:"https://commons.wikimedia.org/wiki/File:"+encoded,
   credit,license,alt
  });
@@ -19,7 +55,7 @@ export const PHOTO_LIBRARY=Object.freeze({
   automobiles:photo("20200517 Toyota Hilux.jpg","Kahvilokki / Wikimedia Commons","See source","Real Toyota Hilux pickup truck"),
   gold:photo("Gold bullion bars.jpg","Wikimedia Commons","CC0 1.0","Photograph of real gold bullion bars"),
   transport:photo("Excavator On A Truck Bed.jpg","Ingolfson / Wikimedia Commons","See source","Excavator carried on a heavy transport truck"),
-  hire:photo("Komatsu PC200.jpg","Wikimedia Commons contributor","See source","Real Komatsu PC200 excavator at a worksite"),
+  hire:photo("Komatsu PC200.jpg","FBenjr123","CC BY-SA 4.0","Real Komatsu PC200 excavator at a worksite"),
   filters:photo("Oil filter.JPG","PHGCOM / Wikimedia Commons","See source","Photograph of a real oil filter"),
   hoses:photo("Hydraulic hose fittings.JPG","Jstapko / Wikimedia Commons","See source","Photograph of hydraulic hose fittings"),
   oilFilter:photo("Engine oil filter.JPG","Dvortygirl / Wikimedia Commons","See source","Photograph of a real engine oil filter"),
@@ -31,7 +67,7 @@ export const PHOTO_LIBRARY=Object.freeze({
   hilux:photo("Hilux.jpg","Duke Makangila","CC BY-SA 4.0","Real Toyota Hilux pickup"),
   bajaj:photo("Bajaj Boxer BM 150.jpg","Axxter99 / Wikimedia Commons","See source","Real Bajaj Boxer motorcycle"),
   honda:photo("Honda CG125.jpg","SEDJRO SETONDJI","CC BY-SA 4.0","Real Honda CG125"),
-  komatsu:photo("Komatsu PC200.jpg","Wikimedia Commons","See source","Real Komatsu PC200 excavator"),
+  komatsu:photo("Komatsu PC200.jpg","FBenjr123","CC BY-SA 4.0","Real Komatsu PC200 excavator"),
   cat320:photo("CAT 320.excavator.jpg","Justin Smith","CC BY-SA 3.0","Real Caterpillar 320 excavator"),
   volvo:photo("Volvo EC210B.JPG","Ghostrider / Wikimedia Commons","See source","Real Volvo EC210B excavator"),
   hitachiZX210:photo("Hitachi ZX 210 LC p1.JPG","Alf van Beem / Wikimedia Commons","CC0 1.0","Real Hitachi ZX210 LC excavator"),

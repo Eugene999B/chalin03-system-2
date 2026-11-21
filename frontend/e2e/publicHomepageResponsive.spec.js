@@ -58,3 +58,17 @@ test("independent excavator model finder and secure quote are navigable",async({
  await expect(page).toHaveURL(/\/enquire\?/);
  await expect(page.getByRole("heading",{level:1,name:/Tell us what you need/i})).toBeVisible();
 });
+
+test("real excavator and parts photos load from the approved direct CDN, not redirect or cartoons",async({page})=>{
+ test.setTimeout(50000);
+ await page.setViewportSize({width:1400,height:900});
+ await page.goto("/");
+ const hero=page.locator(".ce-hero__photo img");
+ await expect(hero).toHaveAttribute("src",/^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\//);
+ await expect.poll(async()=>hero.evaluate(el=>el.complete&&el.naturalWidth>=400),{timeout:20000,intervals:[500,1000,1500,2000]}).toBe(true);
+ const parts=page.locator(".ce-market__primary img");
+ await expect(parts).toHaveAttribute("src",/^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\//);
+ await expect.poll(async()=>parts.evaluate(el=>el.complete&&el.naturalWidth>=400),{timeout:20000,intervals:[500,1000,1500,2000]}).toBe(true);
+ await expect(page.locator(".ce-hero__photo .real-photo__unavailable")).toHaveCount(0);
+ await expect(page.locator(".ce-market__primary .real-photo__unavailable")).toHaveCount(0);
+});
