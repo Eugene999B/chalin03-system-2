@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import {PHOTO_LIBRARY,EXACT_MODEL_PHOTOS,REAL_TYPE_PHOTOS} from "../src/data/verifiedPublicPhotos.js";
+import fs from "node:fs";
+import path from "node:path";
+import {fileURLToPath} from "node:url";
 const photoKeys=Object.keys(PHOTO_LIBRARY);
 assert.ok(photoKeys.length>=25,"Expected real category and exact model photo library");
 const urls=new Set();
@@ -24,4 +27,11 @@ for(const [kind,p] of Object.entries(REAL_TYPE_PHOTOS)){
 for(const key of ["excavators","parts","filters","hoses","machines","motorcycles","automobiles","gold","transport","hire"]){
  assert.ok(PHOTO_LIBRARY[key],"Homepage missing real equipment photograph "+key);
 }
+const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const render=fs.readFileSync(path.join(root,"src/components/RealPhoto.jsx"),"utf8");
+const headers=fs.readFileSync(path.join(root,"public/_headers"),"utf8");
+// Wikimedia's 2026 thumbnail rate limits reject hotlinked image requests with
+// an empty Referer. Keep the existing origin-only default Referrer-Policy.
+assert.ok(!render.includes('referrerPolicy="no-referrer"'),"Wikimedia thumbs must receive the page origin referrer");
+assert.match(headers,/Referrer-Policy: strict-origin-when-cross-origin/);
 console.log("All "+urls.size+" unique real equipment photo CDNs have direct 960px routes and source attribution.");
