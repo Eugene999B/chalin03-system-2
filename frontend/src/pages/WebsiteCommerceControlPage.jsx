@@ -1,6 +1,8 @@
 import {useEffect,useMemo,useState} from "react";
 import {useNavigate} from "react-router";
 import axiosClient from "../api/axiosClient";
+import VerifiedPhotoStudio from "../components/VerifiedPhotoStudio";
+import {compressProductPhoto} from "../utils/verifiedPhotoUploads";
 import {useAuth} from "../context/AuthContext";
 import "../styles/websiteCommerceStaff.css";
 
@@ -22,6 +24,8 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
  const [paymentInputs,setPaymentInputs]=useState({});
  const [uploading,setUploading]=useState(false);
  const [photoView,setPhotoView]=useState("all");
+ const [photoStudioOpen,setPhotoStudioOpen]=useState(false);
+ const [photoApproved,setPhotoApproved]=useState(false);
  const isCatalog=mode==="catalogue";
  async function reload(){
   setLoading(true);setError("");
@@ -76,23 +80,18 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
  }
  async function uploadPhoto(file){
   if(!file||!edit)return;
-  if(file.size>2800000){setError("Choose a photo under 2.8 MB.");return}
-  setUploading(true);setError("");
-  const source=URL.createObjectURL(file);
+  if(!photoApproved){setError("Confirm the photo matches this exact SKU before uploading.");return;}
+  setUploading(true);setError("");setMessage("");
   try{
-   const image=new Image();
-   await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=source;});
-   const ratio=Math.min(1,1000/Math.max(image.width,image.height));
-   const canvas=document.createElement("canvas");
-   canvas.width=Math.max(1,Math.round(image.width*ratio));
-   canvas.height=Math.max(1,Math.round(image.height*ratio));
-   canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
-   const image_data_url=canvas.toDataURL("image/jpeg",0.77);
+   const image_data_url=await compressProductPhoto(file);
    const {data}=await axiosClient.post("/public-commerce/staff/products/"+edit.id+"/photo",
-    {image_data_url},{timeout:30000});
-   setMessage(data.message);setEdit(x=>({...x,existing_image:true}));
+    {image_data_url},{timeout:45000});
+   setMessage(data.message+" SKU #"+edit.id+".");
+   setEdit(x=>x?{...x,existing_image:true}:x);
+   setProducts(previous=>previous.map(p=>p.id===edit.id?{...p,existing_image:true}:p));
+   setPhotoApproved(false);
   }catch(error){setError(messageOf(error,"Product photo upload failed."));}
-  finally{URL.revokeObjectURL(source);setUploading(false)}
+  finally{setUploading(false)}
  }
  async function saveCatalogue(){
   if(!edit)return;
@@ -121,7 +120,8 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
    <button type="button" onClick={reload}>↻ Refresh</button>
    {isCatalog?<><select aria-label="Product photo status" value={photoView} onChange={e=>setPhotoView(e.target.value)}>
      <option value="all">All product photos</option><option value="missing">Needs item photos</option><option value="ready">Has item photo</option></select>
-     <button type="button" onClick={()=>navigate("/products")}>+ Add product in MAIN store</button></>:null}
+     <button type="button" onClick={()=>setPhotoStudioOpen(v=>!v)}>{photoStudioOpen?"Close verified photo studio":"Open verified photo studio"}</button>
+      <button type="button" onClick={()=>navigate("/products")}>+ Add product in MAIN store</button></>:null}
   </div>
   {message?<p className="wc-staff-success" role="status">{message}</p>:null}
   {error?<p className="wc-staff-error" role="alert">{error}</p>:null}
@@ -129,14 +129,23 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
   {isCatalog?
    <><div className="wc-staff-intro"><h2>Publish products online</h2>
     <p>Active products are published by default, with actual selling prices pulled live from the existing POS database. You may hide, feature, describe or attach a verified item photo without altering stock or price. The protected price approval workflow remains the only way to change a master price.</p><strong>{needingPhotos} published items still need real product-specific photographs. Use the “Needs item photos” filter above.</strong></div>
-    <div className="wc-product-list">{filteredProducts.map(product=><article key={product.id} className="wc-product-line">
-     <div><small>#{product.id} · {product.category}</small><h3>{product.name}</h3>
-      <p>{product.size||"No size recorded"} · {money(product.selling_price)} · Stock {product.quantity}</p></div>
+    {photoStudioOpen&&admin?<VerifiedPhotoStudio products={products}
+      onChanged={id=>setProducts(previous=>previous.map(p=>p.id===id?{...p,existing_image:true}:p))}
+      onClose={()=>setPhotoStudioOpen(false)}/>:null}
+     <div className="wc-product-list">{filteredProducts.map(product=><article key={product.id} className="wc-product-line">
+     <div className="wc-product-identification">
+       <div className="wc-product-thumb">
+        {product.existing_image?<img src={"/api/public-commerce/products/"+product.id+"/photo"}
+          alt={"Catalogue photograph of "+product.name} loading="lazy" width="84" height="84"
+          onError={e=>{e.currentTarget.hidden=true;}}/>:<span>PHOTO<br/>NEEDED</span>}
+       </div>
+       <div><small>#{product.id} · {product.category}</small><h3>{product.name}</h3>
+      <p>{product.size||"No size recorded"} · {money(product.selling_price)} · Stock {product.quantity}</p></div></div>
      <div className="wc-inline-actions"><span className={product.is_visible?"wc-chip live":"wc-chip"}>
        {product.is_visible?"Published":"Hidden"}</span>
       {product.is_featured?<span className="wc-chip gold">Featured</span>:null}
        <span className={product.existing_image?"wc-chip live":"wc-chip"}>{product.existing_image?"Item photo ready":"Photo needed"}</span>
-      <button type="button" onClick={()=>setEdit({...product})}>Edit online display</button>
+      <button type="button" onClick={()=>{setPhotoApproved(false);setEdit({...product})}}>Edit online display</button>
       <button type="button" onClick={()=>navigate("/products")}>Manage product & price →</button>
      </div></article>)}</div>
     {!filteredProducts.length&&!loading?<p>No products match your search.</p>:null}
@@ -194,15 +203,18 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
       placeholder={edit.category}/></label>
      <label>Short product description<textarea rows={3} value={edit.description||""}
       onChange={e=>setEdit(v=>({...v,description:e.target.value}))}/></label>
-     <label>Upload the actual item photo (recommended)
-      <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading}
-        onChange={event=>uploadPhoto(event.target.files?.[0])}/>
-      {uploading?<small>Uploading the photograph…</small>:null}
-     </label>
-     <label>Optional existing approved photo URL<input value={edit.image_url||""}
-      placeholder="https://images.unsplash.com/… or CHALIN03 image path"
-      onChange={e=>setEdit(v=>({...v,image_url:e.target.value}))}/></label>
-     <p className="wc-photo-note">Use a real photograph of the exact stock item where possible. Otherwise the market displays a clearly labelled product-specific placeholder, not an unrelated category photo.</p>
+     <label className="wc-toggle wc-photo-approval">
+       <input type="checkbox" checked={photoApproved} disabled={uploading}
+        onChange={e=>setPhotoApproved(e.target.checked)}/>
+       I confirm that this real photograph shows the exact item in Main Store SKU #{edit.id},
+       including its brand, model and size, and that I have permission to use the image.
+      </label>
+      <label>Upload the actual item photo for SKU #{edit.id}
+       <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading||!photoApproved}
+        onChange={event=>{uploadPhoto(event.target.files?.[0]);event.target.value="";}}/>
+       {uploading?<small>Optimising and uploading the verified photograph…</small>:null}
+      </label>
+      <p className="wc-photo-note">Use a real photograph of the exact stock item. Never assign an unrelated part image or an unlicensed internet photo. Products without a confirmed photo show a labelled placeholder.</p>
      <div className="wc-inline-actions"><button type="button" className="wc-primary-action" disabled={Boolean(saving)}
       onClick={saveCatalogue}>{saving?"Saving…":"Save online display"}</button>
       <button type="button" onClick={()=>setEdit(null)}>Cancel</button></div>
