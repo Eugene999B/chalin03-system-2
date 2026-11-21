@@ -1,10 +1,10 @@
 "use strict";
 
-const PDFDocument = require("pdfkit");
 const express = require("express");
 const { pool } = require("../config/db");
 const { requirePermission } = require("../middleware/permissionMiddleware");
 const { nextReadyCashDocumentNumbers } = require("../services/equipmentFinanceReadyCashSequenceService");
+const { loadReadyCashExcavatorPhoto, renderReadyCashReceiptPdf } = require("../services/equipmentFinanceReadyCashReceiptPdfService");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { workspaceRoleFor, isEquipmentAdministrator } = require("../security/equipmentDivisionAccess");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
@@ -373,20 +373,25 @@ router.post("/ready-cash/checkout", requirePermission("fleet.assets.manage"), as
   }
 });
 
-// A company-wide payment receipt; unlike legacy Hire receipts it must not
-// INNER JOIN business_locations because Finance records deliberately have NULL location.
+// Branded, image-backed Ready Cash receipt.  Only the original, non-voided
+// settlement and company-wide Finance sale qualify. Rendering is buffered
+// BEFORE sending headers, so a malformed photo/PDF cannot send half a receipt.
 router.get("/ready-cash/:agreementId/receipt.pdf", requirePermission("fleet.assets.view"), async (req, res) => {
   try {
     const agreementId = id(req.params.agreementId);
     if (!agreementId) fail(400, "READY_CASH_ID_INVALID", "Select a valid Ready Cash agreement.");
     const [rows] = await pool.query(
-      `SELECT a.id, a.agreement_number, a.customer_name_snapshot,
-              a.customer_phone_snapshot, a.asset_code_snapshot,
-              a.asset_name_snapshot, a.serial_number_snapshot,
-              a.sale_price, a.discount_amount, a.tax_amount, a.total_amount,
-              a.amount_paid, a.outstanding_balance, a.ownership_status,
+      \`SELECT a.id, a.asset_id, a.agreement_number,
+              a.customer_name_snapshot, a.customer_phone_snapshot,
+              a.customer_location_snapshot,
+              a.asset_code_snapshot, a.asset_name_snapshot,
+              a.make_snapshot, a.model_snapshot, a.serial_number_snapshot,
+              a.main_image_url_snapshot, a.sale_price, a.discount_amount,
+              a.tax_amount, a.total_amount, a.amount_paid,
+              a.outstanding_balance, a.ownership_status,
               p.receipt_number, p.payment_date, p.payment_method,
-              p.reference_number, p.amount, p.notes, u.full_name AS received_by_name
+              p.reference_number, p.amount, p.notes,
+              u.full_name AS received_by_name
          FROM equipment_sale_agreements a
          JOIN equipment_sale_payments p ON p.agreement_id = a.id
           AND p.payment_category = 'settlement' AND p.is_voided = FALSE
@@ -394,69 +399,40 @@ router.get("/ready-cash/:agreementId/receipt.pdf", requirePermission("fleet.asse
          WHERE a.id = ? AND a.sale_type = 'cash'
            AND a.hire_location_id IS NULL
            AND a.agreement_notes LIKE 'READY_CASH:%'
-         LIMIT 1`,
+         ORDER BY p.payment_date ASC, p.id ASC
+         LIMIT 1\`,
       [agreementId]
     );
     const receipt = rows[0];
-    if (!receipt) fail(404, "READY_CASH_RECEIPT_NOT_FOUND", "The paid Ready Cash receipt was not found.");
-    const doc = new PDFDocument({ size: "A4", margin: 48, info: {
-      Title: "CHALIN03 Ready Cash full-payment receipt " + receipt.receipt_number,
-      Author: "CHALIN 03 COMPANY LIMITED",
-    } });
+    if (!receipt) fail(404, "READY_CASH_RECEIPT_NOT_FOUND",
+      "The paid Ready Cash receipt was not found.");
+    // The server reads the exact protected image bytes from database or
+    // private object storage. The browser never receives a raw storage URL.
+    const photo = await loadReadyCashExcavatorPhoto(receipt);
+    const pdf = await renderReadyCashReceiptPdf(receipt, { photo });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition",
       "attachment; filename=\"ready-cash-" +
       String(receipt.receipt_number || agreementId).replace(/[^A-Za-z0-9_-]/g, "-") + ".pdf\"");
-    doc.pipe(res);
-    const gh = (value) => "GHS " + Number(value || 0).toLocaleString("en-GH", {
-      minimumFractionDigits: 2, maximumFractionDigits: 2,
-    });
-    const line = (label, value) => {
-      doc.font("Helvetica").fontSize(10).fillColor("#405568").text(label, 50, doc.y, { continued: true })
-        .font("Helvetica-Bold").fillColor("#0c263a").text("   " + String(value ?? "-"));
-      doc.moveDown(0.5);
-    };
-    doc.fillColor("#153954").font("Helvetica-Bold").fontSize(20)
-      .text("CHALIN 03 COMPANY LIMITED");
-    doc.moveDown(0.3).font("Helvetica").fontSize(10)
-      .fillColor("#587084").text("Equipment Finance | Pay in Full");
-    doc.moveDown(1.3).font("Helvetica-Bold").fontSize(16).fillColor("#11354e")
-      .text("READY CASH - FULL PAYMENT RECEIPT");
-    doc.moveDown(1);
-    line("Receipt", receipt.receipt_number);
-    line("Agreement", receipt.agreement_number);
-    line("Date", new Date(receipt.payment_date).toLocaleString("en-GB", { timeZone: "Africa/Accra" }));
-    line("Buyer", receipt.customer_name_snapshot);
-    line("Contact", receipt.customer_phone_snapshot);
-    line("Machine", receipt.asset_code_snapshot + " - " + receipt.asset_name_snapshot);
-    line("Serial number", receipt.serial_number_snapshot);
-    line("Price before included tax", gh(receipt.sale_price));
-    line("Included tax / levies (approved)", gh(receipt.tax_amount));
-    line("Final agreed price", gh(receipt.total_amount));
-    line("Amount received", gh(receipt.amount));
-    line("Outstanding balance", gh(receipt.outstanding_balance));
-    line("Payment evidence reference", receipt.reference_number);
-    line("Recording method", "Manual full-payment confirmation (no payment gateway)");
-    line("Recorded by", receipt.received_by_name);
-    line("Ownership", receipt.ownership_status === "transferred"
-      ? "Sold / transferred" : "Payment complete; signed handover pending");
-    doc.moveDown(0.8).font("Helvetica").fontSize(9).fillColor("#607588")
-      .text("Ready Cash is a pay-in-full sale option, not a payment channel. " +
-        "This receipt documents a manually confirmed full payment. " +
-        "The actual tender must reconcile with the company's source payment evidence.");
-    doc.end();
+    res.setHeader("Content-Length", String(pdf.length));
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Chalin03-Receipt-Photo", photo ? "embedded" : "unavailable");
+    res.status(200).send(pdf);
     try {
       await audit(pool, req, "EQUIPMENT_READY_CASH_RECEIPT_DOWNLOADED", agreementId,
-        "Ready Cash receipt PDF downloaded.", { receipt_number: receipt.receipt_number });
+        "Branded Ready Cash receipt PDF downloaded.",
+        { receipt_number: receipt.receipt_number, machine_photo_embedded: Boolean(photo) });
     } catch (auditError) {
       console.warn("Ready Cash receipt download audit failed:", auditError.message);
     }
     return undefined;
   } catch (error) {
     if (res.headersSent) {
-      console.error("Ready Cash receipt rendering error:", error);
+      console.error("Ready Cash receipt sending failed:", error.code || error.message);
       return undefined;
     }
+    console.error("Ready Cash premium PDF generation failed:", error.code || error.message);
     return sendError(res, error);
   }
 });
