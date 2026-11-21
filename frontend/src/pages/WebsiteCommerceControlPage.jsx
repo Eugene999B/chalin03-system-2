@@ -21,6 +21,7 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
  const [saleInputs,setSaleInputs]=useState({});
  const [paymentInputs,setPaymentInputs]=useState({});
  const [uploading,setUploading]=useState(false);
+ const [photoView,setPhotoView]=useState("all");
  const isCatalog=mode==="catalogue";
  async function reload(){
   setLoading(true);setError("");
@@ -40,7 +41,10 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[mode,branchId,status]);
  const filteredProducts=useMemo(()=>products.filter(p=>
-  [p.name,p.category,p.size].some(v=>String(v||"").toLowerCase().includes(search.toLowerCase()))),[products,search]);
+  [p.name,p.category,p.size].some(v=>String(v||"").toLowerCase().includes(search.toLowerCase())) &&
+  (photoView==="all"||(photoView==="missing"?!p.existing_image:Boolean(p.existing_image)))
+ ),[products,search,photoView]);
+ const needingPhotos=products.filter(p=>p.is_visible&&!p.existing_image).length;
  const filteredOrders=useMemo(()=>orders.filter(r=>
   [r.reference_code,r.customer_name,r.customer_phone,r.subject,r.request_type].some(v=>
    String(v||"").toLowerCase().includes(search.toLowerCase()))),[orders,search]);
@@ -115,20 +119,23 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
    {!isCatalog?<select value={status} onChange={e=>setStatus(e.target.value)}>
     {statuses.map(v=><option key={v} value={v}>{v==="all"?"All statuses":v.replace("_"," ")}</option>)}</select>:null}
    <button type="button" onClick={reload}>↻ Refresh</button>
-   {isCatalog?<button type="button" onClick={()=>navigate("/products")}>+ Add product in MAIN store</button>:null}
+   {isCatalog?<><select aria-label="Product photo status" value={photoView} onChange={e=>setPhotoView(e.target.value)}>
+     <option value="all">All product photos</option><option value="missing">Needs item photos</option><option value="ready">Has item photo</option></select>
+     <button type="button" onClick={()=>navigate("/products")}>+ Add product in MAIN store</button></>:null}
   </div>
   {message?<p className="wc-staff-success" role="status">{message}</p>:null}
   {error?<p className="wc-staff-error" role="alert">{error}</p>:null}
   {loading?<p className="wc-staff-loading">Loading website commerce…</p>:null}
   {isCatalog?
    <><div className="wc-staff-intro"><h2>Publish products online</h2>
-    <p>Active products are published by default, with actual selling prices pulled live from the existing POS database. You may hide, feature, describe or attach a verified item photo without altering stock or price. The protected price approval workflow remains the only way to change a master price.</p></div>
+    <p>Active products are published by default, with actual selling prices pulled live from the existing POS database. You may hide, feature, describe or attach a verified item photo without altering stock or price. The protected price approval workflow remains the only way to change a master price.</p><strong>{needingPhotos} published items still need real product-specific photographs. Use the “Needs item photos” filter above.</strong></div>
     <div className="wc-product-list">{filteredProducts.map(product=><article key={product.id} className="wc-product-line">
      <div><small>#{product.id} · {product.category}</small><h3>{product.name}</h3>
       <p>{product.size||"No size recorded"} · {money(product.selling_price)} · Stock {product.quantity}</p></div>
      <div className="wc-inline-actions"><span className={product.is_visible?"wc-chip live":"wc-chip"}>
        {product.is_visible?"Published":"Hidden"}</span>
       {product.is_featured?<span className="wc-chip gold">Featured</span>:null}
+       <span className={product.existing_image?"wc-chip live":"wc-chip"}>{product.existing_image?"Item photo ready":"Photo needed"}</span>
       <button type="button" onClick={()=>setEdit({...product})}>Edit online display</button>
       <button type="button" onClick={()=>navigate("/products")}>Manage product & price →</button>
      </div></article>)}</div>
@@ -195,7 +202,7 @@ export default function WebsiteCommerceControlPage({mode="orders"}){
      <label>Optional existing approved photo URL<input value={edit.image_url||""}
       placeholder="https://images.unsplash.com/… or CHALIN03 image path"
       onChange={e=>setEdit(v=>({...v,image_url:e.target.value}))}/></label>
-     <p className="wc-photo-note">Use a real photograph of the exact stock item where possible. Otherwise the website clearly labels its existing category illustration.</p>
+     <p className="wc-photo-note">Use a real photograph of the exact stock item where possible. Otherwise the market displays a clearly labelled product-specific placeholder, not an unrelated category photo.</p>
      <div className="wc-inline-actions"><button type="button" className="wc-primary-action" disabled={Boolean(saving)}
       onClick={saveCatalogue}>{saving?"Saving…":"Save online display"}</button>
       <button type="button" onClick={()=>setEdit(null)}>Cancel</button></div>

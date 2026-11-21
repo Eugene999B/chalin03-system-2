@@ -351,3 +351,29 @@
 @media(max-width:760px){.ch-home__industry-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ch-home__industry-card img{height:135px}.ch-home__industry-card>div{padding:12px}.ch-home__industry-card h3{font-size:15px}.ch-home__industry-card p{font-size:11.5px}}
 @media(max-width:600px){.ch-home__industry-grid{grid-template-columns:1fr}.ch-home__industry-card{display:grid;grid-template-columns:38% 1fr}.ch-home__industry-card img{height:100%;min-height:148px}.ch-home__industry-card>div{padding:12px}.ch-home__industry-heading h2{font-size:36px}}
 @media(max-width:410px){.ch-home__industry-card{display:block}.ch-home__industry-card img{height:155px}.ch-home__industry-card>div{padding:16px}}
+
+
+/* Dedicated marketplace showcase and honest visual alternatives for divisions
+   without approved product/vehicle photography. */
+.ch-home__market-showcase{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.02fr);align-items:stretch;background:#092732;color:#fff;margin:0;padding:clamp(20px,5vw,70px);gap:clamp(25px,5vw,80px)}
+.ch-home__market-visual{position:relative;min-height:420px;overflow:hidden;border-radius:18px;background:#173642}
+.ch-home__market-visual img{width:100%;height:100%;max-height:580px;object-fit:cover;display:block}
+.ch-home__market-visual:after{content:"";position:absolute;inset:45% 0 0;background:linear-gradient(transparent,#071f2a99);pointer-events:none}
+.ch-home__market-visual>span{position:absolute;z-index:1;bottom:27px;left:30px;font-size:12px;font-weight:900;color:#f7d17d;letter-spacing:.16em}
+.ch-home__market-copy{align-self:center;padding:18px 0}
+.ch-home__market-copy .ch-home__section-tag{color:#f4bb42}
+.ch-home__market-copy h2{font-size:clamp(39px,5vw,76px);line-height:1.06;letter-spacing:-.065em;margin:20px 0}
+.ch-home__market-copy p{color:#cddfe3;line-height:1.8;font-size:clamp(14px,1.35vw,17px);max-width:650px}
+.ch-home__market-highlights{display:flex;gap:9px;flex-wrap:wrap;margin:24px 0 30px}
+.ch-home__market-highlights span{font-size:11px;font-weight:800;color:#f8deb0;border:1px solid #a6b6ae59;padding:10px 13px;border-radius:7px}
+.ch-home__market-copy>a{display:inline-flex;align-items:center;justify-content:center;gap:10px}
+.ch-home__market-copy>small{display:block;max-width:510px;margin-top:18px;color:#9eb7c0;font-size:11px;line-height:1.65}
+.ch-home__industry-graphic{height:100%;min-height:190px;position:relative;background:linear-gradient(120deg,#123442,#416167);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.ch-home__industry-graphic::before{content:"";position:absolute;inset:13px;border:1px solid #e9cc804c;border-radius:9px}
+.ch-home__industry-graphic span{font-size:clamp(60px,6vw,110px);filter:drop-shadow(0 12px 17px #0005)}
+.ch-home__industry-graphic strong{font-size:10px;letter-spacing:.28em;color:#ffdc85;margin-top:11px}
+.ch-home__industry-graphic[data-sector="gold"]{background:linear-gradient(135deg,#2a281f,#816b40)}
+.ch-home__industry-graphic[data-sector="motorcycles"]{background:linear-gradient(135deg,#101d2a,#3f5361)}
+.ch-home__industry-graphic[data-sector="automobiles"]{background:linear-gradient(135deg,#0b2938,#3c6574)}
+@media(max-width:920px){.ch-home__market-showcase{grid-template-columns:1fr}.ch-home__market-visual{min-height:260px;max-height:360px}}
+@media(max-width:530px){.ch-home__market-showcase{padding:23px 18px 47px}.ch-home__market-copy h2{font-size:41px}.ch-home__market-visual{min-height:240px}.ch-home__market-visual>span{left:19px;bottom:19px}}

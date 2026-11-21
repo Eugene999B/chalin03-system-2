@@ -1,6 +1,17 @@
 const OFFICIAL_FRONTEND_HOSTS = new Set([
   "chalin03.com",
   "www.chalin03.com",
+  "homepage.chalin03.com",
+  "spareparts.chalin03.com",
+  "excavators.chalin03.com",
+  "machines.chalin03.com",
+  "motorcycles.chalin03.com",
+  "automobiles.chalin03.com",
+  "gold.chalin03.com",
+  "transport.chalin03.com",
+  "hire.chalin03.com",
+  "help.chalin03.com",
+  "work.chalin03.com",
 ]);
 
 function normalizeHost(value) {
