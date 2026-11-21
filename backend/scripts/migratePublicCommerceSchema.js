@@ -10,7 +10,7 @@ const schema=[
  is_featured TINYINT(1) NOT NULL DEFAULT 0,
  category_override VARCHAR(100) NULL,
  description VARCHAR(600) NULL,
- image_url VARCHAR(1000) NULL,
+ image_url MEDIUMTEXT NULL,
  updated_by INT NULL,
  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  KEY idx_web_controls_branch (branch_id,is_visible,is_featured)
