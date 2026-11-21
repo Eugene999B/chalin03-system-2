@@ -99,10 +99,10 @@ function safeProduct(row){
  const isStored=Boolean(row.catalog_image_url||row.image_url)&&!ownImage;
  return {
   id:Number(row.id),name:str(row.name,160),size:str(row.size,100),
-  category:group,price:currency(row.selling_price),
+  category:group,price:Number(row.selling_price)>0?currency(row.selling_price):null,
   image_url:ownImage||(isStored?"/api/public-commerce/products/"+row.id+"/photo":illustration(group)),
   image_is_illustrative:!ownImage&&!isStored,
-  in_stock:Number(row.quantity)>0,
+  in_stock:Number(row.quantity)>0 && Number(row.selling_price)>0,
   featured:Boolean(Number(row.is_featured||0)),
  };
 }
@@ -214,6 +214,10 @@ router.post("/requests",limiter,async(req,res)=>{
      await conn.rollback();
      return res.status(409).json({status:"error",code:"WEB_STOCK_CHANGED",
        message:"One item is unavailable in the requested quantity. Refresh the catalogue or send an enquiry."});
+    }
+    if(Number(rows[0].selling_price)<=0){
+      await conn.rollback();
+      return res.status(409).json({status:"error",message:"This item needs an approved selling price before it can be ordered."});
     }
     const price=currency(rows[0].selling_price);
     total=Math.round((total+price*item.qty)*100)/100;
