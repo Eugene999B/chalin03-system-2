@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {OFFICIAL_SITES} from "../src/config/officialSites.js";
+import {PHOTO_LIBRARY} from "../src/data/verifiedPublicPhotos.js";
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const read=p=>fs.readFileSync(path.join(root,p),"utf8");
 const page=read("src/pages/CompanyExperienceV3.jsx");
@@ -30,11 +32,12 @@ assert.ok(page.includes('aria-expanded={menuOpen}'));
 assert.ok(page.includes('WHATSAPP')||page.includes('WhatsApp us'));
 assert.ok(!page.includes("WhatsApp Boss"));
 assert.ok(!page.includes("🚜")&&!page.includes("🏗️"),"Cartoon category illustrations must not replace photos");
-assert.ok(photos.includes("commons.wikimedia.org"));
+assert.equal(new URL(PHOTO_LIBRARY.excavators.source).hostname,"commons.wikimedia.org");
+assert.equal(new URL(PHOTO_LIBRARY.excavators.src).hostname,"commons.wikimedia.org");
 assert.ok(photos.includes("EXACT_MODEL_PHOTOS"));
 assert.ok(photos.includes("PHOTO_LIBRARY"));
-assert.ok(subdomains.includes('spareparts.chalin03.com'));
-assert.ok(subdomains.includes('work.chalin03.com'));
+assert.equal(new URL(OFFICIAL_SITES.parts).hostname,"spareparts.chalin03.com");
+assert.equal(new URL(OFFICIAL_SITES.work).hostname,"work.chalin03.com");
 for(const breakpoint of ["1160px","980px","760px","520px"]){
  assert.ok(css.includes("max-width:"+breakpoint),"Missing breakpoint: "+breakpoint);
 }
@@ -43,7 +46,12 @@ assert.ok(css.includes(".ce-header nav.is-open"));
 assert.ok(css.includes("focus-visible"));
 assert.ok(css.includes("min-height:53px"));
 assert.ok(e2e.includes("ce-hero")&&e2e.includes("ce-division"));
-assert.ok(headers.includes("https://commons.wikimedia.org"));
-assert.ok(headers.includes("https://upload.wikimedia.org"));
-assert.ok(!headers.includes("https://images.unsplash.com"));
+const policyLine=headers.split("\n").find(line=>line.trimStart().startsWith("Content-Security-Policy:"));
+assert.ok(policyLine,"Missing required CSP header");
+const imageSources=policyLine.split("img-src ")[1]?.split(";")[0].trim().split(/\s+/);
+assert.ok(Array.isArray(imageSources),"Missing CSP img-src directive");
+for(const expected of ["https://commons.wikimedia.org","https://upload.wikimedia.org"]){
+ assert.ok(imageSources.some(source=>source===expected),"Missing source: "+expected);
+}
+assert.ok(imageSources.every(source=>source!=="https://images.unsplash.com"),"Unapproved imagery host");
 console.log("Photographic CHALIN03 corporate homepage and official-site source contracts passed.");
