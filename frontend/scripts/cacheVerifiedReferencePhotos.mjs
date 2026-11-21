@@ -13,11 +13,11 @@ import {fileURLToPath} from "node:url";
 import {PHOTO_LIBRARY} from "../src/data/verifiedPublicPhotos.js";
 
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const SAFE_OUTPUT_DIR=path.resolve(root,"public/images/verified-reference");
 const enabled=process.env.CF_PAGES_BRANCH==="production"
   || process.env.CHALIN03_DOWNLOAD_REAL_PHOTOS==="1";
 const items=[...new Map(Object.values(PHOTO_LIBRARY).map(p=>[p.localSrc,p])).values()];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const sourceHost=url=>new URL(url).hostname;
 const MAX_BYTES=2_500_000;
 const ATTEMPTS=3;
 const TIMEOUT_MS=11_000;
@@ -27,9 +27,13 @@ export function verifyReferencePhoto(photo){
     ||!/^\/images\/verified-reference\/[a-z0-9-]+\.jpg$/.test(photo.localSrc)){
     throw new Error("Invalid local photo destination");
   }
-  if(sourceHost(photo.src)!=="upload.wikimedia.org"
-    ||sourceHost(photo.source)!=="commons.wikimedia.org"){
-    throw new Error("Only verified Wikimedia Commons photographs can be mirrored");
+  const imageUrl=new URL(photo.src);
+  const creditUrl=new URL(photo.source);
+  if(imageUrl.protocol!=="https:"||imageUrl.hostname!=="upload.wikimedia.org"
+    ||!/^\/wikipedia\/commons\/thumb\/[a-f0-9]\/([a-f0-9]{2})\/.+\/960px-.+\.(?:jpg|JPG)$/.test(imageUrl.pathname)
+    ||creditUrl.protocol!=="https:"||creditUrl.hostname!=="commons.wikimedia.org"
+    ||!creditUrl.pathname.startsWith("/wiki/File:")){
+    throw new Error("Only exact verified HTTPS Wikimedia Commons thumbnails can be mirrored");
   }
   if(!photo.credit||!photo.license){
     throw new Error("Image license and author attribution required");
@@ -39,7 +43,9 @@ export function verifyReferencePhoto(photo){
 
 async function downloadOne(photo){
   verifyReferencePhoto(photo);
-  const localPath=path.join(root,"public",photo.localSrc.replace(/^\//,""));
+  const filename=photo.localSrc.split("/").at(-1);
+  const localPath=path.resolve(SAFE_OUTPUT_DIR,filename);
+  if(path.dirname(localPath)!==SAFE_OUTPUT_DIR)throw new Error("Unsafe photo cache destination");
   for(let attempt=1;attempt<=ATTEMPTS;attempt++){
     try{
       const response=await fetch(photo.src,{
@@ -57,10 +63,26 @@ async function downloadOne(photo){
         throw new Error("Source did not return JPEG: "+contentType);
       const length=Number(response.headers.get("content-length")||"0");
       if(length>MAX_BYTES)throw new Error("Reference photo exceeds 2.5 MB");
-      const bytes=Buffer.from(await response.arrayBuffer());
+      if(new URL(response.url).hostname!=="upload.wikimedia.org"){
+        throw new Error("Unexpected remote image redirect");
+      }
+      if(!response.body)throw new Error("Empty JPEG response stream");
+      const reader=response.body.getReader(),chunks=[];
+      let received=0;
+      while(true){
+        const {done,value}=await reader.read();
+        if(done)break;
+        received+=value.byteLength;
+        if(received>MAX_BYTES){
+          await reader.cancel();
+          throw new Error("JPEG response exceeds the capped 2.5 MB streaming limit");
+        }
+        chunks.push(Buffer.from(value));
+      }
+      const bytes=Buffer.concat(chunks,received);
       if(bytes.length<500||bytes.length>MAX_BYTES||bytes[0]!==0xff||bytes[1]!==0xd8)
         throw new Error("Invalid/oversize JPEG source");
-      await mkdir(path.dirname(localPath),{recursive:true});
+      await mkdir(SAFE_OUTPUT_DIR,{recursive:true});
       await writeFile(localPath,bytes);
       return {ok:true,bytes:bytes.length};
     }catch(error){
