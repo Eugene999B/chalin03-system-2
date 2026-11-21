@@ -39,11 +39,8 @@ export function siteHref(site,path="",query=""){
  const key=Object.hasOwn(OFFICIAL_SITES,site)?site:"company";
  const hostname=typeof window==="undefined"?"":window.location.hostname;
  const preview=previewHost(hostname);
- const base=preview?PATH_ON_PREVIEW[key]:OFFICIAL_SITES[key]+"/";
- const relative=String(path||"").replace(/^\/+/, "");
- const url=relative?base.replace(/\/$/,"")+(preview?"/":"" )+relative:base;
- // On official site domains any internal subpath begins with a slash.
- const finalUrl=!preview&&relative?OFFICIAL_SITES[key]+"/"+relative:url;
+ const relative=String(path||"").replace(/^\\/+/, "");
+ const finalUrl=preview ? (relative?"/"+relative:PATH_ON_PREVIEW[key]) : (OFFICIAL_SITES[key]+"/"+relative);
  const qs=String(query||"").replace(/^\?/,"");
  return qs?finalUrl+(finalUrl.includes("?")?"&":"?")+qs:finalUrl;
 }
