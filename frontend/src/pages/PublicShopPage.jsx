@@ -136,7 +136,7 @@ export default function PublicShopPage(){
         <span className="pc-product-category">{product.category}</span>
         <h3>{product.name}</h3>
         <p>{product.size&&product.size.toLowerCase()!=="none"?product.size:"Confirm fitment with our team"}</p>
-        <strong className="pc-price">{money(product.price)}</strong>
+        <strong className="pc-price">{product.price===null?"Price on request":money(product.price)}</strong>
         <span className={"pc-stock"+(product.in_stock?"":" is-empty")}>
          {product.in_stock?"Ask for availability":"Restock enquiry only"}</span>
         <button type="button" disabled={!product.in_stock} onClick={()=>add(product)}>
