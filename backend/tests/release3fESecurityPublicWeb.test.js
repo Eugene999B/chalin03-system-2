@@ -113,11 +113,34 @@ test("production frontend origins are exact and HTTPS", () => {
       assert.equal(normalizeOrigin("https://chalin03.com/login"), "https://chalin03.com");
       assert.equal(isTrustedFrontendOrigin("https://chalin03.com"), true);
       assert.equal(isTrustedFrontendOrigin("https://www.chalin03.com"), true);
+      const officialDivisions=["homepage","spareparts","excavators","machines","motorcycles","automobiles","gold","transport","hire","help","work"];
+      for(const name of officialDivisions){
+        const origin="https://"+name+".chalin03.com";
+        assert.equal(isTrustedFrontendOrigin(origin),true,origin+" should pass secure API origin checks");
+        assert.equal(getTrustedFrontendOrigins().has(origin),true);
+      }
+      assert.equal(isTrustedFrontendOrigin("https://spareparts.chalin03.com.evil.example"),false);
+      assert.equal(isTrustedFrontendOrigin("http://spareparts.chalin03.com"),false);
+      assert.equal(isTrustedFrontendOrigin("https://malicious.chalin03.com"),false);
       assert.equal(isTrustedFrontendOrigin("http://localhost:5173"), false);
       assert.equal(isTrustedFrontendOrigin("https://evil.example"), false);
       assert.equal(getTrustedFrontendOrigins().has("http://localhost:5173"), false);
     }
   );
+});
+
+test("shop and staff subdomain CORS preflight succeeds without wildcard origins",()=>{
+  withEnvironment({NODE_ENV:"production"},()=>{
+    for(const origin of ["https://spareparts.chalin03.com","https://work.chalin03.com"]){
+      const req=mockRequest({method:"OPTIONS",path:"/api/public-commerce/products",
+        headers:{origin,"access-control-request-headers":"authorization"}});
+      const res=mockResponse();let next=false;
+      trustedBrowserCorsBoundary(req,res,()=>{next=true});
+      assert.equal(next,false);assert.equal(res.statusCode,204);
+      assert.equal(res.headers["access-control-allow-origin"],origin);
+      assert.equal(res.headers["access-control-allow-credentials"],"true");
+    }
+  });
 });
 
 test("origin secret comparison is timing-safe and rejects altered values", () => {

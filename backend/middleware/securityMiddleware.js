@@ -7,6 +7,17 @@ const ORIGIN_SECRET_HEADER = "x-chalin-origin-key";
 const OFFICIAL_FRONTEND_ORIGINS = new Set([
   "https://chalin03.com",
   "https://www.chalin03.com",
+  "https://homepage.chalin03.com",
+  "https://spareparts.chalin03.com",
+  "https://excavators.chalin03.com",
+  "https://machines.chalin03.com",
+  "https://motorcycles.chalin03.com",
+  "https://automobiles.chalin03.com",
+  "https://gold.chalin03.com",
+  "https://transport.chalin03.com",
+  "https://hire.chalin03.com",
+  "https://help.chalin03.com",
+  "https://work.chalin03.com",
 ]);
 const TRUSTED_BROWSER_METHODS = "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS";
 const INTERNAL_APPROVAL_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;

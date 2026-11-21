@@ -19,7 +19,7 @@ export const PHOTO_LIBRARY=Object.freeze({
   automobiles:photo("20200517 Toyota Hilux.jpg","Kahvilokki / Wikimedia Commons","See source","Real Toyota Hilux pickup truck"),
   gold:photo("Gold bullion bars.jpg","Wikimedia Commons","CC0 1.0","Photograph of real gold bullion bars"),
   transport:photo("Excavator On A Truck Bed.jpg","Ingolfson / Wikimedia Commons","See source","Excavator carried on a heavy transport truck"),
-  hire:photo("Komatsu PC200 excavator (34970228724).jpg","Bob Adams / Wikimedia Commons","See source","Real Komatsu PC200 excavator at a site"),
+  hire:photo("Komatsu PC200.jpg","Wikimedia Commons contributor","See source","Real Komatsu PC200 excavator at a worksite"),
   filters:photo("Oil filter.JPG","PHGCOM / Wikimedia Commons","See source","Photograph of a real oil filter"),
   hoses:photo("Hydraulic hose fittings.JPG","Jstapko / Wikimedia Commons","See source","Photograph of hydraulic hose fittings"),
   oilFilter:photo("Engine oil filter.JPG","Dvortygirl / Wikimedia Commons","See source","Photograph of a real engine oil filter"),
