@@ -90,3 +90,12 @@ test("staff catalogue photo upload is restricted and does not overwrite master i
  const server=read("server.js");
  assert.match(server,/app\.use\("\/api\/public-commerce", publicCommerceRoutes\)/);
 });
+
+test("website staff request SQL interpolates clauses rather than escaped literals",()=>{
+ const route=read("routes/publicCommerceRoutes.js");
+ const escaped=String.fromCharCode(92)+"$"+"{";
+ assert.equal(route.includes(escaped+"where}"),false);
+ assert.equal(route.includes(escaped+'ids.map(()=>"?").join(",")}'),false);
+ assert.ok(route.includes('WHERE ${where}'));
+ assert.ok(route.includes('IN (${ids.map(()=>"?").join(",")})'));
+});
