@@ -75,9 +75,13 @@ function targetFor(url){
   const target=PATH_SITES[path];
   return target===site?target+"/"+url.search:target+"/"+url.search;
  }
- if(site==="https://work.chalin03.com"||PUBLIC_HOSTS.has(host)){
-  if(path==="/")return null;
-  return ROOT+"/"+url.search;
+ // Staff has many protected deep routes (finance, expenses, reports, payroll,
+ // auditing, etc.). Do not redirect unknown staff paths off the staff origin.
+ if(site==="https://work.chalin03.com")return null;
+ if(PUBLIC_HOSTS.has(host)){
+  // Unknown non-public paths are legacy staff bookmarks, not company pages.
+  // Keep the original path and query when moving employees to work.
+  return "https://work.chalin03.com"+path+url.search;
  }
  return null;
 }
