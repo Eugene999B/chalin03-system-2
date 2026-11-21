@@ -9,7 +9,7 @@ import "../styles/companyExperienceV3.css";
 const SALES_PHONE="+233540713654",MAIN_PHONE="+233249469080";
 const WHATSAPP="https://wa.me/233540713654?text="+encodeURIComponent("Hello CHALIN03, I would like to make an enquiry.");
 const divisions=[
- {id:"excavators",index:"01",site:"excavators",label:"EQUIPMENT SALES",title:"Excavators",description:"Real machines for real work. Explore makes and model references, then request a verified quotation.",photo:PHOTO_LIBRARY.excavators,cta:"Explore excavators"},
+ {id:"excavators",index:"01",site:"excavators",label:"EQUIPMENT SALES",title:"Excavators",description:"Real machines for real work. Explore makes and model references, then request a verified quotation.",photo:PHOTO_LIBRARY.homepageExcavator,cta:"Explore excavators"},
  {id:"heavy",index:"02",site:"machines",label:"HEAVY MACHINERY",title:"Heavy-duty machines",description:"Dozers, loaders, graders, rollers and site equipment. Find the type suited to your job.",photo:PHOTO_LIBRARY.machines,cta:"Explore heavy machines"},
  {id:"transport",index:"03",site:"transport",label:"HAULAGE & LIFTING",title:"Machine transport",description:"Planning a move? Enquire about loading, low-bed haulage and machine relocation.",photo:PHOTO_LIBRARY.transport,cta:"Plan a movement"},
  {id:"vehicles",index:"04",site:"automobiles",label:"AUTOMOTIVE",title:"Automobiles",description:"Explore vehicles for individuals, companies and work sites. Discuss available specifications directly.",photo:PHOTO_LIBRARY.automobiles,cta:"Explore vehicles"},
@@ -49,7 +49,7 @@ export default function CompanyExperienceV3(){
     </div>
     <div className="ce-hero__foot"><span>GHANA BASED</span><span>ENQUIRIES NATIONWIDE</span><span>INDIVIDUAL BUSINESS SITES</span></div>
    </div>
-   <div className="ce-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.excavators} eager className="ce-hero__photo"/>
+   <div className="ce-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.homepageExcavator} eager className="ce-hero__photo"/>
     <div className="ce-hero__visual-stamp"><small>CHALIN03</small><strong>POWERING<br/>WHAT'S NEXT.</strong></div>
    </div>
   </section>
