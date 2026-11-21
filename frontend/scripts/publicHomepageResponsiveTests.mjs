@@ -32,7 +32,7 @@ assert.ok(page.includes('WHATSAPP')||page.includes('WhatsApp us'));
 assert.ok(!page.includes("WhatsApp Boss"));
 assert.ok(!page.includes("🚜")&&!page.includes("🏗️"),"Cartoon category illustrations must not replace photos");
 assert.equal(new URL(PHOTO_LIBRARY.excavators.source).hostname,"commons.wikimedia.org");
-assert.equal(new URL(PHOTO_LIBRARY.excavators.src).hostname,"commons.wikimedia.org");
+assert.equal(new URL(PHOTO_LIBRARY.excavators.src).hostname,"upload.wikimedia.org");
 assert.ok(photos.includes("EXACT_MODEL_PHOTOS"));
 assert.ok(photos.includes("PHOTO_LIBRARY"));
 assert.equal(new URL(OFFICIAL_SITES.parts).hostname,"spareparts.chalin03.com");
