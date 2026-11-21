@@ -78,6 +78,7 @@ export default function IndependentPartsMarket(){
  const [products,setProducts]=useState([]),[categories,setCategories]=useState([]);
  const [count,setCount]=useState(0),[pages,setPages]=useState(1);
  const [busy,setBusy]=useState(true),[error,setError]=useState("");
+ const [reloadCount,setReloadCount]=useState(0);
  const [basket,setBasket]=useState({}),[basketOpen,setBasketOpen]=useState(false);
  const [customer,setCustomer]=useState(emptyCustomer);
  const [requestKey,setRequestKey]=useState(keygen);
@@ -96,17 +97,34 @@ export default function IndependentPartsMarket(){
   setParams(qs,{replace:true});
  },[query,category,sort,onlyStock,onlyPhotos,page,setParams]);
  useEffect(()=>{
-  let alive=true;const controller=new AbortController();
+  const controller=new AbortController();
+  let retryTimer;
   setBusy(true);setError("");
-  axiosClient.get("/public-commerce/products",{
-   params:{search:query,category,sort,stock:onlyStock?"only":"",photo:onlyPhotos?"only":"",page,limit:24},
-   signal:controller.signal,timeout:17000
-  }).then(({data})=>{if(!alive)return;setProducts(data.products||[]);
-    setCategories(data.categories||[]);setCount(Number(data.count||0));setPages(Math.max(1,Number(data.pages||1)));})
-    .catch(e=>{if(alive&&e?.code!=="ERR_CANCELED")setError(e.response?.data?.message||"We could not load the latest product catalogue. Please retry or contact our team.");})
-    .finally(()=>{if(alive)setBusy(false)});
-  return()=>{alive=false;controller.abort()};
- },[query,category,sort,onlyStock,onlyPhotos,page]);
+  async function loadCatalogue(canRetry){
+   try{
+    const {data}=await axiosClient.get("/public-commerce/products",{
+     params:{search:query,category,sort,stock:onlyStock?"only":"",photo:onlyPhotos?"only":"",page,limit:24},
+     signal:controller.signal,timeout:8000
+    });
+    if(controller.signal.aborted)return;
+    if(!Array.isArray(data?.products))throw new Error("Invalid catalogue response");
+    setProducts(data.products);
+    setCategories(data.categories||[]);
+    setCount(Number(data.count||0));
+    setPages(Math.max(1,Number(data.pages||1)));
+   }catch(e){
+    if(controller.signal.aborted)return;
+    if(canRetry&&([502,503,504].includes(e.response?.status)||["ERR_NETWORK","ECONNABORTED","ETIMEDOUT"].includes(e.code))){
+     retryTimer=setTimeout(()=>loadCatalogue(false),500);
+     return;
+    }
+    setError(e.response?.data?.message||"We could not load the latest product catalogue. Please retry or contact our team.");
+   }
+   setBusy(false);
+  }
+  loadCatalogue(true);
+  return()=>{clearTimeout(retryTimer);controller.abort()};
+ },[query,category,sort,onlyStock,onlyPhotos,page,reloadCount]);
  function resetFilters(){setSearch("");setQuery("");setCategory("");setOnlyStock(false);setOnlyPhotos(false);setSort("featured");setPage(1);}
  function addItem(product){
   if(!product.in_stock||product.price==null)return;
@@ -177,7 +195,7 @@ export default function IndependentPartsMarket(){
    </aside>
    <div className="pm-listings">
     <div className="pm-listings__toolbar"><div><span>{category||"All departments"}</span><strong>{count} products</strong></div></div>
-    {error?<div className="pm-error" role="alert">{error}<button type="button" onClick={()=>{setPage(1);setQuery(search.trim())}}>Retry</button></div>:null}
+    {error?<div className="pm-error" role="alert">{error}<button type="button" onClick={()=>setReloadCount(value=>value+1)}>Retry</button></div>:null}
     {busy?<div className="pm-loading" role="status">Loading the latest catalogue…</div>:null}
     {!busy&&products.length?<div className="pm-grid">{products.map(p=>{
      const photo=displayPhoto(p);
