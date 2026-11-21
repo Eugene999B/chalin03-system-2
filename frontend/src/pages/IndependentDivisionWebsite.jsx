@@ -138,7 +138,7 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
   (i.name+" "+i.brand+" "+i.description).toLowerCase().includes(search.toLowerCase().trim())),[available,maker,search]);
  const enquiry=sectorHref(data.sector);
  return <main className={"bd-site bd-site--"+data.tone}>
-  <PublicPageMeta title={data.lead+" | CHALIN03 Ghana"} description={data.intro} canonicalPath={"/"+sector}/>
+  <PublicPageMeta title={data.lead+" | CHALIN03 Ghana"} description={data.intro} canonicalPath={sector==="equipment-hire"?"/equipment-hire-services":"/"+sector}/>
   <div className="bd-topline"><span>CHALIN03 COMPANY LIMITED · GHANA</span><div><a href="tel:+233540713654">054 071 3654</a><a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WHATSAPP US</a></div></div>
   <header className="bd-header"><Brand/>
    <button className="bd-menu-btn" type="button" onClick={()=>setMenuOpen(v=>!v)} aria-label={menuOpen?"Close navigation":"Open navigation"} aria-expanded={menuOpen}><span/><span/><span/></button>
