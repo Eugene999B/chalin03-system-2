@@ -7,15 +7,17 @@ async function tapTarget(locator){
  const box=await locator.boundingBox();expect(box).not.toBeNull();
  expect(box.height).toBeGreaterThanOrEqual(44);
 }
-test("new CHALIN03 corporate website has independent seven-business photographic desktop experience",async({page},testInfo)=>{
+test("new CHALIN03 corporate website has independent eight-business photographic desktop experience",async({page},testInfo)=>{
  await page.setViewportSize({width:1440,height:900});
  await page.goto("/");
  await expect(page.getByRole("heading",{level:1,name:/CHALIN03.*Company Limited/s})).toBeVisible();
  await expect(page.getByRole("navigation",{name:"Company navigation"})).toBeVisible();
- await expect(page.locator(".ce-division")).toHaveCount(7);
+ await expect(page.locator(".ce-division")).toHaveCount(8);
+ await expect(page.locator(".ce-division").first().getByRole("heading",{name:"Spare Parts Shop"})).toBeVisible();
+ await expect(page.locator(".ce-division").first().getByRole("link",{name:/Browse spare parts/})).toHaveAttribute("href","/shop");
  await expect(page.locator(".ce-trustline")).toBeVisible();
  await expect(page.locator(".ce-hero .real-photo img")).toHaveCount(1);
- await expect(page.locator(".ce-division__media .real-photo img")).toHaveCount(7);
+ await expect(page.locator(".ce-division__media .real-photo img")).toHaveCount(8);
  const parts=page.getByRole("navigation",{name:"Company navigation"}).getByRole("link",{name:"Spare-parts shop"});
  await expect(parts).toHaveAttribute("href","/shop");
  await expect(page.getByRole("link",{name:"Staff portal"}).first()).toHaveAttribute("href","/login");
@@ -26,7 +28,7 @@ test("new company mobile navigation opens dedicated Spare Parts Shop without lay
  await page.setViewportSize({width:390,height:844});
  await page.goto("/");
  await expect(page.getByRole("heading",{level:1,name:/CHALIN03.*Company Limited/s})).toBeVisible();
- await expect(page.locator(".ce-division")).toHaveCount(7);
+ await expect(page.locator(".ce-division")).toHaveCount(8);
  const menu=page.getByRole("button",{name:"Open navigation"});await expect(menu).toBeVisible();
  await tapTarget(menu);await noHorizontalOverflow(page);
  await menu.click();
@@ -43,7 +45,7 @@ test("new company tablet layout retains readable real-photo business cards and f
  await page.setViewportSize({width:768,height:1024});
  await page.goto("/");
  await expect(page.locator(".ce-trustline")).toBeVisible();
- await expect(page.locator(".ce-division")).toHaveCount(7);
+ await expect(page.locator(".ce-division")).toHaveCount(8);
  await expect(page.locator(".real-photo img").first()).toBeVisible();
  await noHorizontalOverflow(page);
  await page.screenshot({path:testInfo.outputPath("chalin03-company-tablet.png"),fullPage:true});
