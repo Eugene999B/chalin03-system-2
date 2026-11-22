@@ -1,0 +1,20 @@
+.installment-sms-summary {
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(135px,1fr));
+ gap:12px;
+ margin:16px 0;
+}
+.installment-sms-summary > div {
+ display:grid;
+ gap:6px;
+ background:#f0f5f1;
+ color:#15332a;
+ border:1px solid #d4e2d9;
+ border-radius:8px;
+ padding:13px 15px;
+}
+.installment-sms-summary span {font-size:.84rem}
+.installment-sms-summary strong {font-size:1.35rem}
+.installment-sms-filters {display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}
+.installment-sms-filters label {display:grid;gap:5px;flex:0 1 235px;font-weight:650}
+.installment-sms-filters select {min-height:44px;padding:8px 10px;color:inherit;background:transparent;border:1px solid #839a8f;border-radius:6px}

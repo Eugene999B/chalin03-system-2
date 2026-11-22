@@ -157,6 +157,46 @@ async function buildBusinessMetrics(start, end) {
   };
 }
 
+function shiftDay(value, days) {
+  const date = new Date(value + "T00:00:00Z");
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function previousComparablePeriod(type, period, through) {
+  const end = through < period.end ? through : period.end;
+  if (type === "weekly") return { start: shiftDay(period.start, -7), end: shiftDay(end, -7) };
+  const previousMonthEnd = shiftDay(period.start, -1);
+  const start = previousMonthEnd.slice(0, 7) + "-01";
+  const day = end === period.end ? Number(previousMonthEnd.slice(8)) :
+    Math.min(Number(end.slice(8)), Number(previousMonthEnd.slice(8)));
+  return { start, end: start.slice(0, 8) + String(day).padStart(2, "0") };
+}
+
+function periodMovement(current, previous) {
+  if (previous == null) return "comparison unavailable";
+  const movement = current - previous;
+  if (movement === 0) return "flat";
+  const amount = money(Math.abs(movement));
+  const change = previous > 0 ? ` (${(Math.abs(movement) / previous * 100).toFixed(1)}%)` : "";
+  return `${movement > 0 ? "up" : "down"} ${amount}${change}`;
+}
+
+async function comparableFlows(period) {
+  const [[sales], [expenses]] = await Promise.all([
+    pool.query(
+      `SELECT COALESCE(SUM(total),0) AS sales_total FROM sales
+       WHERE DATE(created_at) BETWEEN ? AND ? AND is_voided=0 AND sale_status='completed'`,
+      [period.start, period.end]
+    ),
+    pool.query(
+      "SELECT COALESCE(SUM(amount),0) AS expenses_total FROM expenses WHERE expense_date BETWEEN ? AND ?",
+      [period.start, period.end]
+    )
+  ]);
+  return { salesTotal:numeric(sales[0]?.sales_total), expensesTotal:numeric(expenses[0]?.expenses_total) };
+}
+
 function buildAdvice(metrics, type) {
   const advice = [];
   if (metrics.estimatedOperatingResult < 0) advice.push("Operating result is negative for this period; review expenses and low-margin sales before the next period.");
@@ -169,19 +209,29 @@ function buildAdvice(metrics, type) {
   return advice.slice(0, 5);
 }
 
-function buildMessage(type, period, metrics, recipientLabel) {
-  const title = type === "weekly" ? "Chalin 03 Weekly Business Intelligence" : "Chalin 03 Monthly Business Intelligence";
-  const periodLabel = type === "weekly" ? `${period.start} to ${period.end}` : period.start.slice(0, 7);
+function buildMessage(type, period, metrics, recipientLabel, previous) {
+  const title = type === "weekly" ? "Spare Parts weekly review" : "Spare Parts month-end review";
+  const gap = metrics.salesTotal - metrics.paymentsReceived;
+  const collection = metrics.salesTotal > 0
+    ? `${(metrics.paymentsReceived / metrics.salesTotal * 100).toFixed(1)}% of sales`
+    : "no completed sales";
   const advice = buildAdvice(metrics, type);
-  const resultLabel = metrics.estimatedOperatingResult >= 0 ? "estimated operating surplus" : "estimated operating shortfall";
+  const priority = metrics.absoluteVariance > 0 || metrics.awaitingVerification > 0
+    ? `Reconcile ${money(metrics.absoluteVariance)} in absolute closing variances and clear ${metrics.awaitingVerification} pending checks.`
+    : gap > 0 ? `Assign collection follow-up on the ${money(gap)} unpaid against sales in this period.`
+    : metrics.lowStockCount > 0 ? `Review purchasing for ${metrics.lowStockCount} lines at or below reorder level.`
+    : "Review the next reporting period for collection, cost and stock changes.";
+  const gapNote = gap > 0 ? `; ${money(gap)} unpaid` : "";
   return {
     title,
-    message:
-      `${recipientLabel}: ${title} for ${periodLabel}. ` +
-      `Sales ${money(metrics.salesTotal)} across ${metrics.salesCount} sale(s); payments received ${money(metrics.paymentsReceived)}; expenses ${money(metrics.expensesTotal)}; ${resultLabel} ${money(Math.abs(metrics.estimatedOperatingResult))}; outstanding debt ${money(metrics.outstandingDebt)}. ` +
-      `Daily closing: ${metrics.completedClosings}/${metrics.closings} completed, ${metrics.awaitingVerification} awaiting verification, variance exposure ${money(metrics.absoluteVariance)}. ` +
-      `Operations: ${metrics.lowStockCount} low-stock product(s), ${metrics.incidents} Mining incident(s) including ${metrics.seriousIncidents} serious/high. ` +
-      `Management advice: ${advice.join(" ")}`,
+    message: `${recipientLabel} | ${title} | ${period.start} to ${period.end}\n` +
+      `Sales: ${money(metrics.salesTotal)} across ${metrics.salesCount} sales, ${periodMovement(metrics.salesTotal, previous?.salesTotal)} vs comparable period.\n` +
+      `Recorded paid against those sales: ${money(metrics.paymentsReceived)} (${collection})${gapNote}.\n` +
+      `Expenses: ${money(metrics.expensesTotal)}, ${periodMovement(metrics.expensesTotal, previous?.expensesTotal)}. Sales less recorded expenses: ${money(metrics.estimatedOperatingResult)}.\n` +
+      `Current: ${money(metrics.outstandingDebt)} open debt across ${metrics.debtAccounts} accounts; ${metrics.lowStockCount} low-stock lines.\n` +
+      `Priority: ${priority}` +
+      (metrics.seriousIncidents > 0 ? ` Group: ${metrics.seriousIncidents} serious Mining incidents require separate follow-up.` : ""),
+    sms: `CHALIN03 ${title} ${period.end}. ${priority} Sales ${money(metrics.salesTotal)}, ${periodMovement(metrics.salesTotal, previous?.salesTotal)}. Paid ${money(metrics.paymentsReceived)}. Expenses ${money(metrics.expensesTotal)}. Open debt ${money(metrics.outstandingDebt)}. Full figures in Notifications.`,
     advice,
   };
 }
@@ -221,13 +271,19 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
   }
 
   const period = currentPeriod(type, date);
-  const metrics = await buildBusinessMetrics(period.start, period.end);
   const notificationKey = `${type === "weekly" ? WEEKLY_RULE : MONTHLY_RULE}.${period.key}`;
   const [existing] = await pool.query(`SELECT id FROM notifications WHERE notification_key = ? LIMIT 1`, [notificationKey]);
   if (existing.length && !force) return { skipped: true, reason: "already_sent", notification_id: existing[0].id, period };
 
+  const through = date.toISOString().slice(0, 10);
+  const effectivePeriod = { ...period, end: through < period.end ? through : period.end };
+  const previousPeriod = previousComparablePeriod(type, period, through);
+  const [metrics, previous] = await Promise.all([
+    buildBusinessMetrics(effectivePeriod.start, effectivePeriod.end),
+    comparableFlows(previousPeriod),
+  ]);
   const recipientRoles = configuredRecipientRoles(rule);
-  const message = buildMessage(type, period, metrics, "Management");
+  const message = buildMessage(type, effectivePeriod, metrics, "Management", previous);
   const targetRole = recipientRoles.join(",");
   const notificationType = type === "weekly" ? "weekly_business_intelligence" : "monthly_business_intelligence";
 
@@ -235,19 +291,19 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
   if (notificationId) {
     await pool.query(
       `UPDATE notifications SET title=?, message=?, target_role=?, status='active', metadata_json=?, updated_at=NOW() WHERE id=?`,
-      [message.title, message.message, targetRole, JSON.stringify({ type, period, metrics, advice: message.advice, recipientRoles }), notificationId]
+      [message.title, message.message, targetRole, JSON.stringify({ type, period: effectivePeriod, metrics, previousPeriod, previous, advice: message.advice, recipientRoles }), notificationId]
     );
   } else {
     const [insert] = await pool.query(
       `INSERT INTO notifications (notification_key, rule_id, rule_code, workspace_code, target_role, target_permission, category, notification_type, severity, title, message, action_path, source_type, source_reference, status, auto_generated, occurred_at, metadata_json)
        VALUES (?, ?, ?, 'group', ?, 'notifications.view', 'executive', ?, ?, ?, ?, '/group-executive-control', 'executive_business_report', ?, 'active', TRUE, NOW(), ?)`,
-      [notificationKey, rule.id, rule.rule_code, targetRole, notificationType, metrics.estimatedOperatingResult < 0 ? "high" : "medium", message.title, message.message, period.key, JSON.stringify({ type, period, metrics, advice: message.advice, recipientRoles })]
+      [notificationKey, rule.id, rule.rule_code, targetRole, notificationType, metrics.estimatedOperatingResult < 0 ? "high" : "medium", message.title, message.message, period.key, JSON.stringify({ type, period: effectivePeriod, metrics, previousPeriod, previous, advice: message.advice, recipientRoles })]
     );
     notificationId = insert.insertId;
   }
 
   await sendToRoles(
-    { id: notificationId, notification_key: notificationKey, message: message.message, type: notificationType },
+    { id: notificationId, notification_key: notificationKey, message: message.sms, type: notificationType },
     rule,
     recipientRoles
   );
@@ -255,7 +311,8 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
   if (rule.sms_allowed) {
     await sendOwnerSmsAlert({
       branchId: 1,
-      message: `${message.title}: ${message.message}`,
+      message: message.sms,
+      ownerOnly: true,
       smsType: notificationType,
       sourceReference: notificationKey,
     });
@@ -298,6 +355,8 @@ module.exports = {
   configuredRecipientRoles,
   isWeeklySendWindow,
   isMonthEndSendWindow,
+  buildMessage,
+  previousComparablePeriod,
   sendBusinessReport,
   runScheduledBusinessReports,
 };

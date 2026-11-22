@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
+import "../styles/installmentSmsCentre.css";
 
 const LEGACY_API = "/equipment-catalogue/sales";
 const API = `${LEGACY_API}/phase6`;
@@ -220,6 +221,8 @@ export default function EquipmentSalesReportsPage() {
     () => accounts.find((account) => String(account.agreement_id || account.id) === String(selectedAgreementId)),
     [accounts, selectedAgreementId]
   );
+  const [messageAudience, setMessageAudience] = useState("all");
+  const [messageStatus, setMessageStatus] = useState("all");
   const messageRows = useMemo(() => {
     if (!messages) return [];
     return [
@@ -232,8 +235,13 @@ export default function EquipmentSalesReportsPage() {
           new Date(right.created_at || 0).getTime() -
           new Date(left.created_at || 0).getTime()
       )
-      .slice(0, 50);
+      .slice(0, 100);
   }, [messages]);
+  const visibleMessages = messageRows.filter(row =>
+    (messageAudience === "all" || row.recipient_type === messageAudience) &&
+    (messageStatus === "all" || row.delivery_status === messageStatus));
+  const messageStatuses = [...new Set(messageRows.map(row => row.delivery_status).filter(Boolean))];
+  const messageAudiences = [...new Set(messageRows.map(row => row.recipient_type).filter(Boolean))];
 
   return (
     <main className="finance-simple" data-testid="phase6-finance-reports">
@@ -641,12 +649,28 @@ export default function EquipmentSalesReportsPage() {
           <section className="finance-simple__section" data-testid="phase6-message-history">
             <div className="finance-simple__section-header">
               <div>
-                <p className="finance-simple__eyebrow">Notification evidence</p>
+                <p className="finance-simple__eyebrow">Installment SMS centre</p>
                 <h2>SMS History</h2>
                 <span className="finance-simple__muted">
                   Customer payment receipts, boss alerts, upcoming-payment reminders and overdue reminders.
                 </span>
               </div>
+            </div>
+            <div className="installment-sms-summary" aria-label="Recent SMS activity">
+              <div><span>Customer receipts</span><strong>{messages?.customer_payment_receipts?.length ?? 0}</strong></div>
+              <div><span>Boss payment alerts</span><strong>{messages?.boss_payment_alerts?.length ?? 0}</strong></div>
+              <div><span>Payment reminders</span><strong>{messages?.reminders?.length ?? 0}</strong></div>
+              <div><span>Failed in recent history</span><strong>{messageRows.filter(row=>row.delivery_status==="failed").length}</strong></div>
+            </div>
+            <div className="installment-sms-filters">
+              <label>Audience<select value={messageAudience} onChange={event=>setMessageAudience(event.target.value)}>
+                <option value="all">All recipients</option>
+                {messageAudiences.map(value=><option key={value} value={value}>{label(value)}</option>)}
+              </select></label>
+              <label>Delivery status<select value={messageStatus} onChange={event=>setMessageStatus(event.target.value)}>
+                <option value="all">All delivery states</option>
+                {messageStatuses.map(value=><option key={value} value={value}>{label(value)}</option>)}
+              </select></label>
             </div>
             <div className="finance-simple__table-wrap">
               <table className="finance-simple__table">
@@ -654,7 +678,7 @@ export default function EquipmentSalesReportsPage() {
                   <tr><th>Created</th><th>Type</th><th>Agreement / Receipt</th><th>Recipient</th><th>Status</th><th>Message</th><th>Delivery note</th></tr>
                 </thead>
                 <tbody>
-                  {messageRows.map((row) => (
+                  {visibleMessages.map((row) => (
                     <tr key={`${row.message_type}-${row.id}-${row.recipient_type}`}>
                       <td>{dateTimeLabel(row.created_at)}</td>
                       <td>{label(row.message_type)}</td>
@@ -665,7 +689,7 @@ export default function EquipmentSalesReportsPage() {
                       <td>{row.last_error || "—"}</td>
                     </tr>
                   ))}
-                  {!messageRows.length ? <tr><td colSpan="7">No Finance SMS evidence yet.</td></tr> : null}
+                  {!visibleMessages.length ? <tr><td colSpan="7">{messageRows.length?"No messages match these filters.":"No Finance SMS evidence yet."}</td></tr> : null}
                 </tbody>
               </table>
             </div>
