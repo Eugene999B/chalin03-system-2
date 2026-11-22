@@ -7,6 +7,10 @@ import {fileURLToPath} from "node:url";
 const photoKeys=Object.keys(PHOTO_LIBRARY);
 assert.ok(photoKeys.length>=25,"Expected real category and exact model photo library");
 const urls=new Set();
+assert.ok(PHOTO_LIBRARY.parts.source.endsWith("Heavy-machinery-parts.jpg"),"Parts homepage must show a wide range of industrial parts, not the old isolated fittings");
+assert.ok(PHOTO_LIBRARY.motorcycles.source.includes("BMW_R_1250_GS_(1).jpg"),"Motorcycle homepage must show the new premium motorcycle photo");
+assert.notEqual(PHOTO_LIBRARY.parts.src,PHOTO_LIBRARY.hoses.src,"Parts homepage must not repeat the single-hose reference");
+assert.notEqual(PHOTO_LIBRARY.motorcycles.src,PHOTO_LIBRARY.honda.src,"Motorcycle homepage must not repeat the old commuter-bike image");
 for(const [key,photo] of Object.entries(PHOTO_LIBRARY)){
  const image=new URL(photo.src),original=new URL(photo.original),source=new URL(photo.source);
  assert.equal(image.hostname,"upload.wikimedia.org","Broken direct photo CDN for "+key);
