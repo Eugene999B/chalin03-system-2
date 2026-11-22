@@ -15,6 +15,7 @@ test("finance SMS campaign remains a specific, approved offer", () => {
   assert.match(DEFAULT_MESSAGE, /ready.cash/i);
   assert.match(DEFAULT_MESSAGE, /installment/i);
   assert.match(DEFAULT_MESSAGE, /discount/i);
+  assert.match(DEFAULT_MESSAGE, /024 946 9080/);
   assert.ok(DEFAULT_MESSAGE.length <= 480);
 });
 
