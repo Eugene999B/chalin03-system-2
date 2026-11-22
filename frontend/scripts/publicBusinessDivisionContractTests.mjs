@@ -30,6 +30,8 @@ for(const item of ["Caterpillar","Komatsu","Hitachi","Volvo","SANY","Kobelco","D
 assert.ok(sector.includes("not live inventory")||sector.includes("not a guarantee")||sector.includes("not verified stock"),"Stock disclaimer missing");
 assert.ok(home.includes('ce-trustline')&&home.includes('siteHref("parts")'),"Separate featured market missing from homepage");
 assert.ok(home.includes('ce-division-grid')&&home.includes("RealPhoto"),"Distinct real-photo business divisions missing");
+assert.ok(home.includes('const divisions=[\n {id:"parts",site:"parts"'),"Spare Parts Shop must be the first business card on the homepage");
+assert.ok(home.includes('photo:PHOTO_LIBRARY.parts,cta:"Browse spare parts"'),"Spare Parts Shop must show its real reference photo and shop link");
 assert.ok(shop.includes('pm-departments')&&shop.includes('pm-grid'),"Shop departments/grid missing");
 assert.ok(shop.includes('photosrc(product.image_url)')&&backend.includes('row.id+"/photo?v="'),"SKU-specific photos must be linked to product records");
 assert.ok(shop.includes('href={askPhoto(p)}')&&shop.includes('Product #"+product.id'),"SKU-specific enquiry missing");

@@ -11,6 +11,7 @@ import "../styles/chalin03PublicRebuild.css";
 const SALES_PHONE="+233540713654",MAIN_PHONE="+233249469080";
 const WHATSAPP="https://wa.me/233540713654?text="+encodeURIComponent("Hello CHALIN03, I would like to make an enquiry.");
 const divisions=[
+ {id:"parts",site:"parts",label:"SPARE PARTS & LUBRICANTS",title:"Spare Parts Shop",description:"Browse genuine Main Store listings for filters, lubricants, tools and machine parts. Search products, compare GHS prices and send an enquiry.",photo:PHOTO_LIBRARY.parts,cta:"Browse spare parts"},
  {id:"excavators",site:"excavators",label:"EQUIPMENT SALES",title:"Excavators",description:"Real machines for real work. Explore makes and model references, then request a verified quotation.",photo:PHOTO_LIBRARY.homepageExcavator,cta:"Explore excavators"},
  {id:"heavy",site:"machines",label:"HEAVY MACHINERY",title:"Heavy-duty machines",description:"Dozers, loaders, graders, rollers and site equipment. Find the type suited to your job.",photo:PHOTO_LIBRARY.machines,cta:"Explore heavy machines"},
  {id:"transport",site:"transport",label:"HAULAGE & LIFTING",title:"Machine transport",description:"Planning a move? Enquire about loading, low-bed haulage and machine relocation.",photo:PHOTO_LIBRARY.transport,cta:"Plan a movement"},
