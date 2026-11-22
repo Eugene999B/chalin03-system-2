@@ -76,6 +76,7 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [challenge, setChallenge] = useState("");
+  const [oneTimeVerification, setOneTimeVerification] = useState("");
   const [step, setStep] = useState("identify");
   const [code, setCode] = useState("");
   const [backupMode, setBackupMode] = useState(false);
@@ -118,7 +119,7 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
     window.history.replaceState({}, "", url.pathname + url.search + url.hash);
   }
   function reset() {
-    setStep("identify"); setCode(""); setChallenge("");
+    setStep("identify"); setCode(""); setChallenge(""); setOneTimeVerification("");
     setSetup(null); setRecoveryCodes([]); setBackupMode(false);
     setPendingSession(null); setError(""); setNotice("");
   }
@@ -133,6 +134,11 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
         branch_id: isSpareParts ? Number(selectedBranchId) : null,
       });
       setChallenge(data.challenge); setCode(""); setBackupMode(false);
+      if (data.stage === "identity") {
+        setStep("identity");
+        setNotice("Confirm ownership once to activate your Authenticator. Future sign-ins will not ask for this.");
+        return;
+      }
       if (data.stage === "sms") {
         setStep("sms"); setNotice("Enter the one-time message sent to your registered phone.");
       } else if (data.stage === "authenticator") {
@@ -143,6 +149,26 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
     } catch (e) { setError(messageFrom(e)); }
     finally { setBusy(false); }
   }
+  async function submitFirstSetupIdentity(event) {
+    event.preventDefault();
+    if (!oneTimeVerification || busy) return;
+    setBusy(true); setError("");
+    try {
+      const { data } = await axiosClient.post(API + "/first-setup/verify", {
+        challenge, verification: oneTimeVerification,
+      });
+      setOneTimeVerification("");
+      if (data.stage !== "setup" || !data.qr_data_url || !data.secret) {
+        throw new Error("Authenticator enrollment could not be started.");
+      }
+      setSetup(data); setStep("setup"); setCode("");
+      setNotice("Account confirmed. Add CHALIN03 to your Authenticator app and enter its six-digit code.");
+    } catch (error) {
+      setOneTimeVerification("");
+      setError(error.response?.data?.message || "Account confirmation failed. Check your existing credential and try again.");
+    } finally { setBusy(false); }
+  }
+
   async function submitSms(event) {
     event.preventDefault(); if (!/^\d{6}$/.test(code)) return;
     setBusy(true); setError("");
@@ -184,9 +210,9 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
     : workspace?.loginContextTitle || workspace?.name;
   const label = workspaceCode === "mining" ? "Mining Dashboard"
     : workspaceCode === "equipment_hire" ? "Equipment Sales & Hire Dashboard" : "Spare Parts Dashboard";
-  const title = { identify: "Welcome back", sms: "Verify your phone", setup: "Set up Authenticator",
+  const title = { identify: "Welcome back", identity: "Confirm your account", sms: "Verify your phone", setup: "Set up Authenticator",
     authenticator: "Enter your security code", backup: "Save your backup codes" }[step];
-  const subtitle = { identify: "Select a business and continue.", sms: "This check is only needed when you set up your account.",
+  const subtitle = { identify: "Select a business and continue.", identity: "A one-time identity check protects your first Authenticator key. No SMS is needed.", sms: "This check is only needed when you set up your account.",
     setup: "Scan the QR code or copy the setup key into your Authenticator app.",
     authenticator: "Enter the code from your Authenticator app to continue.",
     backup: "Keep a private copy of these one-time recovery codes." }[step];
@@ -264,6 +290,19 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
                 <span>{busy ? "◌" : "→"}</span>
                 <div><strong>{busy ? "Checking account…" : "Continue securely"}</strong>
                   <small>Use Authenticator or a one-time backup code</small></div>
+              </button>
+            </form>}
+
+            {step === "identity" && <form className="gate4__form" onSubmit={submitFirstSetupIdentity}>
+              <p className="gpl-notice">This is your first setup. Confirm that the account belongs to you using your existing sign-in credential. You won't need it after activating Authenticator.</p>
+              <label className="gate4__field"><span>One-time account confirmation</span>
+                <input type="password" value={oneTimeVerification} onChange={(e) => setOneTimeVerification(e.target.value)}
+                  autoComplete="current-password" placeholder="Enter your existing credential" maxLength={256}
+                  disabled={busy} required autoFocus />
+              </label>
+              <button type="submit" className="gate4__submit" disabled={busy || !oneTimeVerification}>
+                <span>→</span><div><strong>{busy ? "Confirming account…" : "Create my Authenticator key"}</strong>
+                  <small>No SMS. The next screen shows your private QR code.</small></div>
               </button>
             </form>}
 
