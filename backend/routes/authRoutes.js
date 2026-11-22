@@ -1081,6 +1081,10 @@ router.get("/me", requireAuth, async (req, res) => {
       }
     }
 
+    const profile = await buildUserResponse(user, selectedBranch, workspace);
+    if (req.user.login_method === "authenticator") {
+      profile.must_change_password = false;
+    }
     return res.json({
       status: "success",
       workspace: {
@@ -1088,7 +1092,7 @@ router.get("/me", requireAuth, async (req, res) => {
         code: workspace.code,
         name: workspace.name,
       },
-      user: await buildUserResponse(user, selectedBranch, workspace),
+      user: profile,
     });
   } catch (error) {
     console.error("Me route error:", error);
