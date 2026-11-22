@@ -115,5 +115,44 @@
     "alt": "A toothed excavator digging bucket",
     "evidence": "Excavator bucket shown. Confirm LiuGong model, capacity, pin diameter and pin spacing.",
     "changes": "Resized and converted to WebP"
+  },
+  "82": {
+    "source": "https://commons.wikimedia.org/wiki/File:Thread-locking_fluid.jpg",
+    "credit": "Honmingjun",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Bottles of thread-locking fluid",
+    "name": "Tread Locker",
+    "size": "All",
+    "evidence": "The photo shows thread-locking compound. Confirm the stocked brand and strength.",
+    "localSrc": "/images/catalogue/82-960.webp",
+    "srcSet": "/images/catalogue/82-480.webp 371w, /images/catalogue/82-960.webp 743w"
+  },
+  "289": {
+    "source": "https://commons.wikimedia.org/wiki/File:Adjustable_spanner.jpg",
+    "credit": "Mike Peel (www.mikepeel.net)",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "An adjustable spanner showing its moving jaw",
+    "name": "Shifting Spanner",
+    "size": "None",
+    "evidence": "The moving jaw identifies an adjustable spanner. Confirm the stocked jaw range and length.",
+    "localSrc": "/images/catalogue/289-960.webp",
+    "srcSet": "/images/catalogue/289-480.webp 480w, /images/catalogue/289-960.webp 960w"
+  },
+  "374": {
+    "source": "https://commons.wikimedia.org/wiki/File:Ta%C5%9Bma_uszczelniaj%C4%85ca_teflonowa_i_z%C5%82%C4%85czka_%2802%29_-_DSC05204_v2.jpg",
+    "credit": "Pece",
+    "license": "CC BY 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "PTFE thread-sealing tape with a threaded fitting",
+    "name": "TREAD TAPE",
+    "size": "None",
+    "evidence": "The photo shows thread-sealing tape with a fitting. Confirm stocked tape material and width.",
+    "localSrc": "/images/catalogue/374-960.webp",
+    "srcSet": "/images/catalogue/374-480.webp 480w, /images/catalogue/374-960.webp 960w"
   }
 }

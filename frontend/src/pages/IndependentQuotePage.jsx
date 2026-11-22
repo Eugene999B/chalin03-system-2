@@ -7,6 +7,7 @@ import {PHOTO_LIBRARY} from "../data/verifiedPublicPhotos";
 import {SECTOR_TO_SITE,getOfficialSite,siteHref} from "../config/officialSites";
 import "../styles/independentQuotePage.css";
 import "../styles/chalin03PublicRefresh.css";
+import "../styles/chalin03PublicRebuild.css";
 
 const entries=[
  {id:"excavators",label:"Excavators",photo:PHOTO_LIBRARY.excavators},

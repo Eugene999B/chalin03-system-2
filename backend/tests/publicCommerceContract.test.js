@@ -3,7 +3,7 @@ const test=require("node:test");
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
 const path=require("node:path");
-const {category,safeImageUrl,safeProduct,samePhone,photoSubmission,MAIN_STORE}=require("../routes/publicCommerceRoutes");
+const {category,safeImageUrl,safeProduct,samePhone,photoSubmission,cataloguePhotoRank,MAIN_STORE}=require("../routes/publicCommerceRoutes");
 const {schema}=require("../scripts/migratePublicCommerceSchema");
 const root=path.resolve(__dirname,"..");
 function read(file){return fs.readFileSync(path.join(root,file),"utf8");}
@@ -138,4 +138,13 @@ test("approved uploads require a recorded match and reuse rights",()=>{
  }
  const source="https://commons.wikimedia.org/wiki/File:Part.jpg";
  assert.equal(photoSubmission({...reference,photo_source_url:source}).source,source);
+});
+
+test("catalogue ranks verified images and matches static references by ID, name and size",()=>{
+ const listing={id:11,name:"Shell Oil 1L",size:"All",photo_status:"missing"};
+ assert.equal(cataloguePhotoRank(listing),1);
+ assert.equal(cataloguePhotoRank({...listing,size:"20L"}),0);
+ assert.equal(cataloguePhotoRank({...listing,id:12}),0);
+ assert.equal(cataloguePhotoRank({...listing,photo_status:"verified_exact"}),2);
+ assert.equal(cataloguePhotoRank({...listing,id:12,photo_status:"honest_reference"}),1);
 });

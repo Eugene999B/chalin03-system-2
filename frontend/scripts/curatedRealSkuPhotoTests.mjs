@@ -4,6 +4,8 @@ import {readFileSync} from "node:fs";
 import photos from "../src/data/catalogueReferencePhotos.json" with {type:"json"};
 import {referenceSkuPhoto} from "../src/data/catalogueReferencePhotos.js";
 
+const backendIdentities=JSON.parse(readFileSync(new URL("../../backend/data/catalogueReferenceIdentities.json",import.meta.url)));
+assert.deepEqual(backendIdentities,Object.fromEntries(Object.entries(photos).map(([id,{name,size}])=>[id,{name,size}])));
 const hashes=new Set();
 for(const [id,photo] of Object.entries(photos)){
  assert.equal(referenceSkuPhoto({id,name:photo.name,size:photo.size}),photo);

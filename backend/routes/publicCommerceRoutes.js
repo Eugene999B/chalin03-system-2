@@ -10,6 +10,8 @@ const {requireAuth}=require("../middleware/authMiddleware");
 const {writeAuditEvent}=require("../services/auditTrailService");
 const {normalizeStoredImage}=require("../services/equipmentFinanceProtectedImageService");
 
+const referenceIdentities=require("../data/catalogueReferenceIdentities.json");
+
 const router=express.Router();
 const MAIN_STORE=1; // Source workbook: MAIN - Chalin 03 Main Store, Store ID 1.
 const ALLOWED_TYPES=new Set(["parts_order","equipment_enquiry","service_enquiry","message"]);
@@ -95,6 +97,11 @@ async function auditAction(req,action,id,details){
     entityId:id,actionType:action,outcome:"success",severity:"notice"});
  }catch(error){console.warn("Public commerce audit deferred:",error.code||"AUDIT_ERROR");}
 }
+function cataloguePhotoRank(product){
+ if(product.photo_status==="verified_exact")return 2;
+ const ref=referenceIdentities[product.id];
+ return product.photo_status==="honest_reference"||(ref?.name===product.name&&ref?.size===product.size)?1:0;
+}
 function safeProduct(row){
  const group=str(row.category_override)||category(row.name,row.category);
  const photo=photoDetails(row);
@@ -171,12 +178,13 @@ router.get("/products",async(req,res)=>{
   const terms=search.split(/\s+/).filter(Boolean).slice(0,8);
   const onlyInStock=req.query.stock==="only";
   const onlyWithPhoto=req.query.photo==="only";
+  const anyPhoto=req.query.photo==="any";
   let results=data.filter(p=>{
     const indexed=[p.name,p.size,p.category].join(" ").toLowerCase();
     return terms.every(term=>indexed.includes(term)) &&
       (!group||p.category===group) &&
       (!onlyInStock||p.in_stock) &&
-      (!onlyWithPhoto||p.has_photo);
+      (!onlyWithPhoto||p.has_photo) && (!anyPhoto||cataloguePhotoRank(p)>0);
   });
   const relevance=p=>{
     if(!terms.length)return 0;
@@ -187,7 +195,7 @@ router.get("/products",async(req,res)=>{
   results.sort((a,b)=>{
    if(sort==="price_asc")return (a.price??Infinity)-(b.price??Infinity)||a.name.localeCompare(b.name);
    if(sort==="price_desc")return (b.price??-1)-(a.price??-1)||a.name.localeCompare(b.name);
-   if(sort==="featured")return relevance(b)-relevance(a)||Number(b.featured)-Number(a.featured)||Number(b.in_stock)-Number(a.in_stock)||a.name.localeCompare(b.name);
+   if(sort==="featured")return relevance(b)-relevance(a)||Number(b.featured)-Number(a.featured)||cataloguePhotoRank(b)-cataloguePhotoRank(a)||Number(b.in_stock)-Number(a.in_stock)||a.name.localeCompare(b.name);
    return a.name.localeCompare(b.name);
   });
   res.setHeader("Cache-Control","public,max-age=30,stale-while-revalidate=60");
@@ -540,4 +548,4 @@ router.post("/staff/requests/:id/fulfill",requireAuth,requireManager,async(req,r
   return res.status(503).json({status:"error",message:"Could not verify the completed sale. No order was marked fulfilled."});
  }finally{c.release();}
 });
-module.exports={router,category,safeImageUrl,safeProduct,samePhone,photoSubmission,MAIN_STORE};
+module.exports={router,category,safeImageUrl,safeProduct,samePhone,photoSubmission,cataloguePhotoRank,MAIN_STORE};
