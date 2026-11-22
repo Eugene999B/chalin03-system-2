@@ -7,7 +7,7 @@ const requestKey=()=>globalThis.crypto?.randomUUID?.()||
  ("e95f9365-6ca0-44a3-8661-"+Math.random().toString(16).slice(2).padEnd(12,"0").slice(0,12));
 
 /** This is an asynchronous website enquiry, not a misleading live-chat promise. */
-export default function PublicContactPanel({subject="General enquiry",inline=false}){
+export default function PublicContactPanel({subject="General enquiry",inline=false,whatsAppUrl="https://wa.me/233540713654"}){
  const [open,setOpen]=useState(false);
  const [fields,setFields]=useState(blank);
  const [requestId,setRequestId]=useState(requestKey);
@@ -54,7 +54,7 @@ export default function PublicContactPanel({subject="General enquiry",inline=fal
     </form>}
    <div className="public-contact__links">
     <a href="tel:+233540713654">Call us</a>
-    <a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us</a>
+    <a href={whatsAppUrl} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
    </div>
   </section>:null}
   {!inline?<button className="public-contact__trigger" type="button" aria-expanded={open}

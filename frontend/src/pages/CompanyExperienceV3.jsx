@@ -100,7 +100,7 @@ export default function CompanyExperienceV3(){
     <p>Questions about spare parts, excavators, transport, vehicles, heavy machinery or gold-sector services? Describe your requirements and our team can follow up.</p>
     <p className="ce-message__notice">Photos are references unless explicitly verified as actual CHALIN03 stock.</p>
    </div>
-   <PublicContactPanel subject="CHALIN03 company website customer enquiry" inline/>
+   <PublicContactPanel subject="CHALIN03 company website customer enquiry" whatsAppUrl={WHATSAPP} inline/>
   </section>
   <footer className="ce-footer"><div><Brand inverse/><p>Dunkwa Police Barrier · Ghana</p><p>Real equipment, practical services, and people ready to help.</p></div>
    <div className="ce-footer__links"><strong>DISCOVER</strong><a href={siteHref("parts")}>Spare-parts shop</a><a href={siteHref("excavators")}>Excavators</a><a href={siteHref("machines")}>Heavy machinery</a><a href={siteHref("automobiles")}>Automobiles</a><a href={siteHref("motorcycles")}>Motorcycles</a></div>
