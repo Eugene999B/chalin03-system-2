@@ -7,6 +7,7 @@ const page=read("src/pages/StaffPasswordlessLogin.jsx");
 const wrapper=read("src/pages/LoginPageGroupOperations.jsx");
 const settings=read("src/pages/StaffAccountSecurityPage.jsx");
 const css=read("src/styles/loginPasswordlessClassic.css");
+const entry=read("src/pages/LoginPage.jsx");
 const api=read("../backend/routes/staffPasswordlessRoutes.js");
 for(const marker of ["gate4__topbar","gate4__brand","gate4__logo","gate4__online","gate4__layout",
  "gate4__workspace-tabs","gate4__context-strip","gate4__field--store","gate4__form",
@@ -28,4 +29,8 @@ assert.match(settings,/\/administrator\/start/,"Trusted-session setup endpoint s
 assert.match(api,/isOriginalSystemAdministrator\(user\)&&!alreadyEnrolled/,"Anonymous original admin enrollment blocked");
 assert.match(api,/\/administrator\/start",requireAuth/,"Administrator enrollment requires valid session");
 assert.match(css,/\.gate4-passwordless/);
+assert.match(api,/\/start\/verified",requireAuth/,"Trusted original account requires valid session");
+assert.match(page,/allowSignedInSetup \? "\/start\/verified" : "\/start"/,"Trusted flow routes to verified endpoint");
+assert.match(entry,/needsInitialSetup === true/,"Original account can enter its name from a verified device");
+assert.match(entry,/auth\/passwordless\/account\/status/,"Enrollment status checked from server");
 console.log("CHALIN03 original-design passwordless flow contract passed");
