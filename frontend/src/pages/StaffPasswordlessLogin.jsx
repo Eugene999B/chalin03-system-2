@@ -212,7 +212,7 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
       const serverCode = e.response?.data?.code || "";
       const wrongCode = serverCode === "SECURITY_CODE_INCORRECT";
       const blockedCode = ["CODE_ATTEMPTS_EXHAUSTED", "RATE_LIMITED", "VERIFICATION_EXPIRED"].includes(serverCode);
-      const displayMessage = wrongCode ? "Incorrect code. Check Google Authenticator, then enter the newest six-digit code."
+      const displayMessage = wrongCode ? (backupMode ? "That backup code is incorrect or has already been used. Check your saved codes and try again." : "Incorrect code. Check Google Authenticator, then enter the newest six-digit code.")
         : blockedCode ? messageFrom(e) : e.response ? messageFrom(e) : e.message;
       setCode("");
       setVerificationError(displayMessage);
