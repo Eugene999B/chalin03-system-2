@@ -1,5 +1,9 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto=require("node:crypto");
+const {enforced:passwordlessEnforced,pilotEnabled:passwordlessPilotEnabled}=require("../services/staffPasswordlessCrypto");
+const {sendSmsAlertToPhone}=require("../services/smsAlertService");
+const {getSmsConfig}=require("../services/smsService");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -693,10 +697,13 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    if (!cleanFullName || !cleanUsername || !password || !cleanRole) {
+    const passwordlessOnly=passwordlessEnforced();
+    if (!cleanFullName || !cleanUsername || (!password && !passwordlessOnly) || !cleanRole || (passwordlessOnly && !normalizedLoginPhone)) {
       return res.status(400).json({
         status: "error",
-        message: "Full name, username, password and role are required.",
+        message: passwordlessOnly
+          ? "Full name, username, role and a unique Ghana phone are required."
+          : "Full name, username, password and role are required.",
       });
     }
 
@@ -707,7 +714,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (!passwordlessOnly && password.length < 6) {
       return res.status(400).json({
         status: "error",
         message: "Password must be at least 6 characters.",
@@ -715,7 +722,10 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const selectedBranchIds = normalizeBranchIds(branch_ids, branchId);
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Preserve the required DB column, but do not create a usable password for
+    // users invited after the verified passwordless-only cutover.
+    const credential=passwordlessOnly?crypto.randomBytes(48).toString("hex"):password;
+    const passwordHash = await bcrypt.hash(credential, 10);
 
     await connection.beginTransaction();
 
@@ -777,9 +787,21 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       accessAllBranches,
     });
 
+    let invitationState="not_enabled";
+    if(passwordlessPilotEnabled()&&normalizedLoginPhone){
+      const config=getSmsConfig();
+      if(config.enabled&&config.provider!=="mock"){
+        const sent=await sendSmsAlertToPhone({branchId,phone:normalizedLoginPhone,
+          message:"CHALIN03: Your staff account is ready. Install Google Authenticator. Open work.chalin03.com, enter your username, verify the first SMS code and save your backup codes. Never share codes.",
+          smsType:"security_alert",sentBy:req.user.id,sourceReference:"staff-passwordless-new-account-invite"});
+        invitationState=sent.ok?sent.status:"failed";
+      }else invitationState="sms_unavailable";
+    }
+
     return res.status(201).json({
       status: "success",
       message: "User created successfully.",
+      invitation_status: invitationState,
       user: normalizeUserRow(createdUser),
     });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import axiosClient from "../api/axiosClient";
+import StaffPasswordlessLogin from "./StaffPasswordlessLogin.jsx";
 import { useAuth } from "../context/AuthContext";
 import { businessWorkspaces, getBusinessWorkspace } from "../data/businessWorkspaces";
 import { collectDeviceEvidence } from "../utils/deviceEvidence";
@@ -133,7 +134,7 @@ function GroupOperationsMap() {
   );
 }
 
-export default function LoginPageGroupOperations() {
+function LegacyLoginPageGroupOperations() {
   const {
     isLoggedIn,
     login,
@@ -906,4 +907,21 @@ export default function LoginPageGroupOperations() {
       )}
     </main>
   );
+}
+
+// Passwordless login is selected by the backend's pilot mode, not by query parameters.
+// When the pilot is off, the original staff experience remains unchanged.
+export default function LoginPageGroupOperations() {
+  const [mode, setMode] = useState("loading");
+  useEffect(() => {
+    let mounted = true;
+    axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
+      .then((response) => { if (mounted) setMode(response.data?.pilot ? (response.data?.enforced ? "passwordless-enforced" : "passwordless") : "legacy"); })
+      .catch(() => { if (mounted) setMode("legacy"); });
+    return () => { mounted = false; };
+  }, []);
+  if (mode === "passwordless" && new URLSearchParams(window.location.search).get("admin_setup") === "1") return <LegacyLoginPageGroupOperations />;
+  if (mode === "passwordless" || mode === "passwordless-enforced") return <StaffPasswordlessLogin showAdminBootstrap={mode === "passwordless"} />;
+  if (mode === "loading") return <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f4ee"}}><p>Preparing secure access…</p></main>;
+  return <LegacyLoginPageGroupOperations />;
 }

@@ -47,6 +47,9 @@ const {
 } = require("./services/productionSchemaReadinessService");
 
 const authRoutes = require("./routes/authRoutes");
+const staffPasswordlessRoutes = require("./routes/staffPasswordlessRoutes");
+const staffGoogleLinkRoutes = require("./routes/staffGoogleLinkRoutes");
+const {blockLegacySignInWhenEnforced}=require("./services/staffPasswordlessCutoverGuard");
 const passkeyRoutes = require("./routes/passkeyRoutes");
 const productRoutes = require("./routes/productRoutes");
 const {router:publicCommerceRoutes} = require("./routes/publicCommerceRoutes");
@@ -314,7 +317,13 @@ app.use(
   requireDelegatedCapability("system_operations")
 );
 app.use("/api", systemRoutes);
+app.use("/api/auth", blockLegacySignInWhenEnforced);
 app.use("/api/auth", authRoutes);
+// Pilot is OFF by default and never changes current password authentication.
+if (process.env.STAFF_PASSWORDLESS_PILOT === "true") {
+  app.use("/api/auth/passwordless", loginLimiter, staffPasswordlessRoutes);
+  app.use("/api/auth/passwordless/google", loginLimiter, staffGoogleLinkRoutes);
+}
 app.use("/api/auth/passkeys", passkeyRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productPriceApprovalRoutes);
 app.use("/api/products", requireAuth, sparePartsBoundary, productRoutes);

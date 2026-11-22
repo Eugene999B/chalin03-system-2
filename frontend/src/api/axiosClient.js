@@ -17,6 +17,11 @@ const FINANCE_APPLICATION_TIMEOUT_MS = 12000;
 const FINANCE_RESET_TIMEOUT_MS = 120000;
 const PUBLIC_SESSION_PATHS = new Set([
   "/auth/login",
+  "/auth/passwordless/mode",
+  "/auth/passwordless/start",
+  "/auth/passwordless/sms/verify",
+  "/auth/passwordless/setup/confirm",
+  "/auth/passwordless/verify",
   "/auth/recovery/request-otp",
   "/auth/recovery/reset-password",
   "/branches/public",
@@ -238,6 +243,7 @@ axiosClient.interceptors.response.use(
     const isOwnerRecoveryPage = window.location.pathname === "/owner-recovery";
     const isStaleSessionResponse = statusCode === 401 && Boolean(requestToken) && Boolean(activeToken) && requestToken !== activeToken;
     const isChangePasswordCredentialFailure = requestPath === "/auth/change-password" && statusCode === 401 && (errorCode === "CURRENT_PASSWORD_INCORRECT" || errorMessage === "Current password is incorrect.");
+    // Real 401/403/404 responses remain authoritative: never recover revoked access from a cached profile.
     const isTemporaryProfileFailure = requestPath === "/auth/me" && Boolean(activeToken) && requestToken === activeToken && Boolean(cachedUser) && (statusCode === undefined || statusCode === 0 || statusCode === 400 || statusCode >= 500);
     if (isStaleSessionResponse) {
       const alreadyRetried = Boolean(error.config?.[STALE_SESSION_RETRY_KEY]);
@@ -249,6 +255,16 @@ axiosClient.interceptors.response.use(
       try { sessionStorage.setItem("chalin03_session_warning", errorMessage || "Fresh profile details could not be loaded. Your verified session remains active."); } catch { /* Session storage may be unavailable; keep the verified session active. */ }
       return Promise.resolve(buildCachedProfileResponse(error, cachedUser));
     }
+    // An unavailable profile fetch (transport failure, 400, or 5xx) may use
+    // the already-authenticated identity solely to avoid erasing a valid
+    // local session during transient service outages. This is not permission
+    // to assume server authentication. In particular, an actual HTTP 401
+    // means the server declined this bearer token, an HTTP 403 means the
+    // role or account is forbidden, and an HTTP 404 is not temporary profile
+    // transport failure. None of those statuses can be replaced with a
+    // locally cached success response. Session removal continues to require
+    // checking that the response still concerns the current token so that
+    // late failures from another browser tab do not erase a new sign-in.
     if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage && !isChangePasswordCredentialFailure) {
       if (errorCode === "SESSION_REPLACED") sessionStorage.setItem("chalin03_login_notice", errorMessage || "Your account was signed in on another device.");
       else if (errorCode.startsWith("SESSION_EXPIRED")) sessionStorage.setItem("chalin03_login_notice", errorMessage || "Your session ended after 8 hours or at 12:00 a.m. Ghana time. Please login again.");
