@@ -19,6 +19,7 @@ const PUBLIC_SESSION_PATHS = new Set([
   "/auth/login",
   "/auth/passwordless/mode",
   "/auth/passwordless/start",
+  "/auth/passwordless/first-setup/verify",
   "/auth/passwordless/sms/verify",
   "/auth/passwordless/setup/confirm",
   "/auth/passwordless/verify",
@@ -265,7 +266,7 @@ axiosClient.interceptors.response.use(
     // locally cached success response. Session removal continues to require
     // checking that the response still concerns the current token so that
     // late failures from another browser tab do not erase a new sign-in.
-    if (statusCode === 401 && !isOwnerRecoveryRequest && !isOwnerRecoveryPage && !isChangePasswordCredentialFailure) {
+    if (statusCode === 401 && !isPublicSessionRequest(error.config) && !isOwnerRecoveryRequest && !isOwnerRecoveryPage && !isChangePasswordCredentialFailure) {
       if (errorCode === "SESSION_REPLACED") sessionStorage.setItem("chalin03_login_notice", errorMessage || "Your account was signed in on another device.");
       else if (errorCode.startsWith("SESSION_EXPIRED")) sessionStorage.setItem("chalin03_login_notice", errorMessage || "Your session ended after 8 hours or at 12:00 a.m. Ghana time. Please login again.");
       if (!requestToken || requestToken === activeToken) { clearStoredSession(); clearPollingReadCache(); if (window.location.pathname !== "/login") window.location.href = "/login"; }
