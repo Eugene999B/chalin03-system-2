@@ -88,7 +88,13 @@ router.post("/start",action(async(req,res)=>{
  if(!(await accessFor(user,workspace,branch)))return deny(res);
  const alreadyEnrolled=await enrolled(user.id);
  // A public username can never bootstrap the original administrator.
- if(isOriginalSystemAdministrator(user)&&!alreadyEnrolled)return deny(res);
+ if(isOriginalSystemAdministrator(user)&&!alreadyEnrolled){
+  return res.status(409).json({
+   status:"error",
+   code:"TRUSTED_SESSION_SETUP_REQUIRED",
+   message:"First-time Authenticator setup needs an existing verified account session. Open Account Security from your signed-in device."
+  });
+ }
  if(alreadyEnrolled){
   if(!(await belowLimit(user.id,"totp_login",8,10)))return deny(res,429);
   const challenge=await createChallenge({id:user.id,purpose:"totp_login",workspace,branch});
@@ -122,6 +128,31 @@ router.post("/sms/verify",action(async(req,res)=>{
   userId=row.user_id;await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
  return res.json({status:"success",...await createSetup(token,userId)});
+}));
+// The account name is not proof of ownership. This is used only when a
+// recently authenticated original account owner enters their own username
+// on the normal sign-in design. No SMS and no public enrollment key.
+router.post("/start/verified",requireAuth,action(async(req,res)=>{
+ const lookup=await auth.findUsersForLogin(String(req.body?.identifier||"").trim().slice(0,120));
+ const candidate=lookup.users?.[0];
+ if(!candidate||!isOriginalSystemAdministrator(req.user)||!isOriginalSystemAdministrator(candidate)||
+    Number(candidate.id)!==Number(req.user.id))return deny(res,403);
+ const workspace=auth.normalizeWorkspaceCode(req.body?.workspace_code);
+ const branch=number(req.body?.branch_id);
+ if(!(await accessFor(candidate,workspace,branch)))return deny(res,403);
+ const [sessions]=await pool.query(
+  "SELECT session_id FROM auth_sessions WHERE user_id=? AND session_id=? AND revoked_at IS NULL AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 10 MINUTE) AND expires_at>UTC_TIMESTAMP() LIMIT 1",
+  [req.user.id,req.user.session_id]);
+ if(!sessions.length)return res.status(403).json({
+  status:"error",code:"RECENT_SESSION_REQUIRED",
+  message:"Your secure session needs to be confirmed again before creating a new Authenticator key."
+ });
+ if(await enrolled(candidate.id))return deny(res,409);
+ const token=await createChallenge({id:candidate.id,purpose:"admin_setup",workspace,branch});
+ const setup=await createSetup(token,candidate.id);
+ await audit(req,candidate.id,"TRUSTED_FIRST_SETUP");
+ res.set("Cache-Control","no-store");
+ return res.json({status:"success",challenge:token,...setup});
 }));
 router.post("/administrator/start",requireAuth,action(async(req,res)=>{
  if(!isOriginalSystemAdministrator(req.user))return deny(res,403);
