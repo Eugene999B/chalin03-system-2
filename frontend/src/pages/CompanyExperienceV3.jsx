@@ -5,6 +5,7 @@ import RealPhoto from "../components/RealPhoto";
 import {PHOTO_LIBRARY} from "../data/verifiedPublicPhotos";
 import {siteHref} from "../config/officialSites";
 import "../styles/companyExperienceV3.css";
+import "../styles/chalin03PublicRefresh.css";
 
 const SALES_PHONE="+233540713654",MAIN_PHONE="+233249469080";
 const WHATSAPP="https://wa.me/233540713654?text="+encodeURIComponent("Hello CHALIN03, I would like to make an enquiry.");
@@ -40,17 +41,17 @@ export default function CompanyExperienceV3(){
    </nav>
   </header>
   <section className="ce-hero">
-   <div className="ce-hero__copy"><div className="ce-eyebrow"><span/> CHALIN03 · BUILT FOR WORK</div>
-    <h1>Equipment.<br/>Enterprise.<br/><em>Possibility.</em></h1>
-    <p>From excavators and workshop parts to heavy machinery, transport and more — discover the business you need, on its own dedicated website.</p>
+   <div className="ce-hero__copy"><div className="ce-eyebrow">Dunkwa, Ghana</div>
+    <h1>CHALIN03<br/>Company Limited</h1>
+    <p>Equipment sales and hire, spare parts, and machine transport from Dunkwa, Ghana.</p>
     <div className="ce-hero__actions">
      <a className="ce-button ce-button--gold" href="#our-businesses">Explore our businesses <span aria-hidden="true">↗</span></a>
      <a className="ce-button ce-button--light" href={WHATSAPP} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
     </div>
-    <div className="ce-hero__foot"><span>GHANA BASED</span><span>ENQUIRIES NATIONWIDE</span><span>INDIVIDUAL BUSINESS SITES</span></div>
+
    </div>
    <div className="ce-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.homepageExcavator} eager className="ce-hero__photo"/>
-    <div className="ce-hero__visual-stamp"><small>CHALIN03</small><strong>POWERING<br/>WHAT'S NEXT.</strong></div>
+
    </div>
   </section>
   <section className="ce-trustline" aria-label="Company commitments">
@@ -60,7 +61,7 @@ export default function CompanyExperienceV3(){
   </section>
   <section className="ce-market" id="spare-parts">
    <div className="ce-market__info"><div className="ce-eyebrow ce-eyebrow--dark"><span/> OUR ONLINE SPARE-PARTS SHOP</div>
-    <h2>Parts when<br/><em>you need them.</em></h2>
+    <h2>Main Store spare parts</h2>
     <p>A dedicated market built around your actual Main Store products. Search by item or specification, use filters and sorting, see selling prices and submit your order to the CHALIN03 team for confirmation.</p>
     <div className="ce-market__features"><span>Live Main Store prices</span><span>Detailed product search</span><span>Organized shop departments</span><span>Easy order requests</span></div>
     <a className="ce-button ce-button--dark" href={siteHref("parts")}>Enter the spare-parts shop <span aria-hidden="true">↗</span></a>
@@ -74,12 +75,12 @@ export default function CompanyExperienceV3(){
   </section>
   <section className="ce-divisions" id="our-businesses">
    <div className="ce-section-head"><div className="ce-eyebrow ce-eyebrow--dark"><span/> BUSINESS DIVISIONS</div>
-    <h2>One company.<br/><em>Every business its own home.</em></h2>
+    <h2>Our businesses</h2>
     <p>Each division has its own dedicated website with relevant information and a direct route to our team. Images represent the type of equipment shown, not verified CHALIN03 stock.</p>
    </div>
    <div className="ce-division-grid">{divisions.map(d=><article className="ce-division" key={d.id}>
      <div className="ce-division__media">
-      <RealPhoto photo={d.photo}/><span className="ce-division__number">{d.index}</span>
+      <RealPhoto photo={d.photo}/>
      </div>
      <div className="ce-division__body">
       <span>{d.label}</span><h3>{d.title}</h3><p>{d.description}</p>

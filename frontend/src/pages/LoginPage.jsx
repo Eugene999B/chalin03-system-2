@@ -12,6 +12,7 @@ import "../styles/loginEmojiRestore.css";
 import "../styles/loginMobileDesktopMatch.css";
 import "../styles/loginMobileOriginalDesign.css";
 import "../styles/loginMobileCompactFinal.css";
+import "../styles/chalin03PublicRefresh.css";
 
 export default function LoginPage() {
   const { isLoggedIn, loading, workspaceCode } = useAuth();
