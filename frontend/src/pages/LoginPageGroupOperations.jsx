@@ -909,19 +909,22 @@ function LegacyLoginPageGroupOperations() {
   );
 }
 
-// Passwordless login is selected by the backend's pilot mode, not by query parameters.
-// When the pilot is off, the original staff experience remains unchanged.
+// Keep one CHALIN03 visual identity across every sign-in step.
+// A temporary API outage must never expose the old password form as a fallback.
 export default function LoginPageGroupOperations() {
   const [mode, setMode] = useState("loading");
   useEffect(() => {
     let mounted = true;
     axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
-      .then((response) => { if (mounted) setMode(response.data?.pilot ? (response.data?.enforced ? "passwordless-enforced" : "passwordless") : "legacy"); })
-      .catch(() => { if (mounted) setMode("legacy"); });
+      .then((response) => { if (mounted) setMode(response.data?.pilot ? "passwordless" : "legacy"); })
+      .catch(() => { if (mounted) setMode("passwordless"); });
     return () => { mounted = false; };
   }, []);
-  if (mode === "passwordless" && new URLSearchParams(window.location.search).get("admin_setup") === "1") return <LegacyLoginPageGroupOperations />;
-  if (mode === "passwordless" || mode === "passwordless-enforced") return <StaffPasswordlessLogin showAdminBootstrap={mode === "passwordless"} />;
-  if (mode === "loading") return <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f4ee"}}><p>Preparing secure access…</p></main>;
-  return <LegacyLoginPageGroupOperations />;
+  if (mode === "loading") return (
+    <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f3f5f8",color:"#0b2343"}}>
+      <p>Preparing secure access…</p>
+    </main>
+  );
+  if (mode === "legacy") return <LegacyLoginPageGroupOperations />;
+  return <StaffPasswordlessLogin />;
 }
