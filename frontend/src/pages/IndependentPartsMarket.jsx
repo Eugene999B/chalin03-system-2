@@ -6,9 +6,11 @@ import PublicPageMeta from "../components/PublicPageMeta";
 import PublicContactPanel from "../components/PublicContactPanel";
 import RealPhoto from "../components/RealPhoto";
 import {PHOTO_LIBRARY} from "../data/verifiedPublicPhotos";
+import cataloguePhotos from "../data/catalogueReferencePhotos.json";
 import {photoNeedsReview,referenceSkuPhoto} from "../data/catalogueReferencePhotos";
 import {siteHref,sectorHref} from "../config/officialSites";
 import "../styles/independentPartsMarket.css";
+import "../styles/chalin03PublicRefresh.css";
 
 const money=value=>value==null?"Price on request":"GHS "+Number(value).toLocaleString("en-GH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const keygen=()=>globalThis.crypto?.randomUUID?.()||"e95f9365-6ca0-44a3-8661-"+Math.random().toString(16).slice(2).padEnd(12,"0").slice(0,12);
@@ -167,16 +169,16 @@ export default function IndependentPartsMarket(){
   </header>
   <section className="pm-hero"><div className="pm-hero__copy">
     <div className="pm-eyebrow">THE CHALIN03 SPARE PARTS SHOP</div>
-    <h1>Keep your machine<br/><em>moving.</em></h1>
-    <p>Excavator spare parts, oils, workshop tools and components — organized in a dedicated market, with prices from our Main Store.</p>
+    <h1>Spare parts &amp;<br/>workshop supplies</h1>
+    <p>Search the Dunkwa Main Store by part name, model or size. See live prices in Ghana cedis.</p>
     <form className="pm-hero-search" onSubmit={e=>{e.preventDefault();document.getElementById("pm-products")?.scrollIntoView({behavior:"smooth"});}}>
      <label htmlFor="pm-big-search" className="pm-visually-hidden">Search the spare-parts shop</label>
      <input id="pm-big-search" type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Search part, filter, model, oil, tool…"/>
      <button type="submit">Search products</button>
     </form>
-    <div className="pm-hero__promises"><span>Live selling prices</span><span>Staff-confirmed orders</span><span>Secure enquiry only</span></div>
+
    </div><div className="pm-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.hoses} eager/>
-    <div className="pm-hero__seal">REAL PARTS.<br/><strong>RIGHT FIT.</strong></div>
+
    </div>
   </section>
   <section className="pm-find" id="pm-products">
@@ -184,6 +186,19 @@ export default function IndependentPartsMarket(){
     <h2>The parts catalogue</h2><p>{busy?"Checking latest listings…":count.toLocaleString()+" matching products"} · Main Store prices in Ghana cedis</p></div>
     <button type="button" className="pm-mobile-filter-btn" onClick={()=>setMobileFilters(v=>!v)}>{mobileFilters?"Close filters":"Show filters"}</button>
    </div>
+   {!query&&!category&&!onlyStock&&!onlyPhotos&&page===1?<section className="pm-photo-index" aria-labelledby="pm-photo-index-heading">
+    <h3 id="pm-photo-index-heading">Browse photo references</h3>
+    <div className="pm-photo-index__grid">{[11,138,656].map(id=>{
+     const photo=cataloguePhotos[id];
+     return <article key={id}>
+      <a className="pm-photo-index__product" href={siteHref("parts","",new URLSearchParams({q:photo.name}).toString())}>
+       <img src={photo.localSrc} srcSet={photo.srcSet} sizes="(max-width: 680px) 26vw, 260px" alt={photo.alt} width="180" height="108" loading="lazy" decoding="async"/>
+       <strong>{photo.name}</strong><small>Reference photo · confirm exact stock item</small>
+      </a>
+      <PhotoCredit photo={photo}/>
+     </article>;
+    })}</div>
+   </section>:null}
    <div className="pm-store-layout"><aside className={"pm-sidebar"+(mobileFilters?" is-open":"")}>
     <div className="pm-sidebar__head"><strong>Find the right item</strong><button type="button" onClick={resetFilters}>Reset all</button></div>
     <label className="pm-filter-label" htmlFor="pm-side-search">Search by name or specification</label>

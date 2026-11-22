@@ -10,7 +10,7 @@ async function tapTarget(locator){
 test("new CHALIN03 corporate website has independent seven-business photographic desktop experience",async({page},testInfo)=>{
  await page.setViewportSize({width:1440,height:900});
  await page.goto("/");
- await expect(page.getByRole("heading",{level:1,name:/Equipment.*Enterprise.*Possibility/s})).toBeVisible();
+ await expect(page.getByRole("heading",{level:1,name:/CHALIN03.*Company Limited/s})).toBeVisible();
  await expect(page.getByRole("navigation",{name:"Company navigation"})).toBeVisible();
  await expect(page.locator(".ce-division")).toHaveCount(7);
  await expect(page.locator(".ce-market")).toBeVisible();
@@ -25,7 +25,7 @@ test("new CHALIN03 corporate website has independent seven-business photographic
 test("new company mobile navigation opens dedicated Spare Parts Shop without layout overflow",async({page},testInfo)=>{
  await page.setViewportSize({width:390,height:844});
  await page.goto("/");
- await expect(page.getByRole("heading",{level:1,name:/Equipment.*Enterprise.*Possibility/s})).toBeVisible();
+ await expect(page.getByRole("heading",{level:1,name:/CHALIN03.*Company Limited/s})).toBeVisible();
  await expect(page.locator(".ce-division")).toHaveCount(7);
  const menu=page.getByRole("button",{name:"Open navigation"});await expect(menu).toBeVisible();
  await tapTarget(menu);await noHorizontalOverflow(page);
@@ -34,7 +34,7 @@ test("new company mobile navigation opens dedicated Spare Parts Shop without lay
  const parts=page.getByRole("navigation",{name:"Company navigation"}).getByRole("link",{name:"Spare-parts shop"});
  await tapTarget(parts);await parts.click();
  await expect(page).toHaveURL(/\/shop$/);
- await expect(page.getByRole("heading",{level:1,name:/Keep your machine moving/i})).toBeVisible();
+ await expect(page.getByRole("heading",{level:1,name:/Spare parts & workshop supplies/i})).toBeVisible();
  await expect(page.locator(".pm-store-layout")).toBeVisible();
  await noHorizontalOverflow(page);
  await page.screenshot({path:testInfo.outputPath("chalin03-independent-market-mobile.png"),fullPage:true});

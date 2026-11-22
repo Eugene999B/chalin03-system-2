@@ -17,6 +17,7 @@ import "../styles/commandGateV4.css";
 import "../styles/commandGateBankPolish.css";
 import "../styles/biometricBankLogin.css";
 import "../styles/groupOperationsLogin.css";
+import "../styles/chalin03PublicRefresh.css";
 
 const DEFAULT_WORKSPACE = "spare_parts";
 const TOKEN_KEY = "chalin03_token";
