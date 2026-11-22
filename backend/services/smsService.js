@@ -66,6 +66,9 @@ function normalizeGhanaPhone(phone) {
   }
 
   if (digits.length === 9) {
+    // Eight digits after a leading zero is an incomplete Ghana phone number.
+    // Do not mistake it for a valid nine-digit national significant number.
+    if (digits.startsWith("0")) return "";
     digits = `233${digits}`;
   }
 
