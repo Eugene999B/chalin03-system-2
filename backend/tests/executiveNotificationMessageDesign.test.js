@@ -25,5 +25,5 @@ test("weekly report quantifies sales movement and leads the SMS with the priorit
 });
 
 test("automatic escalation uses the existing SMS approval switch", async () => {
-  assert.deepEqual(await deliverCriticalOwnerAlerts({ env: { NOTIFICATION_SMS_ENABLED: "false" } }), { skipped: true });
+  assert.deepEqual(await deliverCriticalOwnerAlerts({ env: { CRITICAL_OWNER_SMS_ENABLED: "false" } }), { skipped: true });
 });
