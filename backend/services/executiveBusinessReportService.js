@@ -47,13 +47,26 @@ function configuredCloseHour(env = process.env) {
 }
 
 function isWeeklySendWindow(date = new Date(), env = process.env) {
-  return date.getDay() === 6 && date.getHours() >= configuredCloseHour(env);
+  // Railway's low-cost scheduler runs every six hours. Keep a Sunday morning
+  // catch-up window so a missed Saturday evening tick cannot lose the report.
+  return (date.getDay() === 6 && date.getHours() >= configuredCloseHour(env)) ||
+    (date.getDay() === 0 && date.getHours() < 12);
 }
 
 function isMonthEndSendWindow(date = new Date(), env = process.env) {
   const tomorrow = new Date(date);
   tomorrow.setDate(date.getDate() + 1);
-  return tomorrow.getMonth() !== date.getMonth() && date.getHours() >= configuredCloseHour(env);
+  return (tomorrow.getMonth() !== date.getMonth() && date.getHours() >= configuredCloseHour(env)) ||
+    (date.getDate() === 1 && date.getHours() < 12);
+}
+
+function reportPeriodDate(type, date = new Date()) {
+  const reference = new Date(date);
+  if ((type === "weekly" && reference.getDay() === 0 && reference.getHours() < 12) ||
+      (type === "monthly" && reference.getDate() === 1 && reference.getHours() < 12)) {
+    reference.setDate(reference.getDate() - 1);
+  }
+  return reference;
 }
 
 function configuredRecipientRoles(rule) {
@@ -231,7 +244,25 @@ function buildMessage(type, period, metrics, recipientLabel, previous) {
       `Current: ${money(metrics.outstandingDebt)} open debt across ${metrics.debtAccounts} accounts; ${metrics.lowStockCount} low-stock lines.\n` +
       `Priority: ${priority}` +
       (metrics.seriousIncidents > 0 ? ` Group: ${metrics.seriousIncidents} serious Mining incidents require separate follow-up.` : ""),
-    sms: `CHALIN03 ${title} ${period.end}. ${priority} Sales ${money(metrics.salesTotal)}, ${periodMovement(metrics.salesTotal, previous?.salesTotal)}. Paid ${money(metrics.paymentsReceived)}. Expenses ${money(metrics.expensesTotal)}. Open debt ${money(metrics.outstandingDebt)}. Full figures in Notifications.`,
+    sms: [
+      "CHALIN03 SPARE PARTS " + (type === "weekly" ? "WEEKLY" : "MONTHLY") + " " + period.end + ":",
+      "Sales " + money(metrics.salesTotal) + " (" + periodMovement(metrics.salesTotal, previous?.salesTotal) + ");",
+      "collected " + money(metrics.paymentsReceived) + " (" + collection + ");",
+      "expenses " + money(metrics.expensesTotal) + ";",
+      "open debt " + money(metrics.outstandingDebt) + "; low stock " + metrics.lowStockCount + ".",
+      "ACTION: " + (
+        metrics.absoluteVariance > 0 || metrics.awaitingVerification > 0
+          ? "Reconcile closings and outstanding verification."
+          : gap > 0
+            ? "Assign collection follow-up on unpaid sale balances."
+            : metrics.lowStockCount > 0
+              ? "Prioritise stock replenishment."
+              : metrics.estimatedOperatingResult < 0
+                ? "Review expenses and margins."
+                : "Maintain collection and closing controls."
+      ),
+      "Details: Notifications.",
+    ].join(" ").slice(0, 420),
     advice,
   };
 }
@@ -270,12 +301,13 @@ async function sendBusinessReport(type, { force = false, date = new Date() } = {
     if (type === "monthly" && !isMonthEndSendWindow(date)) return { skipped: true, reason: "not_month_end_send_window" };
   }
 
-  const period = currentPeriod(type, date);
+  const effectiveReportDate = reportPeriodDate(type, date);
+  const period = currentPeriod(type, effectiveReportDate);
   const notificationKey = `${type === "weekly" ? WEEKLY_RULE : MONTHLY_RULE}.${period.key}`;
   const [existing] = await pool.query(`SELECT id FROM notifications WHERE notification_key = ? LIMIT 1`, [notificationKey]);
   if (existing.length && !force) return { skipped: true, reason: "already_sent", notification_id: existing[0].id, period };
 
-  const through = date.toISOString().slice(0, 10);
+  const through = effectiveReportDate.toISOString().slice(0, 10);
   const effectivePeriod = { ...period, end: through < period.end ? through : period.end };
   const previousPeriod = previousComparablePeriod(type, period, through);
   const [metrics, previous] = await Promise.all([
@@ -355,6 +387,7 @@ module.exports = {
   configuredRecipientRoles,
   isWeeklySendWindow,
   isMonthEndSendWindow,
+  reportPeriodDate,
   buildMessage,
   previousComparablePeriod,
   sendBusinessReport,

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import "../styles/sparePartsSmsRedesign.css";
 
 function MobilePageFix() {
   return (
@@ -877,9 +878,9 @@ export default function SmsPage() {
   }
 
   return (
-    <div className="boss-mobile-fix" style={styles.page}>
+    <div className="boss-mobile-fix sms-centre-v2" style={styles.page}>
       <MobilePageFix />
-      <section style={styles.hero}>
+      <section className="sms-centre-v2__hero" style={styles.hero}>
         <div style={styles.signalOne} />
         <div style={styles.signalTwo} />
 
@@ -961,7 +962,7 @@ export default function SmsPage() {
         records briefly in the background and stops checking terminal failures.
       </div>
 
-      <div style={styles.metricsGrid}>
+      <div className="sms-centre-v2__metrics" style={styles.metricsGrid}>
         <MetricCard label="Customers With Phone" value={customers.length} icon="👥" />
         <MetricCard label="Sent" value={smsDashboard.acceptedCount} icon="📤" />
         <MetricCard label="Delivered" value={smsDashboard.deliveredCount} icon="✅" />
@@ -970,11 +971,37 @@ export default function SmsPage() {
         <MetricCard label="Estimated Credits" value={smsDashboard.estimatedCredits} icon="💳" />
       </div>
 
+      <section className="sms-centre-v2__coverage" aria-label="Business notification coverage">
+        <div className="sms-centre-v2__coverage-intro">
+          <span className="sms-centre-v2__eyebrow">Management intelligence</span>
+          <h2>Boss alerts and scheduled reporting</h2>
+          <p>Customer campaigns remain separate from automated critical alerts and management reporting. Delivery depends on enabled SMS settings and a valid owner number.</p>
+        </div>
+        <div className="sms-centre-v2__coverage-items">
+          <article>
+            <span className="sms-centre-v2__coverage-icon">⚠</span>
+            <div><strong>Critical events</strong><p>Urgent operational exceptions escalate to the owner with a linked Notification Centre record and delivery evidence.</p></div>
+          </article>
+          <article>
+            <span className="sms-centre-v2__coverage-icon">↗</span>
+            <div><strong>Weekly review</strong><p>Sales movement, collections, open debt, expenses, stock shortages and the next management action.</p></div>
+          </article>
+          <article>
+            <span className="sms-centre-v2__coverage-icon">▤</span>
+            <div><strong>Month-end analysis</strong><p>Performance against the previous period, cash quality, outstanding exposure and closing-control exceptions.</p></div>
+          </article>
+          <article>
+            <span className="sms-centre-v2__coverage-icon">◆</span>
+            <div><strong>Finance alerts</strong><p>Installment approvals, deposits, payments and customer Finance campaigns stay within the Equipment Finance workflow.</p></div>
+          </article>
+        </div>
+      </section>
+
       {loading ? (
         <div style={styles.loadingPanel}>Loading SMS page...</div>
       ) : (
-        <div style={styles.controlGrid}>
-          <main style={styles.composerPanel}>
+        <div className="sms-centre-v2__main-grid" style={styles.controlGrid}>
+          <main className="sms-centre-v2__composer" style={styles.composerPanel}>
             <div style={styles.panelHeader}>
               <div>
                 <p style={styles.eyebrowDark}>Message Composer</p>
@@ -991,7 +1018,7 @@ export default function SmsPage() {
             </div>
 
             <form onSubmit={sendCustomSms}>
-              <div style={styles.targetTabs}>
+              <div className="sms-centre-v2__target-tabs" style={styles.targetTabs}>
                 {[
                   ["single", "One Phone"],
                   ["selected", "Selected Customers"],
@@ -1135,7 +1162,7 @@ export default function SmsPage() {
                 </div>
               )}
 
-              <div style={styles.templateBoard}>
+              <div className="sms-centre-v2__templates" style={styles.templateBoard}>
                 <div style={styles.templateHeader}>
                   <strong>Quick Templates</strong>
                   <span>{SMS_TEMPLATES.length}</span>
@@ -1185,7 +1212,7 @@ export default function SmsPage() {
             </form>
           </main>
 
-          <aside style={styles.sideStack}>
+          <aside className="sms-centre-v2__aside" style={styles.sideStack}>
             <section style={styles.testPanel}>
               <p style={styles.eyebrowDark}>Test Provider</p>
               <h2>Test SMS Setup</h2>
@@ -1223,7 +1250,7 @@ export default function SmsPage() {
               </button>
             </section>
 
-            <section style={styles.summaryPanel}>
+            <section className="sms-centre-v2__boss-panel" style={styles.summaryPanel}>
               <p style={styles.eyebrowDark}>Owner Alert</p>
               <h2>Boss Daily Closing Summary</h2>
               <p>
@@ -1263,7 +1290,7 @@ export default function SmsPage() {
         </div>
       )}
 
-      <section style={styles.historyPanel}>
+      <section className="sms-centre-v2__history" style={styles.historyPanel}>
         <div style={styles.panelHeader}>
           <div>
             <p style={styles.eyebrowDark}>Message History</p>
