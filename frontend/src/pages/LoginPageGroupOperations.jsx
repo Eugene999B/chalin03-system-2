@@ -326,11 +326,6 @@ function LegacyLoginPageGroupOperations() {
 
     setProgressMessage("Identity verified. Opening your dashboard…");
     await new Promise((resolve) => window.setTimeout(resolve, 420));
-    const initialIdentityCheck = new URLSearchParams(window.location.search).get("first_setup") === "1";
-    if (initialIdentityCheck && session.user?.is_original_system_administrator) {
-      window.location.assign("/account-security");
-      return;
-    }
     window.location.assign(destination);
   }
 
