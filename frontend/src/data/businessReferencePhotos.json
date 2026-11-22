@@ -1,0 +1,110 @@
+{
+  "wheeled": {
+    "src": "/images/business/wheeled.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Excavator_0025.jpg",
+    "credit": "Rami Tarawneh",
+    "license": "CC BY 2.5",
+    "licenseUrl": "https://creativecommons.org/licenses/by/2.5/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Two ATLAS wheeled excavators working at a trench"
+  },
+  "backhoe": {
+    "src": "/images/business/backhoe.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Jcb.backhoe-loader.jpg",
+    "credit": "Arjun Sinh Jadeja",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "JCB backhoe loader"
+  },
+  "skidSteer": {
+    "src": "/images/business/skidSteer.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Bobcat_loader.jpg",
+    "credit": "Samoborac",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Bobcat 553 skid steer loader"
+  },
+  "forklift": {
+    "src": "/images/business/forklift.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Forklift.jpg",
+    "credit": "Pavel Ševela / Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Industrial forklift"
+  },
+  "longReach": {
+    "src": "/images/business/longReach.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Liebherr_934_Long_Reach_with_engcon_Tiltrotator.jpg",
+    "credit": "engcon / Sten Stromgren",
+    "license": "CC BY 2.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/2.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Liebherr 934 long-reach excavator"
+  },
+  "crane": {
+    "src": "/images/business/crane.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Liebherr_Mobilkran_01.jpg",
+    "credit": "Huhu Uet",
+    "license": "CC BY 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Liebherr mobile crane"
+  },
+  "dumper": {
+    "src": "/images/business/dumper.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Volvo_A40F._Spielvogel1.jpg",
+    "credit": "Spielvogel / Wikimedia Commons",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Volvo A40F articulated hauler"
+  },
+  "scooter": {
+    "src": "/images/business/scooter.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:2021_Honda_PCX_125.jpg",
+    "credit": "Jiri Smolik",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Honda PCX 125 automatic scooter"
+  },
+  "sedan": {
+    "src": "/images/business/sedan.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:EU-spec_Toyota_Corolla_sedan.jpg",
+    "credit": "Paolo Tamagnini",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Toyota Corolla sedan"
+  },
+  "hatchback": {
+    "src": "/images/business/hatchback.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:2019_Toyota_Corolla_Hatchback_SE_front_4.2.18.jpg",
+    "credit": "Kevauto",
+    "license": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Toyota Corolla hatchback"
+  },
+  "demolition": {
+    "src": "/images/business/demolition.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Specialist_High_Reach_Excavator_Demolishing_the_Stadium.jpg",
+    "credit": "Garethsharvin",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "High-reach excavator demolishing a stadium structure"
+  },
+  "trail": {
+    "src": "/images/business/trail.webp",
+    "source": "https://commons.wikimedia.org/wiki/File:Yamaha_XT600_001.jpg",
+    "credit": "Tux-Man",
+    "license": "CC BY-SA 3.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+    "changes": "Resized and converted to WebP",
+    "alt": "Yamaha XT600 trail motorcycle"
+  }
+}

@@ -14,7 +14,7 @@ const headers=read("public/_headers");
 assert.ok(page.includes("PublicPageMeta"));
 assert.ok(page.includes('canonicalPath="/"'));
 assert.ok(page.includes('ce-hero'));
-assert.ok(page.includes('ce-market'));
+assert.ok(page.includes('ce-trustline'));
 assert.ok(page.includes('ce-division-grid'));
 assert.ok(page.includes('PublicContactPanel'));
 assert.ok(page.includes('RealPhoto'));

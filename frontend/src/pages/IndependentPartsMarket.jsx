@@ -4,13 +4,11 @@ import axiosClient from "../api/axiosClient";
 import {API_BASE_URL} from "../api/apiBaseUrl";
 import PublicPageMeta from "../components/PublicPageMeta";
 import PublicContactPanel from "../components/PublicContactPanel";
-import RealPhoto from "../components/RealPhoto";
-import {PHOTO_LIBRARY} from "../data/verifiedPublicPhotos";
-import cataloguePhotos from "../data/catalogueReferencePhotos.json";
 import {photoNeedsReview,referenceSkuPhoto} from "../data/catalogueReferencePhotos";
 import {siteHref,sectorHref} from "../config/officialSites";
 import "../styles/independentPartsMarket.css";
 import "../styles/chalin03PublicRefresh.css";
+import "../styles/chalin03PublicRebuild.css";
 
 const money=value=>value==null?"Price on request":"GHS "+Number(value).toLocaleString("en-GH",{minimumFractionDigits:2,maximumFractionDigits:2});
 const keygen=()=>globalThis.crypto?.randomUUID?.()||"e95f9365-6ca0-44a3-8661-"+Math.random().toString(16).slice(2).padEnd(12,"0").slice(0,12);
@@ -38,8 +36,10 @@ function PhotoCredit({photo}){
 function ProductPhoto({product,photo,onOpen}){
  const [failed,setFailed]=useState(false);
  const description=photo?.alt||[product.name,product.size].filter(Boolean).join(" · ");
- if(!photo||failed)return <div className="pm-product__no-photo">
-  <small>{failed?"Photo temporarily unavailable":photoNeedsReview(product)?"Photo under review":"Stock photo unavailable"}</small>
+ if(!photo||failed)return <div className="pm-product__no-photo" aria-label={"Item-specific photo not verified for "+product.name}>
+  <span className="pm-product__no-photo-top">CHALIN03 / MAIN STORE</span>
+  <strong>{product.name}</strong><small>{product.category} · SKU {product.id}</small>
+  <em>{failed?"Reference photo temporarily unavailable":photoNeedsReview(product)?"Photo under review — exact item to confirm":"Actual item photo pending verification"}</em>
  </div>;
  return <>
   <button className="pm-product__photo-button" type="button" aria-label={"Enlarge photo of "+product.name}
@@ -75,7 +75,7 @@ export default function IndependentPartsMarket(){
  const [category,setCategory]=useState(params.get("category")||"");
  const [sort,setSort]=useState(params.get("sort")||"featured");
  const [onlyStock,setOnlyStock]=useState(params.get("stock")==="only");
- const [onlyPhotos,setOnlyPhotos]=useState(params.get("photo")==="only");
+ const [photoFilter,setPhotoFilter]=useState(["any","only"].includes(params.get("photo"))?params.get("photo"):"");
  const [page,setPage]=useState(Math.max(1,Number(params.get("page"))||1));
  const [products,setProducts]=useState([]),[categories,setCategories]=useState([]);
  const [count,setCount]=useState(0),[pages,setPages]=useState(1);
@@ -95,13 +95,13 @@ export default function IndependentPartsMarket(){
   const qs=new URLSearchParams();
   if(query)qs.set("q",query);if(category)qs.set("category",category);
   if(sort!=="featured")qs.set("sort",sort);if(onlyStock)qs.set("stock","only");
-  if(onlyPhotos)qs.set("photo","only");if(page>1)qs.set("page",String(page));
+  if(photoFilter)qs.set("photo",photoFilter);if(page>1)qs.set("page",String(page));
   setParams(qs,{replace:true});
- },[query,category,sort,onlyStock,onlyPhotos,page,setParams]);
+ },[query,category,sort,onlyStock,photoFilter,page,setParams]);
  useEffect(()=>{
   let alive=true;let retryTimer=null;
   const controller=new AbortController();
-  const filters={search:query,category,sort,stock:onlyStock?"only":"",photo:onlyPhotos?"only":"",page,limit:24};
+  const filters={search:query,category,sort,stock:onlyStock?"only":"",photo:photoFilter,page,limit:24};
   setBusy(true);setError("");setRetryingCatalogue(false);
   async function fetchCatalogue(attempt=0){
    try{
@@ -129,12 +129,12 @@ export default function IndependentPartsMarket(){
   }
   void fetchCatalogue();
   return()=>{alive=false;clearTimeout(retryTimer);controller.abort();};
- },[query,category,sort,onlyStock,onlyPhotos,page,catalogueReload]);
+ },[query,category,sort,onlyStock,photoFilter,page,catalogueReload]);
  function retryCatalogue(){
   setError("");setRetryingCatalogue(false);
   setCatalogueReload(version=>version+1);
  }
- function resetFilters(){setSearch("");setQuery("");setCategory("");setOnlyStock(false);setOnlyPhotos(false);setSort("featured");setPage(1);}
+ function resetFilters(){setSearch("");setQuery("");setCategory("");setOnlyStock(false);setPhotoFilter("");setSort("featured");setPage(1);}
  function addItem(product){
   if(!product.in_stock||product.price==null)return;
   setBasket(previous=>({...previous,[product.id]:{...product,qty:Math.min(200,(previous[product.id]?.qty||0)+1)}}));
@@ -168,37 +168,22 @@ export default function IndependentPartsMarket(){
    <button className="pm-cart-btn" onClick={()=>setBasketOpen(true)} type="button">Your basket <strong>{basketUnits}</strong></button>
   </header>
   <section className="pm-hero"><div className="pm-hero__copy">
-    <div className="pm-eyebrow">THE CHALIN03 SPARE PARTS SHOP</div>
-    <h1>Spare parts &amp;<br/>workshop supplies</h1>
-    <p>Search the Dunkwa Main Store by part name, model or size. See live prices in Ghana cedis.</p>
+    <p className="site-location">CHALIN03 MAIN STORE · DUNKWA</p>
+    <h1>Find the part you need.</h1>
+    <p>Search live stock and prices by part name, model or size.</p>
     <form className="pm-hero-search" onSubmit={e=>{e.preventDefault();document.getElementById("pm-products")?.scrollIntoView({behavior:"smooth"});}}>
      <label htmlFor="pm-big-search" className="pm-visually-hidden">Search the spare-parts shop</label>
      <input id="pm-big-search" type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Search part, filter, model, oil, tool…"/>
      <button type="submit">Search products</button>
     </form>
-
-   </div><div className="pm-hero__visual"><RealPhoto photo={PHOTO_LIBRARY.hoses} eager/>
-
    </div>
+   <aside className="pm-hero__service"><h2>Need help with fitment?</h2><p>Send the machine model and any number stamped on the part.</p><a href={sectorHref("spare-parts")}>Ask the parts team →</a></aside>
   </section>
   <section className="pm-find" id="pm-products">
-   <div className="pm-heading"><div><span className="pm-eyebrow pm-eyebrow--dark">BROWSE OUR MAIN STORE</span>
-    <h2>The parts catalogue</h2><p>{busy?"Checking latest listings…":count.toLocaleString()+" matching products"} · Main Store prices in Ghana cedis</p></div>
+   <div className="pm-heading"><div>
+    <h2>Shop the catalogue</h2><p>{busy?"Checking latest listings…":count.toLocaleString()+" matching products"} · Main Store prices in Ghana cedis</p></div>
     <button type="button" className="pm-mobile-filter-btn" onClick={()=>setMobileFilters(v=>!v)}>{mobileFilters?"Close filters":"Show filters"}</button>
    </div>
-   {!query&&!category&&!onlyStock&&!onlyPhotos&&page===1?<section className="pm-photo-index" aria-labelledby="pm-photo-index-heading">
-    <h3 id="pm-photo-index-heading">Browse photo references</h3>
-    <div className="pm-photo-index__grid">{[11,138,656].map(id=>{
-     const photo=cataloguePhotos[id];
-     return <article key={id}>
-      <a className="pm-photo-index__product" href={siteHref("parts","",new URLSearchParams({q:photo.name}).toString())}>
-       <img src={photo.localSrc} srcSet={photo.srcSet} sizes="(max-width: 680px) 26vw, 260px" alt={photo.alt} width="180" height="108" loading="lazy" decoding="async"/>
-       <strong>{photo.name}</strong><small>Reference photo · confirm exact stock item</small>
-      </a>
-      <PhotoCredit photo={photo}/>
-     </article>;
-    })}</div>
-   </section>:null}
    <div className="pm-store-layout"><aside className={"pm-sidebar"+(mobileFilters?" is-open":"")}>
     <div className="pm-sidebar__head"><strong>Find the right item</strong><button type="button" onClick={resetFilters}>Reset all</button></div>
     <label className="pm-filter-label" htmlFor="pm-side-search">Search by name or specification</label>
@@ -209,7 +194,10 @@ export default function IndependentPartsMarket(){
      <option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
     </select>
     <div className="pm-toggles"><label><input type="checkbox" checked={onlyStock} onChange={e=>{setOnlyStock(e.target.checked);setPage(1)}}/> In-stock listings</label>
-     <label><input type="checkbox" checked={onlyPhotos} onChange={e=>{setOnlyPhotos(e.target.checked);setPage(1)}}/> Actual item photo available</label></div>
+     <label className="pm-filter-label" htmlFor="pm-photo-filter">Photo availability</label>
+     <select id="pm-photo-filter" value={photoFilter} onChange={e=>{setPhotoFilter(e.target.value);setPage(1)}}>
+      <option value="">All listings</option><option value="any">Exact or reference photo</option><option value="only">Verified exact photo</option>
+     </select></div>
     <div className="pm-department-head"><strong>Shop departments</strong><small>{categories.length} groups</small></div>
     <div className="pm-departments"><button type="button" className={!category?"selected":""} onClick={()=>{setCategory("");setPage(1)}}>All spare parts <span>→</span></button>
      {categories.map(name=><button type="button" className={category===name?"selected":""} key={name} onClick={()=>{setCategory(name);setPage(1)}}>{shortCategory(name)}<span>→</span></button>)}</div>

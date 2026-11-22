@@ -28,12 +28,12 @@ for(const item of ["Caterpillar","Komatsu","Hitachi","Volvo","SANY","Kobelco","D
  assert.ok(sector.includes(item),"Reference catalogue missing "+item);
 }
 assert.ok(sector.includes("not live inventory")||sector.includes("not a guarantee")||sector.includes("not verified stock"),"Stock disclaimer missing");
-assert.ok(home.includes('ce-market')&&home.includes('siteHref("parts")'),"Separate featured market missing from homepage");
+assert.ok(home.includes('ce-trustline')&&home.includes('siteHref("parts")'),"Separate featured market missing from homepage");
 assert.ok(home.includes('ce-division-grid')&&home.includes("RealPhoto"),"Distinct real-photo business divisions missing");
 assert.ok(shop.includes('pm-departments')&&shop.includes('pm-grid'),"Shop departments/grid missing");
 assert.ok(shop.includes('photosrc(product.image_url)')&&backend.includes('row.id+"/photo?v="'),"SKU-specific photos must be linked to product records");
 assert.ok(shop.includes('href={askPhoto(p)}')&&shop.includes('Product #"+product.id'),"SKU-specific enquiry missing");
-assert.ok(shop.includes("price_asc")&&shop.includes("price_desc")&&shop.includes("onlyStock")&&shop.includes("onlyPhotos"),"Search and filters missing");
+assert.ok(shop.includes("price_asc")&&shop.includes("price_desc")&&shop.includes("onlyStock")&&shop.includes("photoFilter"),"Search and filters missing");
 assert.ok(contact.includes('request_type:"message"')&&contact.includes("client_key:requestId"));
 assert.ok(enquiry.includes('/public-commerce/requests'));
 assert.ok(help.includes("hc-faq")&&help.includes("search"));
