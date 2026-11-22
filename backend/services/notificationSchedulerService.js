@@ -150,6 +150,7 @@ function startNotificationSyncScheduler({
     runScheduledNotificationSync({
       sync,
       executiveReports,
+      criticalOwnerAlerts: () => criticalOwnerAlerts({ env }),
       logger,
     });
 
