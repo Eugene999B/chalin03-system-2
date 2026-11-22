@@ -35,5 +35,8 @@ test("ID-token verification checks cryptographic signature, Google audience, non
  assert.throws(()=>s.verifyGoogleIdToken(valid,{keys:[jwk]},{clientId,expectedNonce:"other",now}),/nonce/);
  assert.throws(()=>s.verifyGoogleIdToken(sign({...claims,email_verified:false}),{keys:[jwk]},{clientId,expectedNonce:nonce,now}),/Unverified/);
  assert.throws(()=>s.verifyGoogleIdToken(sign({...claims,exp:Math.floor(now/1000)-1}),{keys:[jwk]},{clientId,expectedNonce:nonce,now}),/Expired/);
- assert.throws(()=>s.verifyGoogleIdToken(valid.replace(/.$/,"x"),{keys:[jwk]},{clientId,expectedNonce:nonce,now}),/signature/);
+ const [head,payload,signature]=valid.split(".");
+ const mutated=signature[0]==="A"?"B":"A";
+ const tampered=head+"."+payload+"."+mutated+signature.slice(1);
+ assert.throws(()=>s.verifyGoogleIdToken(tampered,{keys:[jwk]},{clientId,expectedNonce:nonce,now}),/signature/);
 });
