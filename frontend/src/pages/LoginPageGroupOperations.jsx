@@ -916,7 +916,7 @@ function LegacyLoginPageGroupOperations() {
 
 // Keep one CHALIN03 visual identity across every sign-in step.
 // A temporary API outage must never expose the old password form as a fallback.
-export default function LoginPageGroupOperations() {
+export default function LoginPageGroupOperations({ allowSignedInSetup = false }) {
   const [mode, setMode] = useState("loading");
   const [enforced, setEnforced] = useState(true);
   useEffect(() => {
@@ -938,5 +938,5 @@ export default function LoginPageGroupOperations() {
   if (mode === "legacy" || (initialCheck && mode === "passwordless" && !enforced)) {
     return <LegacyLoginPageGroupOperations />;
   }
-  return <StaffPasswordlessLogin />;
+  return <StaffPasswordlessLogin allowSignedInSetup={allowSignedInSetup} />;
 }
