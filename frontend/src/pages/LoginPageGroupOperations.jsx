@@ -918,7 +918,7 @@ function LegacyLoginPageGroupOperations() {
 // A temporary API outage must never expose the old password form as a fallback.
 export default function LoginPageGroupOperations() {
   const [mode, setMode] = useState("loading");
-  const [enforced, setEnforced] = useState(false);
+  const [enforced, setEnforced] = useState(true);
   useEffect(() => {
     let mounted = true;
     axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
