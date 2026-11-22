@@ -17,7 +17,9 @@ test("original account enrollment from login requires signed-in same-account pro
 });
 test("ordinary first-time staff still use SMS, original account never has anonymous bypass",()=>{
  assert.match(source,/if\(isOriginalSystemAdministrator\(user\)&&!alreadyEnrolled\)/);
- assert.match(source,/TRUSTED_SESSION_SETUP_REQUIRED/);
+ assert.match(source,/router\.post\("\/first-setup\/verify"/);
+ assert.match(source,/bcrypt\.compare\(password,user\.password_hash\)/);
+ assert.match(source,/challengeRow\(conn,token,\["admin_setup"\]\)/);
  assert.match(source,/getSmsConfig\(\)/);
  assert.match(source,/sendSmsAlertToPhone/);
  assert.match(source,/\/sms\/verify/);
