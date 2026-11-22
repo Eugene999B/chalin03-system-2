@@ -93,8 +93,8 @@ router.post("/start",action(async(req,res)=>{
   // first-setup challenge. The account owner verifies the EXISTING credential
   // exactly once before an Authenticator secret can ever be generated.
   // Subsequent sign-ins use only the Authenticator or a recovery code.
-  if(!(await belowLimit(user.id,"owner_first_enroll",5,60)))return deny(res,429);
-  const challenge=await createChallenge({id:user.id,purpose:"owner_first_enroll",workspace,branch});
+  if(!(await belowLimit(user.id,"admin_setup",5,60)))return deny(res,429);
+  const challenge=await createChallenge({id:user.id,purpose:"admin_setup",workspace,branch});
   res.set("Cache-Control","no-store");
   return res.json({status:"success",stage:"identity",challenge});
  }
@@ -131,7 +131,7 @@ router.post("/first-setup/verify",action(async(req,res)=>{
  const conn=await pool.getConnection();let userId;
  try{
   await conn.beginTransaction();
-  const row=await challengeRow(conn,token,["owner_first_enroll"]);
+  const row=await challengeRow(conn,token,["admin_setup"]);
   if(!row){await conn.rollback();return deny(res);}
   const user=await getUser(row.user_id);
   if(!user||!isOriginalSystemAdministrator(user)||!Number(user.is_active)||Number(user.is_login_locked)){
