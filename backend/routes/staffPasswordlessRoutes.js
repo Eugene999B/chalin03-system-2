@@ -145,6 +145,12 @@ router.post("/first-setup/verify",action(async(req,res)=>{
    await conn.commit();
    return deny(res);
   }
+  // Atomically retire the proof stage before returning an enrollment key.
+  // A second concurrent confirmation cannot produce a competing QR secret.
+  await conn.query(
+   "UPDATE staff_passwordless_challenges SET purpose='setup' WHERE token_digest=? AND purpose='admin_setup' AND consumed_at IS NULL",
+   [row.token_digest]
+  );
   userId=row.user_id;
   await conn.commit();
  }catch(error){await conn.rollback();throw error;}finally{conn.release();}
