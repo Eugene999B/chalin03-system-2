@@ -326,6 +326,11 @@ function LegacyLoginPageGroupOperations() {
 
     setProgressMessage("Identity verified. Opening your dashboard…");
     await new Promise((resolve) => window.setTimeout(resolve, 420));
+    const initialIdentityCheck = new URLSearchParams(window.location.search).get("first_setup") === "1";
+    if (initialIdentityCheck && session.user?.is_original_system_administrator) {
+      window.location.assign("/account-security");
+      return;
+    }
     window.location.assign(destination);
   }
 
@@ -909,19 +914,29 @@ function LegacyLoginPageGroupOperations() {
   );
 }
 
-// Passwordless login is selected by the backend's pilot mode, not by query parameters.
-// When the pilot is off, the original staff experience remains unchanged.
-export default function LoginPageGroupOperations() {
+// Keep one CHALIN03 visual identity across every sign-in step.
+// A temporary API outage must never expose the old password form as a fallback.
+export default function LoginPageGroupOperations({ allowSignedInSetup = false }) {
   const [mode, setMode] = useState("loading");
+  const [enforced, setEnforced] = useState(true);
   useEffect(() => {
     let mounted = true;
     axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
-      .then((response) => { if (mounted) setMode(response.data?.pilot ? (response.data?.enforced ? "passwordless-enforced" : "passwordless") : "legacy"); })
-      .catch(() => { if (mounted) setMode("legacy"); });
+      .then((response) => { if (mounted) { setEnforced(Boolean(response.data?.enforced)); setMode(response.data?.pilot ? "passwordless" : "legacy"); } })
+      .catch(() => { if (mounted) setMode("passwordless"); });
     return () => { mounted = false; };
   }, []);
-  if (mode === "passwordless" && new URLSearchParams(window.location.search).get("admin_setup") === "1") return <LegacyLoginPageGroupOperations />;
-  if (mode === "passwordless" || mode === "passwordless-enforced") return <StaffPasswordlessLogin showAdminBootstrap={mode === "passwordless"} />;
-  if (mode === "loading") return <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f4ee"}}><p>Preparing secure access…</p></main>;
-  return <LegacyLoginPageGroupOperations />;
+  if (mode === "loading") return (
+    <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f3f5f8",color:"#0b2343"}}>
+      <p>Preparing secure access…</p>
+    </main>
+  );
+  // A one-time original-account identity check remains available during the
+  // migration only; it has no link, menu entry, or visible setup label.
+  // This is never usable after full authenticator-only enforcement.
+  const initialCheck = new URLSearchParams(window.location.search).get("first_setup") === "1";
+  if (mode === "legacy" || (initialCheck && mode === "passwordless" && !enforced)) {
+    return <LegacyLoginPageGroupOperations />;
+  }
+  return <StaffPasswordlessLogin allowSignedInSetup={allowSignedInSetup} />;
 }
