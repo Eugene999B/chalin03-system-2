@@ -7,7 +7,7 @@ const requestKey=()=>globalThis.crypto?.randomUUID?.()||
  ("e95f9365-6ca0-44a3-8661-"+Math.random().toString(16).slice(2).padEnd(12,"0").slice(0,12));
 
 /** This is an asynchronous website enquiry, not a misleading live-chat promise. */
-export default function PublicContactPanel({subject="General enquiry"}){
+export default function PublicContactPanel({subject="General enquiry",inline=false}){
  const [open,setOpen]=useState(false);
  const [fields,setFields]=useState(blank);
  const [requestId,setRequestId]=useState(requestKey);
@@ -27,11 +27,11 @@ export default function PublicContactPanel({subject="General enquiry"}){
   }catch(e){setError(e.response?.data?.message||"Message not sent. Please call or use WhatsApp us instead.");}
   finally{setSending(false);}
  }
- return <div className="public-contact" data-testid="public-message-us">
-  {open?<section className="public-contact__panel" role="dialog" aria-modal="false" aria-label="Message the CHALIN03 team">
+ return <div className={inline?"public-contact public-contact--inline":"public-contact"} data-testid="public-message-us">
+  {(inline||open)?<section className="public-contact__panel" role={inline?undefined:"dialog"} aria-modal={inline?undefined:"false"} aria-label="Message the CHALIN03 team">
    <div className="public-contact__head"><div><span>CHALIN03 CUSTOMER CARE</span><strong>Message our team</strong>
     <p>Send us a question. Our staff will follow up using the contact details you provide.</p></div>
-    <button type="button" onClick={()=>setOpen(false)} aria-label="Close message form">×</button></div>
+    {!inline?<button type="button" onClick={()=>setOpen(false)} aria-label="Close message form">×</button>:null}</div>
    {reference?<div className="public-contact__success" role="status"><strong>Message received</strong>
      <p>Reference: {reference}. Keep this number for follow-up.</p>
      <button type="button" onClick={()=>{setReference("");setError("");}}>Send another message</button></div>:
@@ -57,10 +57,10 @@ export default function PublicContactPanel({subject="General enquiry"}){
     <a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us</a>
    </div>
   </section>:null}
-  <button className="public-contact__trigger" type="button" aria-expanded={open}
+  {!inline?<button className="public-contact__trigger" type="button" aria-expanded={open}
     aria-label={open?"Close customer message form":"Message CHALIN03 customer service"}
     onClick={()=>setOpen(value=>!value)}>
    <span aria-hidden="true">✉</span><span>{open?"Close":"Message us"}</span>
-  </button>
+  </button>:null}
  </div>;
 }

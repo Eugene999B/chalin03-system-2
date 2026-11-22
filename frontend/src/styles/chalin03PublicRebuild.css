@@ -1,0 +1,111 @@
+/* Customer-facing pages and the staff sign-in. */
+.ce-site,.bd-site,.pm-site,.hc-site,.iq-site {
+  --site-ink:#182825;
+  --site-accent:#b85c34;
+  background:#f4f1e9;
+  color:var(--site-ink);
+}
+.ce-site .ce-hero {
+  margin:0;
+  background:#eeeae0;
+  display:grid;
+  grid-template-columns:minmax(0,5fr) minmax(0,7fr);
+  min-height:0;
+  padding:clamp(20px,4vw,64px);
+  gap:clamp(22px,4vw,68px);
+  align-items:center;
+}
+.ce-site .ce-hero__copy {padding:0 0 0 clamp(0px,1.8vw,30px);color:#182825}
+.ce-site .ce-hero__copy p {color:#46534d}
+.ce-site .ce-hero h1 {font-family:Georgia,serif;color:#182825;font-weight:500;font-size:clamp(2.6rem,6.1vw,7rem)}
+.ce-site .ce-hero__visual,.ce-site .ce-hero__photo {height:clamp(265px,37vw,610px);min-height:0}
+.ce-site .ce-hero__photo img {object-fit:cover;object-position:center;min-height:0}
+.ce-site .ce-button--gold {background:#173a34;color:#fff}
+.ce-site .ce-button--light {background:transparent;border:1px solid #667a70;color:#172f29}
+.ce-site .ce-trustline {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:0;background:#193932}
+.ce-site .ce-trustline a {display:grid;gap:8px;padding:clamp(17px,3vw,44px);border-right:1px solid #7e958653;color:#fff}
+.ce-site .ce-trustline a:hover {background:#22483f}
+.ce-site .ce-trustline strong {font-size:clamp(.95rem,2vw,1.45rem);display:flex;justify-content:space-between;gap:8px;color:#fff}
+.ce-site .ce-trustline span {color:#e0e8de}
+.ce-site .ce-divisions {background:#f4f1e9}
+.ce-site .ce-section-head h2,.ce-site .ce-contact h2 {font-family:Georgia,serif;font-weight:500;letter-spacing:-.04em}
+.ce-site .ce-division-grid {grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.ce-site .ce-division {border-radius:0;background:#fff}
+.ce-site .ce-division__body {padding:20px}
+.ce-site .ce-division__media {height:clamp(150px,16vw,240px)}
+.ce-site .ce-division__media .real-photo {height:100%;min-height:0}
+.ce-site .ce-division__media .real-photo img {height:100%;min-height:0;object-fit:cover}
+
+.pm-site .pm-hero {
+  display:grid;
+  grid-template-columns:minmax(0,2.3fr) minmax(0,1fr);
+  align-items:end;
+  gap:clamp(18px,5vw,80px);
+  padding:clamp(23px,5vw,76px);
+  min-height:0;
+  background:#e6eae0;
+  color:#142f28;
+}
+.pm-site .pm-hero__copy {padding:0}
+.pm-site .pm-hero h1 {color:#142f28;font-family:Georgia,serif;font-weight:500;font-size:clamp(2.4rem,5vw,5.2rem);text-wrap:initial}
+.pm-site .pm-hero p {color:#3e554b}
+.pm-site .pm-hero .site-location {font-size:.76rem;font-weight:750;letter-spacing:.08em}
+.pm-site .pm-hero-search {margin-top:20px;max-width:none}
+.pm-site .pm-hero__service {border-left:3px solid #ab6644;padding:12px 18px;background:#f8f8f2;box-shadow:none}
+.pm-hero__service h2 {font-size:1.2rem;margin:0 0 8px}
+.pm-hero__service p {margin:0 0 14px;font-size:.91rem}
+.pm-hero__service a {text-decoration:underline;font-weight:750}
+.pm-site .pm-find {padding-top:clamp(28px,4vw,60px)}
+.pm-site .pm-product {border-radius:0}
+.pm-site .pm-product__photo:has(.pm-product__photo-button) {height:clamp(170px,19vw,290px)}
+.pm-site .pm-product__body {padding:18px}
+.pm-site .pm-sidebar {position:sticky;max-height:none;overflow:visible}
+
+.bd-site .bd-hero {background:#ece9e0;color:#182825;min-height:0}
+.bd-site .bd-hero__copy {color:#182825}
+.bd-site .bd-hero h1 {color:#182825;font-family:Georgia,serif;font-weight:500;text-wrap:initial}
+.bd-site .bd-hero__copy p,.bd-site .bd-hero .bd-kicker {color:#3f554b}
+.bd-site .bd-hero .bd-button--primary {background:#203d35;color:#fff;border-color:#203d35}
+.bd-site .bd-hero .bd-button--outline {color:#203d35;border-color:#62736c}
+.bd-site .bd-hero__photo .real-photo {height:100%}
+.bd-site .bd-item {border-radius:0;overflow:hidden}
+.bd-site .bd-item__photo {height:clamp(180px,22vw,315px)}
+.bd-site .bd-item__body p {min-height:0}
+.bd-machine-types {margin:0 0 clamp(22px,4vw,44px)}
+.bd-machine-types__grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.bd-machine-types article {padding:16px;background:#fff;border-top:3px solid #966045}
+.bd-machine-types h3 {font-size:1.12rem;margin:10px 0 6px}
+.bd-machine-types p {margin:0 0 14px;color:#42534b}
+.bd-machine-types .real-photo {height:180px}
+.bd-machine-types .real-photo img {height:100%;min-height:0;object-fit:cover}
+.bd-site.bd-site--gold .bd-products {grid-template-columns:repeat(2,minmax(0,1fr))}
+.bd-site.bd-site--gold .bd-item {border-top:3px solid #986219}
+.bd-site.bd-site--gold .bd-hero {background:#f3e9d5}
+.bd-site.bd-site--orange .bd-hero {background:#efe2d9}
+.hc-site .hc-hero,.iq-site .iq-intro {background:#193b32}
+
+body .gate4__shell {background:#f2eee5;border-radius:0;box-shadow:none}
+body .gate4__topbar {background:#203d35;color:#fff;border:0}
+body .gate4__layout {gap:0}
+body .gate4__story {background:#233e35;color:#fff;border-radius:0}
+body .gate4__access {background:#fcfbf8;color:#142f28;border:0;border-radius:0;box-shadow:none}
+body .gate4__access-heading h1,body .gate4__access-heading h2 {color:#142f28;font-family:Georgia,serif;letter-spacing:-.035em}
+body .gate4__access-heading p,body .gate4__field {color:#34473d}
+body .gate4__form .gate4__submit {background:#1e493e;color:#fff;border-radius:6px}
+body .gate4__context-strip {border-radius:6px}
+@media(max-width:780px) {
+ .ce-site .ce-hero,.pm-site .pm-hero {grid-template-columns:minmax(0,1fr)}
+ .ce-site .ce-division-grid,.bd-machine-types__grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+ .pm-site .pm-sidebar {position:static}
+}
+@media(max-width:500px) {
+ .ce-site .ce-division-grid,.bd-machine-types__grid,.bd-site.bd-site--gold .bd-products,.ce-site .ce-trustline {grid-template-columns:1fr}
+ .ce-site .ce-trustline a {border-bottom:1px solid #7e958653}
+ .ce-site .ce-division__media {height:220px}
+}
+.bd-site .public-contact--inline {position:static;z-index:auto;width:auto;margin:0 auto;padding:0 20px 48px;max-width:800px}
+.bd-site .public-contact--inline .public-contact__panel {position:static;right:auto;bottom:auto;width:100%;max-width:none;max-height:none;box-shadow:none}
+.gate4__logo img {display:block;max-width:100%;height:auto;object-fit:contain}
+.pm-site .pm-toggles {display:grid;gap:10px}
+.pm-site #pm-photo-filter {width:100%}
+.bd-more{margin-top:20px;padding:11px 20px;background:#203d35;color:#fff;border:0;border-radius:4px;cursor:pointer}

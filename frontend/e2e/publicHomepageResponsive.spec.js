@@ -13,7 +13,7 @@ test("new CHALIN03 corporate website has independent seven-business photographic
  await expect(page.getByRole("heading",{level:1,name:/CHALIN03.*Company Limited/s})).toBeVisible();
  await expect(page.getByRole("navigation",{name:"Company navigation"})).toBeVisible();
  await expect(page.locator(".ce-division")).toHaveCount(7);
- await expect(page.locator(".ce-market")).toBeVisible();
+ await expect(page.locator(".ce-trustline")).toBeVisible();
  await expect(page.locator(".ce-hero .real-photo img")).toHaveCount(1);
  await expect(page.locator(".ce-division__media .real-photo img")).toHaveCount(7);
  const parts=page.getByRole("navigation",{name:"Company navigation"}).getByRole("link",{name:"Spare-parts shop"});
@@ -34,7 +34,7 @@ test("new company mobile navigation opens dedicated Spare Parts Shop without lay
  const parts=page.getByRole("navigation",{name:"Company navigation"}).getByRole("link",{name:"Spare-parts shop"});
  await tapTarget(parts);await parts.click();
  await expect(page).toHaveURL(/\/shop$/);
- await expect(page.getByRole("heading",{level:1,name:/Spare parts & workshop supplies/i})).toBeVisible();
+ await expect(page.getByRole("heading",{level:1,name:/Find the part you need/i})).toBeVisible();
  await expect(page.locator(".pm-store-layout")).toBeVisible();
  await noHorizontalOverflow(page);
  await page.screenshot({path:testInfo.outputPath("chalin03-independent-market-mobile.png"),fullPage:true});
@@ -42,7 +42,7 @@ test("new company mobile navigation opens dedicated Spare Parts Shop without lay
 test("new company tablet layout retains readable real-photo business cards and featured market",async({page},testInfo)=>{
  await page.setViewportSize({width:768,height:1024});
  await page.goto("/");
- await expect(page.locator(".ce-market")).toBeVisible();
+ await expect(page.locator(".ce-trustline")).toBeVisible();
  await expect(page.locator(".ce-division")).toHaveCount(7);
  await expect(page.locator(".real-photo img").first()).toBeVisible();
  await noHorizontalOverflow(page);
@@ -50,7 +50,7 @@ test("new company tablet layout retains readable real-photo business cards and f
 });
 test("independent excavator model finder and secure quote are navigable",async({page})=>{
  await page.goto("/excavators");
- await expect(page.getByRole("heading",{level:1,name:/Excavators for your next big job/i})).toBeVisible();
+ await expect(page.getByRole("heading",{level:1,name:/Excavators by type and model/i})).toBeVisible();
  await expect(page.locator(".bd-item").first()).toBeVisible();
  await page.getByRole("searchbox",{name:/Search models and manufacturers/i}).fill("CAT 320");
  await expect(page.locator(".bd-item")).toHaveCount(1);
@@ -66,11 +66,11 @@ test("real excavator and parts photos load from the approved direct CDN, not red
  const hero=page.locator(".ce-hero__photo img");
  await expect(hero).toHaveAttribute("src",/^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\//);
  await expect.poll(async()=>hero.evaluate(el=>el.complete&&el.naturalWidth>=400),{timeout:20000,intervals:[500,1000,1500,2000]}).toBe(true);
- const parts=page.locator(".ce-market__primary img");
+ const parts=page.locator(".ce-division__media img").first();
  await expect(parts).toHaveAttribute("src",/^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\//);
  await expect.poll(async()=>parts.evaluate(el=>el.complete&&el.naturalWidth>=400),{timeout:20000,intervals:[500,1000,1500,2000]}).toBe(true);
  await expect(page.locator(".ce-hero__photo .real-photo__unavailable")).toHaveCount(0);
- await expect(page.locator(".ce-market__primary .real-photo__unavailable")).toHaveCount(0);
+ await expect(page.locator(".ce-division").first().locator(".real-photo__unavailable")).toHaveCount(0);
 });
 
 

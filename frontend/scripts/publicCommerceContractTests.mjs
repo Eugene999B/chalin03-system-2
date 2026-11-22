@@ -17,7 +17,7 @@ assert.ok(app.includes('path="/shop" element={<IndependentPartsMarket />} />'));
 assert.ok(app.includes('path="/enquire" element={<IndependentQuotePage />} />'));
 assert.ok(app.includes('path="online-orders"'));
 assert.ok(app.includes('path="online-catalogue"'));
-for(const term of ["/public-commerce/products","/public-commerce/requests","price_asc","price_desc","onlyPhotos","onlyStock","customer_email","customer_location","client_key:requestKey","No online payment"]){
+for(const term of ["/public-commerce/products","/public-commerce/requests","price_asc","price_desc","photoFilter","onlyStock","customer_email","customer_location","client_key:requestKey","No online payment"]){
  assert.ok(shop.includes(term),"Missing market feature: "+term);
 }
 for(const term of ["Gold buying & refining","Automobiles","Motorcycles","machine-transport","054 071 3654"]){
@@ -42,7 +42,7 @@ for(const code of ["page.spare_parts.online_orders.view","page.spare_parts.onlin
  assert.ok(frontCatalog.includes(code));
  assert.ok(backendCatalog.includes(code));
 }
-for(const term of ['ce-market','ce-division','siteHref("parts")','siteHref("excavators")','siteHref("work")','PublicContactPanel']){
+for(const term of ['ce-trustline','ce-division','siteHref("parts")','siteHref("excavators")','siteHref("work")','PublicContactPanel']){
  assert.ok(homepage.includes(term),"Missing redesigned company feature "+term);
 }
 const seo=read("public/sitemap.xml");

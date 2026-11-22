@@ -28,6 +28,6 @@ export default function RealPhoto({photo:image,className="",eager=false}){
     fetchPriority={eager?"high":"auto"} width="960" height="640"
     onError={()=>setSourceIndex(i=>i+1)}/>}
   {!failed?<figcaption><a href={image.source} rel="noopener noreferrer" target="_blank">
-   Real photo · {image.credit} · {image.license}</a></figcaption>:null}
+   Real photo · {image.credit}{image.licenseUrl?"":" · "+image.license}</a>{image.licenseUrl?<>{" · "}<a href={image.licenseUrl} rel="noopener noreferrer" target="_blank">{image.license}</a>{" · "+image.changes}</>:null}</figcaption>:null}
  </figure>;
 }

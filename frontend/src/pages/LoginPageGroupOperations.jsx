@@ -18,6 +18,7 @@ import "../styles/commandGateBankPolish.css";
 import "../styles/biometricBankLogin.css";
 import "../styles/groupOperationsLogin.css";
 import "../styles/chalin03PublicRefresh.css";
+import "../styles/chalin03PublicRebuild.css";
 
 const DEFAULT_WORKSPACE = "spare_parts";
 const TOKEN_KEY = "chalin03_token";
@@ -549,7 +550,7 @@ export default function LoginPageGroupOperations() {
       <section className="gate4__shell">
         <header className="gate4__topbar">
           <div className="gate4__brand">
-            <div className="gate4__logo"><span>C03</span></div>
+            <div className="gate4__logo"><img src="/chalin03-logo.png" width="48" height="48" alt=""/></div>
             <div>
               <small>Chalin 03 Company Limited</small>
               <strong>Business Operating System</strong>
