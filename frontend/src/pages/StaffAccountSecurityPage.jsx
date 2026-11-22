@@ -3,6 +3,9 @@ import { Navigate } from "react-router";
 import { useAuth } from "../context/AuthContext";
 import axiosClient from "../api/axiosClient";
 import { APP_RELEASE_LABEL } from "../config/appVersion";
+import "../styles/commandGateV4.css";
+import "../styles/commandGateBankPolish.css";
+import "../styles/groupOperationsLogin.css";
 import "../styles/loginPasswordlessClassic.css";
 
 const API = "/auth/passwordless";
