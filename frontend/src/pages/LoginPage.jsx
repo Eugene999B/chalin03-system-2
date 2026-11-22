@@ -103,11 +103,13 @@ export default function LoginPage() {
 
   // Visiting the sign-in route must never revoke a valid authenticated
   // session. Explicit Logout/Back to Login controls handle revocation.
-  if (isLoggedIn && user?.is_original_system_administrator && needsInitialSetup === null) {
-    return <main className="gate4" role="status" style={{minHeight:"100vh",display:"grid",placeItems:"center"}}>Checking secure access…</main>;
-  }
-  if (isLoggedIn && needsInitialSetup !== true) {
-    return <Navigate to={getWorkspaceHomeRoute(workspaceCode)} replace />;
+  if (isLoggedIn) {
+    if (user?.is_original_system_administrator && needsInitialSetup === null) {
+      return <main className="gate4" role="status" style={{minHeight:"100vh",display:"grid",placeItems:"center"}}>Checking secure access…</main>;
+    }
+    if (needsInitialSetup !== true) {
+      return <Navigate to={getWorkspaceHomeRoute(workspaceCode)} replace />;
+    }
   }
 
   return <LoginPageGroupOperations allowSignedInSetup={isLoggedIn && needsInitialSetup === true} />;
