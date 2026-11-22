@@ -5,6 +5,7 @@ import RealPhoto from "../components/RealPhoto";
 import {PHOTO_LIBRARY,EXACT_MODEL_PHOTOS,REAL_TYPE_PHOTOS} from "../data/verifiedPublicPhotos";
 import {siteHref,sectorHref} from "../config/officialSites";
 import "../styles/independentDivisionWebsite.css";
+import "../styles/chalin03PublicRefresh.css";
 
 const modelFamilies={
  "Caterpillar":["CAT 305","CAT 307","CAT 308","CAT 312","CAT 315","CAT 318","CAT 320","CAT 323","CAT 325","CAT 330","CAT 336","CAT 340","CAT 349","CAT 352","CAT 374","CAT 395"],

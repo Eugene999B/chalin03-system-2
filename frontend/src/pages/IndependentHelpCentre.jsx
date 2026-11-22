@@ -3,6 +3,7 @@ import PublicPageMeta from "../components/PublicPageMeta";
 import PublicContactPanel from "../components/PublicContactPanel";
 import {siteHref,sectorHref} from "../config/officialSites";
 import "../styles/independentHelpCentre.css";
+import "../styles/chalin03PublicRefresh.css";
 const answers=[
  ["Ordering","How do I order spare parts?","Visit the dedicated spare-parts shop, find your item using search or shop departments, add it to your basket, and submit your request. Staff will confirm availability, fitment, final total and how to pay before completing any sale."],
  ["Ordering","Does the website accept online payments?","No. CHALIN03 currently accepts basket and quotation requests. Our staff verifies the actual transaction before any payment. Never send payment simply because someone sends you a link."],
