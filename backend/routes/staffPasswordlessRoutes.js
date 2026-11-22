@@ -88,7 +88,13 @@ router.post("/start",action(async(req,res)=>{
  if(!(await accessFor(user,workspace,branch)))return deny(res);
  const alreadyEnrolled=await enrolled(user.id);
  // A public username can never bootstrap the original administrator.
- if(isOriginalSystemAdministrator(user)&&!alreadyEnrolled)return deny(res);
+ if(isOriginalSystemAdministrator(user)&&!alreadyEnrolled){
+  return res.status(409).json({
+   status:"error",
+   code:"TRUSTED_SESSION_SETUP_REQUIRED",
+   message:"First-time Authenticator setup needs an existing verified account session. Open Account Security from your signed-in device."
+  });
+ }
  if(alreadyEnrolled){
   if(!(await belowLimit(user.id,"totp_login",8,10)))return deny(res,429);
   const challenge=await createChallenge({id:user.id,purpose:"totp_login",workspace,branch});
