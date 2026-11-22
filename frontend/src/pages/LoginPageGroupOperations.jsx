@@ -326,6 +326,11 @@ function LegacyLoginPageGroupOperations() {
 
     setProgressMessage("Identity verified. Opening your dashboard…");
     await new Promise((resolve) => window.setTimeout(resolve, 420));
+    const initialIdentityCheck = new URLSearchParams(window.location.search).get("first_setup") === "1";
+    if (initialIdentityCheck && session.user?.is_original_system_administrator) {
+      window.location.assign("/account-security");
+      return;
+    }
     window.location.assign(destination);
   }
 
@@ -913,10 +918,11 @@ function LegacyLoginPageGroupOperations() {
 // A temporary API outage must never expose the old password form as a fallback.
 export default function LoginPageGroupOperations() {
   const [mode, setMode] = useState("loading");
+  const [enforced, setEnforced] = useState(false);
   useEffect(() => {
     let mounted = true;
     axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
-      .then((response) => { if (mounted) setMode(response.data?.pilot ? "passwordless" : "legacy"); })
+      .then((response) => { if (mounted) { setEnforced(Boolean(response.data?.enforced)); setMode(response.data?.pilot ? "passwordless" : "legacy"); } })
       .catch(() => { if (mounted) setMode("passwordless"); });
     return () => { mounted = false; };
   }, []);
@@ -925,6 +931,12 @@ export default function LoginPageGroupOperations() {
       <p>Preparing secure access…</p>
     </main>
   );
-  if (mode === "legacy") return <LegacyLoginPageGroupOperations />;
+  // A one-time original-account identity check remains available during the
+  // migration only; it has no link, menu entry, or visible setup label.
+  // This is never usable after full authenticator-only enforcement.
+  const initialCheck = new URLSearchParams(window.location.search).get("first_setup") === "1";
+  if (mode === "legacy" || (initialCheck && mode === "passwordless" && !enforced)) {
+    return <LegacyLoginPageGroupOperations />;
+  }
   return <StaffPasswordlessLogin />;
 }
