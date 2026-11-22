@@ -254,7 +254,7 @@ function buildMessage(type, period, metrics, recipientLabel, previous) {
         metrics.absoluteVariance > 0 || metrics.awaitingVerification > 0
           ? "Reconcile closings and outstanding verification."
           : gap > 0
-            ? "Follow up unpaid sale balances."
+            ? "Assign collection follow-up on unpaid sale balances."
             : metrics.lowStockCount > 0
               ? "Prioritise stock replenishment."
               : metrics.estimatedOperatingResult < 0
