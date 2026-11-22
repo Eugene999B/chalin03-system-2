@@ -43,7 +43,7 @@ async function claimCriticalAlerts() {
 
 async function deliverCriticalOwnerAlerts({ env = process.env } = {}) {
   const config = getSmsConfig();
-  if (String(env.NOTIFICATION_SMS_ENABLED || "").toLowerCase() !== "true" || !config.enabled || config.provider === "mock") {
+  if (!["1", "true"].includes(String(env.CRITICAL_OWNER_SMS_ENABLED ?? (env.NODE_ENV === "production" ? "true" : "false")).toLowerCase()) || !config.enabled || config.provider === "mock") {
     return { skipped: true };
   }
   const claims = await claimCriticalAlerts();
