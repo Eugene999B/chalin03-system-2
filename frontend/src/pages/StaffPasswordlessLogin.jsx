@@ -86,6 +86,9 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [verificationError, setVerificationError] = useState(null);
+  const [remainingAttempts, setRemainingAttempts] = useState(null);
+  const [verificationBlocked, setVerificationBlocked] = useState(false);
   const [notice, setNotice] = useState("");
   const selectedBranch = useMemo(
     () => branches.find((item) => branchId(item) === Number(selectedBranchId)),
@@ -121,12 +124,12 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
   function reset() {
     setStep("identify"); setCode(""); setChallenge(""); setOneTimeVerification("");
     setSetup(null); setRecoveryCodes([]); setBackupMode(false);
-    setPendingSession(null); setError(""); setNotice("");
+    setPendingSession(null); setError(""); setNotice(""); setVerificationError(null); setRemainingAttempts(null); setVerificationBlocked(false);
   }
   async function submitIdentifier(event) {
     event.preventDefault();
     if (!identifier.trim() || (isSpareParts && !selectedBranchId)) return;
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setError(""); setNotice(""); setVerificationError(null); setRemainingAttempts(null); setVerificationBlocked(false);
     try {
       const { data } = await axiosClient.post(API + (allowSignedInSetup ? "/start/verified" : "/start"), {
         identifier: identifier.trim(),
@@ -183,9 +186,16 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
     const result = completePasswordlessLogin(data, workspaceCode);
     window.location.assign(HOME[result.user?.workspace_code] || HOME[workspaceCode] || "/");
   }
+  function updateCode(value) {
+    setCode(value);
+    if (!verificationBlocked) {
+      setVerificationError(null);
+      setError("");
+    }
+  }
   async function submitAuthenticator(event) {
-    event.preventDefault(); if (!code.trim()) return;
-    setBusy(true); setError("");
+    event.preventDefault(); if (!code.trim() || verificationBlocked) return;
+    setBusy(true); setError(""); setVerificationError(null);
     try {
       const endpoint = step === "setup" ? "/setup/confirm" : "/verify";
       const { data } = await axiosClient.post(API + endpoint, { challenge, code: code.trim() });
@@ -198,8 +208,17 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
         setStep("backup"); setSaved(false);
         setNotice("Save these codes now. They won't be displayed again.");
       } else openWorkspace(data);
-    } catch (e) { setError(e.response ? messageFrom(e) : e.message); }
-    finally { setBusy(false); }
+    } catch (e) {
+      const serverCode = e.response?.data?.code || "";
+      const wrongCode = serverCode === "SECURITY_CODE_INCORRECT";
+      const blockedCode = ["CODE_ATTEMPTS_EXHAUSTED", "RATE_LIMITED", "VERIFICATION_EXPIRED"].includes(serverCode);
+      const displayMessage = wrongCode ? "Incorrect code. Check Google Authenticator, then enter the newest six-digit code."
+        : blockedCode ? messageFrom(e) : e.response ? messageFrom(e) : e.message;
+      setCode("");
+      setVerificationError(displayMessage);
+      setRemainingAttempts(Number.isInteger(e.response?.data?.attempts_remaining) ? e.response.data.attempts_remaining : null);
+      setVerificationBlocked(blockedCode);
+    } finally { setBusy(false); }
   }
 
   if (isLoggedIn && step !== "backup" && !allowSignedInSetup) {
@@ -319,6 +338,7 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
             </form>}
 
             {step === "setup" && <form className="gate4__form" onSubmit={submitAuthenticator}>
+              <div className="gpl-step-label"><span>02</span><div><strong>Connect your Authenticator</strong><small>Scan the QR code, then confirm the new account.</small></div></div>
               <div className="gpl-setup">
                 <div className="gpl-setup__qr"><img src={setup?.qr_data_url} width="210" height="210" alt="Scan to add CHALIN03 to your authenticator app" /></div>
                 <label className="gate4__field"><span>Manual setup key</span>
@@ -329,28 +349,33 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
               </div>
               <label className="gate4__field"><span>Current Authenticator code</span>
                 <input type="text" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code"
-                  value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  maxLength={6} disabled={busy} required />
+                  value={code} onChange={(e) => updateCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  maxLength={6} disabled={busy || verificationBlocked} required aria-invalid={Boolean(verificationError)} aria-describedby={verificationError ? "gpl-verification-error" : undefined} />
               </label>
-              <button type="submit" className="gate4__submit" disabled={busy || code.length !== 6}>
+              {verificationError && <div className="gpl-code-feedback" id="gpl-verification-error" role="alert"><strong>Code not accepted</strong><p>{verificationError}</p>{remainingAttempts !== null && remainingAttempts > 0 && <small>{remainingAttempts} tries left in this verification.</small>}{verificationBlocked && <button type="button" onClick={reset}>Start again</button>}</div>}
+              <p className="gpl-code-tip">The code changes every 30 seconds. Enter the newest one shown in your app.</p>
+              <button type="submit" className="gate4__submit" disabled={busy || verificationBlocked || code.length !== 6}>
                 <span>→</span><div><strong>{busy ? "Activating…" : "Activate Authenticator"}</strong>
                   <small>Save your recovery codes in the next step</small></div>
               </button>
             </form>}
 
             {step === "authenticator" && <form className="gate4__form" onSubmit={submitAuthenticator}>
+              <div className="gpl-step-label"><span>02</span><div><strong>Verify it's you</strong><small>Your secure code stays on this screen until accepted.</small></div></div>
               <label className="gate4__field"><span>{backupMode ? "One-time backup code" : "Authenticator code"}</span>
                 <input type="text" autoComplete="one-time-code" inputMode={backupMode ? "text" : "numeric"}
-                  value={code} onChange={(e) => setCode(backupMode ? e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 24)
+                  value={code} onChange={(e) => updateCode(backupMode ? e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 24)
                     : e.target.value.replace(/\D/g, "").slice(0, 6))}
                   maxLength={backupMode ? 24 : 6} placeholder={backupMode ? "Enter your saved recovery code" : "6-digit code"}
-                  disabled={busy} required />
+                  disabled={busy || verificationBlocked} required aria-invalid={Boolean(verificationError)} aria-describedby={verificationError ? "gpl-verification-error" : undefined} />
               </label>
-              <button type="submit" className="gate4__submit" disabled={busy || (backupMode ? code.replace(/[^A-Z0-9]/g, "").length < 10 : code.length !== 6)}>
+              {verificationError && <div className="gpl-code-feedback" id="gpl-verification-error" role="alert"><strong>{verificationBlocked ? "Verification paused" : "Incorrect code"}</strong><p>{verificationError}</p>{remainingAttempts !== null && remainingAttempts > 0 && <small>{remainingAttempts} tries left in this verification.</small>}{verificationBlocked && <button type="button" onClick={reset}>Start again</button>}</div>}
+              {!backupMode && <p className="gpl-code-tip">Codes change every 30 seconds. Use the latest one and check that your phone's time is automatic.</p>}
+              <button type="submit" className="gate4__submit" disabled={busy || verificationBlocked || (backupMode ? code.replace(/[^A-Z0-9]/g, "").length < 10 : code.length !== 6)}>
                 <span>→</span><div><strong>{busy ? "Verifying…" : "Sign in to Chalin 03"}</strong>
                   <small>Secure access to your business dashboard</small></div>
               </button>
-              <button className="gpl-link" type="button" onClick={() => { setBackupMode(!backupMode); setCode(""); }}>
+              <button className="gpl-link" type="button" onClick={() => { setBackupMode(!backupMode); setCode(""); setVerificationError(null); setRemainingAttempts(null); }}>
                 {backupMode ? "Use Authenticator instead" : "Use a backup code instead"}
               </button>
             </form>}
