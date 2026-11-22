@@ -37,14 +37,14 @@ export default function CompanyExperienceV3(){
     <a href={siteHref("parts")}>Spare-parts shop</a>
     <a href={siteHref("excavators")}>Excavators</a>
     <a href={siteHref("machines")}>Heavy machines</a>
-    <a href={siteHref("help")}>Help & contact</a>
+    <a href="#message" onClick={()=>setMenuOpen(false)}>Send a message</a>
     <a className="ce-work-link" href={siteHref("work")}>Staff portal</a>
    </nav>
   </header>
   <section className="ce-hero">
    <div className="ce-hero__copy"><div className="ce-eyebrow">Dunkwa, Ghana</div>
     <h1>CHALIN03<br/>Company Limited</h1>
-    <p>Equipment sales and hire, spare parts, and machine transport from Dunkwa, Ghana.</p>
+    <p>Excavators, spare parts, heavy machinery, motorcycles, automobiles and equipment hire — plus machine transport and responsible gold-sector enquiries, from Dunkwa, Ghana.</p>
     <div className="ce-hero__actions">
      <a className="ce-button ce-button--gold" href="#our-businesses">Find a business <span aria-hidden="true">↓</span></a>
      <a className="ce-button ce-button--light" href={WHATSAPP} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
@@ -75,6 +75,15 @@ export default function CompanyExperienceV3(){
      </div>
     </article>)}</div>
   </section>
+
+  <section className="ce-approach" aria-labelledby="ce-approach-title">
+   <div className="ce-section-head"><div className="ce-eyebrow ce-eyebrow--dark"><span/> HOW IT WORKS</div><h2 id="ce-approach-title">A clear route from enquiry to action.</h2><p>Explore the options, share your requirements and verify the details before you commit.</p></div>
+   <div className="ce-approach__grid">
+    <article><span>01 / EXPLORE</span><h3>Find the right business</h3><p>Browse parts, equipment and vehicle types — or tell us what you are sourcing.</p></article>
+    <article><span>02 / DISCUSS</span><h3>Share the specifics</h3><p>Give us the model, job, location and budget. We can clarify compatibility and logistics.</p></article>
+    <article><span>03 / VERIFY</span><h3>Confirm before proceeding</h3><p>Our team verifies availability, condition, documentation and quotation.</p></article>
+   </div>
+  </section>
   <section className="ce-contact" id="contact"><div><div className="ce-eyebrow ce-eyebrow--dark"><span/> SPEAK TO US</div>
    <h2>Tell us what<br/>you are looking for.</h2><p>Our team is available for parts requests, machine enquiries and service quotations. You can message us directly here on the website.</p></div>
    <div className="ce-contact__links">
@@ -83,11 +92,19 @@ export default function CompanyExperienceV3(){
     <a href={"tel:"+SALES_PHONE}><span>SALES & SUPPORT</span><strong>054 071 3654</strong><span aria-hidden="true">↗</span></a>
    </div>
   </section>
+
+  <section className="ce-message" id="message" aria-labelledby="ce-message-title">
+   <div className="ce-message__intro"><div className="ce-eyebrow ce-eyebrow--dark"><span/> DIRECT ENQUIRIES</div>
+    <h2 id="ce-message-title">Send us a message.</h2>
+    <p>Questions about spare parts, excavators, transport, vehicles, heavy machinery or gold-sector services? Describe your requirements and our team can follow up.</p>
+    <p className="ce-message__notice">Photos are references unless explicitly verified as actual CHALIN03 stock.</p>
+   </div>
+   <PublicContactPanel subject="CHALIN03 company website customer enquiry" inline/>
+  </section>
   <footer className="ce-footer"><div><Brand inverse/><p>Dunkwa Police Barrier · Ghana</p><p>Real equipment, practical services, and people ready to help.</p></div>
    <div className="ce-footer__links"><strong>DISCOVER</strong><a href={siteHref("parts")}>Spare-parts shop</a><a href={siteHref("excavators")}>Excavators</a><a href={siteHref("machines")}>Heavy machinery</a><a href={siteHref("automobiles")}>Automobiles</a><a href={siteHref("motorcycles")}>Motorcycles</a></div>
    <div className="ce-footer__links"><strong>MORE SERVICES</strong><a href={siteHref("gold")}>Gold & refining enquiries</a><a href={siteHref("transport")}>Machine transport</a><a href={siteHref("hire")}>Equipment hire</a><a href={siteHref("help")}>Help centre</a><a href={siteHref("work")}>Staff login</a></div>
    <div className="ce-footer__end"><span>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED</span><span>Equipment photos are references. Current stock is confirmed by our staff.</span></div>
   </footer>
-  <PublicContactPanel subject="CHALIN03 company website customer enquiry"/>
  </main>;
 }

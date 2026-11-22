@@ -206,7 +206,10 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
    </div>
    {results.length?<div className="bd-products">
     {results.slice(0,visibleCount).map(item=><article key={item.brand+"-"+item.name} className="bd-item">
-     {item.photo?<RealPhoto photo={item.photo} className="bd-item__photo"/>:null}
+     <div className="bd-item__visual">
+       {item.photo?<><RealPhoto photo={item.photo} className="bd-item__photo"/><span className="bd-item__visual-label">Real reference photo · current stock to confirm</span></>:
+       <div className="bd-item__photo-pending"><span>CHALIN03 / MODEL GUIDE</span><strong>{item.name}</strong><small>Specific photograph not yet verified</small></div>}
+      </div>
      <div className="bd-item__body"><span className="bd-item__meta">{item.brand}</span><h3>{item.name}</h3><p>{item.description}</p>
       <a href={sectorHref(data.sector,sector==="excavators"?item.brand+" "+item.name:item.name)}>Enquire about {item.name} <span>↗</span></a></div>
     </article>)}</div>:
@@ -221,6 +224,6 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
    <div className="bd-contact__actions"><a href={enquiry}>Send an enquiry on this website ↗</a><a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us ↗</a><a href="tel:+233540713654">Call 054 071 3654 ↗</a></div></section>
   <footer className="bd-footer"><Brand/><nav aria-label="CHALIN03 other website links"><a href={siteHref("company")}>Company home</a><a href={siteHref("parts")}>Spare-parts shop</a><a href={siteHref("help")}>Help centre</a><a href={siteHref("work")}>Staff sign in</a></nav>
     <small>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED · Reference photographs are credited and do not represent confirmed stock.</small></footer>
-  <PublicContactPanel subject={data.line+" enquiry"} inline={sector==="gold"||sector==="machine-transport"}/>
+  <PublicContactPanel subject={data.line+" enquiry"} inline/>
  </main>;
 }

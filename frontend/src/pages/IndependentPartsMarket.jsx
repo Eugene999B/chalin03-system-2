@@ -36,8 +36,10 @@ function PhotoCredit({photo}){
 function ProductPhoto({product,photo,onOpen}){
  const [failed,setFailed]=useState(false);
  const description=photo?.alt||[product.name,product.size].filter(Boolean).join(" · ");
- if(!photo||failed)return <div className="pm-product__no-photo">
-  <small>{failed?"Photo temporarily unavailable":photoNeedsReview(product)?"Photo under review":"Stock photo unavailable"}</small>
+ if(!photo||failed)return <div className="pm-product__no-photo" aria-label={"Item-specific photo not verified for "+product.name}>
+  <span className="pm-product__no-photo-top">CHALIN03 / MAIN STORE</span>
+  <strong>{product.name}</strong><small>{product.category} · SKU {product.id}</small>
+  <em>{failed?"Reference photo temporarily unavailable":photoNeedsReview(product)?"Photo under review — exact item to confirm":"Actual item photo pending verification"}</em>
  </div>;
  return <>
   <button className="pm-product__photo-button" type="button" aria-label={"Enlarge photo of "+product.name}
