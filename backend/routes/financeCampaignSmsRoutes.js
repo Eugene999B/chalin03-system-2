@@ -16,6 +16,13 @@ const {
 } = require("../services/financeSmsCampaignService");
 
 const router = express.Router();
+function providerReady(config) {
+  if (!config.enabled || !config.senderId) return false;
+  if (config.provider === "arkesel") return Boolean(config.arkeselApiKey);
+  if (config.provider === "hubtel") return Boolean(config.hubtelClientId && config.hubtelClientSecret);
+  return false;
+}
+
 const MAX_RECIPIENTS = 200;
 const CONFIRMATION = "SEND EXCAVATOR OFFER";
 const rateLimit = buildRateLimiter({
@@ -70,7 +77,7 @@ router.get("/preview", safeHandler(async (_req, res) => {
     invalid_count: audience.invalid_count,
     duplicate_count: audience.duplicate_count,
     sms_enabled: Boolean(config.enabled),
-    live_sending: Boolean(config.enabled && config.provider !== "mock"),
+    live_sending: providerReady(config),
     provider: config.provider,
     confirmation_text: CONFIRMATION,
     recipients: audience.recipients.map((row) => ({
@@ -119,7 +126,7 @@ router.post("/send",
     if (!message || message.length > 480) return fail(res, 400, "Message must be 1-480 characters.");
 
     const config = getSmsConfig();
-    if (!config.enabled || config.provider === "mock") {
+    if (!providerReady(config)) {
       return fail(res, 409, "Live SMS sending is not enabled. No campaign messages were sent.");
     }
 
