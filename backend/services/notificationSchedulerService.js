@@ -1,6 +1,8 @@
 const { runNotificationSync } = require("./notificationService");
 const { runScheduledBusinessReports } = require("./executiveBusinessReportService");
 
+const { deliverCriticalOwnerAlerts } = require("./criticalOwnerNotificationSms");
+
 const DEFAULT_INTERVAL_MINUTES = 15;
 const MIN_INTERVAL_MINUTES = 5;
 const MAX_INTERVAL_MINUTES = 24 * 60;
@@ -51,6 +53,7 @@ async function runScheduledNotificationSync({
   sync = runNotificationSync,
   logger = console,
   executiveReports = runScheduledBusinessReports,
+  criticalOwnerAlerts = deliverCriticalOwnerAlerts,
 } = {}) {
   if (syncRunning) {
     return { skipped: true, reason: "local_sync_already_running" };
@@ -59,7 +62,15 @@ async function runScheduledNotificationSync({
   syncRunning = true;
   try {
     const [notificationResult, executiveResult] = await Promise.allSettled([
-      sync({ workspaceCode: "group", userId: null }),
+      Promise.resolve().then(async () => {
+        const result = await sync({ workspaceCode: "group", userId: null });
+        try {
+          await criticalOwnerAlerts();
+        } catch (error) {
+          logger.error("Critical owner alerts could not be processed:", error?.message || error);
+        }
+        return result;
+      }),
       executiveReports({ logger }),
     ]);
 
@@ -119,6 +130,7 @@ function startNotificationSyncScheduler({
   env = process.env,
   sync = runNotificationSync,
   executiveReports = runScheduledBusinessReports,
+  criticalOwnerAlerts = deliverCriticalOwnerAlerts,
   logger = console,
   setTimeoutFn = setTimeout,
   setIntervalFn = setInterval,
