@@ -866,6 +866,22 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Once an account has a verified Authenticator, password sign-in can no
+    // longer bypass its new security method, including during the pilot.
+    if (process.env.STAFF_PASSWORDLESS_PILOT === "true") {
+      const [authenticatorRows] = await pool.query(
+        "SELECT user_id FROM staff_passwordless_identities WHERE user_id = ? LIMIT 1",
+        [user.id]
+      );
+      if (authenticatorRows.length) {
+        return res.status(410).json({
+          status: "error",
+          code: "ACCOUNT_PASSWORD_LOGIN_RETIRED",
+          message: "This account now uses Authenticator or a one-time backup code. Return to secure sign-in.",
+        });
+      }
+    }
+
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
