@@ -916,11 +916,12 @@ export default function LoginPageGroupOperations() {
   useEffect(() => {
     let mounted = true;
     axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
-      .then((response) => { if (mounted) setMode(response.data?.pilot ? "passwordless" : "legacy"); })
+      .then((response) => { if (mounted) setMode(response.data?.pilot ? (response.data?.enforced ? "passwordless-enforced" : "passwordless") : "legacy"); })
       .catch(() => { if (mounted) setMode("legacy"); });
     return () => { mounted = false; };
   }, []);
-  if (mode === "passwordless") return <StaffPasswordlessLogin />;
+  if (mode === "passwordless" && new URLSearchParams(window.location.search).get("admin_setup") === "1") return <LegacyLoginPageGroupOperations />;
+  if (mode === "passwordless" || mode === "passwordless-enforced") return <StaffPasswordlessLogin showAdminBootstrap={mode === "passwordless"} />;
   if (mode === "loading") return <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f5f4ee"}}><p>Preparing secure access…</p></main>;
   return <LegacyLoginPageGroupOperations />;
 }
