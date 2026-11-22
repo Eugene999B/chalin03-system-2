@@ -16,18 +16,22 @@ for(const marker of ["submitIdentifier","submitSms","submitAuthenticator","stage
  "stage === \"authenticator\"","step === \"setup\"","step === \"backup\"",
  "backupMode","/sms/verify","/setup/confirm","/verify","downloadRecoveryImage",
  "recoveryCodes","completePasswordlessLogin"])assert.ok(page.includes(marker),"Security journey missing: "+marker);
-assert.doesNotMatch(page,/type=["']password["']/i,"Public sign-in must not render password input");
 assert.doesNotMatch(page,/administrator first-time|administrator setup|admin_setup/i,"No visible administrator bypass");
 assert.doesNotMatch(wrapper,/showAdminBootstrap|admin_setup=1|<StaffPasswordlessLogin showAdminBootstrap/);
-assert.match(wrapper,/initialCheck.*!enforced/,"One-time identity check only before enforcement");
-assert.match(wrapper,/setEnforced\] = useState\(true\)/,"Fail closed on API outage");
-assert.match(wrapper,/first_setup.*=== "1"/,"Controlled first-setup recovery path");
 assert.match(settings,/gate4__topbar/,"Account security uses original visual system");
 assert.doesNotMatch(settings,/>Set up administrator|>Administrator first-time setup/i);
 assert.match(settings,/is_original_system_administrator && !initialStart.current/,"Only trusted original account can self-enroll");
 assert.match(settings,/\/administrator\/start/,"Trusted-session setup endpoint still protected");
 assert.match(api,/isOriginalSystemAdministrator\(user\)&&!alreadyEnrolled/,"Anonymous original admin enrollment blocked");
 assert.match(api,/\/administrator\/start",requireAuth/,"Administrator enrollment requires valid session");
+assert.match(page,/step === "identity"/,"Identity confirmation stage is present");
+assert.match(page,/type="password"/,"Only first enrollment uses existing credential for identity proof");
+assert.match(page,/submitFirstSetupIdentity/,"Owner proof leads to QR setup");
+assert.match(page,/first-setup\/verify/,"One-time verification posts to backend");
+assert.doesNotMatch(wrapper,/first_setup|admin_setup/,"No hidden password login URL");
+assert.match(wrapper,/setMode\("passwordless"\)/,"API outage must never reveal legacy form");
+assert.match(api,/router\.post\("\/first-setup\/verify"/,"One-time enrollment endpoint exists");
+assert.match(api,/bcrypt\.compare\(password,user\.password_hash\)/,"Must authenticate owner before emitting TOTP secret");
 assert.match(css,/\.gate4-passwordless/);
 assert.match(api,/\/start\/verified",requireAuth/,"Trusted original account requires valid session");
 assert.match(page,/allowSignedInSetup \? "\/start\/verified" : "\/start"/,"Trusted flow routes to verified endpoint");

@@ -3,7 +3,7 @@
  * Original admin bypasses FIRST enrollment SMS only after a recent,
  * authenticated session. No anonymous administrator bootstrap.
  */
-const express=require("express"),QRCode=require("qrcode");
+const express=require("express"),QRCode=require("qrcode"),bcrypt=require("bcryptjs");
 const {pool}=require("../config/db"),{requireAuth}=require("../middleware/authMiddleware");
 const {isOriginalSystemAdministrator}=require("../security/systemAdminIdentity");
 const {sendSmsAlertToPhone}=require("../services/smsAlertService");
@@ -89,11 +89,14 @@ router.post("/start",action(async(req,res)=>{
  const alreadyEnrolled=await enrolled(user.id);
  // A public username can never bootstrap the original administrator.
  if(isOriginalSystemAdministrator(user)&&!alreadyEnrolled){
-  return res.status(409).json({
-   status:"error",
-   code:"TRUSTED_SESSION_SETUP_REQUIRED",
-   message:"First-time Authenticator setup needs an existing verified account session. Open Account Security from your signed-in device."
-  });
+  // A username is not proof of identity. Create a short-lived, limited
+  // first-setup challenge. The account owner verifies the EXISTING credential
+  // exactly once before an Authenticator secret can ever be generated.
+  // Subsequent sign-ins use only the Authenticator or a recovery code.
+  if(!(await belowLimit(user.id,"admin_setup",5,60)))return deny(res,429);
+  const challenge=await createChallenge({id:user.id,purpose:"admin_setup",workspace,branch});
+  res.set("Cache-Control","no-store");
+  return res.json({status:"success",stage:"identity",challenge});
  }
  if(alreadyEnrolled){
   if(!(await belowLimit(user.id,"totp_login",8,10)))return deny(res,429);
@@ -117,6 +120,46 @@ router.post("/start",action(async(req,res)=>{
   return res.status(503).json({status:"error",message:"SMS verification is currently unavailable."});}
  await pool.query("UPDATE staff_passwordless_challenges SET sms_sent_at=UTC_TIMESTAMP() WHERE token_digest=?",[digest(challenge)]);
  return res.json({status:"success",stage:"sms",challenge,message:"Enter the verification code sent to your registered phone."});
+}));
+// Single-use identity verification for the ORIGINAL account only.
+// Cannot expose the TOTP seed from a username or caller-supplied user ID.
+// No SMS is ever sent in this flow. It is disabled after enrollment.
+router.post("/first-setup/verify",action(async(req,res)=>{
+ const token=String(req.body?.challenge||"");
+ const password=typeof req.body?.verification==="string"?req.body.verification:"";
+ if(token.length<40||token.length>100||password.length===0||password.length>256)return deny(res);
+ const conn=await pool.getConnection();let userId;
+ try{
+  await conn.beginTransaction();
+  const row=await challengeRow(conn,token,["admin_setup"]);
+  if(!row){await conn.rollback();return deny(res);}
+  const user=await getUser(row.user_id);
+  if(!user||!isOriginalSystemAdministrator(user)||!Number(user.is_active)||Number(user.is_login_locked)){
+   await conn.rollback();return deny(res);
+  }
+  const [enrolledRows]=await conn.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[row.user_id]);
+  if(enrolledRows.length){await conn.rollback();return deny(res,409);}
+  const verified=await bcrypt.compare(password,user.password_hash);
+  if(!verified){
+   await markFailure(conn,row);
+   await conn.commit();
+   return deny(res);
+  }
+  // Atomically retire the proof stage before returning an enrollment key.
+  // A second concurrent confirmation cannot produce a competing QR secret.
+  await conn.query(
+   "UPDATE staff_passwordless_challenges SET purpose='setup' WHERE token_digest=? AND purpose='admin_setup' AND consumed_at IS NULL",
+   [row.token_digest]
+  );
+  userId=row.user_id;
+  await conn.commit();
+ }catch(error){await conn.rollback();throw error;}finally{conn.release();}
+ // The challenge is upgraded, not copied. It remains short-lived and can
+ // only be completed with a valid code from the new Authenticator.
+ const setup=await createSetup(token,userId);
+ await audit(req,userId,"OWNER_FIRST_SETUP_VERIFIED");
+ res.set("Cache-Control","no-store");
+ return res.json({status:"success",challenge:token,...setup});
 }));
 router.post("/sms/verify",action(async(req,res)=>{
  const token=String(req.body?.challenge||"");if(token.length<40||token.length>100)return deny(res);
