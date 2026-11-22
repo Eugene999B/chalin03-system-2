@@ -16,6 +16,33 @@ const s=require("../services/staffPasswordlessCrypto");
 const router=express.Router();
 s.assertConfigured();
 const GENERIC="The account or security code could not be verified. Check your details or contact the administrator.";
+const OTP_WINDOW_MINUTES=15,OTP_MAX_FAILURES=10;
+const incorrectCode=(res,row,kind="authenticator")=>{
+ const attemptsLeft=Math.max(0,s.MAX_SMS_ATTEMPTS-Number(row.attempts)-1);
+ res.set("Cache-Control","no-store");
+ if(attemptsLeft===0)return res.status(429).json({
+  status:"error",code:"CODE_ATTEMPTS_EXHAUSTED",
+  message:"Too many incorrect codes. Start a new verification after a short break.",
+  attempts_remaining:0
+ });
+ return res.status(422).json({
+  status:"error",code:"SECURITY_CODE_INCORRECT",
+  message:kind==="sms"?"That SMS code is incorrect. Please check it and try again.":"Incorrect or expired code. Wait for a fresh code in Authenticator and try again.",
+  attempts_remaining:attemptsLeft
+ });
+};
+const unavailableChallenge=(res)=>res.status(410).json({
+ status:"error",code:"VERIFICATION_EXPIRED",
+ message:"This verification has ended or expired. Select Start again to request a new code."
+});
+async function tooManyCodeFailures(userId,conn=pool){
+ const [rows]=await conn.query(
+  "SELECT COALESCE(SUM(attempts),0) AS n FROM staff_passwordless_challenges WHERE user_id=? AND purpose='totp_login' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)",
+  [userId,OTP_WINDOW_MINUTES]
+ );
+ return Number(rows[0]?.n||0)>=OTP_MAX_FAILURES;
+}
+
 const deny=(res,code=401)=>res.status(code).json({status:"error",message:GENERIC});
 const number=v=>Number.isInteger(Number(v))&&Number(v)>0?Number(v):null;
 const digest=token=>s.digestChallenge(token);
@@ -99,7 +126,10 @@ router.post("/start",action(async(req,res)=>{
   return res.json({status:"success",stage:"identity",challenge});
  }
  if(alreadyEnrolled){
-  if(!(await belowLimit(user.id,"totp_login",8,10)))return deny(res,429);
+  if(!(await belowLimit(user.id,"totp_login",8,10))||await tooManyCodeFailures(user.id)){
+   res.set("Retry-After","900");
+   return res.status(429).json({status:"error",code:"RATE_LIMITED",message:"Too many recent attempts. Try again after 15 minutes."});
+  }
   const challenge=await createChallenge({id:user.id,purpose:"totp_login",workspace,branch});
   return res.json({status:"success",stage:"authenticator",challenge});
  }
@@ -167,7 +197,7 @@ router.post("/sms/verify",action(async(req,res)=>{
  try{
   await conn.beginTransaction();const row=await challengeRow(conn,token,["sms_enroll"]);
   if(!row){await conn.rollback();return deny(res);}
-  if(!s.verifySms(token,String(req.body?.code||""),row.sms_pin_digest)){await markFailure(conn,row);await conn.commit();return deny(res);}
+  if(!s.verifySms(token,String(req.body?.code||""),row.sms_pin_digest)){await markFailure(conn,row);await conn.commit();return incorrectCode(res,row,"sms");}
   userId=row.user_id;await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
  return res.json({status:"success",...await createSetup(token,userId)});
@@ -213,10 +243,10 @@ router.post("/setup/confirm",action(async(req,res)=>{
  const conn=await pool.getConnection();let id,workspace,branch,codes;
  try{
   await conn.beginTransaction();const row=await challengeRow(conn,token,["setup"]);
-  if(!row||!row.verified_at||!row.pending_ciphertext){await conn.rollback();return deny(res);}
+  if(!row||!row.verified_at||!row.pending_ciphertext){await conn.rollback();return unavailableChallenge(res);}
   const secret=s.decryptSecret({ciphertext:row.pending_ciphertext,iv:row.pending_iv,tag:row.pending_tag});
   const counter=s.matchedCounter(secret,String(req.body?.code||""));
-  if(counter===null){await markFailure(conn,row);await conn.commit();return deny(res);}
+  if(counter===null){await markFailure(conn,row);await conn.commit();return incorrectCode(res,row);}
   const [exists]=await conn.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[row.user_id]);
   if(exists.length){await conn.rollback();return deny(res,409);}
   await conn.query("INSERT INTO staff_passwordless_identities(user_id,secret_ciphertext,secret_iv,secret_tag,verified_at,last_totp_counter) VALUES(?,?,?,?,UTC_TIMESTAMP(),?)",[row.user_id,row.pending_ciphertext,row.pending_iv,row.pending_tag,counter]);
@@ -234,7 +264,8 @@ router.post("/verify",action(async(req,res)=>{
  const conn=await pool.getConnection();let id,workspace,branch;
  try{
   await conn.beginTransaction();const row=await challengeRow(conn,token,["totp_login"]);
-  if(!row){await conn.rollback();return deny(res);}
+  if(!row){await conn.rollback();return unavailableChallenge(res);}
+  if(await tooManyCodeFailures(row.user_id,conn)){await conn.rollback();res.set("Retry-After","900");return res.status(429).json({status:"error",code:"RATE_LIMITED",message:"Too many recent attempts. Try again after 15 minutes."});}
   const [rows]=await conn.query("SELECT * FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[row.user_id]);
   const credential=rows[0];if(!credential){await conn.rollback();return deny(res);}
   const value=String(req.body?.code||"").trim();let approved=false;
@@ -251,7 +282,7 @@ router.post("/verify",action(async(req,res)=>{
     await conn.query("UPDATE staff_passwordless_backup_codes SET used_at=UTC_TIMESTAMP() WHERE user_id=? AND code_digest=? AND used_at IS NULL",[row.user_id,codeHash]);approved=true;
    }
   }
-  if(!approved){await markFailure(conn,row);await conn.commit();return deny(res);}
+  if(!approved){await markFailure(conn,row);await conn.commit();return incorrectCode(res,row);}
   await conn.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP() WHERE token_digest=?",[row.token_digest]);
   id=row.user_id;workspace=row.workspace_code;branch=row.branch_id;await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
