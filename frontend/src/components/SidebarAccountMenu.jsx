@@ -40,6 +40,7 @@ export default function SidebarAccountMenu({
             <span>{storeAccessLabel}</span>
           </div>
           <InstallAppButton />
+          <a className="compact-account-action password" href="/account-security" onClick={() => setOpen(false)}>Account security</a>
           <button
             type="button"
             className="compact-account-action password"

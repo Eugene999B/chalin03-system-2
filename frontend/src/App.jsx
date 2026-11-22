@@ -14,6 +14,7 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
+import StaffAccountSecurityPage from "./pages/StaffAccountSecurityPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
 import IndependentPartsMarket from "./pages/IndependentPartsMarket";
@@ -258,6 +259,7 @@ export default function App() {
           <Route path="/equipment-hire-services" element={<IndependentDivisionWebsite sector="equipment-hire" />} />
           <Route path="/customer-help" element={<IndependentHelpCentre />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/account-security" element={<ProtectedRoute><StaffAccountSecurityPage /></ProtectedRoute>} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
           <Route path="/equipment-hire" element={<EquipmentHirePortalPage />} />
