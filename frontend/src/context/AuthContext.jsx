@@ -227,6 +227,18 @@ export function AuthProvider({ children }) {
     setUser(normalizedUser);
   }
 
+  function completePasswordlessLogin(data, fallbackWorkspaceCode = DEFAULT_WORKSPACE_CODE) {
+    const rawUser = data?.user;
+    if (!data?.token || !rawUser) throw new Error("Authenticator sign-in response is incomplete.");
+    const normalized = {
+      ...rawUser,
+      workspace_code: rawUser.workspace_code || data.workspace?.code || fallbackWorkspaceCode,
+      active_workspace: rawUser.active_workspace || data.workspace || null,
+    };
+    saveSession(data.token, normalized);
+    return { ...data, user: normalizeUser(normalized) };
+  }
+
   async function logout({ expectedToken = null } = {}) {
     const tokenBeforeLogout = localStorage.getItem(TOKEN_KEY);
 
@@ -512,6 +524,7 @@ export function AuthProvider({ children }) {
       },
 
       login,
+      completePasswordlessLogin,
       logout,
       refreshUser,
     };

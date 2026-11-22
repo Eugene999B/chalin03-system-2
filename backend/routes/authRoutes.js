@@ -1345,6 +1345,8 @@ router.get("/discount-permission", requireAuth, async (req, res) => {
 
 router.commandGateAuth = Object.freeze({
   buildUserSelectByWhere,
+  buildUserResponse,
+  findUsersForLogin,
   createToken,
   isLoginLocked,
   loadUserCategoryState,
