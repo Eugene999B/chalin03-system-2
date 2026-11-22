@@ -26,7 +26,7 @@ function saveBackupPng(codes){
  const a=document.createElement("a");a.href=canvas.toDataURL("image/png");a.download="CHALIN03-private-recovery-codes.png";document.body.appendChild(a);a.click();a.remove();
 }
 function readError(error){return error.response?.data?.message||"Could not complete this step. Check your connection and try again.";}
-export default function StaffPasswordlessLogin(){
+export default function StaffPasswordlessLogin({showAdminBootstrap=false}){
  const {completePasswordlessLogin,isLoggedIn,user}=useAuth();
  const [workspace,setWorkspace]=useState("spare_parts"),[branchId,setBranchId]=useState(""),[branches,setBranches]=useState([]);
  const [identifier,setIdentifier]=useState(""),[code,setCode]=useState(""),[challenge,setChallenge]=useState("");
@@ -115,6 +115,7 @@ export default function StaffPasswordlessLogin(){
     </div>}
     {notice&&<div className="psl-note" role="status">{notice}</div>}
     {error&&<div className="psl-error" role="alert">{error}</div>}
+    {step==="identify"&&showAdminBootstrap&&<a className="psl-back" href="/login?admin_setup=1">Administrator first-time setup</a>}
     {step!=="identify"&&step!=="backup"&&<button className="psl-back" type="button" onClick={restart}>Back to account</button>}
     <footer className="psl-panel__footer">Keep Authenticator and recovery codes private. CHALIN03 will never ask you to send them.</footer>
    </section>
