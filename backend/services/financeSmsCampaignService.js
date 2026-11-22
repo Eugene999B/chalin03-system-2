@@ -3,7 +3,7 @@ const { normalizeGhanaPhone } = require("./smsService");
 
 const CAMPAIGN_ID = "excavator-discount-2026-11";
 const DEFAULT_MESSAGE =
-  "CHALIN03: Great news! Our excavator is available for both ready-cash purchase and installment payment at a special discount. Limited-time offer! Hurry and secure yours. Contact CHALIN03 for details.";
+  "CHALIN03: Great news! Our excavator is available for ready-cash purchase or installment payment at a special discount. Limited-time offer! Hurry and secure yours. For enquiries, call 024 946 9080.";
 
 function validMobile(value) {
   const raw = String(value || "").replace(/\D/g, "");
