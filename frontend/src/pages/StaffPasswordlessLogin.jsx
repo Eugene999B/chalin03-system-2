@@ -62,7 +62,7 @@ function GroupOperationsMap() {
   );
 }
 
-export default function StaffPasswordlessLogin() {
+export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
   const { completePasswordlessLogin, isLoggedIn, user } = useAuth();
   const [workspaceCode, setWorkspaceCode] = useState(() => {
     const search = new URLSearchParams(window.location.search);
@@ -127,7 +127,7 @@ export default function StaffPasswordlessLogin() {
     if (!identifier.trim() || (isSpareParts && !selectedBranchId)) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const { data } = await axiosClient.post(API + "/start", {
+      const { data } = await axiosClient.post(API + (allowSignedInSetup ? "/start/verified" : "/start"), {
         identifier: identifier.trim(),
         workspace_code: workspaceCode,
         branch_id: isSpareParts ? Number(selectedBranchId) : null,
@@ -176,7 +176,7 @@ export default function StaffPasswordlessLogin() {
     finally { setBusy(false); }
   }
 
-  if (isLoggedIn && step !== "backup") {
+  if (isLoggedIn && step !== "backup" && !allowSignedInSetup) {
     return <Navigate to={HOME[user?.workspace_code] || "/"} replace />;
   }
   const currentContext = isSpareParts
