@@ -9,7 +9,7 @@ import "../styles/chalin03PublicRefresh.css";
 import "../styles/chalin03PublicRebuild.css";
 
 const SALES_PHONE="+233540713654",MAIN_PHONE="+233249469080";
-const WHATSAPP="https://wa.me/233540713654?text="+encodeURIComponent("Hello CHALIN03, I would like to make an enquiry.");
+const WHATSAPP="https://wa.me/"+MAIN_PHONE.slice(1)+"?text="+encodeURIComponent("Hello CHALIN03, I would like to make an enquiry.");
 const divisions=[
  {id:"parts",site:"parts",label:"SPARE PARTS & LUBRICANTS",title:"Spare Parts Shop",description:"Browse genuine Main Store listings for filters, lubricants, tools and machine parts. Search products, compare GHS prices and send an enquiry.",photo:PHOTO_LIBRARY.parts,cta:"Browse spare parts"},
  {id:"excavators",site:"excavators",label:"EQUIPMENT SALES",title:"Excavators",description:"Real machines for real work. Explore makes and model references, then request a verified quotation.",photo:PHOTO_LIBRARY.homepageExcavator,cta:"Explore excavators"},
