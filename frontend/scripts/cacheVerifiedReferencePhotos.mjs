@@ -52,7 +52,8 @@ async function downloadOne(photo){
   if(path.dirname(localPath)!==SAFE_OUTPUT_DIR)throw new Error("Unsafe photo cache destination");
   for(let attempt=1;attempt<=ATTEMPTS;attempt++){
     try{
-      const response=await fetch(photo.src,{
+      const candidate=attempt===1?photo.src:attempt===2?photo.src.replace("/960px-","/1280px-"):photo.original;
+      const response=await fetch(candidate,{
         headers:{
           "Accept":"image/jpeg",
           // Wikimedia requests a descriptive User-Agent and a real referrer.

@@ -137,3 +137,27 @@ test("founder photograph and leadership section are visible without mobile overf
   await noHorizontalOverflow(page);
  }
 });
+
+
+test("public cookie choices persist and can be changed",async({page})=>{
+ await page.goto("/");
+ const banner=page.getByRole("region",{name:"Cookie preferences"});
+ await expect(banner).toBeVisible();
+ await expect(banner.getByRole("button",{name:"Accept all"})).toBeVisible();
+ await banner.getByRole("button",{name:"Read about cookies"}).click();
+ await expect(banner.getByText("Optional preferences:",{exact:true})).toBeVisible();
+ await banner.getByRole("button",{name:"Reject optional"}).click();
+ await expect(banner).toHaveCount(0);
+ await page.reload();
+ await expect(banner).toHaveCount(0);
+ await page.getByRole("button",{name:"Cookie settings"}).click();
+ await banner.getByRole("button",{name:"Accept all"}).click();
+ await expect(banner).toHaveCount(0);
+ await page.goto("/gold");
+ await expect(page.getByRole("heading",{name:"Gold buying and refining",exact:true})).toBeVisible();
+ await page.goto("/");
+ await expect(page.getByRole("link",{name:/Continue exploring: Gold buying/})).toBeVisible();
+ await page.getByRole("button",{name:"Cookie settings"}).click();
+ await banner.getByRole("button",{name:"Reject optional"}).click();
+ await expect(page.getByRole("link",{name:/Continue exploring:/})).toHaveCount(0);
+});
