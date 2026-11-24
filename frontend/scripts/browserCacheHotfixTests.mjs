@@ -18,6 +18,7 @@ const indexHtml = read("index.html");
 const headers = read("public/_headers");
 const redirects = read("public/_redirects");
 const notFound = read("public/404.html");
+const recoveryBootstrap = read("public/staff-recovery-bootstrap.js");
 
 assert.match(
   serviceWorker,
@@ -116,10 +117,11 @@ assert.match(
 );
 assert.match(headers, /\/404\.html/);
 assert.match(notFound, /data-chalin03-static-404="true"/);
-assert.match(notFound, /new URL\("\/", window\.location\.origin\)/);
-assert.match(notFound, /__chalin03_return/);
-assert.match(notFound, /window\.location\.replace\(recovery\.toString\(\)\)/);
-assert.match(notFound, /isRetiredBuildAsset/);
+assert.match(recoveryBootstrap, /new URL\("\/", window\.location\.origin\)/);
+assert.match(recoveryBootstrap, /__chalin03_return/);
+assert.match(recoveryBootstrap, /window\.location\.replace\(recovery\.toString\(\)\)/);
+assert.match(recoveryBootstrap, /isRetiredBuildAsset/);
+assert.match(notFound, /src="\/staff-recovery-bootstrap\.js"/);
 
 console.log(
   "✅ Browser cache recovery contracts passed: one page-owned recovery flow loads the root shell, restores the staff's deep route without a second network request, and self-heals unexpected navigation 404 responses."
