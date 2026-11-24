@@ -69,7 +69,7 @@ export default function BackupPage() {
   const [dryRunReport, setDryRunReport] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockCode, setUnlockCode] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [protectedToken, setProtectedToken] = useState(null);
   const [message, setMessage] = useState("");
@@ -107,9 +107,9 @@ export default function BackupPage() {
     setMessage("");
     try {
       const response = await axiosClient.post("/release2-final/security/unlock", {
-        password: unlockPassword,
+        authenticator_code: unlockCode,
       });
-      setUnlockPassword("");
+      setUnlockCode("");
       setProtectedToken({
         value: response.data.protected_action_token,
         expiresAt:
@@ -122,7 +122,7 @@ export default function BackupPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
-          "Your current Administrator password was not accepted."
+          "Incorrect or expired Authenticator code. Wait for a new code and retry."
       );
     } finally {
       setUnlocking(false);
@@ -131,7 +131,7 @@ export default function BackupPage() {
 
   async function downloadBackup() {
     if (!tokenReady) {
-      setError("Unlock protected actions with your current password first.");
+      setError("Unlock protected actions with a fresh Authenticator code first.");
       return;
     }
     setDownloading(true);
@@ -202,7 +202,7 @@ export default function BackupPage() {
       return null;
     }
     if (!tokenReady) {
-      setError("Unlock protected actions with your current password first.");
+      setError("Unlock protected actions with a fresh Authenticator code first.");
       return null;
     }
     const backup = JSON.parse(await selectedFile.text());
@@ -309,8 +309,8 @@ export default function BackupPage() {
 
       <form className="section-card" onSubmit={unlockProtectedActions} autoComplete="off" style={{ marginBottom: 18 }}>
         <h2>Protected Action Confirmation</h2>
-        <p>{tokenReady ? "Protected backup actions are unlocked for this page session." : "Enter your current Administrator password before downloading, validating or restoring. Passwords are never recorded."}</p>
-        {!tokenReady ? <div className="form-row"><input type="password" value={unlockPassword} onChange={(event) => setUnlockPassword(event.target.value)} placeholder="Current Administrator password" autoComplete="new-password" required /><button type="submit" disabled={unlocking}>{unlocking ? "Unlocking…" : "Unlock Backup Actions"}</button></div> : <div className="success-box">Protected action window is active.</div>}
+        <p>{tokenReady ? "Protected backup actions are unlocked for this page session." : "Enter a fresh six-digit Authenticator code before downloading, validating or restoring. Codes are never recorded."}</p>
+        {!tokenReady ? <div className="form-row"><input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} aria-label="Authenticator code" value={unlockCode} onChange={(event) => setUnlockCode(event.target.value)} placeholder="6-digit Authenticator code" autoComplete="one-time-code" required /><button type="submit" disabled={unlocking}>{unlocking ? "Unlocking…" : "Unlock Backup Actions"}</button></div> : <div className="success-box">Protected action window is active.</div>}
       </form>
 
       <div className="backup-grid">
