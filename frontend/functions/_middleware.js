@@ -119,8 +119,8 @@ async function publicResponse(context,url){
  h.set("X-Robots-Tag","index, follow, max-image-preview:large");
  const canonical=url.origin+"/";
  const structured={"@context":"https://schema.org","@type":"WebSite",name:"CHALIN03 Company Limited",alternateName:"CHALIN03",url:canonical,publisher:{"@type":"Organization",name:"CHALIN03 Company Limited",url:ROOT+"/",logo:ROOT+"/chalin03-logo.png",telephone:"+233249469080",address:{"@type":"PostalAddress",streetAddress:"Dunkwa Police Barrier",addressLocality:"Dunkwa",addressCountry:"GH"}}};
- if(typeof HTMLRewriter==="undefined")return new Response(response.body,{status:response.status,headers:h});
- return new HTMLRewriter()
+ if(typeof globalThis.HTMLRewriter==="undefined")return new Response(response.body,{status:response.status,headers:h});
+ return new globalThis.HTMLRewriter()
   .on("title",{element(el){el.setInnerContent(info[0]);}})
   .on('meta[name="description"]',{element(el){el.setAttribute("content",info[1]);}})
   .on('meta[name="robots"]',{element(el){el.setAttribute("content","index, follow, max-image-preview:large");}})

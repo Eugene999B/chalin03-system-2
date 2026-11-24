@@ -1,5 +1,6 @@
 import {useEffect,useState} from "react";
 import {useLocation} from "react-router";
+import {useAuth} from "../context/AuthContext";
 import {PATH_ON_PREVIEW,siteForHostname,siteHref} from "../config/officialSites";
 import "../styles/publicEditorial2026.css";
 const CONSENT="chalin03_cookie_choice_v1",LAST="chalin03_recent_business_v1";
@@ -13,10 +14,11 @@ function writeCookie(name,value,age){
 function readChoice(){const v=getCookie(CONSENT);return ["accepted","rejected"].includes(v)?v:"";}
 export default function PublicCookiePreferences(){
  const location=useLocation();
+ const {isLoggedIn,loading}=useAuth();
  const host=window.location.hostname.toLowerCase();
  const site=siteForHostname(host);
  const publicPaths=Object.values(PATH_ON_PREVIEW).filter(p=>p!=="/login");
- const visible=site!=="work"&&(location.pathname==="/"||publicPaths.includes(location.pathname)||location.pathname==="/enquire")&&(site||host==="localhost"||host==="127.0.0.1"||host.endsWith(".pages.dev"));
+ const visible=site!=="work"&&(location.pathname==="/"||publicPaths.includes(location.pathname)||location.pathname==="/enquire")&&(site||(!loading&&!isLoggedIn&&(host==="localhost"||host==="127.0.0.1"||host.endsWith(".pages.dev"))));
  const [choice,setChoice]=useState(readChoice),[open,setOpen]=useState(false),[details,setDetails]=useState(false),[recent,setRecent]=useState(()=>getCookie(LAST));
  useEffect(()=>{
   if(!visible||choice!=="accepted")return;
