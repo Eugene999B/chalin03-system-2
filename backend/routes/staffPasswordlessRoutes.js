@@ -14,6 +14,7 @@ const {writeAuditEvent}=require("../services/auditTrailService");
 const auth=require("./authRoutes").commandGateAuth;
 const s=require("../services/staffPasswordlessCrypto");
 const router=express.Router();
+const {turnstileConfig,verifyStaffTurnstile}=require("../services/staffTurnstile");
 s.assertConfigured();
 const GENERIC="The account or security code could not be verified. Check your details or contact the administrator.";
 const OTP_WINDOW_MINUTES=15,OTP_MAX_FAILURES=10;
@@ -106,10 +107,12 @@ async function belowLimit(id,purpose,cap,mins){
  const [rows]=await pool.query("SELECT COUNT(*) n FROM staff_passwordless_challenges WHERE user_id=? AND purpose=? AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)",[id,purpose,mins]);
  return Number(rows[0]?.n||0)<cap;
 }
-router.get("/mode",(req,res)=>res.json({status:"success",pilot:true,enforced:s.enforced()}));
+router.get("/mode",(req,res)=>{res.set("Cache-Control","no-store");return res.json({status:"success",pilot:true,enforced:s.enforced(),turnstile_site_key:turnstileConfig().siteKey});});
 router.post("/start",action(async(req,res)=>{
  const name=String(req.body?.identifier||"").trim().slice(0,120),workspace=auth.normalizeWorkspaceCode(req.body?.workspace_code),branch=number(req.body?.branch_id);
  if(!name||!workspace)return deny(res);
+ const human=await verifyStaffTurnstile(req.body?.turnstile_token);
+ if(!human.ok)return res.status(human.unavailable?503:403).json({status:"error",code:"SECURITY_CHALLENGE_REQUIRED",message:human.unavailable?"Security verification is temporarily unavailable. Please try again.":"Complete the security check and try again. If it is not visible, refresh this page."});
  const look=await auth.findUsersForLogin(name),user=look.users?.[0];
  if(!user||!Number(user.is_active)||Number(user.is_login_locked))return deny(res);
  if(!(await accessFor(user,workspace,branch)))return deny(res);
