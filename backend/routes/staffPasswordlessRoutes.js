@@ -14,6 +14,8 @@ const {writeAuditEvent}=require("../services/auditTrailService");
 const auth=require("./authRoutes").commandGateAuth;
 const s=require("../services/staffPasswordlessCrypto");
 const router=express.Router();
+const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+const {rotationBinding,liveRotationRow,retireAuthenticatorAccess}=require("../services/staffAuthenticatorLifecycle");
 const {turnstileConfig,verifyStaffTurnstile}=require("../services/staffTurnstile");
 s.assertConfigured();
 const GENERIC="The account or security code could not be verified. Check your details or contact the administrator.";
@@ -67,9 +69,10 @@ async function accessFor(user,code,branchId){
 async function audit(req,id,verb){
  await writeAuditEvent({req,userId:id,action:"STAFF_PASSWORDLESS_"+verb,actionType:"security.staff_passwordless."+verb.toLowerCase(),outcome:"success",severity:"notice",entityType:"user",entityId:id,details:"Staff authenticator security event."});
 }
-async function sessionFor(req,userId,workspaceCode,branchId){
+async function sessionFor(req,userId,workspaceCode,branchId,verifiedVersion){
  const user=await getUser(userId);
  if(!user||!Number(user.is_active)||Number(user.is_login_locked))throw new Error("Account inactive");
+ if(verifiedVersion!==undefined&&Number(user.token_version||0)!==Number(verifiedVersion))throw new Error("Account security state changed");
  const a=await accessFor(user,workspaceCode,branchId);if(!a)throw new Error("Workspace revoked");
  const category=await auth.loadUserCategoryState(user);
  user.workspace_role=a.role;user.primary_workspace_code=category.primary_workspace_code;
@@ -85,7 +88,7 @@ async function sessionFor(req,userId,workspaceCode,branchId){
 }
 async function createChallenge({id,purpose,workspace,branch,smsCode}){
  const token=s.newChallenge(),hash=digest(token);
- await pool.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP() WHERE user_id=? AND consumed_at IS NULL",[id]);
+ await pool.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP() WHERE user_id=? AND consumed_at IS NULL AND NOT (purpose='admin_setup' AND verified_at IS NOT NULL AND pending_ciphertext IS NOT NULL)",[id]);
  await pool.query("INSERT INTO staff_passwordless_challenges(token_digest,user_id,purpose,workspace_code,branch_id,sms_pin_digest,expires_at) VALUES(?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? SECOND))",
  [hash,id,purpose,workspace,branch||null,smsCode?s.smsDigest(token,smsCode):null,purpose==="sms_enroll"?s.SMS_TTL_SECONDS:s.ENROLL_TTL_SECONDS]);
  return token;
@@ -165,7 +168,7 @@ router.post("/first-setup/verify",action(async(req,res)=>{
  try{
   await conn.beginTransaction();
   const row=await challengeRow(conn,token,["admin_setup"]);
-  if(!row){await conn.rollback();return deny(res);}
+  if(!row||row.verified_at||row.pending_ciphertext){await conn.rollback();return deny(res);}
   const user=await getUser(row.user_id);
   if(!user||!isOriginalSystemAdministrator(user)||!Number(user.is_active)||Number(user.is_login_locked)){
    await conn.rollback();return deny(res);
@@ -243,13 +246,16 @@ router.post("/administrator/start",requireAuth,action(async(req,res)=>{
 }));
 router.post("/setup/confirm",action(async(req,res)=>{
  const token=String(req.body?.challenge||"");if(token.length<40||token.length>100)return deny(res);
- const conn=await pool.getConnection();let id,workspace,branch,codes;
+ const conn=await pool.getConnection();let id,workspace,branch,codes,verifiedVersion;
  try{
   await conn.beginTransaction();const row=await challengeRow(conn,token,["setup"]);
   if(!row||!row.verified_at||!row.pending_ciphertext){await conn.rollback();return unavailableChallenge(res);}
   const secret=s.decryptSecret({ciphertext:row.pending_ciphertext,iv:row.pending_iv,tag:row.pending_tag});
   const counter=s.matchedCounter(secret,String(req.body?.code||""));
   if(counter===null){await markFailure(conn,row);await conn.commit();return incorrectCode(res,row);}
+  const [current]=await conn.query("SELECT token_version,is_active,is_login_locked FROM users WHERE id=? FOR UPDATE",[row.user_id]);
+  if(!current[0]||!Number(current[0].is_active)||Number(current[0].is_login_locked)){await conn.rollback();return deny(res,403);}
+  verifiedVersion=Number(current[0].token_version||0);
   const [exists]=await conn.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[row.user_id]);
   if(exists.length){await conn.rollback();return deny(res,409);}
   await conn.query("INSERT INTO staff_passwordless_identities(user_id,secret_ciphertext,secret_iv,secret_tag,verified_at,last_totp_counter) VALUES(?,?,?,?,UTC_TIMESTAMP(),?)",[row.user_id,row.pending_ciphertext,row.pending_iv,row.pending_tag,counter]);
@@ -258,17 +264,20 @@ router.post("/setup/confirm",action(async(req,res)=>{
   await conn.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP(),pending_ciphertext=NULL,pending_iv=NULL,pending_tag=NULL WHERE user_id=? AND consumed_at IS NULL",[row.user_id]);
   id=row.user_id;workspace=row.workspace_code;branch=row.branch_id;await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
- const session=await sessionFor(req,id,workspace,branch);
+ const session=await sessionFor(req,id,workspace,branch,verifiedVersion);
  await audit(req,id,"ENROLLED");res.set("Cache-Control","no-store");
  return res.json({...session,recovery_codes:codes.map(x=>x.code),message:"Save your one-time backup codes now; they cannot be viewed again."});
 }));
 router.post("/verify",action(async(req,res)=>{
  const token=String(req.body?.challenge||"");if(token.length<40||token.length>100)return deny(res);
- const conn=await pool.getConnection();let id,workspace,branch;
+ const conn=await pool.getConnection();let id,workspace,branch,verifiedVersion;
  try{
   await conn.beginTransaction();const row=await challengeRow(conn,token,["totp_login"]);
   if(!row){await conn.rollback();return unavailableChallenge(res);}
   if(await tooManyCodeFailures(row.user_id,conn)){await conn.rollback();res.set("Retry-After","900");return res.status(429).json({status:"error",code:"RATE_LIMITED",message:"Too many recent attempts. Try again after 15 minutes."});}
+  const [current]=await conn.query("SELECT token_version,is_active,is_login_locked FROM users WHERE id=? FOR UPDATE",[row.user_id]);
+  if(!current[0]||!Number(current[0].is_active)||Number(current[0].is_login_locked)){await conn.rollback();return deny(res,403);}
+  verifiedVersion=Number(current[0].token_version||0);
   const [rows]=await conn.query("SELECT * FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[row.user_id]);
   const credential=rows[0];if(!credential){await conn.rollback();return deny(res);}
   const value=String(req.body?.code||"").trim();let approved=false;
@@ -289,8 +298,89 @@ router.post("/verify",action(async(req,res)=>{
   await conn.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP() WHERE token_digest=?",[row.token_digest]);
   id=row.user_id;workspace=row.workspace_code;branch=row.branch_id;await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
- res.set("Cache-Control","no-store");return res.json(await sessionFor(req,id,workspace,branch));
+ res.set("Cache-Control","no-store");return res.json(await sessionFor(req,id,workspace,branch,verifiedVersion));
 }));
+
+// Authenticated self-rotation. The existing secret remains usable until the
+// new authenticator is proven. The isolated, encrypted challenge is bound to
+// the currently verified session and cannot be redeemed by public enrollment.
+router.post("/account/rotate/start",requireAuth,action(async(req,res)=>{
+ res.set("Cache-Control","no-store");
+ const checked=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+ if(!checked.ok){if(checked.status===429)res.set("Retry-After","900");return res.status(checked.status).json({status:"error",code:checked.code,message:checked.message});}
+ const token=s.newChallenge(),fresh=s.newAuthenticator(req.user.username),box=s.encryptSecret(fresh.secret);
+ const qr=await QRCode.toDataURL(fresh.uri,{width:260,margin:2});
+ const conn=await pool.getConnection();
+ try{
+  await conn.beginTransaction();
+  if(!(await liveRotationRow(conn,req.user))){await conn.rollback();return deny(res,403);}
+  await conn.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP(),pending_ciphertext=NULL,pending_iv=NULL,pending_tag=NULL WHERE user_id=? AND purpose='admin_setup' AND verified_at IS NOT NULL AND consumed_at IS NULL",[req.user.id]);
+  await conn.query("INSERT INTO staff_passwordless_challenges(token_digest,user_id,purpose,workspace_code,branch_id,sms_pin_digest,pending_ciphertext,pending_iv,pending_tag,verified_at,expires_at) VALUES(?,?,'admin_setup',?,?,?,?,?,?,UTC_TIMESTAMP(),DATE_ADD(UTC_TIMESTAMP(),INTERVAL 10 MINUTE))",[digest(token),req.user.id,req.user.workspace_code,req.user.branch_id||null,rotationBinding(token,req.user),box.ciphertext,box.iv,box.tag]);
+  await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_ROTATION_STARTED",actionType:"security.staff_authenticator.rotation_started",severity:"warning",entityType:"user",entityId:req.user.id,details:"Verified account holder started Authenticator replacement."});
+  await conn.commit();
+ }catch(e){await conn.rollback();throw e;}finally{conn.release();}
+ return res.json({status:"success",challenge:token,stage:"rotation",secret:fresh.secret,qr_data_url:qr});
+}));
+router.post("/account/rotate/confirm",requireAuth,action(async(req,res)=>{
+ res.set("Cache-Control","no-store");
+ const token=String(req.body?.challenge||""),code=String(req.body?.code||"");
+ if(token.length<40||token.length>100||!/^\d{6}$/.test(code))return deny(res,400);
+ const conn=await pool.getConnection();let codes,newVersion,workspace,branch;
+ try{
+  await conn.beginTransaction();
+  const row=await challengeRow(conn,token,["admin_setup"]);
+  if(!row||Number(row.user_id)!==Number(req.user.id)||!row.verified_at||!row.pending_ciphertext||
+   !s.safeEqualHex(row.sms_pin_digest,rotationBinding(token,req.user))){await conn.rollback();return unavailableChallenge(res);}
+  if(!(await liveRotationRow(conn,req.user))){await conn.rollback();return deny(res,403);}
+  const secret=s.decryptSecret({ciphertext:row.pending_ciphertext,iv:row.pending_iv,tag:row.pending_tag});
+  const counter=s.matchedCounter(secret,code);
+  if(counter===null){await markFailure(conn,row);await conn.commit();return incorrectCode(res,row);}
+  codes=s.newBackupCodes(req.user.id);
+  await retireAuthenticatorAccess(conn,req.user.id,"authenticator_rotated");
+  await conn.query("UPDATE staff_passwordless_identities SET secret_ciphertext=?,secret_iv=?,secret_tag=?,last_totp_counter=?,verified_at=UTC_TIMESTAMP(),google_sub=NULL,google_email=NULL,google_linked_at=NULL WHERE user_id=?",[row.pending_ciphertext,row.pending_iv,row.pending_tag,counter,req.user.id]);
+  for(const item of codes)await conn.query("INSERT INTO staff_passwordless_backup_codes(user_id,code_digest) VALUES(?,?)",[req.user.id,item.digest]);
+  await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_ROTATED",actionType:"security.staff_authenticator.rotated",severity:"critical",entityType:"user",entityId:req.user.id,details:"Authenticator replaced after proof of old and new codes. Previous sessions and recovery credentials revoked."});
+  newVersion=Number(req.user.token_version||0)+1;workspace=row.workspace_code;branch=row.branch_id;
+  await conn.commit();
+ }catch(e){await conn.rollback();throw e;}finally{conn.release();}
+ const session=await sessionFor(req,req.user.id,workspace,branch,newVersion);
+ return res.json({...session,recovery_codes:codes.map(x=>x.code),message:"Authenticator replaced. Old keys, sessions and backup codes are no longer valid."});
+}));
+// Staff recovery is deliberately narrower than owner handover. Only the
+// original administrator may revoke ordinary staff credentials after fresh
+// TOTP proof. Elevated accounts must use rotation or stronger owner recovery.
+router.post("/administrator/revoke-authenticator",requireAuth,action(async(req,res)=>{
+ res.set("Cache-Control","no-store");
+ if(!isOriginalSystemAdministrator(req.user))return deny(res,403);
+ if(!s.enforced())return res.status(409).json({status:"error",code:"PASSWORDLESS_ENFORCEMENT_REQUIRED",message:"Staff revocation requires enforced Authenticator sign-in before it can be used safely."});
+ const target=number(req.body?.user_id),reason=String(req.body?.reason||"").trim().slice(0,500);
+ if(!target||target===Number(req.user.id)||reason.length<8)return res.status(400).json({status:"error",message:"Select another staff account and enter a reason of at least eight characters."});
+ const checked=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+ if(!checked.ok){if(checked.status===429)res.set("Retry-After","900");return res.status(checked.status).json({status:"error",code:checked.code,message:checked.message});}
+ const config=getSmsConfig();
+ if(!config.enabled||config.provider==="mock")return res.status(409).json({status:"error",message:"Verified phone enrollment is unavailable. Do not revoke this Authenticator yet."});
+ const conn=await pool.getConnection();
+ try{
+  await conn.beginTransaction();
+  if(!(await liveRotationRow(conn,req.user))){await conn.rollback();return deny(res,403);}
+  const [rows]=await conn.query("SELECT id,username,role,is_active,is_login_locked,login_phone_normalized FROM users WHERE id=? FOR UPDATE",[target]);
+  const user=rows[0];
+  if(!user||isOriginalSystemAdministrator(user)||String(user.role).toLowerCase()==="admin"||!Number(user.is_active)||Number(user.is_login_locked)){
+   await conn.rollback();return res.status(409).json({status:"error",message:"This account requires verified self-rotation or separate administrator recovery."});
+  }
+  const phone=normalizeGhanaPhone(user.login_phone_normalized);
+  const [matching]=await conn.query("SELECT COUNT(*) n FROM users WHERE login_phone_normalized=? AND is_active=1",[phone||""]);
+  if(!phone||Number(matching[0]?.n||0)!==1){await conn.rollback();return res.status(409).json({status:"error",message:"A unique registered phone is required for safe staff re-enrollment."});}
+  const [identity]=await conn.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[target]);
+  if(!identity.length){await conn.rollback();return res.status(409).json({status:"error",message:"This account does not have an active Authenticator."});}
+  await retireAuthenticatorAccess(conn,target,"authenticator_revoked");
+  await conn.query("DELETE FROM staff_passwordless_identities WHERE user_id=?",[target]);
+  await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_REVOKED",actionType:"security.staff_authenticator.revoked",severity:"critical",entityType:"user",entityId:target,details:"Owner approved staff Authenticator revocation. Re-enrollment requires registered phone verification.",metadata:{reason}});
+  await conn.commit();
+ }catch(e){await conn.rollback();throw e;}finally{conn.release();}
+ return res.json({status:"success",message:"Staff Authenticator revoked. The user must verify their registered phone and enroll again. Their permissions are unchanged."});
+}));
+
 router.get("/account/status",requireAuth,action(async(req,res)=>{
  const [rows]=await pool.query("SELECT verified_at,google_email,google_linked_at FROM staff_passwordless_identities WHERE user_id=?",[req.user.id]);
  const info=rows[0]||{};

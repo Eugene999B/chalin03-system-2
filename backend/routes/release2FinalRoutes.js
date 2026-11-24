@@ -28,6 +28,7 @@ const {
 } = require("../services/categoryIsolationService");
 
 const { verifyStaffProtectedAction } = require("../services/staffProtectedActionService");
+const { protectedActionHash } = require("../services/protectedActionHash");
 
 const router = express.Router();
 
@@ -913,7 +914,7 @@ async function protectedActionRecord(
     200
   );
 
-  if (!rawToken) {
+  if (!rawToken || !req.user?.session_id) {
     return null;
   }
 
@@ -930,7 +931,7 @@ async function protectedActionRecord(
        AND expires_at > NOW()
      LIMIT 1`,
     [
-      tokenHash(rawToken),
+      protectedActionHash(rawToken, req.user),
       req.user.id,
     ]
   );
@@ -1925,7 +1926,7 @@ router.post(
          )`,
         [
           req.user.id,
-          tokenHash(token),
+          protectedActionHash(token, req.user),
           requestIp(req) ||
             null,
           requestUserAgent(req) ||

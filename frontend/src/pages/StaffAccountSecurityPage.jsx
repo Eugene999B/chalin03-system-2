@@ -47,6 +47,8 @@ export default function StaffAccountSecurityPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [googleStep, setGoogleStep] = useState(false);
+  const [rotationStep, setRotationStep] = useState(false);
+  const [oldCode, setOldCode] = useState("");
   const [googleCode, setGoogleCode] = useState("");
   const initialStart = useRef(false);
   const back = HOME[user?.workspace_code] || "/";
@@ -84,18 +86,28 @@ export default function StaffAccountSecurityPage() {
       setError(err.response?.data?.message || "Setup needs a recently verified account session.");
     } finally { setBusy(false); }
   }
+  async function startRotation(event) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    try {
+      const { data } = await axiosClient.post(API + "/account/rotate/start", { authenticator_code: oldCode });
+      setPending(data); setOldCode(""); setCode(""); setRotationStep(false);
+      setNotice("Add the NEW Authenticator key on the intended device. The old one remains active until you confirm.");
+    } catch (err) {
+      setError(err.response?.data?.message || "Could not start Authenticator replacement.");
+    } finally { setBusy(false); }
+  }
   async function activate(event) {
     event.preventDefault();
     if (!/^\d{6}$/.test(code)) return;
     setBusy(true); setError("");
     try {
-      const { data } = await axiosClient.post(API + "/setup/confirm", { challenge: pending.challenge, code });
+      const { data } = await axiosClient.post(API + (pending.stage === "rotation" ? "/account/rotate/confirm" : "/setup/confirm"), { challenge: pending.challenge, code });
       if (!Array.isArray(data.recovery_codes) || data.recovery_codes.length !== 10) {
         throw new Error("Recovery codes were not returned. Contact support.");
       }
       completePasswordlessLogin(data, user?.workspace_code);
       setCodes(data.recovery_codes); setPending(null); setCode(""); setSaved(false);
-      setStatus((v) => ({ ...v, authenticator_active: true }));
+      setStatus((v) => ({ ...v, authenticator_active: true, ...(pending.stage === "rotation" ? {google_linked:false,google_email:null} : {}) }));
       setNotice("Authenticator is active. Save your backup codes before continuing.");
     } catch (err) {
       setError(err.response?.data?.message || err.message || "The code could not be verified.");
@@ -158,6 +170,17 @@ export default function StaffAccountSecurityPage() {
                 <span>→</span><div><strong>{busy ? "Preparing…" : "Create my Authenticator key"}</strong>
                   <small>Confirm setup from this signed-in device</small></div>
               </button>}
+            {ready && status.authenticator_active && !pending && !codes.length && (
+              rotationStep ? <form className="gate4__form" onSubmit={startRotation}>
+                <p>Confirm using your existing Authenticator. After the replacement is activated, all previous sessions, backup codes and linked Google access will be revoked.</p>
+                <label className="gate4__field"><span>Existing Authenticator code</span>
+                  <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={oldCode}
+                    onChange={e=>setOldCode(e.target.value.replace(/\D/g,"").slice(0,6))} required />
+                </label>
+                <button type="submit" className="gate4__submit" disabled={busy || oldCode.length!==6}><span>→</span><div><strong>Verify and create new key</strong><small>Existing access stays active until confirmation</small></div></button>
+                <button type="button" className="gpl-link" onClick={()=>{setRotationStep(false);setOldCode("");}}>Cancel</button>
+              </form> : <button type="button" className="gpl-recovery__download" onClick={()=>{setRotationStep(true);setGoogleStep(false);}}>Replace my Authenticator</button>
+            )}
             {pending && <form className="gate4__form" onSubmit={activate}>
               <div className="gpl-setup">
                 <div className="gpl-setup__qr"><img src={pending.qr_data_url} alt="Authenticator setup QR code" width="210" height="210" /></div>
@@ -188,7 +211,7 @@ export default function StaffAccountSecurityPage() {
                 <span>→</span><div><strong>Finish setup</strong><small>Secure access enabled</small></div>
               </button>
             </div>}
-            {ready && status.authenticator_active && !status.google_linked && status.google_linking_available &&
+            {ready && status.authenticator_active && !pending && !rotationStep && !codes.length && !status.google_linked && status.google_linking_available &&
               <div className="gpl-google">
                 {!googleStep ? <button type="button" className="gpl-recovery__download" onClick={() => setGoogleStep(true)}>Connect Google account</button> :
                   <form className="gate4__form" onSubmit={linkGoogle}>

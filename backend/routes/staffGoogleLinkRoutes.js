@@ -62,8 +62,8 @@ router.get("/callback",action(async(req,res)=>{
   const token=await google.getGoogleIdToken({code,verifier});
   const keys=await google.fetchGoogleJwks();
   const identity=google.verifyGoogleIdToken(token,keys,{clientId:process.env.GOOGLE_OIDC_CLIENT_ID,expectedNonce:row.nonce});
-  const update=await pool.query("UPDATE staff_passwordless_identities SET google_sub=?,google_email=?,google_linked_at=UTC_TIMESTAMP() WHERE user_id=? AND google_sub IS NULL",
-   [identity.sub,identity.email,row.user_id]);
+  const update=await pool.query("UPDATE staff_passwordless_identities i INNER JOIN auth_sessions a ON a.user_id=i.user_id AND a.session_id=? AND a.revoked_at IS NULL AND a.expires_at>UTC_TIMESTAMP() SET i.google_sub=?,i.google_email=?,i.google_linked_at=UTC_TIMESTAMP() WHERE i.user_id=? AND i.google_sub IS NULL",
+   [row.session_id,identity.sub,identity.email,row.user_id]);
   if(update[0].affectedRows!==1)return res.redirect(303,resultUrl(false));
   await writeAuditEvent({userId:row.user_id,action:"STAFF_GOOGLE_ACCOUNT_LINKED",actionType:"security.staff_google_link",
    outcome:"success",severity:"notice",entityType:"user",entityId:row.user_id,details:"Verified Google OpenID subject linked. No roles or permissions changed."});

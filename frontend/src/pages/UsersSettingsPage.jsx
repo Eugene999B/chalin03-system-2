@@ -196,6 +196,10 @@ export default function UsersSettingsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [authReset, setAuthReset] = useState(null);
+  const [authResetCode, setAuthResetCode] = useState("");
+  const [authResetReason, setAuthResetReason] = useState("");
+  const [authResetBusy, setAuthResetBusy] = useState(false);
   const [offboardingUserId, setOffboardingUserId] = useState("");
   const [roleDraftByUser, setRoleDraftByUser] = useState({});
   const [savingRoleUserId, setSavingRoleUserId] = useState(null);
@@ -467,6 +471,19 @@ export default function UsersSettingsPage() {
     });
   }
 
+  async function revokeStaffAuthenticator(event) {
+    event.preventDefault();
+    if(!authReset || authResetBusy || !/^\d{6}$/.test(authResetCode) || authResetReason.trim().length<8) return;
+    setAuthResetBusy(true);setError("");setMessage("");
+    try {
+      const {data}=await axiosClient.post("/auth/passwordless/administrator/revoke-authenticator",{
+        user_id:authReset.id,authenticator_code:authResetCode,reason:authResetReason.trim()
+      });
+      setAuthReset(null);setAuthResetCode("");setAuthResetReason("");setMessage(data.message);
+      await loadUsers();
+    } catch(err){setError(err.response?.data?.message || "Authenticator revocation could not be completed.");}
+    finally{setAuthResetBusy(false);setAuthResetCode("");}
+  }
   function openResetPassword(user) {
     setMessage("");
     setError("");
@@ -2090,6 +2107,20 @@ This disables login, revokes all active sessions and assigned access, and preser
         )}
       </div>
 
+      {authReset && (
+        <section className="users-card users-reset-card">
+          <div className="users-card-header"><h2>Revoke staff Authenticator</h2><p>Selected account: <strong>{authReset.full_name || authReset.username}</strong>. Confirm the person's identity and registered phone before continuing.</p></div>
+          <form className="users-card-body" onSubmit={revokeStaffAuthenticator}>
+            <div className="users-reset-warning">Existing Authenticator, backup codes, linked Google account and sessions will be revoked. The user must verify their registered phone and enroll again. Role and business permissions are unchanged.</div>
+            <div className="users-form-grid">
+              <div className="users-field"><label>Reason for revocation</label><input value={authResetReason} onChange={e=>setAuthResetReason(e.target.value)} minLength={8} maxLength={500} required /></div>
+              <div className="users-field"><label>Your six-digit Authenticator code</label><input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={authResetCode} onChange={e=>setAuthResetCode(e.target.value.replace(/\D/g,"").slice(0,6))} required /></div>
+            </div>
+            <div className="users-actions-row"><button type="submit" className="users-primary-action" disabled={authResetBusy || authResetCode.length!==6 || authResetReason.trim().length<8}>Confirm revocation</button>
+              <button type="button" className="users-secondary-action" disabled={authResetBusy} onClick={()=>{setAuthReset(null);setAuthResetCode("");setAuthResetReason("");}}>Cancel</button></div>
+          </form>
+        </section>
+      )}
       {resetPasswordForm.userId && (
         <div className="users-card users-reset-card">
           <div className="users-card-header">
@@ -2293,6 +2324,12 @@ This disables login, revokes all active sessions and assigned access, and preser
                                     {isRoleSaving ? "Updating…" : "Save Role"}
                                   </button>
                                 </div>
+                              )}
+                              {canCurrentUserResetAccounts() && !protectedAdmin && String(user.role).toLowerCase() !== "admin" && user.is_active && !user.is_login_locked && (
+                                <button type="button" className="users-small-button warning" onClick={()=>{setAuthReset(user);setAuthResetReason("");setAuthResetCode("");setResetPasswordForm(emptyResetPasswordForm);}}>Revoke Authenticator</button>
+                              )}
+                              {protectedAdmin && isOriginalSystemAdministrator(currentUser) && (
+                                <a className="users-small-button neutral" href="/account-security">Replace Authenticator</a>
                               )}
                               {canCurrentUserResetAccounts() &&
                                 !protectedAdmin && (
