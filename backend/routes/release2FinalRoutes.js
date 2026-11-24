@@ -27,6 +27,8 @@ const {
   normalizeCategory,
 } = require("../services/categoryIsolationService");
 
+const { verifyStaffProtectedAction } = require("../services/staffProtectedActionService");
+
 const router = express.Router();
 
 const SYSTEM_ADMIN_ID = Number(
@@ -962,7 +964,7 @@ function requireProtectedAction(
             code:
               "PROTECTED_ACTION_REQUIRED",
             message:
-              "Unlock protected actions with your current password before continuing.",
+              "Unlock protected actions with a fresh six-digit Authenticator code before continuing.",
           });
       }
 
@@ -1874,64 +1876,27 @@ router.post(
   ),
   asyncHandler(
     async (req, res) => {
-      const password =
-        req.body?.password;
+      res.set("Cache-Control", "no-store");
+      const result = await verifyStaffProtectedAction({
+        userId: req.user.id,
+        code: req.body?.authenticator_code,
+      });
 
-      if (!password) {
-        return res
-          .status(400)
-          .json({
-            status: "error",
-            message:
-              "Current password is required.",
-          });
-      }
-
-      const [users] =
-        await pool.query(
-          `SELECT
-             id,
-             password_hash,
-             is_active
-           FROM users
-           WHERE id = ?
-           LIMIT 1`,
-          [req.user.id]
-        );
-
-      const user = users[0];
-
-      if (
-        !user ||
-        !booleanValue(
-          user.is_active
-        ) ||
-        !(await bcrypt.compare(
-          password,
-          user.password_hash
-        ))
-      ) {
+      if (!result.ok) {
         await appendLedger({
           req,
-          actorUserId:
-            req.user.id,
-          actionCode:
-            "PROTECTED_ACTION_UNLOCK_FAILED",
+          actorUserId: req.user.id,
+          actionCode: "PROTECTED_ACTION_UNLOCK_FAILED",
           outcome: "failure",
           severity: "warning",
-          payload: {
-            password_recorded:
-              false,
-          },
+          payload: { verification_method: "authenticator", reason: result.code },
         });
-
-        return res
-          .status(403)
-          .json({
-            status: "error",
-            message:
-              "Current password was not accepted.",
-          });
+        if (result.status === 429) res.set("Retry-After", "900");
+        return res.status(result.status).json({
+          status: "error",
+          code: result.code,
+          message: result.message,
+        });
       }
 
       await pool.query(
@@ -1977,8 +1942,8 @@ router.post(
         payload: {
           window_minutes:
             PROTECTED_WINDOW_MINUTES,
-          password_recorded:
-            false,
+          verification_method: "authenticator",
+          code_recorded: false,
         },
       });
 

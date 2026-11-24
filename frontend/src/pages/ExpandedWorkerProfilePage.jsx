@@ -275,7 +275,7 @@ function ProtectedUnlock({
   token,
   onToken,
 }) {
-  const [password, setPassword] =
+  const [authenticatorCode, setAuthenticatorCode] =
     useState("");
 
   const [loading, setLoading] =
@@ -296,12 +296,10 @@ function ProtectedUnlock({
     try {
       const response = await axiosClient.post(
         "/release2-final/security/unlock",
-        {
-          password,
-        }
+        { authenticator_code: authenticatorCode }
       );
 
-      setPassword("");
+      setAuthenticatorCode("");
 
       onToken({
         value:
@@ -343,13 +341,13 @@ function ProtectedUnlock({
       ) : (
         <form onSubmit={unlock}>
           <input
-            type="password"
-            value={password}
+            type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} aria-label="Authenticator code"
+            value={authenticatorCode}
             onChange={(event) =>
-              setPassword(event.target.value)
+              setAuthenticatorCode(event.target.value)
             }
-            placeholder="Current password"
-            autoComplete="current-password"
+            placeholder="6-digit Authenticator code"
+            autoComplete="one-time-code"
             required
           />
 
