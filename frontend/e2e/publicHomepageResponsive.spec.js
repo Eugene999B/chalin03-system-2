@@ -132,7 +132,7 @@ test("founder photograph and leadership section are visible without mobile overf
   await expect(leadership.getByRole("heading",{name:/Meet our CEO.*Founder/})).toBeVisible();
   const photo=leadership.getByRole("img",{name:"CEO and founder of CHALIN03 Company Limited"});
   await expect(photo).toBeVisible();
-  await expect.poll(()=>photo.evaluate(el=>el.complete&&el.naturalWidth===300)).toBe(true);
+  await expect.poll(()=>photo.evaluate(el=>el.complete&&el.naturalWidth===900&&el.naturalHeight===1351&&el.currentSrc.endsWith('/images/home/v2/chalin03-ceo-founder-hd.avif'))).toBe(true);
   await expect(page.locator(".ce-division")).toHaveCount(8);
   await noHorizontalOverflow(page);
  }
