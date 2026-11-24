@@ -32,3 +32,15 @@ test("public first setup rejects rotation challenges and staff reset preserves o
  assert.match(source,/router\.post\("\/administrator\/revoke-authenticator",requireAuth/);
  assert.match(source,/PASSWORDLESS_ENFORCEMENT_REQUIRED/);
 });
+
+test("protected action approval cannot be transferred to another session or token generation",()=>{
+ const {protectedActionHash}=require("../services/protectedActionHash");
+ const first=protectedActionHash("test-token",user);
+ assert.notEqual(first,protectedActionHash("test-token",{...user,session_id:"other"}));
+ assert.notEqual(first,protectedActionHash("test-token",{...user,token_version:5}));
+ assert.throws(()=>protectedActionHash("test-token",{id:7}));
+});
+test("Google callback may only attach to an active original initiating session",()=>{
+ const source=fs.readFileSync(path.join(__dirname,"../routes/staffGoogleLinkRoutes.js"),"utf8");
+ assert.match(source,/UPDATE staff_passwordless_identities i INNER JOIN auth_sessions a ON a.user_id=i.user_id AND a.session_id=\? AND a.revoked_at IS NULL/);
+});
