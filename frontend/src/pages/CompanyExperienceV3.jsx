@@ -91,13 +91,13 @@ export default function CompanyExperienceV3(){
       <source type="image/avif" srcSet="/images/home/v2/chalin03-ceo-founder-hd.avif"/>
       <img src="/images/home/v1/chalin03-ceo-founder.webp" alt="CEO and founder of CHALIN03 Company Limited" width="900" height="1351" loading="lazy" decoding="async"/>
      </picture>
-     <figcaption><span>CHALIN03 COMPANY LIMITED</span><strong>CEO &amp; Founder</strong></figcaption>
+     <figcaption><span>CHALIN03 COMPANY LIMITED</span><strong>Mr. Agyapong Charles</strong><span>CEO &amp; Founder</span></figcaption>
     </figure>
     <div className="ce-leadership__copy">
      <div className="ce-eyebrow"><span/> OUR LEADERSHIP</div>
      <h2 id="ce-leadership-title">Meet our CEO<br className="ce-leadership__break"/> &amp; Founder.</h2>
      <div className="ce-leadership__rule" aria-hidden="true"/>
-     <p>The founder and CEO of CHALIN03 Company Limited leads our business, connecting customers with equipment, spare parts, vehicles, machine transport, equipment hire and our other business divisions.</p>
+     <p>Mr. Agyapong Charles, CEO and Founder of CHALIN03 Company Limited, leads our business across equipment, spare parts, vehicles, machine transport, equipment hire and our other business divisions.</p>
      <a className="ce-button ce-button--gold" href="#our-businesses">Discover our businesses <span aria-hidden="true">↗</span></a>
     </div>
    </div>
