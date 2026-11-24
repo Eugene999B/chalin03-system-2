@@ -85,11 +85,55 @@ function targetFor(url){
  }
  return null;
 }
+
+const SEARCH_INFO={
+ "homepage.chalin03.com":["CHALIN03 Company Limited | Excavators, Parts, Vehicles & Gold","CHALIN03 in Dunkwa, Ghana: excavators, spare parts, heavy machinery, automobiles, motorcycles, gold buying and refining, equipment hire and transport."],
+ "spareparts.chalin03.com":["Spare Parts & Lubricants | CHALIN03 Ghana","Shop excavator parts, filters, oils and tools. Browse CHALIN03 Main Store products and prices."],
+ "excavators.chalin03.com":["Excavators for Sale & Installment Finance | CHALIN03 Ghana","Browse excavator makes and models. Ask about available machines, ready-cash prices and installment finance."],
+ "machines.chalin03.com":["Heavy-Duty Machinery | CHALIN03 Ghana","Explore bulldozers, wheel loaders, graders, rollers and other heavy-duty machinery."],
+ "automobiles.chalin03.com":["Cars, Pickups & Commercial Vehicles | CHALIN03 Ghana","Discuss available cars, pickups, SUVs and commercial vehicles with our Dunkwa team."],
+ "motorcycles.chalin03.com":["Motorcycles | CHALIN03 Ghana","Explore commuter bikes, scooters, delivery motorcycles and utility bikes."],
+ "gold.chalin03.com":["Gold Buying & Refining | CHALIN03 Ghana","CHALIN03 buys and refines gold. Contact our team in Dunkwa to discuss gold buying and refining services."],
+ "transport.chalin03.com":["Machine Transport & Lifting | CHALIN03 Ghana","Enquire about heavy equipment loading, low-bed haulage and machine relocation."],
+ "hire.chalin03.com":["Equipment Hire | CHALIN03 Ghana","Ask about excavator and equipment hire in Ghana."],
+ "help.chalin03.com":["Customer Help | CHALIN03 Ghana","Contact CHALIN03 about parts, machines, vehicles, gold and equipment services."]
+};
+async function publicResponse(context,url){
+ const host=url.hostname.toLowerCase(),path=url.pathname;
+ const info=SEARCH_INFO[host];
+ if((path==="/robots.txt"||path==="/sitemap.xml")&&HOSTS[host]){
+  const root=host==="chalin03.com"||host==="www.chalin03.com"?ROOT:url.origin;
+  const publicHost=Boolean(info)||host==="chalin03.com"||host==="www.chalin03.com";
+  const robots=publicHost?"User-agent: *\nAllow: /\n\nSitemap: "+root+"/sitemap.xml\n":"User-agent: *\nDisallow: /\n";
+  const sitemap='<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+(publicHost?"<url><loc>"+root+"/</loc></url>":"")+'</urlset>';
+  return new Response(path==="/robots.txt"?robots:sitemap,{headers:{"Content-Type":path==="/robots.txt"?"text/plain; charset=utf-8":"application/xml; charset=utf-8","Cache-Control":"public, max-age=3600"}});
+ }
+ const response=await context.next();
+ const h=new Headers(response.headers);
+ if(/^\/(?:favicon(?:[-.]|$)|apple-touch-icon\.png$)/i.test(path)&&HOSTS[host]&&host!=="work.chalin03.com"){
+  h.delete("X-Robots-Tag");h.set("Cache-Control","public, max-age=86400");
+  return new Response(response.body,{status:response.status,headers:h});
+ }
+ if(!h.get("Content-Type")?.includes("text/html"))return response;
+ if(!info||path!=="/"){h.set("X-Robots-Tag","noindex, nofollow, noarchive");return new Response(response.body,{status:response.status,headers:h});}
+ h.set("X-Robots-Tag","index, follow, max-image-preview:large");
+ const canonical=url.origin+"/";
+ const structured={"@context":"https://schema.org","@type":"WebSite",name:"CHALIN03 Company Limited",alternateName:"CHALIN03",url:canonical,publisher:{"@type":"Organization",name:"CHALIN03 Company Limited",url:ROOT+"/",logo:ROOT+"/chalin03-logo.png",telephone:"+233249469080",address:{"@type":"PostalAddress",streetAddress:"Dunkwa Police Barrier",addressLocality:"Dunkwa",addressCountry:"GH"}}};
+ if(typeof globalThis.HTMLRewriter==="undefined")return new Response(response.body,{status:response.status,headers:h});
+ return new globalThis.HTMLRewriter()
+  .on("title",{element(el){el.setInnerContent(info[0]);}})
+  .on('meta[name="description"]',{element(el){el.setAttribute("content",info[1]);}})
+  .on('meta[name="robots"]',{element(el){el.setAttribute("content","index, follow, max-image-preview:large");}})
+  .on('link[rel="canonical"]',{element(el){el.setAttribute("href",canonical);}})
+  .on("head",{element(el){el.append('<script type="application/ld+json">'+JSON.stringify(structured).replace(/</g,"\\u003c")+'</script>',{html:true});}})
+  .transform(new Response(response.body,{status:response.status,headers:h}));
+}
+
 export async function onRequest(context){
  const request=context.request;
  const url=new URL(request.url);
  const target=targetFor(url);
- if(!target)return context.next();
+ if(!target)return publicResponse(context,url);
  if(request.method!=="GET"&&request.method!=="HEAD"){
   return new Response("Open the page on its official CHALIN03 address before submitting.",{
    status:409,headers:{"Content-Type":"text/plain; charset=utf-8","Cache-Control":"no-store"}
@@ -98,7 +142,8 @@ export async function onRequest(context){
  const destination=new URL(target);
  // Guard against redirects to non-official hosts and self-redirect loops.
  if(!Object.values(HOSTS).some(x=>destination.origin===x)||destination.href===url.href)return context.next();
- return new Response(null,{status:302,headers:{
+ const permanent=url.pathname==="/"&&(url.hostname==="chalin03.com"||url.hostname==="www.chalin03.com");
+ return new Response(null,{status:permanent?301:302,headers:{
   Location:destination.href,
   "Cache-Control":"no-store, max-age=0",
   "Vary":"Host",

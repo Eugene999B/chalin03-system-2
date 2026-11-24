@@ -14,6 +14,7 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
+import PublicCookiePreferences from "./components/PublicCookiePreferences";
 import StaffAccountSecurityPage from "./pages/StaffAccountSecurityPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
@@ -247,6 +248,7 @@ export default function App() {
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
+        <PublicCookiePreferences />
         <Routes>
           <Route path="/shop" element={<IndependentPartsMarket />} />
           <Route path="/enquire" element={<IndependentQuotePage />} />

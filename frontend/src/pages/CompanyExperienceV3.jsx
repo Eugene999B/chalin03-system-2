@@ -7,17 +7,18 @@ import {siteHref} from "../config/officialSites";
 import "../styles/companyExperienceV3.css";
 import "../styles/chalin03PublicRefresh.css";
 import "../styles/chalin03PublicRebuild.css";
+import "../styles/publicEditorial2026.css";
 
 const SALES_PHONE="+233540713654",MAIN_PHONE="+233249469080";
 const WHATSAPP="https://wa.me/"+MAIN_PHONE.slice(1)+"?text="+encodeURIComponent("Hello CHALIN03, I would like to make an enquiry.");
 const divisions=[
- {id:"parts",site:"parts",label:"SPARE PARTS & LUBRICANTS",title:"Spare Parts Shop",description:"Browse genuine Main Store listings for filters, lubricants, tools and machine parts. Search products, compare GHS prices and send an enquiry.",photo:PHOTO_LIBRARY.parts,cta:"Browse spare parts"},
- {id:"excavators",site:"excavators",label:"EQUIPMENT SALES",title:"Excavators",description:"Real machines for real work. Explore makes and model references, then request a verified quotation.",photo:PHOTO_LIBRARY.homepageExcavator,cta:"Explore excavators"},
+ {id:"parts",site:"parts",label:"SPARE PARTS & LUBRICANTS",title:"Spare Parts Shop",description:"Find filters, lubricants, tools and machine parts. Browse Main Store products and prices in Ghana cedis.",photo:PHOTO_LIBRARY.parts,cta:"Browse spare parts"},
+ {id:"excavators",site:"excavators",label:"EQUIPMENT SALES",title:"Excavators",description:"Shop excavators by make and model. Ask about ready-cash purchases and installment finance.",photo:PHOTO_LIBRARY.homepageExcavator,cta:"Explore excavators"},
  {id:"heavy",site:"machines",label:"HEAVY MACHINERY",title:"Heavy-duty machines",description:"Dozers, loaders, graders, rollers and site equipment. Find the type suited to your job.",photo:PHOTO_LIBRARY.machines,cta:"Explore heavy machines"},
  {id:"transport",site:"transport",label:"HAULAGE & LIFTING",title:"Machine transport",description:"Planning a move? Enquire about loading, low-bed haulage and machine relocation.",photo:PHOTO_LIBRARY.transport,cta:"Plan a movement"},
  {id:"vehicles",site:"automobiles",label:"AUTOMOTIVE",title:"Automobiles",description:"Explore vehicles for individuals, companies and work sites. Discuss available specifications directly.",photo:PHOTO_LIBRARY.automobiles,cta:"Explore vehicles"},
- {id:"motorcycles",site:"motorcycles",label:"TWO-WHEEL TRANSPORT",title:"Motorcycles",description:"Commuter and commercial motorcycles, sourced and verified to your requirements.",photo:PHOTO_LIBRARY.motorcycles,cta:"Explore motorcycles"},
- {id:"gold",site:"gold",label:"PRECIOUS METALS",title:"Gold buying & refining",description:"A confidential route for gold-related enquiries, subject to applicable Ghanaian verification and regulation.",photo:PHOTO_LIBRARY.gold,cta:"Learn about the process"},
+ {id:"motorcycles",site:"motorcycles",label:"TWO-WHEEL TRANSPORT",title:"Motorcycles",description:"Motorcycles for commuting, delivery and everyday transport.",photo:PHOTO_LIBRARY.motorcycles,cta:"Explore motorcycles"},
+ {id:"gold",site:"gold",label:"PRECIOUS METALS",title:"Gold buying & refining",description:"We buy and refine gold. Speak with our team about your gold and refining requirements.",photo:PHOTO_LIBRARY.gold,cta:"Explore gold services"},
  {id:"hire",site:"hire",label:"PROJECT SUPPORT",title:"Equipment hire",description:"The right equipment for earthworks and site preparation, with quotations matched to your project.",photo:PHOTO_LIBRARY.hire,cta:"Explore hire services"},
 ];
 function Brand({inverse=false}){
@@ -27,8 +28,10 @@ function Brand({inverse=false}){
 }
 export default function CompanyExperienceV3(){
  const [menuOpen,setMenuOpen]=useState(false);
+ const [businessSearch,setBusinessSearch]=useState("");
+ const filtered=divisions.filter(d=>(d.title+" "+d.description+" "+d.label).toLowerCase().includes(businessSearch.trim().toLowerCase()));
  return <main className="ce-site" id="top">
-  <PublicPageMeta title="CHALIN03 Company Limited | Excavators, Parts, Machines & More" description="CHALIN03 Ghana — independent excavator sales, spare-parts marketplace, heavy-duty machinery, motorcycles, automobiles, gold-sector enquiries and machine transport." canonicalPath="/"/>
+  <PublicPageMeta title="CHALIN03 Company Limited | Excavators, Parts, Machines & More" description="CHALIN03 Company Limited in Dunkwa, Ghana. Excavator sales, spare parts, heavy machinery, vehicles, motorcycles, equipment hire, machine transport, gold buying and refining." canonicalPath="/"/>
   <div className="ce-topline"><span>DUNKWA POLICE BARRIER · GHANA</span><span>CALL OUR TEAM <a href={"tel:"+SALES_PHONE}>054 071 3654</a></span></div>
   <header className="ce-header">
    <Brand/>
@@ -38,14 +41,15 @@ export default function CompanyExperienceV3(){
     <a href={siteHref("parts")}>Spare-parts shop</a>
     <a href={siteHref("excavators")}>Excavators</a>
     <a href={siteHref("machines")}>Heavy machines</a>
-    <a href="#message" onClick={()=>setMenuOpen(false)}>Send a message</a>
+    <a href="#leadership" onClick={()=>setMenuOpen(false)}>Leadership</a><a href="#message" onClick={()=>setMenuOpen(false)}>Contact</a>
     <a className="ce-work-link" href={siteHref("work")}>Staff portal</a>
    </nav>
   </header>
   <section className="ce-hero">
    <div className="ce-hero__copy"><div className="ce-eyebrow">Dunkwa, Ghana</div>
-    <h1>CHALIN03<br/>Company Limited</h1>
-    <p>Excavators, spare parts, heavy machinery, motorcycles, automobiles and equipment hire — plus machine transport and responsible gold-sector enquiries, from Dunkwa, Ghana.</p>
+    <h1>CHALIN03<br/><span>Company Limited</span></h1>
+    <div className="ce-hero-tagline">Equipment. Trade. Mobility.</div>
+    <p>Buy excavators, find spare parts, source vehicles, hire or transport machinery, and access our gold buying and refining services. Eight businesses, based in Dunkwa, Ghana.</p>
     <div className="ce-hero__actions">
      <a className="ce-button ce-button--gold" href="#our-businesses">Find a business <span aria-hidden="true">↓</span></a>
      <a className="ce-button ce-button--light" href={WHATSAPP} target="_blank" rel="noopener noreferrer">WhatsApp us</a>
@@ -66,7 +70,8 @@ export default function CompanyExperienceV3(){
     <h2>Our businesses</h2>
     <p>Browse machine and vehicle types, find project services or speak to the relevant team.</p>
    </div>
-   <div className="ce-division-grid">{divisions.map(d=><article className="ce-division" key={d.id}>
+   <div className="ce-business-finder"><label htmlFor="ce-business-search">Find a business</label><input id="ce-business-search" type="search" value={businessSearch} placeholder="Search excavators, gold, cars, spare parts…" onChange={e=>setBusinessSearch(e.target.value)}/><span aria-live="polite">{filtered.length} of {divisions.length} businesses</span></div>
+   <div className="ce-division-grid">{filtered.map(d=><article className="ce-division" key={d.id}>
      <div className="ce-division__media">
       <RealPhoto photo={d.photo}/>
      </div>
@@ -75,6 +80,7 @@ export default function CompanyExperienceV3(){
       <a href={siteHref(d.site)}>{d.cta} <span aria-hidden="true">↗</span></a>
      </div>
     </article>)}</div>
+   {filtered.length===0&&<p className="ce-empty">No matching business. <button type="button" onClick={()=>setBusinessSearch("")}>Show all businesses</button></p>}
   </section>
 
 
@@ -85,24 +91,24 @@ export default function CompanyExperienceV3(){
       <source type="image/avif" srcSet="/images/home/v2/chalin03-ceo-founder-hd.avif"/>
       <img src="/images/home/v1/chalin03-ceo-founder.webp" alt="CEO and founder of CHALIN03 Company Limited" width="900" height="1351" loading="lazy" decoding="async"/>
      </picture>
-     <figcaption><span>CHALIN03 COMPANY LIMITED</span><strong>CEO &amp; Founder</strong></figcaption>
+     <figcaption><span>CHALIN03 COMPANY LIMITED</span><strong>Mr. Agyapong Charles</strong><span>CEO &amp; Founder</span></figcaption>
     </figure>
     <div className="ce-leadership__copy">
      <div className="ce-eyebrow"><span/> OUR LEADERSHIP</div>
      <h2 id="ce-leadership-title">Meet our CEO<br className="ce-leadership__break"/> &amp; Founder.</h2>
      <div className="ce-leadership__rule" aria-hidden="true"/>
-     <p>The founder and CEO of CHALIN03 Company Limited leads our business, connecting customers with equipment, spare parts, vehicles, machine transport, equipment hire and our other business divisions.</p>
+     <p>Mr. Agyapong Charles, CEO and Founder of CHALIN03 Company Limited, leads our business across equipment, spare parts, vehicles, machine transport, equipment hire and our other business divisions.</p>
      <a className="ce-button ce-button--gold" href="#our-businesses">Discover our businesses <span aria-hidden="true">↗</span></a>
     </div>
    </div>
   </section>
 
   <section className="ce-approach" aria-labelledby="ce-approach-title">
-   <div className="ce-section-head"><div className="ce-eyebrow ce-eyebrow--dark"><span/> HOW IT WORKS</div><h2 id="ce-approach-title">A clear route from enquiry to action.</h2><p>Explore the options, share your requirements and verify the details before you commit.</p></div>
+   <div className="ce-section-head"><div className="ce-eyebrow ce-eyebrow--dark"><span/> HOW IT WORKS</div><h2 id="ce-approach-title">Speak to the right team.</h2><p>Tell us what you need, and we can discuss availability, prices and delivery.</p></div>
    <div className="ce-approach__grid">
     <article><span>01 / EXPLORE</span><h3>Find the right business</h3><p>Browse parts, equipment and vehicle types — or tell us what you are sourcing.</p></article>
     <article><span>02 / DISCUSS</span><h3>Share the specifics</h3><p>Give us the model, job, location and budget. We can clarify compatibility and logistics.</p></article>
-    <article><span>03 / VERIFY</span><h3>Confirm before proceeding</h3><p>Our team verifies availability, condition, documentation and quotation.</p></article>
+    <article><span>03 / VERIFY</span><h3>Get your quote</h3><p>We will confirm the available options, pricing and arrangements.</p></article>
    </div>
   </section>
   <section className="ce-contact" id="contact"><div><div className="ce-eyebrow ce-eyebrow--dark"><span/> SPEAK TO US</div>
@@ -117,15 +123,15 @@ export default function CompanyExperienceV3(){
   <section className="ce-message" id="message" aria-labelledby="ce-message-title">
    <div className="ce-message__intro"><div className="ce-eyebrow ce-eyebrow--dark"><span/> DIRECT ENQUIRIES</div>
     <h2 id="ce-message-title">Send us a message.</h2>
-    <p>Questions about spare parts, excavators, transport, vehicles, heavy machinery or gold-sector services? Describe your requirements and our team can follow up.</p>
-    <p className="ce-message__notice">Photos are references unless explicitly verified as actual CHALIN03 stock.</p>
+    <p>Questions about spare parts, excavators, transport, vehicles, heavy machinery or gold buying and refining? Describe your requirements and our team can follow up.</p>
+    <p className="ce-message__notice">Ask our team for photographs and prices of the items currently available.</p>
    </div>
    <PublicContactPanel subject="CHALIN03 company website customer enquiry" whatsAppUrl={WHATSAPP} inline/>
   </section>
   <footer className="ce-footer"><div><Brand inverse/><p>Dunkwa Police Barrier · Ghana</p><p>Real equipment, practical services, and people ready to help.</p></div>
    <div className="ce-footer__links"><strong>DISCOVER</strong><a href={siteHref("parts")}>Spare-parts shop</a><a href={siteHref("excavators")}>Excavators</a><a href={siteHref("machines")}>Heavy machinery</a><a href={siteHref("automobiles")}>Automobiles</a><a href={siteHref("motorcycles")}>Motorcycles</a></div>
-   <div className="ce-footer__links"><strong>MORE SERVICES</strong><a href={siteHref("gold")}>Gold & refining enquiries</a><a href={siteHref("transport")}>Machine transport</a><a href={siteHref("hire")}>Equipment hire</a><a href={siteHref("help")}>Help centre</a><a href={siteHref("work")}>Staff login</a></div>
-   <div className="ce-footer__end"><span>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED</span><span>Equipment photos are references. Current stock is confirmed by our staff.</span></div>
+   <div className="ce-footer__links"><strong>MORE SERVICES</strong><a href={siteHref("gold")}>Gold buying & refining</a><a href={siteHref("transport")}>Machine transport</a><a href={siteHref("hire")}>Equipment hire</a><a href={siteHref("help")}>Help centre</a><a href={siteHref("work")}>Staff login</a></div>
+   <div className="ce-footer__end"><span>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED</span><span>Dunkwa Police Barrier · Ghana</span></div>
   </footer>
  </main>;
 }

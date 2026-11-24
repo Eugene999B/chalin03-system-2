@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { businessWorkspaces, getBusinessWorkspace } from "../data/businessWorkspaces";
 import { APP_RELEASE_LABEL } from "../config/appVersion";
 import "../styles/loginPasswordlessClassic.css";
+import StaffTurnstile from "../components/StaffTurnstile";
 
 const API = "/auth/passwordless";
 const HOME = { spare_parts: "/", mining: "/mining", equipment_hire: "/equipment-hire-operations" };
@@ -62,7 +63,7 @@ function GroupOperationsMap() {
   );
 }
 
-export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
+export default function StaffPasswordlessLogin({ allowSignedInSetup = false, turnstileSiteKey = "" }) {
   const { completePasswordlessLogin, isLoggedIn, user } = useAuth();
   const [workspaceCode, setWorkspaceCode] = useState(() => {
     const search = new URLSearchParams(window.location.search);
@@ -75,6 +76,9 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
   const [branchesError, setBranchesError] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [identifier, setIdentifier] = useState("");
+  const [turnstileToken,setTurnstileToken]=useState("");
+  const [turnstileCycle,setTurnstileCycle]=useState(0);
+  const needsTurnstile=Boolean(turnstileSiteKey)&&!allowSignedInSetup;
   const [challenge, setChallenge] = useState("");
   const [oneTimeVerification, setOneTimeVerification] = useState("");
   const [step, setStep] = useState("identify");
@@ -122,17 +126,19 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
     window.history.replaceState({}, "", url.pathname + url.search + url.hash);
   }
   function reset() {
+    setTurnstileToken("");setTurnstileCycle(n=>n+1);
     setStep("identify"); setCode(""); setChallenge(""); setOneTimeVerification("");
     setSetup(null); setRecoveryCodes([]); setBackupMode(false);
     setPendingSession(null); setError(""); setNotice(""); setVerificationError(null); setRemainingAttempts(null); setVerificationBlocked(false);
   }
   async function submitIdentifier(event) {
     event.preventDefault();
-    if (!identifier.trim() || (isSpareParts && !selectedBranchId)) return;
+    if (!identifier.trim() || (isSpareParts && !selectedBranchId) || (needsTurnstile && !turnstileToken) || busy) return;
     setBusy(true); setError(""); setNotice(""); setVerificationError(null); setRemainingAttempts(null); setVerificationBlocked(false);
     try {
       const { data } = await axiosClient.post(API + (allowSignedInSetup ? "/start/verified" : "/start"), {
         identifier: identifier.trim(),
+        ...(needsTurnstile?{turnstile_token:turnstileToken}:{}),
         workspace_code: workspaceCode,
         branch_id: isSpareParts ? Number(selectedBranchId) : null,
       });
@@ -149,7 +155,10 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
       } else if (data.stage === "setup") {
         setSetup(data); setStep("setup");
       } else throw new Error("We couldn't start secure sign-in. Please try again.");
-    } catch (e) { setError(messageFrom(e)); }
+    } catch (e) {
+      setError(messageFrom(e));
+      setTurnstileToken("");setTurnstileCycle(n=>n+1);
+    }
     finally { setBusy(false); }
   }
   async function submitFirstSetupIdentity(event) {
@@ -304,8 +313,9 @@ export default function StaffPasswordlessLogin({ allowSignedInSetup = false }) {
                 <input value={identifier} onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="username" placeholder="Enter username or phone" maxLength={120} required disabled={busy} />
               </label>
+              {needsTurnstile&&<StaffTurnstile key={turnstileCycle} siteKey={turnstileSiteKey} onToken={setTurnstileToken}/>}
               <button type="submit" className="gate4__submit"
-                disabled={busy || branchesLoading || !identifier.trim() || (isSpareParts && !selectedBranchId)}>
+                disabled={busy || branchesLoading || !identifier.trim() || (isSpareParts && !selectedBranchId) || (needsTurnstile&&!turnstileToken)}>
                 <span>{busy ? "◌" : "→"}</span>
                 <div><strong>{busy ? "Checking account…" : "Continue securely"}</strong>
                   <small>Use Authenticator or a one-time backup code</small></div>
