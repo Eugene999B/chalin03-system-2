@@ -98,6 +98,10 @@ const SEARCH_INFO={
  "hire.chalin03.com":["Equipment Hire | CHALIN03 Ghana","Ask about excavator and equipment hire in Ghana."],
  "help.chalin03.com":["Customer Help | CHALIN03 Ghana","Contact CHALIN03 about parts, machines, vehicles, gold and equipment services."]
 };
+// Start the stricter policy in report-only mode for the entire staff SPA.
+// Some historic print views still generate inline scripts; enforce only
+// after authenticated browser and printing journeys have been exercised.
+const STAFF_SCRIPT_POLICY="default-src 'self'; base-uri 'self'; connect-src 'self' https://api.chalin03.com https://cloudflareinsights.com https://static.cloudflareinsights.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src https://challenges.cloudflare.com; img-src 'self' data: blob: https://api.chalin03.com https://commons.wikimedia.org https://upload.wikimedia.org; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; script-src-elem 'self' https://static.cloudflareinsights.com https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; upgrade-insecure-requests";
 async function publicResponse(context,url){
  const host=url.hostname.toLowerCase(),path=url.pathname;
  const info=SEARCH_INFO[host];
@@ -115,6 +119,13 @@ async function publicResponse(context,url){
   return new Response(response.body,{status:response.status,headers:h});
  }
  if(!h.get("Content-Type")?.includes("text/html"))return response;
+ if(host==="work.chalin03.com"){
+  h.set("Content-Security-Policy-Report-Only",STAFF_SCRIPT_POLICY);
+  h.set("Referrer-Policy","no-referrer");
+  h.set("Cache-Control","no-store, max-age=0");
+  h.set("X-Robots-Tag","noindex, nofollow, noarchive");
+  return new Response(response.body,{status:response.status,headers:h});
+ }
  if(!info||path!=="/"){h.set("X-Robots-Tag","noindex, nofollow, noarchive");return new Response(response.body,{status:response.status,headers:h});}
  h.set("X-Robots-Tag","index, follow, max-image-preview:large");
  const canonical=url.origin+"/";

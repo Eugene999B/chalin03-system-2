@@ -47,3 +47,9 @@ assert.equal(post.status,409);
 assert.equal(post.headers.get("Location"),null);
 assert.equal(nextCalls,1,"Protected cross-domain requests must not be forwarded");
 console.log("CHALIN03 KOFAD-style official subdomain enforcement and cross-origin POST protection passed.");
+
+const staffHtml=await onRequest({request:new Request("https://work.chalin03.com/login"),next:()=>new Response("<html></html>",{headers:{"Content-Type":"text/html"}})});
+assert.match(staffHtml.headers.get("Content-Security-Policy-Report-Only"),/script-src-attr 'none'/);
+assert.doesNotMatch(staffHtml.headers.get("Content-Security-Policy-Report-Only"),/script-src[^;]*unsafe-inline/);
+assert.equal(staffHtml.headers.get("Cache-Control"),"no-store, max-age=0");
+assert.equal(staffHtml.headers.get("Referrer-Policy"),"no-referrer");

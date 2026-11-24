@@ -1,4 +1,5 @@
 import axios from "axios";
+import { staffCookieCredentials, trustedApiTarget } from "../security/staffCredentialTransport";
 import { API_BASE_URL } from "./apiBaseUrl";
 import "../utils/equipmentMediaCaptureBridge";
 import {
@@ -205,6 +206,8 @@ function invalidatePollingReadCacheForRequest(config) {
 axiosClient.interceptors.request.use((config) => {
   assertSparePartsInstallmentRequestAllowed(config);
   invalidatePollingReadCacheForRequest(config);
+  const target = trustedApiTarget(config.url || "", API_BASE_URL);
+  config.withCredentials = staffCookieCredentials(target.href);
   const token = localStorage.getItem(TOKEN_KEY) || "";
   const publicSessionRequest = isPublicSessionRequest(config);
   const requestToken = publicSessionRequest ? "" : token;

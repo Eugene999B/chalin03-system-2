@@ -14,6 +14,7 @@ const {writeAuditEvent}=require("../services/auditTrailService");
 const auth=require("./authRoutes").commandGateAuth;
 const s=require("../services/staffPasswordlessCrypto");
 const router=express.Router();
+const {issueStaffSession}=require("../services/staffCookieSession");
 const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
 const {rotationBinding,liveRotationRow,retireAuthenticatorAccess}=require("../services/staffAuthenticatorLifecycle");
 const {turnstileConfig,verifyStaffTurnstile}=require("../services/staffTurnstile");
@@ -266,7 +267,7 @@ router.post("/setup/confirm",action(async(req,res)=>{
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
  const session=await sessionFor(req,id,workspace,branch,verifiedVersion);
  await audit(req,id,"ENROLLED");res.set("Cache-Control","no-store");
- return res.json({...session,recovery_codes:codes.map(x=>x.code),message:"Save your one-time backup codes now; they cannot be viewed again."});
+ return res.json(issueStaffSession(req,res,{...session,recovery_codes:codes.map(x=>x.code),message:"Save your one-time backup codes now; they cannot be viewed again."}));
 }));
 router.post("/verify",action(async(req,res)=>{
  const token=String(req.body?.challenge||"");if(token.length<40||token.length>100)return deny(res);
@@ -298,7 +299,7 @@ router.post("/verify",action(async(req,res)=>{
   await conn.query("UPDATE staff_passwordless_challenges SET consumed_at=UTC_TIMESTAMP() WHERE token_digest=?",[row.token_digest]);
   id=row.user_id;workspace=row.workspace_code;branch=row.branch_id;await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
- res.set("Cache-Control","no-store");return res.json(await sessionFor(req,id,workspace,branch,verifiedVersion));
+ res.set("Cache-Control","no-store");return res.json(issueStaffSession(req,res,await sessionFor(req,id,workspace,branch,verifiedVersion)));
 }));
 
 // Authenticated self-rotation. The existing secret remains usable until the
@@ -344,7 +345,7 @@ router.post("/account/rotate/confirm",requireAuth,action(async(req,res)=>{
   await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
  const session=await sessionFor(req,req.user.id,workspace,branch,newVersion);
- return res.json({...session,recovery_codes:codes.map(x=>x.code),message:"Authenticator replaced. Old keys, sessions and backup codes are no longer valid."});
+ return res.json(issueStaffSession(req,res,{...session,recovery_codes:codes.map(x=>x.code),message:"Authenticator replaced. Old keys, sessions and backup codes are no longer valid."}));
 }));
 // Staff recovery is deliberately narrower than owner handover. Only the
 // original administrator may revoke ordinary staff credentials after fresh

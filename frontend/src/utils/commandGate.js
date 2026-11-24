@@ -4,8 +4,10 @@ import {
   startRegistration,
 } from "@simplewebauthn/browser";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_BASE_URL = globalThis.location?.origin === "https://work.chalin03.com"
+  ? "https://api.chalin03.com/api"
+  : import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const staffCredentials = globalThis.location?.origin === "https://work.chalin03.com" ? "include" : "same-origin";
 
 const STATION_KEY_PREFIX = "chalin03_station_mode_";
 const LAST_WORK_KEY_PREFIX = "chalin03_last_work_";
@@ -162,6 +164,7 @@ export async function authenticateWithPasskey({
     `${API_BASE_URL}/auth/passkeys/authentication/options`,
     {
       method: "POST",
+      credentials: staffCredentials,
       headers: jsonHeaders(),
       body: JSON.stringify({
         workspace_code: workspaceCode,
@@ -184,6 +187,7 @@ export async function authenticateWithPasskey({
     `${API_BASE_URL}/auth/passkeys/authentication/verify`,
     {
       method: "POST",
+      credentials: staffCredentials,
       headers: jsonHeaders(),
       body: JSON.stringify({
         challenge_id: optionsBody.challenge_id,
@@ -204,6 +208,7 @@ export async function registerPasskey({
     `${API_BASE_URL}/auth/passkeys/registration/options`,
     {
       method: "POST",
+      credentials: staffCredentials,
       headers: jsonHeaders({ authenticated: true }),
       body: JSON.stringify({
         current_password: currentPassword,
@@ -221,6 +226,7 @@ export async function registerPasskey({
     `${API_BASE_URL}/auth/passkeys/registration/verify`,
     {
       method: "POST",
+      credentials: staffCredentials,
       headers: jsonHeaders({ authenticated: true }),
       body: JSON.stringify({
         challenge_id: optionsBody.challenge_id,

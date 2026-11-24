@@ -1,3 +1,4 @@
+const { clearStaffSession } = require("../services/staffCookieSession");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -1019,6 +1020,7 @@ router.post("/logout", requireAuth, async (req, res) => {
       details: "User logged out and the active server session was revoked.",
     });
 
+    clearStaffSession(req, res);
     return res.json({
       status: "success",
       message: "Logged out successfully.",

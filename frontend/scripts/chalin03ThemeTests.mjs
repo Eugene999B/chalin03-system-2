@@ -60,8 +60,10 @@ assert.match(entry, /\.\/styles\/chalinDarkModeV4Compat\.css/);
 assert.ok(entry.indexOf('./styles/chalinDarkModeV4Compat.css') > entry.indexOf('./styles/chalinDarkModeV4.css'));
 assert.ok(entry.indexOf('./styles/chalinDarkModeV4Compat.css') > entry.indexOf('./styles/themeHardening.css'));
 assert.doesNotMatch(html, /<script[^>]+src=["']\/darkMode\.js["']/);
-assert.match(html, /chalin03-theme-restore-20261006-v1/);
-assert.match(html, /localStorage\.setItem\("chalin03-theme", "light"\)/);
+const bootstrap = fs.readFileSync(path.join(frontendDir,"public/staff-theme-bootstrap.js"),"utf8");
+assert.match(html, /src="\/staff-theme-bootstrap\.js"/);
+assert.match(bootstrap, /chalin03-theme-restore-20261006-v1/);
+assert.match(bootstrap, /localStorage\.setItem\("chalin03-theme", "light"\)/);
 assert.doesNotMatch(html, /c03-dark-mode/);
 
 console.log("✅ Chalin 03 dark-mode V4 coverage and integration checks passed.");
