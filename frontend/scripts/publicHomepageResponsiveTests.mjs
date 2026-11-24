@@ -61,3 +61,9 @@ assert.ok(css.includes(".ce-leadership__inner"));
 const founderPhoto=fs.readFileSync(path.join(root,"public/images/home/v1/chalin03-ceo-founder.webp"));
 assert.equal(founderPhoto.subarray(0,4).toString(),"RIFF");
 assert.equal(founderPhoto.subarray(8,12).toString(),"WEBP");
+
+// Preserve the original photograph at high pixel density on modern browsers.
+const founderHD=fs.readFileSync(path.join(root,"public/images/home/v2/chalin03-ceo-founder-hd.avif"));
+assert.equal(founderHD.subarray(4,12).toString(),"ftypavif");
+assert.ok(founderHD.length>20000);
+assert.ok(page.includes('srcSet="/images/home/v2/chalin03-ceo-founder-hd.avif"'));

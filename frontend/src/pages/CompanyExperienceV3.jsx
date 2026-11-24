@@ -81,7 +81,10 @@ export default function CompanyExperienceV3(){
   <section className="ce-leadership" id="leadership" aria-labelledby="ce-leadership-title">
    <div className="ce-leadership__inner">
     <figure className="ce-leadership__portrait">
-     <img src="/images/home/v1/chalin03-ceo-founder.webp" alt="CEO and founder of CHALIN03 Company Limited" width="300" height="450" loading="lazy" decoding="async"/>
+     <picture>
+      <source type="image/avif" srcSet="/images/home/v2/chalin03-ceo-founder-hd.avif"/>
+      <img src="/images/home/v1/chalin03-ceo-founder.webp" alt="CEO and founder of CHALIN03 Company Limited" width="900" height="1351" loading="lazy" decoding="async"/>
+     </picture>
      <figcaption><span>CHALIN03 COMPANY LIMITED</span><strong>CEO &amp; Founder</strong></figcaption>
     </figure>
     <div className="ce-leadership__copy">
