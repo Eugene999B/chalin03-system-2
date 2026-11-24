@@ -34,7 +34,7 @@ const excavatorTypes=[
  option("Mini excavators","Compact footprint for drainage, utilities and landscaping. Check gate width, dig depth and tail swing.",PHOTO_LIBRARY.kubotaU35),
  option("Small crawler excavators","Tracked machines for tighter sites that need more reach than a mini. Confirm access and transport weight."),
  option("Medium crawler excavators","Tracked undercarriage for foundations, general earthmoving and loading. Check bucket size and attachment hydraulics.",PHOTO_LIBRARY.cat320),
- option("Large crawler excavators","High-volume excavation and loading on large sites. Confirm operating weight, bucket capacity and haulage needs.",PHOTO_LIBRARY.kobelcoSK350),
+ option("Large crawler excavators","High-volume excavation and loading on large sites. Ask about bucket capacity and haulage.",PHOTO_LIBRARY.cat336Modern),
  option("Wheeled excavators","Useful on paved sites and for work that moves between nearby locations. Check stabilizers and site surface.",BUSINESS_PHOTOS.wheeled),
  option("Long-reach excavators","Extended boom and stick for dredging, slope work and jobs across a setback. Confirm reach and attachment limits.",BUSINESS_PHOTOS.longReach),
  option("High-reach demolition excavators","Specialist boom and guarding for demolition. Send structure height, clearance and the required attachment.",BUSINESS_PHOTOS.demolition),
@@ -53,7 +53,7 @@ const modelDescriptions={
 const divisionData={
  excavators:{
   tone:"amber",line:"EXCAVATOR SALES & SOURCING",lead:"Excavators by type and model",intro:"Browse excavators by type, make and model. Ask about ready-cash prices, installment options and available machines.",
-  photo:PHOTO_LIBRARY.excavators,headline:"Excavators, built for the heavy work.",site:"excavators",sector:"excavators",
+  photo:PHOTO_LIBRARY.homepageExcavator,headline:"Excavators, built for the heavy work.",site:"excavators",sector:"excavators",
   servicePoints:["Crawler excavators","Mini excavators","Large-scale earthmoving","Demolition & specialty machines"],
   catalogTitle:"Explore excavator makes & models",catalogIntro:"Browse popular makes and models. This catalogue is not live inventory; ask us for available machines, prices and condition.",
   steps:["Select a machine model","Share intended work and location","Confirm availability & condition","Receive a verified private quotation"]
@@ -85,7 +85,7 @@ const divisionData={
   catalogTitle:"Explore vehicle types",catalogIntro:"Choose a vehicle type and ask about available vehicles, prices and documents.",
   options:[
    option("Pickups & 4×4s","Hilux-style utility pickups and work vehicles.",REAL_TYPE_PHOTOS["Pickups & 4×4s"]),
-   option("SUVs & crossovers","Family and rough-road vehicles."),
+   option("SUVs & crossovers","Family and rough-road vehicles.",PHOTO_LIBRARY.automobiles),
    option("Saloons & sedans","Separate boot and familiar driving position. Compare legroom, boot space, fuel type and maintenance history.",BUSINESS_PHOTOS.sedan),
    option("Hatchbacks","Compact footprint and a rear liftgate for errands and city parking. Compare seat folding and boot space.",BUSINESS_PHOTOS.hatchback),
    option("Vans & minibuses","Business and group transport."),

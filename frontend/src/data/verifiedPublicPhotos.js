@@ -13,6 +13,10 @@
  * Preserve the linked Commons source + copyright/author attribution.
  */
 const VERIFIED_COMMONS_PATHS=Object.freeze({
+  "Caterpillar excavators 336 and 320GC, 2025 Changsha International Construction Equipment Exhibition.jpg":"d/dd",
+  "Caterpillar excavator 336, 2025 Changsha International Construction Equipment Exhibition.jpg":"4/40",
+  "2024 Toyota Land Cruiser J250.jpg":"d/d5",
+  "2025 Toyota Hilux Travo Prerunner Double-Cab 2.8 Premium.jpg":"1/15",
   "Caterpillar excavator 320 GX, 2025 Changsha International Construction Equipment Exhibition.jpg":"2/2a",
   "CATERPILLAR 950 GC Wheel Loader 05.jpg":"1/1b",
   "Gold Bullion Bar Cooling Out of the Mould - Gold Reef City.jpg":"b/b0",
@@ -56,13 +60,15 @@ function photo(file,credit,license,alt){
  });
 }
 export const PHOTO_LIBRARY=Object.freeze({
-  homepageExcavator:photo("Caterpillar excavator 320 GX, 2025 Changsha International Construction Equipment Exhibition.jpg","Huangdan2060","CC BY 4.0","Caterpillar 320 GX excavator at a 2025 machinery exhibition"),
+  homepageExcavator:photo("Caterpillar excavators 336 and 320GC, 2025 Changsha International Construction Equipment Exhibition.jpg","Huangdan2060","CC BY 4.0","Caterpillar 336 and 320GC excavators at a 2025 machinery exhibition"),
   excavators:photo("Caterpillar 320.jpg","Bene Riobó","CC BY-SA 4.0","Real Caterpillar 320 excavator at work"),
   parts:photo("Heavy-machinery-parts.jpg","Kapsamoon","CC BY-SA 4.0","An assortment of heavy equipment spare parts and machinery components"),
   machines:photo("CATERPILLAR 950 GC Wheel Loader 05.jpg","Oto Zapletal","CC BY-SA 4.0","Caterpillar 950 GC wheel loader photographed in 2023"),
   motorcycles:photo("BMW R 1250 GS (1).jpg","Cjp24","CC BY-SA 4.0","Modern BMW R 1250 GS adventure motorcycle, illustrative model reference"),
-  automobiles:photo("20200517 Toyota Hilux.jpg","Kahvilokki / Wikimedia Commons","See source","Real Toyota Hilux pickup truck"),
+  automobiles:photo("2024 Toyota Land Cruiser J250.jpg","Wlb5V","CC BY-SA 4.0","2024 Toyota Land Cruiser J250"),
+  newHilux:photo("2025 Toyota Hilux Travo Prerunner Double-Cab 2.8 Premium.jpg","Chanokchon","CC BY-SA 4.0","2025 Toyota Hilux Travo double-cab pickup"),
   gold:photo("Gold bullion bars.jpg","Stevebidmead","CC0 1.0","Stacked gold bullion bars"),
+  cat336Modern:photo("Caterpillar excavator 336, 2025 Changsha International Construction Equipment Exhibition.jpg","Huangdan2060","CC BY 4.0","Caterpillar 336 excavator photographed in 2025"),
   goldRefining:photo("Gold Bullion Bar Cooling Out of the Mould - Gold Reef City.jpg","Dan Brown","CC BY 2.0","Gold bullion bar cooling after casting, illustrative refinery photograph"),
   transport:photo("Excavator On A Truck Bed.jpg","Ingolfson / Wikimedia Commons","See source","Excavator carried on a heavy transport truck"),
   hire:photo("Komatsu PC200.jpg","FBenjr123","CC BY-SA 4.0","Real Komatsu PC200 excavator at a worksite"),
@@ -88,6 +94,7 @@ export const PHOTO_LIBRARY=Object.freeze({
 });
 export const EXACT_MODEL_PHOTOS=Object.freeze({
   "Caterpillar|CAT 320":PHOTO_LIBRARY.cat320,
+  "Caterpillar|CAT 336":PHOTO_LIBRARY.cat336Modern,
   "Komatsu|PC200":PHOTO_LIBRARY.komatsu,
   "Volvo|EC210":PHOTO_LIBRARY.volvo,
   "Hitachi|ZX210":PHOTO_LIBRARY.hitachiZX210,
@@ -104,5 +111,5 @@ export const REAL_TYPE_PHOTOS=Object.freeze({
   "Low-bed trailers":PHOTO_LIBRARY.lowbed,
   "Commuter motorcycles":PHOTO_LIBRARY.honda,
   "Delivery motorcycles":PHOTO_LIBRARY.bajaj,
-  "Pickups & 4×4s":PHOTO_LIBRARY.hilux
+  "Pickups & 4×4s":PHOTO_LIBRARY.newHilux
 });
