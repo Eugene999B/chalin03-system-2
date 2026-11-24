@@ -77,6 +77,23 @@ export default function CompanyExperienceV3(){
     </article>)}</div>
   </section>
 
+
+  <section className="ce-leadership" id="leadership" aria-labelledby="ce-leadership-title">
+   <div className="ce-leadership__inner">
+    <figure className="ce-leadership__portrait">
+     <img src="/images/home/v1/chalin03-ceo-founder.webp" alt="CEO and founder of CHALIN03 Company Limited" width="300" height="450" loading="lazy" decoding="async"/>
+     <figcaption><span>CHALIN03 COMPANY LIMITED</span><strong>CEO &amp; Founder</strong></figcaption>
+    </figure>
+    <div className="ce-leadership__copy">
+     <div className="ce-eyebrow"><span/> OUR LEADERSHIP</div>
+     <h2 id="ce-leadership-title">Meet our CEO<br className="ce-leadership__break"/> &amp; Founder.</h2>
+     <div className="ce-leadership__rule" aria-hidden="true"/>
+     <p>The founder and CEO of CHALIN03 Company Limited leads our business, connecting customers with equipment, spare parts, vehicles, machine transport, equipment hire and our other business divisions.</p>
+     <a className="ce-button ce-button--gold" href="#our-businesses">Discover our businesses <span aria-hidden="true">↗</span></a>
+    </div>
+   </div>
+  </section>
+
   <section className="ce-approach" aria-labelledby="ce-approach-title">
    <div className="ce-section-head"><div className="ce-eyebrow ce-eyebrow--dark"><span/> HOW IT WORKS</div><h2 id="ce-approach-title">A clear route from enquiry to action.</h2><p>Explore the options, share your requirements and verify the details before you commit.</p></div>
    <div className="ce-approach__grid">
