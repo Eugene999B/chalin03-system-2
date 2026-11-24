@@ -1,3 +1,4 @@
+const { protectedActionHash } = require("../services/protectedActionHash");
 ﻿const express = require("express");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -354,7 +355,7 @@ async function protectedActionRecord(req) {
     200
   );
 
-  if (!rawToken) {
+  if (!rawToken || !req.user?.session_id) {
     return null;
   }
 
@@ -371,7 +372,7 @@ async function protectedActionRecord(req) {
        AND expires_at > NOW()
      LIMIT 1`,
     [
-      sha256(rawToken),
+      protectedActionHash(rawToken, req.user),
       req.user.id,
     ]
   );
