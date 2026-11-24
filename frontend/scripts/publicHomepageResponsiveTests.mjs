@@ -54,3 +54,10 @@ for(const expected of ["https://commons.wikimedia.org","https://upload.wikimedia
 }
 assert.ok(imageSources.every(source=>source!=="https://images.unsplash.com"),"Unapproved imagery host");
 console.log("Photographic CHALIN03 corporate homepage and official-site source contracts passed.");
+
+assert.ok(page.includes('id="leadership"'));
+assert.ok(page.includes("CEO &amp; Founder"));
+assert.ok(css.includes(".ce-leadership__inner"));
+const founderPhoto=fs.readFileSync(path.join(root,"public/images/home/v1/chalin03-ceo-founder.webp"));
+assert.equal(founderPhoto.subarray(0,4).toString(),"RIFF");
+assert.equal(founderPhoto.subarray(8,12).toString(),"WEBP");

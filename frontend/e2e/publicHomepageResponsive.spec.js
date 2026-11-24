@@ -121,3 +121,19 @@ test("manual Retry loads products again when filters and page have not changed",
  expect(calls).toBe(3);
  await expect(retry).toHaveCount(0);
 });
+
+
+test("founder photograph and leadership section are visible without mobile overflow",async({page})=>{
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:900});
+  await page.goto("/");
+  const leadership=page.locator("#leadership");
+  await leadership.scrollIntoViewIfNeeded();
+  await expect(leadership.getByRole("heading",{name:/Meet our CEO.*Founder/})).toBeVisible();
+  const photo=leadership.getByRole("img",{name:"CEO and founder of CHALIN03 Company Limited"});
+  await expect(photo).toBeVisible();
+  await expect.poll(()=>photo.evaluate(el=>el.complete&&el.naturalWidth===300)).toBe(true);
+  await expect(page.locator(".ce-division")).toHaveCount(8);
+  await noHorizontalOverflow(page);
+ }
+});
