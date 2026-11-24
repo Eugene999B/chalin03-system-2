@@ -913,10 +913,11 @@ function LegacyLoginPageGroupOperations() {
 // A temporary API outage must never expose the old password form as a fallback.
 export default function LoginPageGroupOperations({ allowSignedInSetup = false }) {
   const [mode, setMode] = useState("loading");
+  const [turnstileSiteKey,setTurnstileSiteKey]=useState("");
   useEffect(() => {
     let mounted = true;
     axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
-      .then((response) => { if (mounted) setMode(response.data?.pilot ? "passwordless" : "legacy"); })
+      .then((response) => { if (mounted) { setTurnstileSiteKey(response.data?.turnstile_site_key||""); setMode(response.data?.pilot ? "passwordless" : "legacy"); } })
       .catch(() => { if (mounted) setMode("passwordless"); });
     return () => { mounted = false; };
   }, []);
@@ -927,5 +928,5 @@ export default function LoginPageGroupOperations({ allowSignedInSetup = false })
   );
   // No query parameter can switch the Authenticator flow to a password form.
   if (mode === "legacy") return <LegacyLoginPageGroupOperations />;
-  return <StaffPasswordlessLogin allowSignedInSetup={allowSignedInSetup} />;
+  return <StaffPasswordlessLogin allowSignedInSetup={allowSignedInSetup} turnstileSiteKey={turnstileSiteKey} />;
 }
