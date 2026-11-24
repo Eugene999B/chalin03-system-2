@@ -8,6 +8,7 @@ import BUSINESS_PHOTOS from "../data/businessReferencePhotos.json";
 import "../styles/independentDivisionWebsite.css";
 import "../styles/chalin03PublicRefresh.css";
 import "../styles/chalin03PublicRebuild.css";
+import "../styles/publicEditorial2026.css";
 
 const modelFamilies={
  "Caterpillar":["CAT 305","CAT 307","CAT 308","CAT 312","CAT 315","CAT 318","CAT 320","CAT 323","CAT 325","CAT 330","CAT 336","CAT 340","CAT 349","CAT 352","CAT 374","CAT 395"],
@@ -51,10 +52,10 @@ const modelDescriptions={
 };
 const divisionData={
  excavators:{
-  tone:"amber",line:"EXCAVATOR SALES & SOURCING",lead:"Excavators by type and model",intro:"Find the machine type and model that fits your project. Browse real photographed references where available, then send the requirements for a current quotation.",
+  tone:"amber",line:"EXCAVATOR SALES & SOURCING",lead:"Excavators by type and model",intro:"Browse excavators by type, make and model. Ask about ready-cash prices, installment options and available machines.",
   photo:PHOTO_LIBRARY.excavators,headline:"Excavators, built for the heavy work.",site:"excavators",sector:"excavators",
   servicePoints:["Crawler excavators","Mini excavators","Large-scale earthmoving","Demolition & specialty machines"],
-  catalogTitle:"Explore excavator makes & models",catalogIntro:"The model list is a reference library, not live inventory. We verify actual makes, year, condition, hours, documentation and price for each enquiry.",
+  catalogTitle:"Explore excavator makes & models",catalogIntro:"Browse popular makes and models. This catalogue is not live inventory; ask us for available machines, prices and condition.",
   steps:["Select a machine model","Share intended work and location","Confirm availability & condition","Receive a verified private quotation"]
  },
  "heavy-machines":{
@@ -78,10 +79,10 @@ const divisionData={
   ],steps:["Choose the machinery type","Send site & workload details","Confirm availability & specification","Receive the individual quotation"]
  },
  automobiles:{
-  tone:"navy",line:"AUTOMOBILE SALES & SOURCING",lead:"Cars, pickups and commercial vehicles",intro:"Tell us the body style, year, transmission and budget you need. We can help identify options and confirm the vehicle details.",
+  tone:"navy",line:"AUTOMOBILE SALES & SOURCING",lead:"Cars, pickups and commercial vehicles",intro:"Looking for a car, pickup or commercial vehicle? Tell us your preferred model, year and budget.",
   photo:PHOTO_LIBRARY.automobiles,headline:"Cars and commercial vehicles for the road ahead.",site:"automobiles",sector:"automobiles",
   servicePoints:["Pickups & 4×4s","SUVs & family vehicles","Passenger cars","Business transport"],
-  catalogTitle:"Explore vehicle types",catalogIntro:"Vehicle types are enquiry options, not promises of cars in stock. We verify photos, VIN, condition, year and documents before a sale.",
+  catalogTitle:"Explore vehicle types",catalogIntro:"Choose a vehicle type and ask about available vehicles, prices and documents.",
   options:[
    option("Pickups & 4×4s","Hilux-style utility pickups and work vehicles.",REAL_TYPE_PHOTOS["Pickups & 4×4s"]),
    option("SUVs & crossovers","Family and rough-road vehicles."),
@@ -110,16 +111,14 @@ const divisionData={
   ],steps:["Pick your motorcycle type","Share engine size and budget","Verify available models","Confirm documents & price"]
  },
  gold:{
-  tone:"gold",line:"GOLD-SECTOR ENQUIRIES",lead:"Gold buying and refining",intro:"Discuss gold-related transactions and refining requirements through our dedicated contact channel, with responsible verification and applicable Ghanaian regulatory requirements.",
-  photo:PHOTO_LIBRARY.gold,headline:"A clear process for precious-metal enquiries.",site:"gold",sector:"gold",
-  servicePoints:["Buying enquiries","Refining enquiries","Documentation","Regulatory checks"],
-  catalogTitle:"How enquiries are handled",catalogIntro:"This website does not offer binding precious-metal purchases or represent that a proposed transaction has regulatory approval.",
+  tone:"gold",line:"GOLD BUYING & REFINING",lead:"Gold buying and refining",intro:"CHALIN03 buys and refines gold. Contact our Dunkwa team to discuss your gold, its quality and the refining services you require.",
+  photo:PHOTO_LIBRARY.gold,headline:"Gold buying and refining",site:"gold",sector:"gold",
+  servicePoints:["Gold buying","Gold refining","Quality assessment","Contact our team"],
+  catalogTitle:"Our gold services",catalogIntro:"Talk to us about selling your gold or arranging refining. Our team will explain the assessment, documentation and transaction requirements.",
   options:[
-   option("Buying enquiries","Begin with the proposed quantity, location and transaction details."),
-   option("Refining service enquiries","Ask about lawful refining arrangements and service requirements."),
-   option("Counterparty verification","Identity and supporting documentation are reviewed."),
-   option("Compliance review","Any engagement must meet applicable Ghana licensing and regulatory rules.")
-  ],steps:["Describe your enquiry","Discuss identity & documentation","Confirm legally permitted terms","Arrange a verified follow-up"]
+   option("Gold buying","Speak to our team about the quantity, form and quality of your gold.",PHOTO_LIBRARY.gold),
+   option("Gold refining","Discuss your refining requirements and assessment.",PHOTO_LIBRARY.goldRefining)
+  ],steps:["Contact our gold team","Discuss the gold and assessment","Confirm documents and agreed terms","Arrange the next step"]
  },
  "machine-transport":{
   tone:"orange",line:"HEAVY EQUIPMENT TRANSPORT",lead:"Machine lifting and transport",intro:"Specialist enquiries for excavator lifting, low-bed transport, loading and site-to-site relocation across agreed locations.",
@@ -175,7 +174,7 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
     <div className="bd-kicker">{data.line}</div>
     <h1>{data.lead}</h1><p>{data.intro}</p>
     <div className="bd-hero__buttons"><a className="bd-button bd-button--primary" href="#catalog">Explore {sector==="excavators"?"excavators":"options"} ↓</a>
-     <a className="bd-button bd-button--outline" href={enquiry}>Get a private quote ↗</a></div>
+     <a className="bd-button bd-button--outline" href={enquiry}>Request a quote ↗</a></div>
 
    </div>
    <div className="bd-hero__photo"><RealPhoto photo={data.photo} eager/></div>
@@ -194,7 +193,7 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
     </article>)}</div>
     <p><a href="https://rent.cat.com/en_US/articles/all-about-excavators" target="_blank" rel="noreferrer">Caterpillar guide to excavator types</a></p>
    </section>:null}
-   {sector==="gold"?<p><a href="https://goldbod.gov.gh/notices/" target="_blank" rel="noreferrer">Read current Ghana Gold Board notices</a></p>:null}
+   {sector==="gold"?<p className="bd-gold-note">Gold purchases and refining are subject to applicable Ghanaian requirements. <a href="https://goldbod.gov.gh/notices/" target="_blank" rel="noreferrer">Gold Board notices</a></p>:null}
    <div className="bd-filters"><label htmlFor="bd-find">Search {sector==="excavators"?"models and manufacturers":"equipment or service types"}
     <input id="bd-find" type="search" placeholder={sector==="excavators"?"Try Komatsu PC200, CAT 320, ZX210…":"What kind are you looking for?"}
       value={search} onChange={e=>{setSearch(e.target.value);setVisibleCount(12)}}/></label>
@@ -207,8 +206,8 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
    {results.length?<div className="bd-products">
     {results.slice(0,visibleCount).map(item=><article key={item.brand+"-"+item.name} className="bd-item">
      <div className="bd-item__visual">
-       {item.photo?<><RealPhoto photo={item.photo} className="bd-item__photo"/><span className="bd-item__visual-label">Real reference photo · current stock to confirm</span></>:
-       <div className="bd-item__photo-pending"><span>CHALIN03 / MODEL GUIDE</span><strong>{item.name}</strong><small>Specific photograph not yet verified</small></div>}
+       {item.photo?<><RealPhoto photo={item.photo} className="bd-item__photo"/><span className="bd-item__visual-label">Illustrative photograph</span></>:
+       <div className="bd-item__photo-pending"><span>CHALIN03 / MODEL GUIDE</span><strong>{item.name}</strong><small>Ask for a photograph</small></div>}
       </div>
      <div className="bd-item__body"><span className="bd-item__meta">{item.brand}</span><h3>{item.name}</h3><p>{item.description}</p>
       <a href={sectorHref(data.sector,sector==="excavators"?item.brand+" "+item.name:item.name)}>Enquire about {item.name} <span>↗</span></a></div>
@@ -217,13 +216,13 @@ export default function IndependentDivisionWebsite({sector="excavators"}){
    {results.length>visibleCount?<button type="button" className="bd-more" onClick={()=>setVisibleCount(n=>n+12)}>Show more models</button>:null}
   </section>
   <section className="bd-process"><div><div className="bd-kicker">HOW TO WORK WITH US</div><h2>From your requirements<br/>to the next step.</h2>
-    <p>These pages show real examples and the service types we handle. Photos are not proof of inventory or a promised transaction — our team verifies details before confirmation.</p></div>
+    <p>Our team will discuss your request, available options and the arrangements before you commit.</p></div>
    <ol>{data.steps.map((step,i)=><li key={step}><span>{String(i+1).padStart(2,"0")}</span><strong>{step}</strong></li>)}</ol></section>
   <section className="bd-contact"><div><div className="bd-kicker">CONTACT THIS DIVISION</div><h2>Let's talk about your requirements.</h2>
     <p>Share the work, machine, budget and location. Our team will follow up with the appropriate information.</p></div>
    <div className="bd-contact__actions"><a href={enquiry}>Send an enquiry on this website ↗</a><a href="https://wa.me/233540713654" target="_blank" rel="noopener noreferrer">WhatsApp us ↗</a><a href="tel:+233540713654">Call 054 071 3654 ↗</a></div></section>
   <footer className="bd-footer"><Brand/><nav aria-label="CHALIN03 other website links"><a href={siteHref("company")}>Company home</a><a href={siteHref("parts")}>Spare-parts shop</a><a href={siteHref("help")}>Help centre</a><a href={siteHref("work")}>Staff sign in</a></nav>
-    <small>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED · Reference photographs are credited and do not represent confirmed stock.</small></footer>
+    <small>© {new Date().getFullYear()} CHALIN03 COMPANY LIMITED · Dunkwa, Ghana · Ask for current availability.</small></footer>
   <PublicContactPanel subject={data.line+" enquiry"} inline/>
  </main>;
 }

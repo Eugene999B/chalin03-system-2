@@ -74,7 +74,8 @@ export default function PublicPageMeta({
     };
     const hostname = window.location.hostname.toLowerCase();
     const officialLanding = publicHomeHosts[hostname] === safePath && window.location.pathname === "/";
-    const canonicalUrl = officialLanding ? window.location.origin + "/" : `https://chalin03.com${safePath}`;
+    const preferredHost=Object.entries(publicHomeHosts).find(([,path])=>path===safePath)?.[0];
+    const canonicalUrl = officialLanding ? window.location.origin + "/" : preferredHost ? `https://${preferredHost}/` : `https://homepage.chalin03.com${safePath}`;
 
     document.title = pageTitle;
     setMeta("name", "description", pageDescription);
@@ -84,6 +85,7 @@ export default function PublicPageMeta({
     setMeta("property", "og:description", pageDescription);
     setMeta("property", "og:type", "website");
     setMeta("property", "og:url", canonicalUrl);
+    setMeta("property", "og:image", "https://homepage.chalin03.com/chalin03-logo.png");
     setMeta("name", "twitter:card", "summary_large_image");
     setMeta("name", "twitter:title", pageTitle);
     setMeta("name", "twitter:description", pageDescription);
