@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import {staffCookieCredentials,trustedApiTarget,financeCredentialTarget} from "../src/security/staffCredentialTransport.js";
+const work="https://work.chalin03.com",api="https://api.chalin03.com/api";
+assert.equal(staffCookieCredentials(api,work),true);
+assert.equal(staffCookieCredentials("https://evil.example/api",work),false);
+assert.equal(staffCookieCredentials(api,"https://spareparts.chalin03.com"),false);
+assert.equal(trustedApiTarget("/auth/me",api,work).origin,"https://api.chalin03.com");
+assert.throws(()=>trustedApiTarget("https://evil.example/api/auth/me",api,work));
+assert.throws(()=>trustedApiTarget("//evil.example/api/auth/me",api,work));
+assert.equal(financeCredentialTarget("/api/equipment-catalogue/sales/protected-images/abc",api,work),api+"/equipment-catalogue/sales/protected-images/abc");
+assert.equal(financeCredentialTarget(work+"/api/equipment-catalogue/sales/protected-images/abc",api,work),api+"/equipment-catalogue/sales/protected-images/abc");
+assert.throws(()=>financeCredentialTarget("https://evil.example/api/equipment-catalogue/sales/protected-images/abc",api,work));
+assert.throws(()=>financeCredentialTarget("https://api.chalin03.com@evil.example/api/equipment-catalogue/sales/protected-images/abc",api,work));
+assert.throws(()=>financeCredentialTarget("../private",api,work));
+console.log("Staff credential transport boundary passed.");

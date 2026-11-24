@@ -188,7 +188,10 @@ test("Phase 2 image authority owns protected routes before old handlers", () => 
 });
 
 test("browser image loading uses authenticated Axios blobs and decoded dimensions", () => {
-  assert.match(bridge, /axios\.get\(financeImageRequestUrl\(normalizedSource\)/);
+  assert.match(bridge, /const target = financeImageRequestUrl\(normalizedSource\)/);
+  assert.match(bridge, /axios\.get\(target,/);
+  assert.match(bridge, /financeCredentialTarget\(source, API_BASE_URL\)/);
+  assert.match(bridge, /withCredentials: staffCookieCredentials\(target\)/);
   assert.match(bridge, /responseType: "blob"/);
   assert.match(bridge, /Authorization: `Bearer \$\{token\}`/);
   assert.match(bridge, /"X-Chalin03-Division": "installment_finance"/);

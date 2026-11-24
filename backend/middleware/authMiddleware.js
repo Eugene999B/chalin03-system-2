@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { resolveStaffBearer } = require("../services/staffCookieSession");
 
 const { pool } = require("../config/db");
 const { validateSession } = require("../services/accountSessionService");
@@ -95,7 +96,10 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    const token = authHeader.split(" ")[1];
+    const transport = resolveStaffBearer(req, authHeader.split(" ")[1]);
+    const token = transport.token;
+    if (!token) return res.status(401).json({ status: "error", code: "INVALID_TOKEN", message: "Your secure browser session is no longer active. Please login again." });
+    req.staffCookieSession = transport.cookie;
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);

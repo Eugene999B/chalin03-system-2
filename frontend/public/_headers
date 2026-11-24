@@ -188,3 +188,8 @@ https://help.chalin03.com/
 /sitemap.xml
   ! X-Robots-Tag
   Cache-Control: public, max-age=3600
+
+/staff-theme-bootstrap.js
+  Cache-Control: no-store, max-age=0, must-revalidate
+/staff-recovery-bootstrap.js
+  Cache-Control: no-store, max-age=0, must-revalidate

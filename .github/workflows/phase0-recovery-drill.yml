@@ -2,12 +2,16 @@ name: Phase 0 Recovery Drill
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '37 4 * * 0'
   pull_request:
     branches:
       - main
     paths:
       - backend/scripts/phase0RecoveryDrill.js
       - backend/services/backupSafetyService.js
+      - backend/services/backupSafetyServiceBase.js
+      - backend/services/backupSafetyService/**
       - .github/workflows/phase0-recovery-drill.yml
 
 permissions:
@@ -39,10 +43,10 @@ jobs:
 
     steps:
       - name: Check out Phase 0 branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -62,7 +66,7 @@ jobs:
 
       - name: Upload sanitized recovery evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: phase0-recovery-drill-evidence
           path: backend/phase0-recovery-drill-report.json

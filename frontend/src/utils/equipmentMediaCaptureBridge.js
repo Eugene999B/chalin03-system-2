@@ -1,4 +1,5 @@
 import axios from "axios";
+import { financeCredentialTarget, staffCookieCredentials } from "../security/staffCredentialTransport";
 import "../styles/equipmentSecureUpload.css";
 
 const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -225,10 +226,7 @@ function isProtectedFinanceImageSource(value) {
 }
 
 function financeImageRequestUrl(source) {
-  const value = String(source || "").trim();
-  if (/^https?:\/\//i.test(value)) return value;
-  const path = value.replace(/^\/api(?=\/)/, "");
-  return `${API_BASE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+  return financeCredentialTarget(source, API_BASE_URL);
 }
 
 function buildFinanceImageHeaders() {
@@ -290,7 +288,9 @@ async function hydrateProtectedFinanceImage(image, source) {
   protectedImageRequests.set(image, { controller, objectUrl: "" });
 
   try {
-    const response = await axios.get(financeImageRequestUrl(normalizedSource), {
+    const target = financeImageRequestUrl(normalizedSource);
+    const response = await axios.get(target, {
+      withCredentials: staffCookieCredentials(target),
       responseType: "blob",
       signal: controller.signal,
       timeout: FINANCE_IMAGE_TIMEOUT_MS,

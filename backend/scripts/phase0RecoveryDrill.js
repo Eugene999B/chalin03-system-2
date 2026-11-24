@@ -536,6 +536,12 @@ async function verifyRestoredState(connection, backup, contract) {
 }
 
 async function main() {
+  // The drill creates and drops only synthetic databases. Refuse to connect
+  // to any non-loopback host, even when production credentials are present.
+  const host = String(process.env.DB_HOST || "127.0.0.1").trim();
+  if (!["127.0.0.1", "::1", "localhost"].includes(host) || process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT_ID) {
+    throw new Error("Recovery drill requires an isolated local test database.");
+  }
   const admin = await mysql.createConnection(connectionOptions(undefined));
   let source;
   let target;
