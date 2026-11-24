@@ -24,7 +24,7 @@ function groupTitle(value) {
 }
 
 function ProtectedUnlock({ token, onToken }) {
-  const [password, setPassword] = useState("");
+  const [authenticatorCode, setAuthenticatorCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,10 +40,10 @@ function ProtectedUnlock({ token, onToken }) {
     try {
       const response = await axiosClient.post(
         "/release2-final/security/unlock",
-        { password }
+        { authenticator_code: authenticatorCode }
       );
 
-      setPassword("");
+      setAuthenticatorCode("");
 
       onToken({
         value: response.data.protected_action_token,
@@ -70,7 +70,7 @@ function ProtectedUnlock({ token, onToken }) {
         <h2>Unlock configuration changes</h2>
         <p>
           Viewing configuration is read-only. Saving any group setting or
-          document sequence requires the current administrator password and
+          document sequence requires a fresh Authenticator code and
           creates audit and privileged-ledger evidence.
         </p>
       </div>
@@ -82,11 +82,11 @@ function ProtectedUnlock({ token, onToken }) {
       ) : (
         <form onSubmit={unlock}>
           <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Current administrator password"
-            autoComplete="current-password"
+            type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} aria-label="Authenticator code"
+            value={authenticatorCode}
+            onChange={(event) => setAuthenticatorCode(event.target.value)}
+            placeholder="6-digit Authenticator code"
+            autoComplete="one-time-code"
             required
           />
           <button type="submit" disabled={loading}>

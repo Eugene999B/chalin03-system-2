@@ -62,7 +62,7 @@ export default function UserPermissionManagerPage() {
   const [reason, setReason] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [revokeSessions, setRevokeSessions] = useState(true);
-  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockCode, setUnlockCode] = useState("");
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [protectedToken, setProtectedToken] = useState(null);
   const [conflicts, setConflicts] = useState([]);
@@ -184,9 +184,9 @@ export default function UserPermissionManagerPage() {
     setMessage("");
     try {
       const response = await axiosClient.post("/release2-final/security/unlock", {
-        password: unlockPassword,
+        authenticator_code: unlockCode,
       });
-      setUnlockPassword("");
+      setUnlockCode("");
       setProtectedToken({
         value: response.data.protected_action_token,
         expiresAt:
@@ -196,7 +196,7 @@ export default function UserPermissionManagerPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
-          "Current password was not accepted."
+          "Incorrect or expired Authenticator code. Wait for a new code and retry."
       );
     } finally {
       setUnlockLoading(false);
@@ -209,7 +209,7 @@ export default function UserPermissionManagerPage() {
       return false;
     }
     if (!tokenReady) {
-      setError("Unlock protected actions with your current password first.");
+      setError("Unlock protected actions with a fresh Authenticator code first.");
       return false;
     }
     if (reason.trim().length < 8) {
@@ -361,7 +361,7 @@ export default function UserPermissionManagerPage() {
       return;
     }
     if (!tokenReady) {
-      setError("Unlock protected actions with your current password first.");
+      setError("Unlock protected actions with a fresh Authenticator code first.");
       return;
     }
     if (conflictReason.trim().length < 8) {
@@ -413,7 +413,7 @@ export default function UserPermissionManagerPage() {
       return;
     }
     if (!tokenReady) {
-      setError("Unlock protected actions with your current password first.");
+      setError("Unlock protected actions with a fresh Authenticator code first.");
       return;
     }
     if (conflictReason.trim().length < 8) {
@@ -462,7 +462,7 @@ export default function UserPermissionManagerPage() {
           <p>Release 3F-C2 · Independent Category Control</p>
           <h1>Pages & User Permissions</h1>
           <span>
-            Choose a business category and a staff account. For Spare Parts, see exactly which pages they can open, which are blocked, and change page access directly. Every change remains password-protected and audited.
+            Choose a business category and a staff account. For Spare Parts, see exactly which pages they can open, which are blocked, and change page access directly. Every change remains Authenticator-protected and audited.
           </span>
         </div>
         <div className="upm-hero-badge">🔐 Protected changes</div>
@@ -575,7 +575,7 @@ export default function UserPermissionManagerPage() {
         <div className="upm-card-heading">
           <div>
             <h2>Protected Action Unlock</h2>
-            <p>Your current password opens a short protected window. Passwords are never recorded.</p>
+            <p>A fresh Authenticator code opens a short protected window. Codes are never recorded.</p>
           </div>
           <span className={`upm-token-state ${tokenReady ? "is-ready" : ""}`}>
             {tokenReady ? "Unlocked" : "Locked"}
@@ -587,11 +587,11 @@ export default function UserPermissionManagerPage() {
         ) : (
           <form className="upm-unlock-form" onSubmit={unlockProtectedActions} autoComplete="off">
             <input
-              type="password"
-              value={unlockPassword}
-              onChange={(event) => setUnlockPassword(event.target.value)}
-              placeholder="Current administrator password"
-              autoComplete="new-password"
+              type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} aria-label="Authenticator code"
+              value={unlockCode}
+              onChange={(event) => setUnlockCode(event.target.value)}
+              placeholder="6-digit Authenticator code"
+              autoComplete="one-time-code"
               data-lpignore="true"
               required
             />
