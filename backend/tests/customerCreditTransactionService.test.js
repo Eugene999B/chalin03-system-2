@@ -28,8 +28,8 @@ test("over limit stores pending approval only; exact limit gets calendar month",
  assert.ok(d.calls.some(c=>c.sql.startsWith("INSERT INTO customer_credit")));
  assert.equal(d.calls.some(c=>/INSERT INTO (sales|debts)|UPDATE products/.test(c.sql)),false);
  const d2=db();
- assert.deepEqual(await prepareCreditSale(d2,{...input,total:2000}),{dueDate:"2026-02-28"});
- assert.equal(d2.calls.some(c=>c.sql.startsWith("INSERT")),false);
+ assert.deepEqual(await prepareCreditSale(d2,{...input,total:2000}),{approvalId:11,dueDate:"2026-02-28"});
+ assert.equal(d2.calls.find(c=>c.sql.startsWith("INSERT")).args.at(-1),"approved");
 });
 test("approved exact payload can be consumed once, altered and executed requests rejected",async()=>{
  const prior={id:11,status:"approved",customer_id:7,active:1,payload_sha256:sealSalePayload(input.payload).hash};
