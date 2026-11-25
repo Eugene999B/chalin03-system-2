@@ -957,6 +957,44 @@ router.post("/credit-approvals/:id/review", requireAuth, async (req,res)=>{
   finally{if(conn)conn.release();}
 });
 
+// Recover an approved purchase from the server, even after the POS is reloaded.
+// Only the authenticated original requester may obtain the request key.
+router.get("/credit-approvals/:id/recovery", requireAuth, async (req,res)=>{
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({status:"error",message:"Invalid credit request."});
+  res.set("Cache-Control","no-store");
+  try{
+    const [rows]=await pool.query("SELECT id,request_key,sale_payload,payload_sha256,status,executed_sale_id,expires_at>UTC_TIMESTAMP() AS active FROM customer_credit_approval_requests WHERE id=? AND branch_id=? AND requested_by=?",[id,branchId,req.user.id]);
+    const row=rows[0];
+    if(!row)return res.status(404).json({status:"error",message:"Your credit request was not found in this store."});
+    if(row.status==="executed")return res.status(409).json({status:"error",code:"CREDIT_ALREADY_EXECUTED",sale_id:row.executed_sale_id,message:"This request has already been posted. Check Sales History."});
+    if(row.status!=="approved"||!Number(row.active))return res.status(409).json({status:"error",message:"Only an active approved request can be recovered."});
+    const {recoverSalePayload}=require("../services/customerCreditApprovalPolicy");
+    return res.json({status:"success",request_key:row.request_key,sale:recoverSalePayload(row.sale_payload,row.payload_sha256)});
+  }catch(error){console.error("Credit recovery failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Credit request recovery failed. No sale was posted."});}
+});
+
+router.post("/credit-approvals/:id/cancel", requireAuth, async (req,res)=>{
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({status:"error",message:"Invalid credit request."});
+  let conn;
+  try{
+    conn=await pool.getConnection();await conn.beginTransaction();
+    await conn.query("SELECT id FROM branches WHERE id=? FOR UPDATE",[branchId]);
+    const [updated]=await conn.query("UPDATE customer_credit_approval_requests SET status='cancelled' WHERE id=? AND branch_id=? AND requested_by=? AND status IN ('pending','approved') AND expires_at>UTC_TIMESTAMP()",[id,branchId,req.user.id]);
+    if(updated.affectedRows!==1){await conn.rollback();return res.status(409).json({status:"error",message:"This request is not yours, has expired or is already closed."});}
+    await writeAuditEvent({connection:conn,req,branchId,action:"CUSTOMER_CREDIT_CANCELLED",actionType:"CUSTOMER_CREDIT_CANCELLED",entityType:"credit_approval",entityId:id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{request_id:id}});
+    await conn.commit();return res.json({status:"success",message:"Request cancelled. Any credit reservation was released."});
+  }catch(error){if(conn)await conn.rollback();console.error("Credit cancellation failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Cancellation could not be completed."});}
+  finally{if(conn)conn.release();}
+});
+
 // POST /api/sales
 router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
   // Store-authorised Spare Parts auditors may now record sales at the user's
@@ -2190,6 +2228,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     if (allocationResult.error) {
       await connection.rollback();
       return res.status(400).json({ status: "error", message: allocationResult.error });
+    }
+
+    // Until the dedicated credit correction workflow is implemented, do not
+    // permit the legacy editor to originate or change debt in staging.
+    // The preceding inventory operations remain inside this transaction.
+    if (require("../services/customerCreditTransactionService").enabled() &&
+        (payment.balance > 0 || existingDebts.length > 0 || ["credit","mixed"].includes(payment_type))) {
+      await connection.rollback();
+      return res.status(409).json({status:"error",code:"CREDIT_CORRECTION_REVIEW_REQUIRED",message:"Credit-affecting sale edits require the dedicated credit correction workflow. No changes were saved."});
     }
 
     const customer = await findOrCreateCustomer(
