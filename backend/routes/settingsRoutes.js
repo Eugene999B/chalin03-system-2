@@ -196,6 +196,66 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
   }
 });
 
+// Credit settings are available only in controlled preview until enforcement is ready.
+function creditSettingsAccess(req,res,next) {
+  res.set("Cache-Control","no-store");
+  if (process.env.CHALIN03_CREDIT_PREVIEW !== "true") {
+    return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  }
+  if (!isOriginalSystemAdministrator(req.user)) {
+    return res.status(403).json({status:"error",message:"You are not authorized to change credit policy."});
+  }
+  const branchId = Number(req.user?.branch_id || req.user?.default_branch_id);
+  if (!Number.isSafeInteger(branchId) || branchId <= 0) {
+    return res.status(403).json({status:"error",message:"Select an authorized store first."});
+  }
+  req.creditSettingsBranchId = branchId;
+  return next();
+}
+
+router.get("/customer-credit", requireAuth, requireRole("admin"), creditSettingsAccess, async (req,res) => {
+  try {
+    const [rows] = await pool.query("SELECT term_months,version FROM customer_credit_settings WHERE branch_id=?", [req.creditSettingsBranchId]);
+    if (!rows.length) return res.status(503).json({status:"error",message:"Credit settings migration is not ready."});
+    return res.json({status:"success",settings:{term_months:Number(rows[0].term_months),version:String(rows[0].version)},preview:true});
+  } catch (error) {
+    console.error("Credit settings unavailable:",error.code || error.name);
+    return res.status(503).json({status:"error",message:"Credit settings are temporarily unavailable."});
+  }
+});
+
+router.patch("/customer-credit", requireAuth, requireRole("admin"), creditSettingsAccess, async (req,res) => {
+  const months=req.body?.term_months,version=req.body?.version;
+  if (!Number.isInteger(months) || months<1 || months>12 || typeof version!=="string" || !/^[1-9][0-9]{0,18}$/.test(version)) {
+    return res.status(400).json({status:"error",message:"Choose 1–12 months and refresh the current settings before saving."});
+  }
+  let conn;
+  try {
+    const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+    const verified=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+    if (!verified.ok) return res.status(verified.status).json({status:"error",code:verified.code,message:verified.message});
+    // Do not forward the one-time code into audit metadata.
+    delete req.body.authenticator_code;
+    conn=await pool.getConnection();
+    await conn.beginTransaction();
+    const [rows]=await conn.query("SELECT term_months,version FROM customer_credit_settings WHERE branch_id=? FOR UPDATE",[req.creditSettingsBranchId]);
+    if (!rows.length || String(rows[0].version)!==version) {
+      await conn.rollback();
+      return res.status(409).json({status:"error",message:"Settings have changed. Reload before saving."});
+    }
+    const previous=Number(rows[0].term_months);
+    await conn.query("UPDATE customer_credit_settings SET term_months=?,version=version+1,updated_by=? WHERE branch_id=?",[months,req.user.id,req.creditSettingsBranchId]);
+    const {writeAuditEvent}=require("../services/auditTrailService");
+    await writeAuditEvent({connection:conn,req,branchId:req.creditSettingsBranchId,action:"CUSTOMER_CREDIT_TERM_UPDATED",actionType:"CUSTOMER_CREDIT_TERM_UPDATED",entityType:"credit_settings",entityId:req.creditSettingsBranchId,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{previous_term_months:previous,new_term_months:months}});
+    await conn.commit();
+    return res.json({status:"success",message:"Credit term saved for preview. Existing debt terms are unchanged.",settings:{term_months:months,version:(BigInt(version)+1n).toString()},preview:true});
+  } catch (error) {
+    if(conn) await conn.rollback();
+    console.error("Credit settings update failed:",error.code || error.name);
+    return res.status(503).json({status:"error",message:"Credit settings could not be saved."});
+  } finally {if(conn) conn.release();}
+});
+
 // GET /api/settings/user-settings-access
 router.get(
   "/user-settings-access",
