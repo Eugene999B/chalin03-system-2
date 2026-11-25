@@ -64,7 +64,8 @@ async function reviewCreditRequest(conn,{branchId,reviewerId,requestId,action,re
     decision=reviewDecision({request:{...request,expiresAtMs:now+Number(request.remaining_seconds)*1000,new_debt_pesewas:Number(request.new_debt_pesewas)},reviewerId,branchId,action,reason,now,authoritativeExposure:exposure});
   }catch(e){throw conflict("CREDIT_REVIEW_CONFLICT",e.message);}
   if(sealSalePayload(readJson(request.sale_payload)).hash!==request.payload_sha256)throw conflict("CREDIT_PAYLOAD_INTEGRITY","Credit request integrity check failed.");
-  await conn.query("UPDATE customer_credit_approval_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=UTC_TIMESTAMP() WHERE id=? AND status='pending'",[decision.status,reviewerId,decision.review_reason,requestId]);
+  const [updated]=await conn.query("UPDATE customer_credit_approval_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=UTC_TIMESTAMP() WHERE id=? AND status='pending' AND expires_at>UTC_TIMESTAMP()",[decision.status,reviewerId,decision.review_reason,requestId]);
+  if(updated.affectedRows!==1)throw conflict("CREDIT_REQUEST_EXPIRED","This request expired before the review could be saved.");
   return decision;
 }
 async function consumeCreditApproval(conn,id,saleId){
