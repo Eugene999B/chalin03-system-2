@@ -1,0 +1,20 @@
+# Customer Credit Intelligence and staff reporting — integration specification
+
+Status: policy foundation only. Not a live sale authorization gate. Do not deploy or present the UI as enforcing credit until the transaction integration is complete.
+
+## Customer credit
+- Every canonical debtor receives score 30, including existing customers, without changing or forgiving any receivable. Backfill idempotently and never overwrite an existing score. Use the canonical customer identity, not a phone/name string. Score history and policy versions are auditable.
+- Credit limit in GHS: 0 at score 0, 25,000 at 30 and 200,000 at 100; interpolate linearly between these anchors. Monetary calculations use integer pesewas. No interest or penalty imposed by this policy.
+- Default payment term: one calendar month per new debt item; snapshot the term and due date on origination. Debt Settings may change future terms (1–12 months); preserve historical contractual terms unless an explicit authorized amendment is recorded.
+- Fully paid sales remain permitted irrespective of credit score. Partial payment uses the net new receivable. Calculate aggregate outstanding exposure and approved reservations server-side over the correct legal entity, using a canonical debtor and transactional locking. Never trust browser-supplied totals, score, exposure or approval status.
+- For an over-limit request, create a pending Approval Centre entry instead of a finalized sale; no debt, stock decrement, final receipt, or revenue posting before execution. Existing operational approval kinds do not yet cover credit creation; add a dedicated kind and execution contract, immutable payload hash, requester/approver separation, expiry, idempotency, fresh authenticator verification and revalidation under lock. Release reservations when cancelled/expired. The 200,000 score limit is not a default approval override; above the absolute cap requires a separately authorized policy decision.
+- Track payment history and score explanations. Begin with a uniform score and do not automate reductions based on legacy debts until an approved prospective, documented scoring policy exists. Review late or disputed payments, reversals, and identity merges. Do not use unrelated personal characteristics.
+- UI: score dial, available credit, outstanding, reserved credit, utilization, item due dates, history, and clear approval status. Debt Settings must expose default term and policy version. All changes require role-based permission and audit history.
+
+## Staff portal and business-unit reporting
+- Same design system on staff.chalin03.com, with a server-enforced role/business-unit scope. No duplicated mutable ledger and no artificial reduction of sales or debt balances.
+- Record actual ownership per sale line and corresponding inventory, cost of goods, receivable and payment allocation using verified product/consignment/owner records. Never classify ownership by nationality or name alone.
+- Boss management view shows CHALIN03-owned sales, attributable cost, gross profit, outstanding receivables and collections, with a clear report scope. Mixed receipts are split into attributable lines, not removed wholesale. Unclassified items enter reconciliation; do not guess percentages or fabricate figures.
+- Exports, API responses, counts, dashboards, caches and search enforce the same server-side scope. Original receipts, official statements, statutory reports and authorized full-ledger views retain actual values.
+- Restricted settings: verified owner/product mappings, effective dates, preview with reconciliation against total ledger, audit log, rollback of mappings, approval workflow, and fresh Authenticator step-up. No live changes until classifications have been verified. No silent alteration of real transactions.
+- Acceptance: scoped plus other plus unclassified reconciles to full ledger; returns, partial payments, mixed sales, tax, discounts, inventory movements and cost allocations reconcile; cross-scope access fails; exports match the selected scope. Validate in staging before DNS or Railway production changes.
