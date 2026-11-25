@@ -278,6 +278,59 @@ router.get("/ownership-reconciliation", requireAuth, requireRole("admin"), async
   }catch(error){console.error("Ownership coverage unavailable:",error.code||error.name);return res.status(503).json({status:"error",message:"Ownership reconciliation is temporarily unavailable."});}
 });
 
+// Evidence-based ownership controls. These write classification metadata only.
+function ownershipPreviewAccess(req,res,next){
+  res.set("Cache-Control","no-store");
+  if(process.env.CHALIN03_OWNERSHIP_PREVIEW!=="true")return res.status(404).json({status:"error",code:"OWNERSHIP_PREVIEW_DISABLED"});
+  if(!isOriginalSystemAdministrator(req.user))return res.status(403).json({status:"error",message:"Ownership reconciliation access denied."});
+  const branchId=Number(req.user?.branch_id||req.user?.default_branch_id);
+  if(!Number.isSafeInteger(branchId)||branchId<=0)return res.status(403).json({status:"error",message:"Select an authorized store."});
+  req.ownershipBranchId=branchId;return next();
+}
+router.get("/ownership-reconciliation/receipt",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+  const receipt=typeof req.query.receipt==="string"?req.query.receipt.trim():"";
+  if(!receipt||receipt.length>50)return res.status(400).json({status:"error",message:"Enter an exact receipt number."});
+  try{
+    const [rows]=await pool.query(
+      `SELECT si.id,si.product_id,si.product_name,si.quantity,si.line_total,COALESCE(o.owner_code,'unclassified') AS owner_code,o.evidence_reference,COALESCE(o.version,0) AS version
+       FROM sales s JOIN sale_items si ON si.sale_id=s.id LEFT JOIN sale_item_ownership_classifications o ON o.sale_item_id=si.id
+       WHERE s.branch_id=? AND s.receipt_number=? AND s.sale_status='completed' AND s.is_voided=0 ORDER BY si.id`,
+      [req.ownershipBranchId,receipt]);
+    if(!rows.length)return res.status(404).json({status:"error",message:"No completed receipt found in this store."});
+    return res.json({status:"success",receipt,items:rows.map(row=>({...row,version:String(row.version)}))});
+  }catch(error){console.error("Ownership receipt lookup failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Could not retrieve receipt evidence."});}
+});
+router.patch("/ownership-reconciliation/items/:id",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+  const id=Number(req.params.id),owner=req.body?.owner_code,version=req.body?.version;
+  const evidence=typeof req.body?.evidence_reference==="string"?req.body.evidence_reference.trim():"";
+  if(!Number.isSafeInteger(id)||id<=0||!["chalin03","partner","unclassified"].includes(owner)||typeof version!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(version)||evidence.length<3||evidence.length>255){
+    return res.status(400).json({status:"error",message:"Select an owner, provide the verified inventory or consignment reference, and reload the current item version."});
+  }
+  let conn;
+  try{
+    const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+    const verified=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+    if(!verified.ok)return res.status(verified.status).json({status:"error",code:verified.code,message:verified.message});
+    delete req.body.authenticator_code;
+    conn=await pool.getConnection();await conn.beginTransaction();
+    await conn.query("SELECT id FROM branches WHERE id=? FOR UPDATE",[req.ownershipBranchId]);
+    const [items]=await conn.query("SELECT si.id FROM sale_items si JOIN sales s ON s.id=si.sale_id WHERE si.id=? AND s.branch_id=? AND s.sale_status='completed' AND s.is_voided=0 FOR UPDATE",[id,req.ownershipBranchId]);
+    if(!items.length){await conn.rollback();return res.status(404).json({status:"error",message:"Eligible sale item not found in this store."});}
+    const [rows]=await conn.query("SELECT owner_code,evidence_reference,version FROM sale_item_ownership_classifications WHERE sale_item_id=? FOR UPDATE",[id]);
+    const prior=rows[0];
+    if(String(prior?.version??0)!==version){await conn.rollback();return res.status(409).json({status:"error",message:"Classification changed. Reload the receipt."});}
+    if(prior?.owner_code===owner&&prior?.evidence_reference===evidence){await conn.rollback();return res.json({status:"success",message:"Classification is already current.",version});}
+    if(prior)await conn.query("UPDATE sale_item_ownership_classifications SET owner_code=?,evidence_reference=?,classified_by=?,version=version+1 WHERE sale_item_id=?",[owner,evidence,req.user.id,id]);
+    else await conn.query("INSERT INTO sale_item_ownership_classifications (sale_item_id,owner_code,evidence_reference,classified_by) VALUES (?,?,?,?)",[id,owner,evidence,req.user.id]);
+    await conn.query("INSERT INTO sale_item_ownership_events (sale_item_id,previous_owner,new_owner,evidence_reference,actor_id) VALUES (?,?,?,?,?)",[id,prior?.owner_code||"unclassified",owner,evidence,req.user.id]);
+    const {writeAuditEvent}=require("../services/auditTrailService");
+    await writeAuditEvent({connection:conn,req,branchId:req.ownershipBranchId,action:"SALE_ITEM_OWNERSHIP_CLASSIFIED",actionType:"SALE_ITEM_OWNERSHIP_CLASSIFIED",entityType:"sale_item",entityId:id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{previous_owner:prior?.owner_code||"unclassified",new_owner:owner,evidence_reference:evidence}});
+    await conn.commit();
+    return res.json({status:"success",message:"Ownership evidence saved. The original financial transaction is unchanged.",version:(BigInt(version)+1n).toString()});
+  }catch(error){if(conn)await conn.rollback();console.error("Ownership classification failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Ownership evidence could not be saved."});}
+  finally{if(conn)conn.release();}
+});
+
 // GET /api/settings/user-settings-access
 router.get(
   "/user-settings-access",
