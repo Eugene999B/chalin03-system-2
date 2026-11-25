@@ -11,7 +11,7 @@ export default function CustomerCreditProfile({profile,onChanged}) {
   const utilization = profile.utilization_percent;
   const status = profile.over_limit ? "Above credit limit" : profile.at_limit ? "At credit limit" : "Within credit limit";
   return <section className="ccp" aria-label="Customer credit intelligence preview">
-    <div className="ccp-heading"><div><small>CHALIN03 · CREDIT INTELLIGENCE</small><h3>Customer credit profile</h3></div><span className="ccp-preview">Preview</span></div>
+    <div className="ccp-heading"><div><small>CHALIN03 · CREDIT INTELLIGENCE</small><h3>Customer credit profile</h3></div><span className="ccp-preview">{profile.enforcement_active?"Active":profile.initial_estimate?"Initial estimate":"Preview"}</span></div>
     <div className="ccp-main">
       <div className="ccp-score">
         <svg viewBox="0 0 240 140" role="img" aria-label={`Credit score ${profile.score} out of 100`}>
@@ -22,16 +22,16 @@ export default function CustomerCreditProfile({profile,onChanged}) {
         </svg>
       </div>
       <div className="ccp-metrics">
-        <div><span>Approved limit</span><strong>{money(profile.limit)}</strong></div>
+        <div><span>{profile.initial_estimate?"Proposed credit limit":"Credit limit"}</span><strong>{money(profile.limit)}</strong></div>
         <div><span>Outstanding debt</span><strong>{money(profile.outstanding)}</strong></div>
         <div><span>Approved reservations</span><strong>{money(profile.reserved??0)}</strong></div>
-        <div><span>Available credit</span><strong>{money(profile.available)}</strong></div>
+        <div><span>{profile.initial_estimate?"Estimated available credit":"Available credit"}</span><strong>{money(profile.available)}</strong></div>
         <div><span>Default term</span><strong>{profile.term_months} {profile.term_months===1?"month":"months"}</strong></div>
       </div>
     </div>
     <div className="ccp-util-label"><span>Credit utilization</span><strong>{utilization===null?"Not applicable":utilization+"%"}</strong></div>
     <div className="ccp-track" role="meter" aria-label="Credit utilization" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,utilization??0)}><div style={{width:`${Math.min(100,utilization??0)}%`,background:profile.at_limit?"#b45309":"#087c72"}}/></div>
-    <p className="ccp-status">{status}. Staging preview; not enabled in production.</p>
+    <p className="ccp-status">{status}. {profile.enforcement_active?"Credit approval policy active.":profile.initial_estimate?"Initial score and limit calculated from the existing debt balance; credit approvals and saved score changes are not active.":"Credit approval enforcement is not active."}</p>
     {profile.can_adjust_score&&<ScoreAdjustment key={profile.customer_id+":"+profile.version} profile={profile} onChanged={onChanged}/>}
   </section>;
 }

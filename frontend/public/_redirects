@@ -59,3 +59,6 @@
 /equipment-hire-operations/* / 200
 /equipment-installment-finance/* / 200
 /group-executive-control/* / 200
+
+/account-security / 200
+/business-ownership / 200
