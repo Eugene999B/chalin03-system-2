@@ -920,6 +920,43 @@ router.get("/discount-permission", requireAuth, async (req, res) => {
   }
 });
 
+// Separate staging credit approvals: no password forwarding or impersonation.
+router.get("/credit-approvals", requireAuth, async (req,res) => {
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  res.set("Cache-Control","no-store");
+  try{
+    const reviewer=["admin","manager"].includes(String(req.user?.role||"").toLowerCase());
+    const [rows]=await pool.query(
+      "SELECT a.id,a.status,a.requested_by,a.reviewed_by,a.new_debt_pesewas,a.score_at_request,a.limit_at_request_pesewas,a.exposure_at_request_pesewas,a.expires_at,a.created_at,a.review_reason,a.executed_sale_id,a.expires_at>UTC_TIMESTAMP() AS active,c.name AS customer_name FROM customer_credit_approval_requests a JOIN customers c ON c.id=a.customer_id AND c.branch_id=a.branch_id WHERE a.branch_id=? AND (?=1 OR a.requested_by=?) ORDER BY a.id DESC LIMIT 200",
+      [branchId,reviewer?1:0,req.user.id]
+    );
+    return res.json({status:"success",requests:rows,can_review:reviewer,preview:true});
+  }catch(error){console.error("Credit queue unavailable:",error.code||error.name);return res.status(503).json({status:"error",message:"Credit approval queue unavailable."});}
+});
+router.post("/credit-approvals/:id/review", requireAuth, async (req,res)=>{
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  if(!["admin","manager"].includes(String(req.user?.role||"").toLowerCase()))return res.status(403).json({status:"error",message:"Reviewer permission required."});
+  const id=Number(req.params.id),action=req.body?.action,reason=req.body?.reason;
+  if(!Number.isSafeInteger(id)||id<=0||!["approve","reject"].includes(action)||typeof reason!=="string"||reason.trim().length<3||reason.trim().length>500)return res.status(400).json({status:"error",message:"A valid request, review decision and reason are required."});
+  let conn;
+  try{
+    const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+    const verified=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+    if(!verified.ok)return res.status(verified.status).json({status:"error",code:verified.code,message:verified.message});
+    delete req.body.authenticator_code;
+    conn=await pool.getConnection();await conn.beginTransaction();
+    const decision=await credit.reviewCreditRequest(conn,{branchId,reviewerId:Number(req.user.id),requestId:id,action,reason});
+    await writeAuditEvent({connection:conn,req,branchId,action:"CUSTOMER_CREDIT_REVIEW",actionType:"CUSTOMER_CREDIT_REVIEW",entityType:"credit_approval",entityId:id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:decision});
+    await conn.commit();
+    return res.json({status:"success",decision,message:"Credit request "+decision.status+". No sale has been posted."});
+  }catch(error){if(conn)await conn.rollback();console.error("Credit review failed:",error.code||error.name);return res.status(error.statusCode||503).json({status:"error",code:error.code,message:error.statusCode?error.message:"Credit review could not be saved."});}
+  finally{if(conn)conn.release();}
+});
+
 // POST /api/sales
 router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
   // Store-authorised Spare Parts auditors may now record sales at the user's
@@ -1203,6 +1240,25 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       }
     }
 
+    let stagedCredit = null;
+    const credit = require("../services/customerCreditTransactionService");
+    if (credit.enabled() && payment.balance > 0 && payment_type !== "installment") {
+      if (!customer?.id) {
+        await connection.rollback();
+        return res.status(409).json({status:"error",code:"CREDIT_CUSTOMER_REQUIRED",message:"Select a verified customer before selling on credit."});
+      }
+      // Bind the exact server-priced sale and payment breakdown, not browser totals.
+      const payload = {customer_id:Number(customer.id),customer_name:finalCustomerName,customer_phone:finalCustomerPhone,customer_location:cleanCustomerLocation||customer.location||null,
+        payment_type,total,discount_amount:discountAmount,tax_amount:taxAmount,paid:payment.amount_paid,tendered:payment.amount_tendered,
+        allocations:allocationResult.allocations,items:saleItems.map(({product_id,quantity,unit_price,line_total})=>({product_id,quantity,unit_price,line_total})).sort((a,b)=>a.product_id-b.product_id)};
+      stagedCredit=await credit.prepareCreditSale(connection,{branchId,customerId:Number(customer.id),userId:Number(req.user.id),requestKey:req.get("x-chalin-credit-request-key"),payload,total,paid:payment.amount_paid,businessDate:today});
+      if(stagedCredit.pending){
+        await writeAuditEvent({connection,req,branchId,action:"CUSTOMER_CREDIT_PENDING",actionType:"CUSTOMER_CREDIT_PENDING",entityType:"credit_approval",entityId:stagedCredit.id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{customer_id:customer.id,request_id:stagedCredit.id}});
+        await connection.commit();
+        return res.status(202).json({status:"pending_approval",approval_id:stagedCredit.id,message:"Credit request sent to Approval Centre. No sale, stock movement or payment has been recorded. Do not collect payment or release goods yet."});
+      }
+    }
+
     const [saleResult] = await connection.query(
       `INSERT INTO sales (
         branch_id,
@@ -1243,6 +1299,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
     );
 
     const saleId = saleResult.insertId;
+    if (stagedCredit?.approvalId) await credit.consumeCreditApproval(connection,stagedCredit.approvalId,saleId);
 
     await replaceSalePaymentAllocations(connection, {
       branchId,
@@ -1287,7 +1344,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
 
     if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
       const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
-      const dueDate = calculateDueDate(settings.debt_reminder_days);
+      const dueDate = stagedCredit?.dueDate || calculateDueDate(settings.debt_reminder_days);
 
       const [debtResult] = await connection.query(
         `INSERT INTO debts (
