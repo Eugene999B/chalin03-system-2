@@ -32,8 +32,8 @@ export default function StaffBusinessPortal(){
  return <Layout reportingSections={sections}>
  {page==="/account-security"?<StaffAccountSecurityPage/>:<div className="staff-business-content" key={page+"-"+branchId}>
  <header className="staff-business-header"><div><small>CHALIN03 · {branchName||branchId}</small><h1>{titles[page]}</h1><p>Business ownership reporting · Selected store · Read-only ledger</p></div><span>Spare Parts</span></header>
- {page==="/"&&<><div className="staff-business-shortcuts">{sections[0].items.filter(i=>i.path!=="/").map(i=><Link key={i.path} to={i.path}><span>{i.icon}</span><strong>{i.title}</strong><small>{i.description}</small></Link>)}</div><SalesPlanningScenario key={"scenario-"+branchId} branchId={branchId}/><OwnershipReconciliationPanel branchId={branchId} showUnavailable/></>}
- {page==="/sales-history"&&<OwnershipReconciliationPanel branchId={branchId} showUnavailable/>}
+ {page==="/"&&<><div className="staff-business-shortcuts">{sections[0].items.filter(i=>i.path!=="/").map(i=><Link key={i.path} to={i.path}><span>{i.icon}</span><strong>{i.title}</strong><small>{i.description}</small></Link>)}</div><SalesPlanningScenario key={"scenario-"+branchId} branchId={branchId}/><section className="ccp"><OwnershipFinancialPreview branchId={branchId}/></section></>}
+ {page==="/sales-history"&&<section className="ccp"><h2>Recorded sales by verified ownership</h2><OwnershipFinancialPreview branchId={branchId}/><OwnershipReconciliationPanel branchId={branchId} showUnavailable/></section>}
  {["/debts","/reports","/exports"].includes(page)&&<section className="ccp"><h2>Receipt ownership reconciliation</h2><p>Company, partner and unresolved receipt totals. Until ownership is verified, company-only sales, debts and profit cannot be presented as confirmed amounts.</p><OwnershipFinancialPreview branchId={branchId}/></section>}
  {page==="/users-settings"&&<><SalesPlanningScenario branchId={branchId} editable/><OwnershipReconciliationPanel branchId={branchId} showUnavailable/></>}
  </div>}

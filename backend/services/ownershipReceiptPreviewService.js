@@ -22,21 +22,22 @@ function summarize(rows){
  for(const g of Object.values(groups)){for(const k of Object.keys(total))total[k]=addSafe(total[k],g[k]);}
  return {groups,total,scope:"completed_nonvoid_receipts_before_return_adjustments",financial_reporting_ready:false};
 }
-async function readOwnershipReceiptPreview(db,branchId){
+async function readOwnershipReceiptPreview(db,branchId,{classificationEnabled=true}={}){
  if(!Number.isSafeInteger(branchId)||branchId<=0)throw new RangeError("Invalid branch");
+ const ownerExpression=classificationEnabled?`CASE WHEN COUNT(si.id)>0 AND SUM(CASE WHEN si.id IS NOT NULL AND o.owner_code='chalin03' AND o.classified_by IS NOT NULL AND CHAR_LENGTH(TRIM(COALESCE(o.evidence_reference,'')))>0 THEN 1 ELSE 0 END)=COUNT(si.id) THEN 'chalin03'
+ WHEN COUNT(si.id)>0 AND SUM(CASE WHEN si.id IS NOT NULL AND o.owner_code='partner' AND o.classified_by IS NOT NULL AND CHAR_LENGTH(TRIM(COALESCE(o.evidence_reference,'')))>0 THEN 1 ELSE 0 END)=COUNT(si.id) THEN 'partner'
+ ELSE 'unresolved' END`:"'unresolved'";
  const [rows]=await db.query(
  `SELECT owner_code,COUNT(*) AS receipt_count,COALESCE(SUM(invoice_total),0) AS invoice_total,
  COALESCE(SUM(tax),0) AS tax,COALESCE(SUM(cost),0) AS cost,
  COALESCE(SUM(outstanding),0) AS outstanding,COALESCE(SUM(debt_collections),0) AS debt_collections
  FROM (
  SELECT s.id,
- CASE WHEN COUNT(si.id)>0 AND SUM(CASE WHEN si.id IS NOT NULL AND o.owner_code='chalin03' AND o.classified_by IS NOT NULL AND CHAR_LENGTH(TRIM(COALESCE(o.evidence_reference,'')))>0 THEN 1 ELSE 0 END)=COUNT(si.id) THEN 'chalin03'
- WHEN COUNT(si.id)>0 AND SUM(CASE WHEN si.id IS NOT NULL AND o.owner_code='partner' AND o.classified_by IS NOT NULL AND CHAR_LENGTH(TRIM(COALESCE(o.evidence_reference,'')))>0 THEN 1 ELSE 0 END)=COUNT(si.id) THEN 'partner'
- ELSE 'unresolved' END AS owner_code,
+ ${ownerExpression} AS owner_code,
  s.total AS invoice_total,s.tax_amount AS tax,COALESCE(SUM(si.quantity*si.cost_price_at_sale),0) AS cost,
  COALESCE(d.outstanding,0) AS outstanding,COALESCE(d.debt_collections,0) AS debt_collections
  FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id
- LEFT JOIN sale_item_ownership_classifications o ON o.sale_item_id=si.id
+ ${classificationEnabled?"LEFT JOIN sale_item_ownership_classifications o ON o.sale_item_id=si.id":""}
  LEFT JOIN (
    SELECT d.sale_id,d.branch_id,SUM(d.balance) AS outstanding,SUM(COALESCE(p.collections,0)) AS debt_collections
    FROM debts d LEFT JOIN (SELECT debt_id,branch_id,SUM(amount) AS collections FROM debt_payments WHERE branch_id=? GROUP BY debt_id,branch_id) p ON p.debt_id=d.id AND p.branch_id=d.branch_id
@@ -45,7 +46,7 @@ async function readOwnershipReceiptPreview(db,branchId){
  WHERE s.branch_id=? AND s.sale_status='completed' AND s.is_voided=0
  GROUP BY s.id,s.total,s.tax_amount,d.outstanding,d.debt_collections
  ) receipts GROUP BY owner_code`,[branchId,branchId,branchId]);
- return summarize(rows);
+ return {...summarize(rows),classification_enabled:classificationEnabled};
 }
 // CSV is an explicitly scoped reconciliation artifact, not a replacement ledger.
 function exportReconciliationCsv(report,branchId){

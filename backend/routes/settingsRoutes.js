@@ -311,15 +311,19 @@ router.get("/ownership-reconciliation", requireAuth, requireRole("admin"), async
 function ownershipPreviewAccess(req,res,next){
   res.set("Cache-Control","no-store");
   if(process.env.CHALIN03_OWNERSHIP_PREVIEW!=="true")return res.status(404).json({status:"error",code:"OWNERSHIP_PREVIEW_DISABLED"});
+  return ownershipReadAccess(req,res,next);
+}
+function ownershipReadAccess(req,res,next){
+  res.set("Cache-Control","no-store");
   if(!isOriginalSystemAdministrator(req.user))return res.status(403).json({status:"error",message:"Ownership reconciliation access denied."});
   const branchId=Number(req.user?.branch_id||req.user?.default_branch_id);
   if(!Number.isSafeInteger(branchId)||branchId<=0)return res.status(403).json({status:"error",message:"Select an authorized store."});
   req.ownershipBranchId=branchId;return next();
 }
-router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
   try{
     const {readOwnershipReceiptPreview}=require("../services/ownershipReceiptPreviewService");
-    return res.json({status:"success",preview:await readOwnershipReceiptPreview(pool,req.ownershipBranchId)});
+    return res.json({status:"success",preview:await readOwnershipReceiptPreview(pool,req.ownershipBranchId,{classificationEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"})});
   }catch(error){console.error("Ownership receipt preview failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Receipt reconciliation preview unavailable."});}
 });
 router.get("/ownership-reconciliation/planning-scenario",requireAuth,requireRole("admin"),async(req,res)=>{
@@ -354,10 +358,10 @@ router.patch("/ownership-reconciliation/planning-settings",requireAuth,requireRo
  }catch(error){if(conn)await conn.rollback();console.error("Planning settings failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Planning settings could not be saved."});}
  finally{if(conn)conn.release();}
 });
-router.get("/ownership-reconciliation/financial-preview.csv",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+router.get("/ownership-reconciliation/financial-preview.csv",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
   try{
     const {readOwnershipReceiptPreview,exportReconciliationCsv}=require("../services/ownershipReceiptPreviewService");
-    const report=await readOwnershipReceiptPreview(pool,req.ownershipBranchId);
+    const report=await readOwnershipReceiptPreview(pool,req.ownershipBranchId,{classificationEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"});
     const csv=exportReconciliationCsv(report,req.ownershipBranchId);
     res.set("Content-Type","text/csv; charset=utf-8");
     res.set("Content-Disposition","attachment; filename=ownership-reconciliation-preview-store-"+req.ownershipBranchId+".csv");
