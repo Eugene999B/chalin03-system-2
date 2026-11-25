@@ -779,6 +779,14 @@ router.get("/customers/:customerKey", requireAuth, async (req, res) => {
       const {initialCreditPreview}=require("../services/customerCreditProfileService");
       result.credit_profile=initialCreditPreview(result.summary.outstanding_balance);
     }
+    // Advisory risk is fail-soft: no risk calculation may prevent viewing or paying a debt.
+    try {
+      const {assessCreditRisk}=require("../services/customerCreditRiskAssessment");
+      result.credit_profile.risk=assessCreditRisk({profile:result.credit_profile,debts:result.debts,identityMissing:result.identity_requirements?.required===true});
+    } catch (riskError) {
+      result.credit_profile.risk=null;
+      console.warn("Credit risk evidence unavailable:",riskError.name);
+    }
     res.set("Cache-Control", "no-store");
     return res.json({ status: "success", branch_id: branchId, ...result });
   } catch (error) {
