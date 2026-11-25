@@ -4,6 +4,7 @@ import CustomerFeatureControlsPanel from "../components/CustomerFeatureControlsP
 import ExecutiveBusinessIntelligenceSettingsPanel from "../components/ExecutiveBusinessIntelligenceSettingsPanel";
 import UsersSettingsPage from "./UsersSettingsPage";
 import DebtReminderSettingsPanel from "../components/DebtReminderSettingsPanel";
+import CustomerCreditSettingsPanel from "../components/CustomerCreditSettingsPanel";
 import { useAuth } from "../context/AuthContext";
 
 const SYSTEM_ADMIN_ID = 1;
@@ -153,6 +154,8 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
           </p>
         </div>
       )}
+
+      {systemAdministrator ? <CustomerCreditSettingsPanel /> : null}
 
       {canManage ? (
         <div style={{ marginTop: 18, marginBottom: 18 }}>
