@@ -19,3 +19,8 @@ test("staff challenge requires success, permitted hostname and expected action",
  }
  assert.deepEqual(await verifyStaffTurnstile("token",{env,fetchImpl:async()=>{throw Error("network")}}),{ok:false,unavailable:true});
 });
+test("staff portal hostname accepted only for successful staff_login challenge",async()=>{
+ const result={success:true,hostname:"staff.chalin03.com",action:"staff_login"};
+ assert.equal((await verifyStaffTurnstile("token",{env,fetchImpl:async()=>({ok:true,json:async()=>result})})).ok,true);
+ for(const bad of [{...result,hostname:"staff.chalin03.com.evil.example"},{...result,action:"other"},{...result,success:false}])assert.equal((await verifyStaffTurnstile("token",{env,fetchImpl:async()=>({ok:true,json:async()=>bad})})).ok,false);
+});

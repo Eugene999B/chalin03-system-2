@@ -64,7 +64,7 @@ for (const text of [
   );
 }
 
-assert.match(legacyPage, /axiosClient\.get\("\/debts"\)/);
+assert.match(legacyPage, /axiosClient\.get\("\/debts",\s*\{\s*params:\s*\{\s*credit_profiles:\s*"1"\s*\}\s*\}\)/);
 assert.doesNotMatch(
   legacyPage,
   /axiosClient\.get\("\/debts\/customers",\s*\{/
