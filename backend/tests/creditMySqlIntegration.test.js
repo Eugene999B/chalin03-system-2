@@ -52,7 +52,10 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
  }
  try{
   await pool.query(fullSchema?fullFixture:fixture);
-  for(const name of migrationNames)await pool.query(fs.readFileSync(path.join(root,name+".sql"),"utf8"));
+  const {applyAndVerify}=require("../scripts/runCustomerCreditPlanningMigration");
+  const conn=await pool.getConnection();
+  try{assert.deepEqual(await applyAndVerify(conn),{verified:true,migrations:4,tables:7});}finally{conn.release();}
+
   for(const name of migrationNames)await pool.query(fs.readFileSync(path.join(root,name+".sql"),"utf8"));
   const [profiles]=await pool.query("SELECT score FROM customer_credit_profiles WHERE customer_id=7");assert.equal(Number(profiles[0].score),30);
   const keys=["credit-concurrent-0001","credit-concurrent-0002"];
