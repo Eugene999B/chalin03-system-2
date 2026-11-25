@@ -1,6 +1,6 @@
 "use strict";
 const ACTION="staff_login";
-const ALLOWED_HOSTS=new Set(["work.chalin03.com","chalin03.com","www.chalin03.com"]);
+const ALLOWED_HOSTS=new Set(["work.chalin03.com","staff.chalin03.com","chalin03.com","www.chalin03.com"]);
 function turnstileConfig(env=process.env){
  const siteKey=String(env.STAFF_TURNSTILE_SITE_KEY||"").trim();
  const secret=String(env.STAFF_TURNSTILE_SECRET_KEY||"").trim();
