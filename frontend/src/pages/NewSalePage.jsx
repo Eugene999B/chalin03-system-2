@@ -3,6 +3,7 @@ import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import { useAuth } from "../context/AuthContext";
 import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
+import CreditRequestRecoveryPanel from "../components/CreditRequestRecoveryPanel";
 
 export default function NewSalePage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
@@ -1398,7 +1399,16 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       </div>
 
       {message && <div className="success-box">{message}</div>}
-      {creditPending && <div className="warning-box" role="status">Credit request #{creditPending} is pending or awaiting execution. Keep this cart unchanged. <button type="button" onClick={()=>{creditRequestRef.current=null;setCreditPending(null);setMessage("Start a new request only if the previous one is rejected or expired.");}}>Reset request reference</button></div>}
+      {creditPending && <div className="warning-box" role="status">Credit request #{creditPending} is pending or awaiting execution. Use My credit requests below to post or cancel it.</div>}
+      <CreditRequestRecoveryPanel key={String(user?.id)+":"+String(branchId)} branchId={branchId} userId={user?.id} refreshKey={creditPending} onPosted={(requestId,confirmedReceipt)=>{
+        if(String(requestId)===String(creditPending)){
+          setCreditPending(null);
+          setReceipt(confirmedReceipt);
+          setCart([]);
+          setMessage("Approved purchase posted. Do not collect payment again.");
+        }
+        loadProducts();
+      }} />
       {error && <div className="error-box">{error}</div>}
 
       {lockedPeriod && (
