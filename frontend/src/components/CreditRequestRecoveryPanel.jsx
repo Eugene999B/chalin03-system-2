@@ -3,7 +3,7 @@ import axiosClient from "../api/axiosClient";
 import "../styles/customerCreditProfile.css";
 
 const money=pesewas=>new Intl.NumberFormat("en-GH",{style:"currency",currency:"GHS"}).format(Number(pesewas)/100);
-export default function CreditRequestRecoveryPanel({branchId,userId,onPosted,refreshKey}){
+export default function CreditRequestRecoveryPanel({branchId,userId,onPosted,onCancelled,refreshKey}){
   const [rows,setRows]=useState([]),[visible,setVisible]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[reload,setReload]=useState(0);
   const locked=useRef(false);
   useEffect(()=>{
@@ -22,6 +22,7 @@ export default function CreditRequestRecoveryPanel({branchId,userId,onPosted,ref
       if(action==="cancel"){
         const {data}=await axiosClient.post("/sales/credit-approvals/"+row.id+"/cancel");
         setMessage(data.message);
+        onCancelled?.(row.id);
       }else{
         const {data}=await axiosClient.get("/sales/credit-approvals/"+row.id+"/recovery");
         const posted=await axiosClient.post("/sales",data.sale,{headers:{"x-chalin-credit-request-key":data.request_key,"x-chalin-credit-recovery-id":String(row.id)}});
