@@ -21,6 +21,7 @@ export default function OwnershipFinancialPreview({branchId,refreshKey}){
  const rows=[...Object.entries(report.groups).map(([k,v])=>[labels[k],v]),["All included receipts",report.total]];
  return <div style={{marginTop:20}}>
   <h4>Receipt reconciliation · selected store</h4>
+  {report.classification_enabled===false&&<p role="status">Ownership classification is not activated. The full recorded totals are shown as unresolved; no company or partner allocation is asserted.</p>}
   <button type="button" onClick={download}>Export reconciliation CSV</button>
   <p>Completed, non-void receipts before return adjustments. Mixed and unverified receipts are shown in full in the unresolved group. This preview is not a net-profit or statutory report. Collections below are recorded debt payments only.</p>
   <div style={{overflowX:"auto"}}><table style={{width:"100%",textAlign:"left"}}><thead><tr><th>Ownership</th><th>Receipts</th><th>Invoice total</th><th>Tax</th><th>Recorded cost</th><th>Outstanding</th><th>Debt collections</th></tr></thead><tbody>{rows.map(([label,r])=><tr key={label}><th scope="row">{label}</th><td>{r.receipt_count}</td><td>{money(r.invoice_total)}</td><td>{money(r.tax)}</td><td>{money(r.cost)}</td><td>{money(r.outstanding)}</td><td>{money(r.debt_collections)}</td></tr>)}</tbody></table></div>

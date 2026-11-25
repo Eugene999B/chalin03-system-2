@@ -52,7 +52,7 @@ function PageAccessProtectedOutlet() {
   return <Outlet />;
 }
 
-export default function Layout() {
+export default function Layout({reportingSections=null,children=null} = {}) {
   const {
     user,
     logout,
@@ -114,6 +114,7 @@ export default function Layout() {
     : "No store ID";
 
   const navigationSections = useMemo(() => {
+    if(reportingSections)return reportingSections;
     const mainWorkItems = isAuditor
       ? [
           { title: "Dashboard", description: "Store performance and operational summary", path: "/", icon: "🏠", keywords: "dashboard summary" },
@@ -517,7 +518,7 @@ export default function Layout() {
         return !page || hasPermission(page.permission);
       }),
     })).filter(section => section.items.length);
-  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission]);
+  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission, reportingSections]);
 
   const commandItems = useMemo(() => {
     return navigationSections.flatMap((section) =>
@@ -609,7 +610,7 @@ export default function Layout() {
 
   function goToChangePassword() {
     closeMobileMenu();
-    navigate("/change-password");
+    navigate(reportingSections?"/account-security":"/change-password");
   }
 
   function openCommandCenter() {
@@ -1759,8 +1760,7 @@ export default function Layout() {
           </div>
         )}
 
-        <DebtorIdentityStaffAnnouncement />
-        <PageAccessProtectedOutlet />
+        {reportingSections?children:<><DebtorIdentityStaffAnnouncement /><PageAccessProtectedOutlet /></>}
       </main>
 
       {commandOpen && (
