@@ -23,11 +23,12 @@ async function loadExposure(conn,branchId,customerId,excludeId=null){
   return {score:Number(profiles[0]?.score??30),termMonths:Number(terms[0].term_months),outstanding,reserved};
 }
 function readJson(v){return typeof v==="string"?JSON.parse(v):v;}
-async function prepareCreditSale(conn,{branchId,customerId,userId,requestKey,payload,total,paid,businessDate}){
+async function prepareCreditSale(conn,{branchId,customerId,userId,requestKey,payload,total,paid,businessDate,recoveryId=null}){
   if(!/^[a-zA-Z0-9_-]{16,80}$/.test(requestKey||""))throw conflict("CREDIT_REQUEST_KEY_REQUIRED","Refresh the sale screen before requesting credit.");
   const sealed=sealSalePayload(payload);
   const [rows]=await conn.query("SELECT id,status,payload_sha256,customer_id,expires_at>UTC_TIMESTAMP() AS active,executed_sale_id FROM customer_credit_approval_requests WHERE branch_id=? AND requested_by=? AND request_key=? FOR UPDATE",[branchId,userId,requestKey]);
   const prior=rows[0];
+  if(recoveryId!==null&&(!prior||String(prior.id)!==String(recoveryId)))throw conflict("CREDIT_RECOVERY_SCOPE_CHANGED","The selected store or request changed. No purchase was posted.");
   if(prior){
     if(prior.payload_sha256!==sealed.hash||Number(prior.customer_id)!==customerId)throw conflict("CREDIT_REQUEST_CHANGED","Sale details changed. Start a new approval request.");
     if(prior.status==="executed")throw conflict("CREDIT_ALREADY_EXECUTED","This approval was already posted as sale #"+prior.executed_sale_id+". Check Sales History.");
