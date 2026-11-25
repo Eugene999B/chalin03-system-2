@@ -1,0 +1,4 @@
+const test=require("node:test");const assert=require("node:assert/strict");const {recommendScore}=require("../services/customerCreditScoreRecommendation");
+const item={id:"1",verified:true,settled:true,dueDate:"2026-12-25",settledDate:"2026-12-25"};
+test("no history starts at 30 and only verified evidence counts",()=>{assert.equal(recommendScore([]).recommendedScore,30);const result=recommendScore([item,{...item,id:"2",settledDate:"2026-12-26"},{...item,id:"3",disputed:true},{...item,id:"4",verified:false}]);assert.equal(result.recommendedScore,29);assert.equal(result.excluded,2);assert.equal(result.advisoryOnly,true);});
+test("scores remain bounded and duplicates are rejected",()=>{assert.equal(recommendScore(Array.from({length:60},(_,i)=>({...item,id:String(i)}))).recommendedScore,100);assert.equal(recommendScore(Array.from({length:60},(_,i)=>({...item,id:String(i),settledDate:"2026-12-26"}))).recommendedScore,0);assert.throws(()=>recommendScore([item,item]));});
