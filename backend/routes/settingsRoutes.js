@@ -322,10 +322,15 @@ router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole
     return res.json({status:"success",preview:await readOwnershipReceiptPreview(pool,req.ownershipBranchId)});
   }catch(error){console.error("Ownership receipt preview failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Receipt reconciliation preview unavailable."});}
 });
-router.get("/ownership-reconciliation/planning-scenario",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+router.get("/ownership-reconciliation/planning-scenario",requireAuth,requireRole("admin"),async(req,res)=>{
+ res.set("Cache-Control","no-store");
+ if(!isOriginalSystemAdministrator(req.user))return res.status(403).json({status:"error",message:"Ownership reconciliation access denied."});
+ const branchId=Number(req.user?.branch_id||req.user?.default_branch_id);
+ if(!Number.isSafeInteger(branchId)||branchId<=0)return res.status(403).json({status:"error",message:"Select an authorized store."});
  try{
-   const {readScenario}=require("../services/managementPlanningService");
-   return res.json({status:"success",scenario:await readScenario(pool,req.ownershipBranchId)});
+   const {readScenario,readInitialScenario}=require("../services/managementPlanningService");
+   const scenario=process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"?await readScenario(pool,branchId):await readInitialScenario(pool,branchId);
+    return res.json({status:"success",scenario});
  }catch(error){console.error("Sales planning scenario failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Planning scenario unavailable."});}
 });
 router.patch("/ownership-reconciliation/planning-settings",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{

@@ -61,4 +61,7 @@ function assessPreparedSale({profile, total, paid, reserved, businessDate}) {
   });
   return {...result, due_date:result.newDebt ? debtDueDate(businessDate,profile.term_months) : null};
 }
-module.exports = {toPesewas, describeCredit, loadCreditProfile, assessPreparedSale};
+function initialCreditPreview(outstanding){
+  return {...describeCredit({outstanding}),initial_estimate:true,enforcement_active:false,can_adjust_score:false};
+}
+module.exports = {toPesewas, describeCredit, loadCreditProfile, assessPreparedSale,initialCreditPreview};

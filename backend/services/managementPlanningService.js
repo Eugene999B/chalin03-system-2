@@ -12,4 +12,9 @@ async function readScenario(db,branchId){
  const [rows]=await db.query("SELECT COALESCE(SUM(total),0) AS actual FROM sales WHERE branch_id=? AND sale_status='completed' AND is_voided=0",[branchId]);
  return {...salesPlanningScenario(toPesewas(rows[0].actual),settings.assumed_partner_percent),version:settings.version};
 }
-module.exports={readSettings,readScenario};
+async function readInitialScenario(db,branchId){
+ if(!Number.isSafeInteger(branchId)||branchId<=0)throw new RangeError("Invalid branch");
+ const [rows]=await db.query("SELECT COALESCE(SUM(total),0) AS actual FROM sales WHERE branch_id=? AND sale_status='completed' AND is_voided=0",[branchId]);
+ return {...salesPlanningScenario(toPesewas(rows[0].actual),40),settings_available:false};
+}
+module.exports={readSettings,readScenario,readInitialScenario};
