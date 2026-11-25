@@ -19,7 +19,7 @@ export default function OwnershipEvidencePanel({branchId,onSaved}){
   try{
     const {data}=await axiosClient.patch("/settings/ownership-reconciliation/items/"+selected.id,{owner_code:owner,evidence_reference:evidence.trim(),version:selected.version,authenticator_code:code});
     setRows(current=>current.map(row=>row.id===selected.id?{...row,owner_code:owner,evidence_reference:evidence.trim(),version:data.version}:row));
-    setSelected(null);setEvidence("");setMessage(data.message);onSaved?.();
+    setSelected(null);setEvidence("");setMessage(data.message);onSaved?.(selected.owner_code,owner);
   }catch(e){setError(e.response?.data?.message||"Could not save ownership evidence.");}finally{setCode("");setBusy(false);}
  }
  return <div style={{marginTop:20}}>
