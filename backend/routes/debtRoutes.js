@@ -714,7 +714,19 @@ router.get("/", requireAuth, async (req, res) => {
     sql += " ORDER BY CASE WHEN d.balance > 0 THEN 0 ELSE 1 END, d.due_date ASC, d.created_at DESC LIMIT 500";
 
     const [debts] = await pool.query(sql, params);
-    return res.json({ status: "success", branch_id: branchId, count: debts.length, debts });
+    let credit_profiles;
+    if(req.query.credit_profiles==="1"){
+      try{
+        const {loadDebtListCreditProfiles}=require("../services/customerCreditProfileService");
+        const enabled=process.env.CHALIN03_CREDIT_PREVIEW==="true";
+        credit_profiles=await loadDebtListCreditProfiles(pool,{branchId,debts,enabled,enforcementActive:enabled&&process.env.CHALIN03_CREDIT_ENFORCEMENT_PREVIEW==="true"});
+      }catch(creditError){
+        console.warn("Debt list credit profiles unavailable:",creditError.name);
+        credit_profiles={};
+      }
+      res.set("Cache-Control","no-store");
+    }
+    return res.json({ status: "success", branch_id: branchId, count: debts.length, debts,credit_profiles });
   } catch (error) {
     console.error("Get debts error:", error);
     return res.status(500).json({ status: "error", message: "Something went wrong while fetching debts." });
