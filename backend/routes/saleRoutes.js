@@ -1280,6 +1280,11 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
 
     let stagedCredit = null;
     const credit = require("../services/customerCreditTransactionService");
+    const recoveryId = req.get("x-chalin-credit-recovery-id") || null;
+    if(recoveryId && (!credit.enabled() || payment.balance <= 0 || payment_type === "installment" || !/^[1-9][0-9]{0,15}$/.test(recoveryId))){
+      await connection.rollback();
+      return res.status(409).json({status:"error",code:"CREDIT_RECOVERY_NOT_AVAILABLE",message:"This request cannot be recovered in the current sale context."});
+    }
     if (credit.enabled() && payment.balance > 0 && payment_type !== "installment") {
       if (!customer?.id) {
         await connection.rollback();
@@ -1289,7 +1294,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       const payload = {customer_id:Number(customer.id),customer_name:finalCustomerName,customer_phone:finalCustomerPhone,customer_location:cleanCustomerLocation||customer.location||null,
         payment_type,total,discount_amount:discountAmount,tax_amount:taxAmount,paid:payment.amount_paid,tendered:payment.amount_tendered,
         allocations:allocationResult.allocations,items:saleItems.map(({product_id,quantity,unit_price,line_total})=>({product_id,quantity,unit_price,line_total})).sort((a,b)=>a.product_id-b.product_id)};
-      stagedCredit=await credit.prepareCreditSale(connection,{branchId,customerId:Number(customer.id),userId:Number(req.user.id),requestKey:req.get("x-chalin-credit-request-key"),payload,total,paid:payment.amount_paid,businessDate:today});
+      stagedCredit=await credit.prepareCreditSale(connection,{branchId,customerId:Number(customer.id),userId:Number(req.user.id),requestKey:req.get("x-chalin-credit-request-key"),payload,total,paid:payment.amount_paid,businessDate:today,recoveryId});
       if(stagedCredit.pending){
         await writeAuditEvent({connection,req,branchId,action:"CUSTOMER_CREDIT_PENDING",actionType:"CUSTOMER_CREDIT_PENDING",entityType:"credit_approval",entityId:stagedCredit.id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{customer_id:customer.id,request_id:stagedCredit.id}});
         await connection.commit();
