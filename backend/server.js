@@ -149,6 +149,7 @@ const allowedOrigins = [
   "https://hire.chalin03.com",
   "https://help.chalin03.com",
   "https://work.chalin03.com",
+  "https://staff.chalin03.com",
   process.env.FRONTEND_URL,
   process.env.FRONTEND_URL_ALT,
 ]

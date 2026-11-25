@@ -14,6 +14,7 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
+import StaffBusinessPortal from "./pages/StaffBusinessPortal";
 import PublicCookiePreferences from "./components/PublicCookiePreferences";
 import StaffAccountSecurityPage from "./pages/StaffAccountSecurityPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
@@ -249,6 +250,7 @@ export default function App() {
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
+        {typeof window !== "undefined" && window.location.hostname === "staff.chalin03.com" ? <Routes><Route path="*" element={<StaffBusinessPortal />} /></Routes> : <>
         <PublicCookiePreferences />
         <Routes>
           <Route path="/shop" element={<IndependentPartsMarket />} />
@@ -941,6 +943,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </>}
         </BrowserRouter>
       </WorkspaceContextProvider>
     </AuthProvider>

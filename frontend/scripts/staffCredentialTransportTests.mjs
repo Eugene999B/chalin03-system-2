@@ -13,3 +13,9 @@ assert.throws(()=>financeCredentialTarget("https://evil.example/api/equipment-ca
 assert.throws(()=>financeCredentialTarget("https://api.chalin03.com@evil.example/api/equipment-catalogue/sales/protected-images/abc",api,work));
 assert.throws(()=>financeCredentialTarget("../private",api,work));
 console.log("Staff credential transport boundary passed.");
+
+const portal="https://staff.chalin03.com";
+assert.equal(staffCookieCredentials(api,portal),true);
+assert.equal(staffCookieCredentials("https://evil.example/api",portal),false);
+assert.equal(staffCookieCredentials(api,"https://staff.chalin03.com.evil.example"),false);
+assert.equal(financeCredentialTarget(portal+"/api/equipment-catalogue/sales/protected-images/abc",api,portal),api+"/equipment-catalogue/sales/protected-images/abc");
