@@ -929,7 +929,7 @@ router.get("/credit-approvals", requireAuth, async (req,res) => {
   try{
     const reviewer=["admin","manager"].includes(String(req.user?.role||"").toLowerCase());
     const [rows]=await pool.query(
-      "SELECT a.id,a.status,a.requested_by,a.reviewed_by,a.new_debt_pesewas,a.score_at_request,a.limit_at_request_pesewas,a.exposure_at_request_pesewas,a.expires_at,a.created_at,a.review_reason,a.executed_sale_id,a.expires_at>UTC_TIMESTAMP() AS active,c.name AS customer_name FROM customer_credit_approval_requests a JOIN customers c ON c.id=a.customer_id AND c.branch_id=a.branch_id WHERE a.branch_id=? AND (?=1 OR a.requested_by=?) ORDER BY a.id DESC LIMIT 200",
+      "SELECT a.id,a.status,a.requested_by,a.reviewed_by,a.new_debt_pesewas,a.score_at_request,a.limit_at_request_pesewas,a.exposure_at_request_pesewas,a.expires_at,a.created_at,a.review_reason,a.executed_sale_id,a.sale_payload,a.expires_at>UTC_TIMESTAMP() AS active,c.name AS customer_name FROM customer_credit_approval_requests a JOIN customers c ON c.id=a.customer_id AND c.branch_id=a.branch_id WHERE a.branch_id=? AND (?=1 OR a.requested_by=?) ORDER BY a.id DESC LIMIT 200",
       [branchId,reviewer?1:0,req.user.id]
     );
     return res.json({status:"success",requests:rows,can_review:reviewer,preview:true});
