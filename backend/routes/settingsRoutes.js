@@ -121,7 +121,7 @@ async function createDefaultSettingsForBranch(branchId) {
       "0249469080 / 0249995510",
       "0543421127",
       0,
-      7,
+      30,
       "18:00:00",
       "Thank You For Coming",
       branchCode,
@@ -662,7 +662,7 @@ router.put("/", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const taxRate = toNonNegativeNumber(tax_rate ?? 0);
-    const reminderDays = toPositiveInt(Number(debt_reminder_days ?? 7));
+    const reminderDays = toPositiveInt(Number(debt_reminder_days ?? 30));
     const cardValidityMonths = normalizeValidityMonths(
       Number(worker_id_card_validity_months ?? 24)
     );
