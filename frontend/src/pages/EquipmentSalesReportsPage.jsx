@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
 import FinanceSmsCampaign from "../components/FinanceSmsCampaign";
+import TeamSmsCentre from "../components/TeamSmsCentre";
+import FinanceReminderControls from "../components/FinanceReminderControls";
 import { useAuth } from "../context/AuthContext";
 import "../styles/equipmentFinancePhaseOne.css";
 import "../styles/installmentSmsCentre.css";
@@ -281,6 +283,8 @@ export default function EquipmentSalesReportsPage() {
       ) : null}
       {notice ? <div className="finance-simple__notice" role="status">{notice}</div> : null}
 
+      <TeamSmsCentre scope="finance" canManage={canManage}/>
+      <FinanceReminderControls canManage={canManage}/>
       <FinanceSmsCampaign canManage={canManage} />
 
       <section className="finance-simple__section">

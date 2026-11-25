@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 import "../styles/sparePartsSmsRedesign.css";
+import TeamSmsCentre from "../components/TeamSmsCentre";
 
 function MobilePageFix() {
   return (
@@ -880,6 +881,7 @@ export default function SmsPage() {
   return (
     <div className="boss-mobile-fix sms-centre-v2" style={styles.page}>
       <MobilePageFix />
+      <TeamSmsCentre key={String(branchId)} contextKey={branchId} canManage={["admin","manager"].includes(String(user?.role||"").toLowerCase())}/>
       <section className="sms-centre-v2__hero" style={styles.hero}>
         <div style={styles.signalOne} />
         <div style={styles.signalTwo} />
