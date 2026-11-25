@@ -376,6 +376,9 @@ async function loadDebtDeskAccount(branchId, parsedKey, connection = pool) {
          s.receipt_number,
          s.total AS sale_total,
          s.payment_type,
+         s.sale_status,
+         s.is_voided,
+         EXISTS(SELECT 1 FROM returns r WHERE r.sale_id=s.id AND r.branch_id=s.branch_id) AS has_return,
          s.amount_tendered,
          s.amount_paid AS sale_amount_paid,
          s.balance AS sale_balance,
@@ -418,6 +421,9 @@ async function loadDebtDeskAccount(branchId, parsedKey, connection = pool) {
          s.receipt_number,
          s.total AS sale_total,
          s.payment_type,
+         s.sale_status,
+         s.is_voided,
+         EXISTS(SELECT 1 FROM returns r WHERE r.sale_id=s.id AND r.branch_id=s.branch_id) AS has_return,
          s.amount_tendered,
          s.amount_paid AS sale_amount_paid,
          s.balance AS sale_balance,
@@ -720,6 +726,11 @@ router.get("/", requireAuth, async (req, res) => {
         const {loadDebtListCreditProfiles}=require("../services/customerCreditProfileService");
         const enabled=process.env.CHALIN03_CREDIT_PREVIEW==="true";
         credit_profiles=await loadDebtListCreditProfiles(pool,{branchId,debts,enabled,enforcementActive:enabled&&process.env.CHALIN03_CREDIT_ENFORCEMENT_PREVIEW==="true"});
+        try{
+          const {readGraceDays}=require("../services/customerCreditProfileService");
+          const days=await readGraceDays(pool,branchId);
+          for(const profile of Object.values(credit_profiles))profile.term_days=days;
+        }catch(graceError){console.warn("Credit grace policy unavailable:",graceError.name);}
       }catch(creditError){
         console.warn("Debt list credit profiles unavailable:",creditError.name);
         credit_profiles={};
@@ -791,6 +802,16 @@ router.get("/customers/:customerKey", requireAuth, async (req, res) => {
       const {initialCreditPreview}=require("../services/customerCreditProfileService");
       result.credit_profile=initialCreditPreview(result.summary.outstanding_balance);
     }
+    // Use the same active day-based grace policy as the sale posting route.
+    try{
+      const {readGraceDays}=require("../services/customerCreditProfileService");
+      result.credit_profile.term_days=await readGraceDays(pool,branchId);
+    }catch(graceError){console.warn("Credit grace policy unavailable:",graceError.name);}
+    // Prospective repayment recommendation is advisory and never changes the assigned score.
+    try{
+      const {buildRepaymentRecommendation}=require("../services/customerCreditRepaymentEvidence");
+      result.credit_profile.repayment_recommendation=buildRepaymentRecommendation(result.debts);
+    }catch(e){result.credit_profile.repayment_recommendation=null;console.warn("Credit repayment evidence unavailable:",e.name);}
     // Advisory risk is fail-soft: no risk calculation may prevent viewing or paying a debt.
     try {
       const {assessCreditRisk}=require("../services/customerCreditRiskAssessment");
