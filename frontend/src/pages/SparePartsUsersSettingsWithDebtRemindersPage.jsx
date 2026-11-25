@@ -5,6 +5,7 @@ import ExecutiveBusinessIntelligenceSettingsPanel from "../components/ExecutiveB
 import UsersSettingsPage from "./UsersSettingsPage";
 import DebtReminderSettingsPanel from "../components/DebtReminderSettingsPanel";
 import CustomerCreditSettingsPanel from "../components/CustomerCreditSettingsPanel";
+import OwnershipReconciliationPanel from "../components/OwnershipReconciliationPanel";
 import { useAuth } from "../context/AuthContext";
 
 const SYSTEM_ADMIN_ID = 1;
@@ -156,6 +157,7 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
       )}
 
       {systemAdministrator ? <CustomerCreditSettingsPanel /> : null}
+      {systemAdministrator ? <OwnershipReconciliationPanel branchId={user?.branch_id || user?.default_branch_id} /> : null}
 
       {canManage ? (
         <div style={{ marginTop: 18, marginBottom: 18 }}>
