@@ -872,9 +872,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       return;
     }
 
+    if (saleSubmittingRef.current) return;
+    saleSubmittingRef.current = true;
     try {
-      if (saleSubmittingRef.current) return;
-      saleSubmittingRef.current = true;
       const salePayload = {
         customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
         customer_name: cleanCustomerName,
