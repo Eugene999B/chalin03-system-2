@@ -64,4 +64,33 @@ function assessPreparedSale({profile, total, paid, reserved, businessDate}) {
 function initialCreditPreview(outstanding){
   return {...describeCredit({outstanding}),initial_estimate:true,enforcement_active:false,can_adjust_score:false};
 }
-module.exports = {toPesewas, describeCredit, loadCreditProfile, assessPreparedSale,initialCreditPreview};
+// One bounded aggregate query for the displayed canonical customer IDs.
+// Never calculate available credit from the truncated 500-receipt list.
+async function loadDebtListCreditProfiles(db,{branchId,debts,enabled=false,enforcementActive=false}){
+ if(!Number.isSafeInteger(branchId)||branchId<=0||!Array.isArray(debts)||debts.length>500)throw new RangeError("Invalid debt list scope");
+ const ids=[...new Set(debts.map(d=>Number(d.customer_id)).filter(id=>Number.isSafeInteger(id)&&id>0))];
+ const result={};
+ for(const d of debts){
+   const id=Number(d.id);
+   if(!d.customer_id&&Number.isSafeInteger(id)&&id>0)result["legacy-"+id]=initialCreditPreview(d.balance);
+ }
+ if(!ids.length)return result;
+ const marks=ids.map(()=>"?").join(",");
+ const profileFields=enabled?",COALESCE(p.score,30) AS score,COALESCE(cs.term_months,1) AS term_months,COALESCE(r.reserved,0) AS reserved":"";
+ const profileJoins=enabled?`LEFT JOIN customer_credit_profiles p ON p.customer_id=c.id
+ LEFT JOIN customer_credit_settings cs ON cs.branch_id=c.branch_id
+ LEFT JOIN (SELECT customer_id,branch_id,CAST(SUM(new_debt_pesewas)/100 AS DECIMAL(20,2)) AS reserved FROM customer_credit_approval_requests WHERE branch_id=? AND status='approved' AND expires_at>UTC_TIMESTAMP() GROUP BY customer_id,branch_id) r ON r.customer_id=c.id AND r.branch_id=c.branch_id`:"";
+ const sql=`SELECT a.customer_id,a.outstanding,c.id AS canonical_id${profileFields}
+ FROM (SELECT COALESCE(s.customer_id,d.customer_id) AS customer_id,COALESCE(SUM(CASE WHEN d.balance>0 THEN d.balance ELSE 0 END),0) AS outstanding
+ FROM debts d LEFT JOIN sales s ON s.id=d.sale_id AND s.branch_id=d.branch_id
+ WHERE d.branch_id=? AND COALESCE(s.customer_id,d.customer_id) IN (${marks})
+ GROUP BY COALESCE(s.customer_id,d.customer_id)) a
+ LEFT JOIN customers c ON c.id=a.customer_id AND c.branch_id=? ${profileJoins}`;
+ const [rows]=await db.query(sql,[branchId,...ids,branchId,...(enabled?[branchId]:[])]);
+ for(const row of rows){
+   const key="customer-"+row.customer_id;
+   result[key]=enabled&&row.canonical_id?{...describeCredit({score:Number(row.score),outstanding:row.outstanding,termMonths:Number(row.term_months),reserved:row.reserved}),enforcement_active:enforcementActive,can_adjust_score:false}:initialCreditPreview(row.outstanding);
+ }
+ return result;
+}
+module.exports = {toPesewas, describeCredit, loadCreditProfile, assessPreparedSale,initialCreditPreview,loadDebtListCreditProfiles};
