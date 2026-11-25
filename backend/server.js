@@ -423,6 +423,9 @@ app.use(
 app.use("/api/maintenance", requireAuth, sparePartsBoundary, maintenanceRoutes);
 app.use("/api/audit-signoffs", requireAuth, sparePartsBoundary, auditSignoffRoutes);
 app.use("/api/audit-unlock-requests", requireAuth, sparePartsBoundary, auditUnlockRequestRoutes);
+const {createTeamSmsRouter}=require("./routes/teamSmsRoutes");
+app.use("/api/team-sms/spare-parts",requireAuth,sparePartsBoundary,requireSparePartsBranchContext,createTeamSmsRouter("spare_parts"));
+app.use("/api/team-sms/finance",requireAuth,hireBoundary,createTeamSmsRouter("finance"));
 app.use("/api/sms", requireAuth, sparePartsBoundary, smsRoutes);
 app.use("/api/accounting-intelligence", requireAuth, sparePartsBoundary, accountingIntelligenceRoutes);
 app.use(

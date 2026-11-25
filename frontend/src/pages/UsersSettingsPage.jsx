@@ -183,7 +183,7 @@ export default function UsersSettingsPage() {
     branch_name: "",
     receipt_prefix: "",
     tax_rate: 0,
-    debt_reminder_days: 7,
+    debt_reminder_days: 30,
     daily_summary_time: "18:00:00",
     receipt_footer: "",
     worker_id_card_validity_months: 24,
@@ -788,7 +788,7 @@ This disables login, revokes all active sessions and assigned access, and preser
       const response = await axiosClient.put("/settings", {
         ...settings,
         tax_rate: Number(settings.tax_rate || 0),
-        debt_reminder_days: Number(settings.debt_reminder_days || 7),
+        debt_reminder_days: Number(settings.debt_reminder_days || 30),
         worker_id_card_validity_months: Number(
           settings.worker_id_card_validity_months || 24
         ),
@@ -2045,7 +2045,7 @@ This disables login, revokes all active sessions and assigned access, and preser
                         <input
                           type="number"
                           name="debt_reminder_days"
-                          value={settings.debt_reminder_days || 7}
+                          value={settings.debt_reminder_days || 30}
                           onChange={handleSettingsChange}
                         />
                       </div>

@@ -591,7 +591,7 @@ async function getSettings(connection, branchId) {
 
     return {
       tax_rate: 0,
-      debt_reminder_days: 7,
+      debt_reminder_days: 30,
       business_name: "Chalin 03 Company Limited",
       business_address: fallbackBranch.location || "",
       business_phone: "0249469080 / 0249995510",
@@ -615,13 +615,8 @@ async function getSettings(connection, branchId) {
   };
 }
 
-function calculateDueDate(daysToAdd) {
-  const date = new Date();
-  const parsedDays = Number(daysToAdd);
-  const days = Number.isFinite(parsedDays) ? parsedDays : 7;
-  date.setUTCDate(date.getUTCDate() + days);
-
-  return date.toISOString().slice(0, 10);
+function calculateDueDate(daysToAdd, saleDate = new Date()) {
+  return require("../services/debtGracePeriodService").calculateDebtDueDate(saleDate,daysToAdd);
 }
 
 function toDateOnly(value) {
@@ -1399,7 +1394,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
 
     if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
       const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
-      const dueDate = stagedCredit?.dueDate || calculateDueDate(settings.debt_reminder_days);
+      const dueDate = calculateDueDate(settings.debt_reminder_days);
 
       const [debtResult] = await connection.query(
         `INSERT INTO debts (
@@ -2084,7 +2079,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const [existingDebts] = await connection.query(
-      `SELECT id
+      `SELECT id, due_date
        FROM debts
        WHERE sale_id = ?
        AND branch_id = ?
@@ -2361,7 +2356,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
     if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
       const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
-      const dueDate = calculateDueDate(settings.debt_reminder_days);
+      const dueDate = existingDebts[0]?.due_date ? toDateOnly(existingDebts[0].due_date) : calculateDueDate(settings.debt_reminder_days,sale.created_at);
 
       if (existingDebts.length > 0) {
         await connection.query(

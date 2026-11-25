@@ -24,7 +24,10 @@ test("Debt Desk separates credit and due dates using Ghana business time", () =>
   assert.match(source, /Credit receipts/);
   assert.doesNotMatch(source, /date\.toLocaleDateString\(\)/);
   assert.doesNotMatch(source, /date\.toLocaleString\(\)/);
-  assert.match(saleRoutes, /setUTCDate\(date\.getUTCDate\(\) \+ days\)/);
+  assert.match(saleRoutes, /debtGracePeriodService/);
+  const { calculateDebtDueDate } = require("../services/debtGracePeriodService");
+  assert.equal(calculateDebtDueDate("2026-07-27T23:59:59Z", 30), "2026-08-26");
+  assert.equal(calculateDebtDueDate("2026-07-27T00:00:00Z", 30), "2026-08-26");
 });
 
 test("business date helper preserves Ghana calendar dates", async () => {
