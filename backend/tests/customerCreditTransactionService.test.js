@@ -41,3 +41,10 @@ test("approved exact payload can be consumed once, altered and executed requests
  await assert.rejects(prepareCreditSale(db({prior:{...prior,status:"executed",executed_sale_id:91}}),input),{code:"CREDIT_ALREADY_EXECUTED"});
  await assert.rejects(consumeCreditApproval({query:async()=>[{affectedRows:0}]},11,91),{code:"CREDIT_APPROVAL_NOT_ACTIVE"});
 });
+
+test("recovery cannot be posted in a different store or request context",async()=>{
+ const prior={id:11,status:"approved",customer_id:7,active:1,payload_sha256:sealSalePayload(input.payload).hash};
+ await assert.rejects(prepareCreditSale(db(),{...input,recoveryId:"11"}),{code:"CREDIT_RECOVERY_SCOPE_CHANGED"});
+ await assert.rejects(prepareCreditSale(db({prior}),{...input,recoveryId:"12"}),{code:"CREDIT_RECOVERY_SCOPE_CHANGED"});
+ assert.equal((await prepareCreditSale(db({prior}),{...input,recoveryId:"11"})).approvalId,11);
+});
