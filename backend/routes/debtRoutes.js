@@ -768,6 +768,11 @@ router.get("/customers/:customerKey", requireAuth, async (req, res) => {
     if (process.env.CHALIN03_CREDIT_PREVIEW === "true" && parsedKey.type === "customer") {
       const { loadCreditProfile } = require("../services/customerCreditProfileService");
       result.credit_profile = await loadCreditProfile(pool, {branchId, customerId: parsedKey.id});
+      if(result.credit_profile){
+        const {isOriginalSystemAdministrator}=require("../security/systemAdminIdentity");
+        result.credit_profile.can_adjust_score=isOriginalSystemAdministrator(req.user);
+        result.credit_profile.customer_id=parsedKey.id;
+      }
       res.set("Cache-Control", "no-store");
     }
     return res.json({ status: "success", branch_id: branchId, ...result });
