@@ -42,13 +42,15 @@ async function prepareCreditSale(conn,{branchId,customerId,userId,requestKey,pay
     if(result.projectedExposure>creditLimit(100))throw conflict("CREDIT_CAP_EXCEEDED","Current exposure exceeds the maximum credit cap.");
     return {approvalId:prior.id,dueDate:debtDueDate(businessDate,exposure.termMonths)};
   }
-  if(result.decision!=="approval_required")return {dueDate:debtDueDate(businessDate,exposure.termMonths)};
   if(result.projectedExposure>creditLimit(100))throw conflict("CREDIT_CAP_EXCEEDED","This purchase exceeds the maximum GH₵200,000 credit exposure.");
+  const automatic=result.decision==="within_limit";
+  // Persist the request key for ordinary credit sales too. Automatic clearance
+  // is not a human approval and must be consumed in this same transaction.
   const [insert]=await conn.query(
-    "INSERT INTO customer_credit_approval_requests (branch_id,customer_id,requested_by,request_key,payload_sha256,sale_payload,new_debt_pesewas,score_at_request,limit_at_request_pesewas,exposure_at_request_pesewas,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL 72 HOUR))",
-    [branchId,customerId,userId,requestKey,sealed.hash,sealed.serialized,result.newDebt,result.score,result.limit,result.exposure]
+    "INSERT INTO customer_credit_approval_requests (branch_id,customer_id,requested_by,request_key,payload_sha256,sale_payload,new_debt_pesewas,score_at_request,limit_at_request_pesewas,exposure_at_request_pesewas,status,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL 72 HOUR))",
+    [branchId,customerId,userId,requestKey,sealed.hash,sealed.serialized,result.newDebt,result.score,result.limit,result.exposure,automatic?"approved":"pending"]
   );
-  return {pending:true,id:String(insert.insertId)};
+  return automatic?{approvalId:insert.insertId,dueDate:debtDueDate(businessDate,exposure.termMonths)}:{pending:true,id:String(insert.insertId)};
 }
 async function reviewCreditRequest(conn,{branchId,reviewerId,requestId,action,reason}){
   await conn.query("SELECT id FROM branches WHERE id=? FOR UPDATE",[branchId]);
