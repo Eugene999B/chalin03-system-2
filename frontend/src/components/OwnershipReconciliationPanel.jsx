@@ -4,13 +4,13 @@ import OwnershipEvidencePanel from "./OwnershipEvidencePanel";
 import OwnershipFinancialPreview from "./OwnershipFinancialPreview";
 import "../styles/customerCreditProfile.css";
 
-export default function OwnershipReconciliationPanel({branchId}){
+export default function OwnershipReconciliationPanel({branchId,showUnavailable=false}){
  const [data,setData]=useState(null),[error,setError]=useState(""),[reload,setReload]=useState(0);
  useEffect(()=>{
    let active=true;setData(null);setError("");
-   axiosClient.get("/settings/ownership-reconciliation").then(({data:result})=>{if(active)setData(result);}).catch(e=>{if(active&&![403,404].includes(e.response?.status))setError(e.response?.data?.message||"Reconciliation could not be loaded.");});
+   axiosClient.get("/settings/ownership-reconciliation").then(({data:result})=>{if(active)setData(result);}).catch(e=>{if(active&&(showUnavailable||![403,404].includes(e.response?.status)))setError(e.response?.status===404?"Business ownership reporting is not activated.":e.response?.status===403?"This account is not authorized to view business ownership controls.":e.response?.data?.message||"Reconciliation could not be loaded.");});
    return ()=>{active=false;};
- },[branchId,reload]);
+ },[branchId,reload,showUnavailable]);
  if(!data&&!error)return null;
  const rows=data?[["CHALIN03",data.groups.chalin03],["Business partner",data.groups.partner],["Ownership not yet verified",data.groups.unclassified]]:[];
  return <section className="ccp">

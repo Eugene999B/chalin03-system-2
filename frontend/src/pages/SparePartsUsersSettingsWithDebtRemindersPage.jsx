@@ -158,6 +158,7 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
 
       {systemAdministrator ? <CustomerCreditSettingsPanel /> : null}
       {systemAdministrator ? <OwnershipReconciliationPanel branchId={user?.branch_id || user?.default_branch_id} /> : null}
+      {systemAdministrator ? <a href="/business-ownership">Open business ownership reporting workspace</a> : null}
 
       {canManage ? (
         <div style={{ marginTop: 18, marginBottom: 18 }}>

@@ -34,6 +34,7 @@ import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
+import BusinessOwnershipReportingPage from "./pages/BusinessOwnershipReportingPage";
 import SparePartsUsersSettingsWithDebtRemindersPage from "./pages/SparePartsUsersSettingsWithDebtRemindersPage";
 import UserPermissionManagerPage from "./pages/UserPermissionManagerPage";
 import ExpensesPage from "./pages/ExpensesPage";
@@ -323,6 +324,7 @@ export default function App() {
               path="reports"
               element={rolePage(auditReadRoles, <ReportsPage />)}
             />
+            <Route path="business-ownership" element={rolePage(adminOnlyRoles, <BusinessOwnershipReportingPage />)} />
             <Route
               path="audit-accounting"
               element={rolePage(auditReadRoles, <AuditAccountingPage />)}

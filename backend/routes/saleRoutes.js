@@ -2268,6 +2268,17 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     const finalCustomerPhone =
       cleanCustomerPhone || customer?.phone || sale.customer_phone || null;
 
+    // Existing ownership evidence is tied to immutable sale-line IDs.
+    // Replacing classified lines would destroy the link to the evidence.
+    if(process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"){
+      const [ownershipEvidence]=await connection.query(
+        "SELECT o.sale_item_id FROM sale_item_ownership_classifications o JOIN sale_items si ON si.id=o.sale_item_id WHERE si.sale_id=? LIMIT 1 FOR UPDATE",[id]);
+      if(ownershipEvidence.length){
+        await connection.rollback();
+        return res.status(409).json({status:"error",code:"OWNERSHIP_EVIDENCE_CORRECTION_REQUIRED",message:"This sale has recorded ownership evidence. Use an authorized evidence-preserving correction; no sale, stock or financial changes were saved."});
+      }
+    }
+
     await connection.query(`DELETE FROM sale_items WHERE sale_id = ?`, [id]);
 
     for (const saleItem of saleItems) {
