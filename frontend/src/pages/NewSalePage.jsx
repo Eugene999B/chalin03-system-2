@@ -1400,7 +1400,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
       {message && <div className="success-box">{message}</div>}
       {creditPending && <div className="warning-box" role="status">Credit request #{creditPending} is pending or awaiting execution. Use My credit requests below to post or cancel it.</div>}
-      <CreditRequestRecoveryPanel key={String(user?.id)+":"+String(branchId)} branchId={branchId} userId={user?.id} refreshKey={creditPending} onPosted={(requestId,confirmedReceipt)=>{
+      <CreditRequestRecoveryPanel key={String(user?.id)+":"+String(branchId)} branchId={branchId} userId={user?.id} refreshKey={creditPending} onCancelled={(requestId)=>{if(String(requestId)===String(creditPending)){creditRequestRef.current=null;setCreditPending(null);setMessage("Credit request cancelled. No sale was recorded.");}}} onPosted={(requestId,confirmedReceipt)=>{
         if(String(requestId)===String(creditPending)){
           setCreditPending(null);
           setReceipt(confirmedReceipt);
