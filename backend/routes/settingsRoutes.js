@@ -316,6 +316,12 @@ function ownershipPreviewAccess(req,res,next){
   if(!Number.isSafeInteger(branchId)||branchId<=0)return res.status(403).json({status:"error",message:"Select an authorized store."});
   req.ownershipBranchId=branchId;return next();
 }
+router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+  try{
+    const {readOwnershipReceiptPreview}=require("../services/ownershipReceiptPreviewService");
+    return res.json({status:"success",preview:await readOwnershipReceiptPreview(pool,req.ownershipBranchId)});
+  }catch(error){console.error("Ownership receipt preview failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Receipt reconciliation preview unavailable."});}
+});
 router.get("/ownership-reconciliation/receipt",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
   const receipt=typeof req.query.receipt==="string"?req.query.receipt.trim():"";
   if(!receipt||receipt.length>50)return res.status(400).json({status:"error",message:"Enter an exact receipt number."});
