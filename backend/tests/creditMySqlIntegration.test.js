@@ -25,6 +25,14 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
  INSERT INTO sales(branch_id,customer_id,total) VALUES(1,7,23000);
  INSERT INTO debts(branch_id,sale_id,customer_id,customer_phone,balance) VALUES(1,1,7,'0240000000',23000);
  `;
+ const fullSchema=process.env.CHALIN03_CREDIT_FULL_SCHEMA==="true";
+ const fullFixture=`
+ INSERT INTO branches(id,code,branch_code,name) VALUES(1,'CI1','CI1','Synthetic Store One'),(2,'CI2','CI2','Synthetic Store Two');
+ INSERT INTO users(id,full_name,username,password_hash,role,default_branch_id) VALUES(2,'Synthetic Employee','credit-ci-employee','not-a-login-secret','cashier',1),(3,'Synthetic Reviewer','credit-ci-reviewer','not-a-login-secret','admin',1);
+ INSERT INTO customers(id,branch_id,name,phone) VALUES(7,1,'Synthetic Customer','0240000000');
+ INSERT INTO sales(branch_id,receipt_number,customer_id,customer_name,total,payment_type,balance) VALUES(1,'CI-INITIAL',7,'Synthetic Customer',23000,'credit',23000);
+ INSERT INTO debts(branch_id,sale_id,customer_id,customer_name,customer_phone,amount_owed,balance) VALUES(1,1,7,'Synthetic Customer','0240000000',23000,23000);
+ `;
  const migrationNames=["20261125_customer_credit_foundation","20261125_customer_credit_approval_queue","20261125_sale_item_ownership_evidence"];
  const args=(key,total)=>({branchId:1,customerId:7,userId:2,requestKey:key,payload:{customer_id:7,total},total,paid:0,businessDate:"2026-01-31"});
  async function transaction(fn){
@@ -36,13 +44,14 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
   return transaction(async db=>{
     const r=await prepareCreditSale(db,args(key,total));
     if(r.pending)return r;
-    const [sale]=await db.query("INSERT INTO sales(branch_id,customer_id,total) VALUES(1,7,?)",[total]);
-    await db.query("INSERT INTO debts(branch_id,sale_id,customer_id,customer_phone,balance) VALUES(1,?,7,'0240000000',?)",[sale.insertId,total]);
+    const [sale]=fullSchema?await db.query("INSERT INTO sales(branch_id,receipt_number,customer_id,customer_name,total,payment_type,balance) VALUES(1,?,7,\'Synthetic Customer\',?,\'credit\',?)",["CI-"+key,total,total]):await db.query("INSERT INTO sales(branch_id,customer_id,total) VALUES(1,7,?)",[total]);
+    if(fullSchema)await db.query("INSERT INTO debts(branch_id,sale_id,customer_id,customer_name,customer_phone,amount_owed,balance,due_date) VALUES(1,?,7,'Synthetic Customer','0240000000',?,?,?)",[sale.insertId,total,total,r.dueDate]);
+    else await db.query("INSERT INTO debts(branch_id,sale_id,customer_id,customer_phone,balance) VALUES(1,?,7,'0240000000',?)",[sale.insertId,total]);
     await consumeCreditApproval(db,r.approvalId,sale.insertId);return {...r,saleId:sale.insertId};
   });
  }
  try{
-  await pool.query(fixture);
+  await pool.query(fullSchema?fullFixture:fixture);
   for(const name of migrationNames)await pool.query(fs.readFileSync(path.join(root,name+".sql"),"utf8"));
   for(const name of migrationNames)await pool.query(fs.readFileSync(path.join(root,name+".sql"),"utf8"));
   const [profiles]=await pool.query("SELECT score FROM customer_credit_profiles WHERE customer_id=7");assert.equal(Number(profiles[0].score),30);
@@ -54,10 +63,14 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
   await assert.rejects(checkout(keys[1-index],1500),{code:"CREDIT_ALREADY_EXECUTED"});
   await assert.rejects(transaction(db=>reviewCreditRequest(db,{branchId:1,reviewerId:2,requestId:Number(pending.id),action:"approve",reason:"Self review"})),{code:"CREDIT_REVIEW_CONFLICT"});
   await transaction(db=>reviewCreditRequest(db,{branchId:1,reviewerId:3,requestId:Number(pending.id),action:"approve",reason:"Independent approved exception"}));
+  const {loadCreditProfile}=require("../services/customerCreditProfileService");
+  const profile=await loadCreditProfile(pool,{branchId:1,customerId:7});
+  assert.equal(profile.outstanding,24500);assert.equal(profile.reserved,1500);assert.equal(profile.available,0);
   const recovered=await checkout(keys[index],1500);assert.ok(recovered.saleId);
   await assert.rejects(checkout(keys[index],1500),{code:"CREDIT_ALREADY_EXECUTED"});
   const [debts]=await pool.query("SELECT SUM(balance) AS balance,COUNT(*) AS n FROM debts");assert.equal(Number(debts[0].balance),26000);assert.equal(Number(debts[0].n),3);
-  await pool.query("INSERT INTO customers VALUES(8,2,'+233240000000')");
+  if(fullSchema)await pool.query("INSERT INTO customers(id,branch_id,name,phone) VALUES(8,2,'Synthetic Duplicate','+233240000000')");
+  else await pool.query("INSERT INTO customers VALUES(8,2,'+233240000000')");
   await assert.rejects(checkout("duplicate-phone-0001",100),{code:"CREDIT_IDENTITY_RECONCILIATION_REQUIRED"});
   const [after]=await pool.query("SELECT COUNT(*) AS n FROM debts");assert.equal(Number(after[0].n),3);
   const {readOwnershipReceiptPreview}=require("../services/ownershipReceiptPreviewService");
