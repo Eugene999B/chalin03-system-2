@@ -12,3 +12,5 @@ test("CSV explicitly preserves unresolved receipt totals and report scope",()=>{
  assert.match(csv,/"All included receipts","2","200.50"/);
  assert.throws(()=>exportReconciliationCsv({...report,financial_reporting_ready:true},7));
 });
+
+test("fixed 40% sales planning scenario preserves actual total and rounds exactly",()=>{const {salesPlanningScenario}=require("../services/ownershipReceiptPreviewService");const s=salesPlanningScenario(10000000);assert.equal(s.assumed_partner_amount,4000000);assert.equal(s.estimated_company_amount,6000000);assert.equal(s.scenario_only,true);for(const n of [0,1,2,3,101,Number.MAX_SAFE_INTEGER]){const p=salesPlanningScenario(n);assert.equal(p.assumed_partner_amount+p.estimated_company_amount,n);}assert.throws(()=>salesPlanningScenario(-1));});

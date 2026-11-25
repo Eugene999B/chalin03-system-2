@@ -322,6 +322,13 @@ router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole
     return res.json({status:"success",preview:await readOwnershipReceiptPreview(pool,req.ownershipBranchId)});
   }catch(error){console.error("Ownership receipt preview failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Receipt reconciliation preview unavailable."});}
 });
+router.get("/ownership-reconciliation/planning-scenario",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+ try{
+   const {readOwnershipReceiptPreview,salesPlanningScenario}=require("../services/ownershipReceiptPreviewService");
+   const report=await readOwnershipReceiptPreview(pool,req.ownershipBranchId);
+   return res.json({status:"success",scenario:salesPlanningScenario(report.total.invoice_total)});
+ }catch(error){console.error("Sales planning scenario failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Planning scenario unavailable."});}
+});
 router.get("/ownership-reconciliation/financial-preview.csv",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
   try{
     const {readOwnershipReceiptPreview,exportReconciliationCsv}=require("../services/ownershipReceiptPreviewService");

@@ -71,7 +71,9 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
   const [debts]=await pool.query("SELECT SUM(balance) AS balance,COUNT(*) AS n FROM debts");assert.equal(Number(debts[0].balance),26000);assert.equal(Number(debts[0].n),3);
   if(fullSchema)await pool.query("INSERT INTO customers(id,branch_id,name,phone) VALUES(8,2,'Synthetic Duplicate','+233240000000')");
   else await pool.query("INSERT INTO customers VALUES(8,2,'+233240000000')");
-  await assert.rejects(checkout("duplicate-phone-0001",100),{code:"CREDIT_IDENTITY_RECONCILIATION_REQUIRED"});
+  const {assertUnambiguousCreditIdentity}=require("../services/customerCreditIdentityGuard");
+  await transaction(db=>assertUnambiguousCreditIdentity(db,{customerId:7,phone:"0240000000"}));
+  await assert.rejects(transaction(db=>assertUnambiguousCreditIdentity(db,{customerId:8,phone:"+233240000000"})),{code:"CREDIT_IDENTITY_RECONCILIATION_REQUIRED"});
   const [after]=await pool.query("SELECT COUNT(*) AS n FROM debts");assert.equal(Number(after[0].n),3);
   const {readOwnershipReceiptPreview}=require("../services/ownershipReceiptPreviewService");
   const report=await readOwnershipReceiptPreview(pool,1);assert.equal(report.groups.unresolved.invoice_total,2600000);assert.equal(report.total.outstanding,2600000);

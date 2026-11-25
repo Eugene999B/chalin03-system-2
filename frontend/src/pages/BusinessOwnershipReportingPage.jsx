@@ -1,5 +1,6 @@
 import {useAuth} from "../context/AuthContext";
 import OwnershipReconciliationPanel from "../components/OwnershipReconciliationPanel";
+import SalesPlanningScenario from "../components/SalesPlanningScenario";
 import {Link} from "react-router";
 export default function BusinessOwnershipReportingPage(){
  const {branchId,branchName,user}=useAuth();
@@ -10,6 +11,7 @@ export default function BusinessOwnershipReportingPage(){
   <p>Selected store: <strong>{branchName||branchId}</strong>. Review verified company and partner ownership separately. The original financial ledger remains authoritative.</p>
   <p>Use receipt evidence to classify merchandise. Mixed or unresolved transactions remain visible until supporting financial allocations are reconciled. This workspace does not post or change sales, debts, payments or costs.</p>
   <Link to="/users-settings">System settings</Link></section>
+  <SalesPlanningScenario key={"scenario-"+String(branchId)} branchId={branchId}/>
   <OwnershipReconciliationPanel key={String(branchId)} branchId={branchId} showUnavailable/>
  </main>;
 }

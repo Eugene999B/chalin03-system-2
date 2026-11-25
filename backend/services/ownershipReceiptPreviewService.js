@@ -64,4 +64,11 @@ function exportReconciliationCsv(report,branchId){
  }
  return lines.map(row=>row.map(value=>'"'+String(value).replace(/"/g,'""')+'"').join(",")).join("\r\n")+"\r\n";
 }
-module.exports={summarize,readOwnershipReceiptPreview,exportReconciliationCsv};
+// Fixed 40% management planning assumption, never a transaction adjustment.
+// Integer pesewas and complementary amounts reconcile exactly.
+function salesPlanningScenario(invoiceTotal){
+ if(!Number.isSafeInteger(invoiceTotal)||invoiceTotal<0)throw new RangeError("Invalid invoice total");
+ const assumedPartner=Number((BigInt(invoiceTotal)*40n+50n)/100n);
+ return {actual_invoice_total:invoiceTotal,assumed_partner_percent:40,assumed_partner_amount:assumedPartner,estimated_company_amount:invoiceTotal-assumedPartner,scenario_only:true,scope:"completed_nonvoid_receipts_before_return_adjustments"};
+}
+module.exports={summarize,readOwnershipReceiptPreview,exportReconciliationCsv,salesPlanningScenario};
