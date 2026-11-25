@@ -445,8 +445,9 @@ export default function DebtsPage() {
       // Production compatibility reader: the proven receipt-level endpoint is
       // grouped in the browser. This avoids the live aggregate-SQL failure while
       // preserving the current edited customer identity returned by /debts.
-      const response = await axiosClient.get("/debts");
-      const nextAccounts = buildDebtDeskAccounts(response.data.debts || []);
+      const response = await axiosClient.get("/debts",{params:{credit_profiles:"1"}});
+      const profiles=response.data.credit_profiles||{};
+      const nextAccounts = buildDebtDeskAccounts(response.data.debts || []).map(account=>({...account,credit_profile:profiles[account.customer_key]||null}));
       setAccounts(nextAccounts);
       setSummary(buildDebtDeskSummary(nextAccounts));
     } catch (requestError) {
@@ -532,6 +533,10 @@ export default function DebtsPage() {
         }
       }
 
+      if(!detail.credit_profile){
+        const cardProfile=accounts.find(account=>account.customer_key===customerKey)?.credit_profile;
+        if(cardProfile)detail.credit_profile={...cardProfile,can_adjust_score:false};
+      }
       setSelected(detail);
       setDetailTab("overview");
 
@@ -1600,6 +1605,7 @@ function AccountCard({ account, onOpen, onPay }) {
           </small>
         </div>
       </button>
+      <DebtCardCredit profile={account.credit_profile}/>
       <footer>
         {account.legacy_record ? (
           <span className="debt-desk__legacy-pill">Legacy record</span>
@@ -1621,6 +1627,20 @@ function AccountCard({ account, onOpen, onPay }) {
   );
 }
 
+function DebtCardCredit({profile}){
+ if(!profile)return <div className="debt-card-credit debt-card-credit-unavailable">Credit profile unavailable · Refresh to retry</div>;
+ const tone=profile.at_limit?"limit":"available";
+ return <div className="debt-card-credit" data-tone={tone}>
+   <div className="debt-card-credit-heading"><span>CREDIT INTELLIGENCE</span><small>{profile.enforcement_active?"Active":profile.initial_estimate?"Initial estimate":"Preview"}</small></div>
+   <div className="debt-card-credit-grid">
+     <div className="debt-card-credit-score"><strong>{profile.score}<small>/100</small></strong><span>Credit score</span></div>
+     <div><span>Credit limit</span><strong>{money(profile.limit)}</strong></div>
+     <div><span>Available credit</span><strong>{money(profile.available)}</strong></div>
+   </div>
+   <div className="debt-card-credit-track" role="meter" aria-label="Credit utilization" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,profile.utilization_percent??0)}><i style={{width:Math.min(100,profile.utilization_percent??0)+"%"}}/></div>
+   <div className="debt-card-credit-foot"><span>{profile.at_limit?"Limit reached or exceeded":"Within credit limit"}</span><span>{profile.term_months} {profile.term_months===1?"month":"months"}</span></div>
+ </div>;
+}
 function AccountOverview({ detail }) {
   const changedCount = (detail.debts || []).filter(
     (debt) => debt.identity_changed
