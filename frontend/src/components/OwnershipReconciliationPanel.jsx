@@ -1,5 +1,6 @@
 import {useEffect,useState} from "react";
 import axiosClient from "../api/axiosClient";
+import OwnershipEvidencePanel from "./OwnershipEvidencePanel";
 import "../styles/customerCreditProfile.css";
 
 export default function OwnershipReconciliationPanel({branchId}){
@@ -17,5 +18,6 @@ export default function OwnershipReconciliationPanel({branchId}){
    {error&&<p role="alert">{error}</p>}
    {data&&<><div className="ccp-metrics">{rows.map(([label,n])=><div key={label}><span>{label}</span><strong>{Number(n).toLocaleString()}</strong></div>)}<div><span>All sale lines</span><strong>{Number(data.total).toLocaleString()}</strong></div></div><p>Financial reporting remains unavailable until ownership evidence, returns, discounts, costs, receivables and collections are reconciled.</p></>}
    <button type="button" onClick={()=>setReload(v=>v+1)}>Refresh reconciliation</button>
+   {data&&<OwnershipEvidencePanel branchId={branchId} onSaved={()=>setReload(v=>v+1)} />}
  </section>;
 }
