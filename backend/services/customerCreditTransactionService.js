@@ -2,14 +2,16 @@
 const {creditLimit,evaluateCredit,debtDueDate}=require("./customerCreditPolicy");
 const {toPesewas}=require("./customerCreditProfileService");
 const {sealSalePayload,reviewDecision,sumActiveReservations}=require("./customerCreditApprovalPolicy");
+const {assertUnambiguousCreditIdentity}=require("./customerCreditIdentityGuard");
 
 function conflict(code,message){return Object.assign(new Error(message),{statusCode:409,code});}
 function enabled(env=process.env){return env.CHALIN03_CREDIT_PREVIEW==="true"&&env.CHALIN03_CREDIT_ENFORCEMENT_PREVIEW==="true";}
 
 // Caller holds branch row lock; use locking reads to avoid a stale transaction snapshot.
 async function loadExposure(conn,branchId,customerId,excludeId=null){
-  const [customers]=await conn.query("SELECT id FROM customers WHERE id=? AND branch_id=? FOR UPDATE",[customerId,branchId]);
+  const [customers]=await conn.query("SELECT id,phone FROM customers WHERE id=? AND branch_id=? FOR UPDATE",[customerId,branchId]);
   if(!customers.length)throw conflict("CREDIT_CUSTOMER_REQUIRED","Select a verified customer first.");
+  await assertUnambiguousCreditIdentity(conn,{customerId,phone:customers[0].phone});
   const [profiles]=await conn.query("SELECT score FROM customer_credit_profiles WHERE customer_id=? FOR UPDATE",[customerId]);
   const [terms]=await conn.query("SELECT term_months FROM customer_credit_settings WHERE branch_id=? FOR UPDATE",[branchId]);
   if(!terms.length)throw conflict("CREDIT_SCHEMA_NOT_READY","Credit settings are not ready.");

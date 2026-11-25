@@ -8,7 +8,8 @@ function db({prior=null,balance="23000.00",reserved="0"}={}){
   return {calls,query:async(sql,args)=>{
     calls.push({sql,args});
     if(sql.startsWith("SELECT id,status"))return [[...(prior?[prior]:[])]];
-    if(sql.startsWith("SELECT id FROM customers"))return [[{id:7}]];
+    if(sql.startsWith("SELECT id,phone FROM customers"))return [[{id:7,phone:"0240000000"}]];
+    if(sql.startsWith("SELECT id FROM customers WHERE id<>")||sql.startsWith("SELECT d.id FROM debts"))return [[]];
     if(sql.startsWith("SELECT score"))return [[{score:30}]];
     if(sql.startsWith("SELECT term_months"))return [[{term_months:1}]];
     if(sql.startsWith("SELECT d.balance"))return [[{balance}]];

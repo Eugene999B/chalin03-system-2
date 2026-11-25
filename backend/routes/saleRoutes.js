@@ -1247,6 +1247,18 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       return res.status(400).json({ status: "error", message: allocationResult.error });
     }
 
+    // Do not allow an ordinary credit checkout to replace the selected
+    // canonical customer's phone identity and thereby evade reconciliation.
+    if (require("../services/customerCreditTransactionService").enabled() && payment.balance>0 && payment_type!=="installment" && customer_id) {
+      const {ghPhone}=require("../services/customerCreditIdentityGuard");
+      const [identityRows]=await connection.query("SELECT phone FROM customers WHERE id=? AND branch_id=? FOR UPDATE",[customer_id,branchId]);
+      const stored=ghPhone(identityRows[0]?.phone);
+      if(!stored || (cleanCustomerPhone && ghPhone(cleanCustomerPhone)!==stored)){
+        await connection.rollback();
+        return res.status(409).json({status:"error",code:"CREDIT_IDENTITY_CHANGE_REQUIRES_REVIEW",message:"Use the verified customer identity. Phone corrections must be made through the authorized identity workflow."});
+      }
+    }
+
     const customer = await findOrCreateCustomer(
       connection,
       branchId,
