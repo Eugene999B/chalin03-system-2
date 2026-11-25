@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import { useAuth } from "../context/AuthContext";
 import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 
@@ -1048,6 +1049,7 @@ export default function SalesHistoryPage() {
         </div>
       </div>
 
+      <StaffPlanningPeriods user={user} branchKey={branchId}/>
       <div style={{ ...styles.storeNotice, ...compactStoreNotice }}>
         <span style={styles.noticeIcon}>🏬</span>
         <div>
