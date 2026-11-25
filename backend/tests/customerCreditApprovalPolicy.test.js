@@ -1,6 +1,6 @@
 const test=require("node:test");
 const assert=require("node:assert/strict");
-const {sealSalePayload,verifyPayload,reviewDecision,sumActiveReservations}=require("../services/customerCreditApprovalPolicy");
+const {sealSalePayload,verifyPayload,reviewDecision,sumActiveReservations,recoverSalePayload}=require("../services/customerCreditApprovalPolicy");
 test("canonical hash binds the original sale details",()=>{
  const payload={customer_id:2,items:[{quantity:1,product_id:4}],total:250};
  const sealed=sealSalePayload(payload);
@@ -21,4 +21,15 @@ test("independent, unexpired, same-branch approval within absolute cap",()=>{
 test("reservation query only counts approved nonexpired requests, with optional self exclusion",async()=>{
  const db={query:async(sql,args)=>{assert.match(sql,/status='approved'/);assert.match(sql,/expires_at>UTC_TIMESTAMP/);assert.deepEqual(args,[5,9,9]);return [[{reserved:"120000"}]];}};
  assert.equal(await sumActiveReservations(db,{customerId:5,excludeId:9}),120000);
+});
+
+test("recovery reconstructs only allowed sale inputs and rejects tampering",()=>{
+ const payload={customer_id:7,customer_name:"Test Customer",customer_phone:"0240000000",customer_location:null,payment_type:"credit",discount_amount:0,tendered:0,paid:0,total:3000,allocations:{cash:0,momo:0,bank:0,other:0},items:[{product_id:4,quantity:2,unit_price:1500,line_total:3000}]};
+ const hash=sealSalePayload(payload).hash;
+ const recovered=recoverSalePayload(JSON.stringify(payload),hash);
+ assert.deepEqual(recovered.items,[{product_id:4,quantity:2}]);
+ assert.equal(recovered.customer_id,7);
+ assert.equal(recovered.amount_paid,0);
+ assert.equal("total" in recovered,false);
+ assert.throws(()=>recoverSalePayload({...payload,paid:100},hash));
 });
