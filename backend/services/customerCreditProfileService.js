@@ -29,7 +29,7 @@ async function loadCreditProfile(db, {branchId, customerId}) {
     throw new RangeError("A valid branch and customer are required");
   }
   const [rows] = await db.query(
-    `SELECT c.id, COALESCE(p.score, 30) AS score, COALESCE(cs.term_months,1) AS term_months
+    `SELECT c.id, COALESCE(p.score, 30) AS score, COALESCE(p.version,1) AS version, COALESCE(cs.term_months,1) AS term_months
      FROM customers c
      LEFT JOIN customer_credit_profiles p ON p.customer_id=c.id
      LEFT JOIN customer_credit_settings cs ON cs.branch_id=c.branch_id
@@ -42,7 +42,7 @@ async function loadCreditProfile(db, {branchId, customerId}) {
      WHERE d.branch_id=? AND COALESCE(s.customer_id,d.customer_id)=? AND d.balance>0`,
     [branchId, customerId]
   );
-  return describeCredit({score:Number(rows[0].score), outstanding:balances[0].outstanding, termMonths:Number(rows[0].term_months)});
+  return {...describeCredit({score:Number(rows[0].score), outstanding:balances[0].outstanding, termMonths:Number(rows[0].term_months)}),version:String(rows[0].version??1)};
 }
 
 // Caller must hold the customer lock and provide fresh authoritative exposure,
