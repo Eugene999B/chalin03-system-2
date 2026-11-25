@@ -1,3 +1,5 @@
+-- ADDITIVE MIGRATION ONLY.
+-- BACKUP REQUIRED: verified full database backup and tested restore on a separate staging database.
 -- Additive schema only. Apply in staging first, not automatically on startup.
 CREATE TABLE IF NOT EXISTS customer_credit_profiles (
   customer_id INT NOT NULL PRIMARY KEY,
@@ -42,3 +44,7 @@ INSERT INTO customer_credit_settings (branch_id)
 SELECT b.id FROM branches b
 WHERE NOT EXISTS (SELECT 1 FROM customer_credit_settings s WHERE s.branch_id = b.id)
 ON DUPLICATE KEY UPDATE branch_id = customer_credit_settings.branch_id;
+
+INSERT INTO schema_migrations (migration_name,description)
+VALUES ('20261125_customer_credit_foundation','Adds customer credit profiles, debt term settings and score events.')
+ON DUPLICATE KEY UPDATE description=VALUES(description);
