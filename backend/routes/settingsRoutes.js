@@ -256,6 +256,35 @@ router.patch("/customer-credit", requireAuth, requireRole("admin"), creditSettin
   } finally {if(conn) conn.release();}
 });
 
+// Score adjustment is an authorized human decision, not a silent algorithm.
+router.patch("/customer-credit/customers/:id",requireAuth,requireRole("admin"),creditSettingsAccess,async(req,res)=>{
+  const id=Number(req.params.id),score=req.body?.score,version=req.body?.version;
+  const reason=typeof req.body?.reason==="string"?req.body.reason.trim():"";
+  if(!Number.isSafeInteger(id)||id<=0||!Number.isInteger(score)||score<0||score>100||typeof version!=="string"||!/^[1-9][0-9]{0,18}$/.test(version)||reason.length<5||reason.length>500)return res.status(400).json({status:"error",message:"Enter a valid score, current version and evidence-based reason."});
+  let conn;
+  try{
+    const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+    const verified=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+    if(!verified.ok)return res.status(verified.status).json({status:"error",code:verified.code,message:verified.message});
+    delete req.body.authenticator_code;
+    conn=await pool.getConnection();await conn.beginTransaction();
+    await conn.query("SELECT id FROM branches WHERE id=? FOR UPDATE",[req.creditSettingsBranchId]);
+    const [customers]=await conn.query("SELECT id FROM customers WHERE id=? AND branch_id=? FOR UPDATE",[id,req.creditSettingsBranchId]);
+    if(!customers.length){await conn.rollback();return res.status(404).json({status:"error",message:"Customer not found in this store."});}
+    await conn.query("INSERT INTO customer_credit_profiles (customer_id) VALUES (?) ON DUPLICATE KEY UPDATE customer_id=customer_credit_profiles.customer_id",[id]);
+    const [rows]=await conn.query("SELECT score,version FROM customer_credit_profiles WHERE customer_id=? FOR UPDATE",[id]);
+    if(String(rows[0].version)!==version){await conn.rollback();return res.status(409).json({status:"error",message:"Customer credit profile changed. Reload before saving."});}
+    const oldScore=Number(rows[0].score);
+    if(oldScore===score){await conn.rollback();return res.json({status:"success",message:"Score unchanged.",version});}
+    await conn.query("UPDATE customer_credit_profiles SET score=?,version=version+1 WHERE customer_id=?",[score,id]);
+    await conn.query("INSERT INTO customer_credit_score_events (customer_id,previous_score,new_score,reason,actor_id) VALUES (?,?,?,?,?)",[id,oldScore,score,reason,req.user.id]);
+    const {writeAuditEvent}=require("../services/auditTrailService");
+    await writeAuditEvent({connection:conn,req,branchId:req.creditSettingsBranchId,action:"CUSTOMER_CREDIT_SCORE_UPDATED",actionType:"CUSTOMER_CREDIT_SCORE_UPDATED",entityType:"customer",entityId:id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{previous_score:oldScore,new_score:score,reason}});
+    await conn.commit();return res.json({status:"success",message:"Customer credit score updated. Existing debt balances remain unchanged.",version:(BigInt(version)+1n).toString()});
+  }catch(error){if(conn)await conn.rollback();console.error("Credit score update failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Credit score could not be updated."});}
+  finally{if(conn)conn.release();}
+});
+
 // Read-only reconciliation coverage. This is not a financial statement.
 router.get("/ownership-reconciliation", requireAuth, requireRole("admin"), async (req,res)=>{
   res.set("Cache-Control","no-store");
