@@ -51,16 +51,17 @@ async function prepareCreditSale(conn,{branchId,customerId,userId,requestKey,pay
 }
 async function reviewCreditRequest(conn,{branchId,reviewerId,requestId,action,reason}){
   await conn.query("SELECT id FROM branches WHERE id=? FOR UPDATE",[branchId]);
-  const [rows]=await conn.query("SELECT *,UNIX_TIMESTAMP(expires_at)*1000 AS expiry_ms FROM customer_credit_approval_requests WHERE id=? AND branch_id=? FOR UPDATE",[requestId,branchId]);
+  const [rows]=await conn.query("SELECT *,TIMESTAMPDIFF(SECOND,UTC_TIMESTAMP(),expires_at) AS remaining_seconds FROM customer_credit_approval_requests WHERE id=? AND branch_id=? FOR UPDATE",[requestId,branchId]);
   const request=rows[0];if(!request)throw conflict("CREDIT_REQUEST_NOT_FOUND","Credit request not found.");
   let exposure;
   if(action==="approve"){
     const v=await loadExposure(conn,branchId,Number(request.customer_id));
     exposure=v.outstanding+v.reserved;
   }
+  const now=Date.now();
   let decision;
   try{
-    decision=reviewDecision({request:{...request,expiresAtMs:Number(request.expiry_ms),new_debt_pesewas:Number(request.new_debt_pesewas)},reviewerId,branchId,action,reason,authoritativeExposure:exposure});
+    decision=reviewDecision({request:{...request,expiresAtMs:now+Number(request.remaining_seconds)*1000,new_debt_pesewas:Number(request.new_debt_pesewas)},reviewerId,branchId,action,reason,now,authoritativeExposure:exposure});
   }catch(e){throw conflict("CREDIT_REVIEW_CONFLICT",e.message);}
   if(sealSalePayload(readJson(request.sale_payload)).hash!==request.payload_sha256)throw conflict("CREDIT_PAYLOAD_INTEGRITY","Credit request integrity check failed.");
   await conn.query("UPDATE customer_credit_approval_requests SET status=?,reviewed_by=?,review_reason=?,reviewed_at=UTC_TIMESTAMP() WHERE id=? AND status='pending'",[decision.status,reviewerId,decision.review_reason,requestId]);
