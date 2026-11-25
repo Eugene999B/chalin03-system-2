@@ -256,6 +256,28 @@ router.patch("/customer-credit", requireAuth, requireRole("admin"), creditSettin
   } finally {if(conn) conn.release();}
 });
 
+// Read-only reconciliation coverage. This is not a financial statement.
+router.get("/ownership-reconciliation", requireAuth, requireRole("admin"), async (req,res)=>{
+  res.set("Cache-Control","no-store");
+  if(process.env.CHALIN03_OWNERSHIP_PREVIEW!=="true")return res.status(404).json({status:"error",code:"OWNERSHIP_PREVIEW_DISABLED"});
+  if(!isOriginalSystemAdministrator(req.user))return res.status(403).json({status:"error",message:"Ownership reconciliation access denied."});
+  const branchId=Number(req.user?.branch_id||req.user?.default_branch_id);
+  if(!Number.isSafeInteger(branchId)||branchId<=0)return res.status(403).json({status:"error",message:"Select an authorized store."});
+  try{
+    const [rows]=await pool.query(
+      `SELECT CASE WHEN o.owner_code IN ('chalin03','partner') AND o.classified_by IS NOT NULL AND CHAR_LENGTH(TRIM(COALESCE(o.evidence_reference,'')))>0 THEN o.owner_code ELSE 'unclassified' END AS owner_code,
+       COUNT(*) AS line_count
+       FROM sale_items si JOIN sales s ON s.id=si.sale_id
+       LEFT JOIN sale_item_ownership_classifications o ON o.sale_item_id=si.id
+       WHERE s.branch_id=? AND s.sale_status='completed' AND s.is_voided=0
+       GROUP BY owner_code`,[branchId]
+    );
+    const groups={chalin03:0,partner:0,unclassified:0};
+    for(const row of rows){const count=Number(row.line_count);if(!Object.hasOwn(groups,row.owner_code)||!Number.isSafeInteger(count)||count<0)throw Error("Invalid coverage totals");groups[row.owner_code]+=count;}
+    return res.json({status:"success",scope:"completed_nonvoid_sale_lines_selected_store",groups,total:Object.values(groups).reduce((a,b)=>a+b,0),preview:true,financial_reporting_ready:false});
+  }catch(error){console.error("Ownership coverage unavailable:",error.code||error.name);return res.status(503).json({status:"error",message:"Ownership reconciliation is temporarily unavailable."});}
+});
+
 // GET /api/settings/user-settings-access
 router.get(
   "/user-settings-access",
