@@ -14,7 +14,6 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
-import StaffBusinessPortal from "./pages/StaffBusinessPortal";
 import PublicCookiePreferences from "./components/PublicCookiePreferences";
 import StaffAccountSecurityPage from "./pages/StaffAccountSecurityPage";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
@@ -202,7 +201,7 @@ function RootWorkspaceEntry() {
   const { isLoggedIn, loading } = useAuth();
 
   // All public hostnames share the existing Cloudflare Pages SPA and API.
-  // The work hostname retains the protected application and auth routes.
+  // Both operational hostnames use the same application, route permissions and API.
   const hostname = typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
   if (location.pathname === "/") {
     const divisionHosts = {
@@ -218,7 +217,7 @@ function RootWorkspaceEntry() {
     if (hostname === "spareparts.chalin03.com") return safe(<IndependentPartsMarket />);
     if (hostname === "help.chalin03.com") return safe(<IndependentHelpCentre />);
     if (divisionHosts[hostname]) return safe(<IndependentDivisionWebsite sector={divisionHosts[hostname]} />);
-    if (hostname === "work.chalin03.com" && !loading && !isLoggedIn) return <LoginPage />;
+    if (["work.chalin03.com", "staff.chalin03.com"].includes(hostname) && !loading && !isLoggedIn) return <LoginPage />;
   }
   if (!loading && !isLoggedIn && location.pathname === "/") {
     return safe(<CompanyExperienceV3 />);
@@ -250,7 +249,6 @@ export default function App() {
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
-        {typeof window !== "undefined" && window.location.hostname === "staff.chalin03.com" ? <Routes><Route path="*" element={<StaffBusinessPortal />} /></Routes> : <>
         <PublicCookiePreferences />
         <Routes>
           <Route path="/shop" element={<IndependentPartsMarket />} />
@@ -943,7 +941,6 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
-        </>}
         </BrowserRouter>
       </WorkspaceContextProvider>
     </AuthProvider>
