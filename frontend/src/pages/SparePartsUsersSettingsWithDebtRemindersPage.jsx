@@ -6,6 +6,7 @@ import UsersSettingsPage from "./UsersSettingsPage";
 import DebtReminderSettingsPanel from "../components/DebtReminderSettingsPanel";
 import CustomerCreditSettingsPanel from "../components/CustomerCreditSettingsPanel";
 import OwnershipReconciliationPanel from "../components/OwnershipReconciliationPanel";
+import SalesPlanningScenario from "../components/SalesPlanningScenario";
 import { useAuth } from "../context/AuthContext";
 
 const SYSTEM_ADMIN_ID = 1;
@@ -157,6 +158,7 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
       )}
 
       {systemAdministrator ? <CustomerCreditSettingsPanel /> : null}
+      {systemAdministrator ? <SalesPlanningScenario key={String(user?.branch_id || user?.default_branch_id)} branchId={user?.branch_id || user?.default_branch_id} editable /> : null}
       {systemAdministrator ? <OwnershipReconciliationPanel branchId={user?.branch_id || user?.default_branch_id} /> : null}
       {systemAdministrator ? <a href="/business-ownership">Open business ownership reporting workspace</a> : null}
 

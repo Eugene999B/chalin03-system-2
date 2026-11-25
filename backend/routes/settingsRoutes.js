@@ -324,10 +324,30 @@ router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole
 });
 router.get("/ownership-reconciliation/planning-scenario",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
  try{
-   const {readOwnershipReceiptPreview,salesPlanningScenario}=require("../services/ownershipReceiptPreviewService");
-   const report=await readOwnershipReceiptPreview(pool,req.ownershipBranchId);
-   return res.json({status:"success",scenario:salesPlanningScenario(report.total.invoice_total)});
+   const {readScenario}=require("../services/managementPlanningService");
+   return res.json({status:"success",scenario:await readScenario(pool,req.ownershipBranchId)});
  }catch(error){console.error("Sales planning scenario failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Planning scenario unavailable."});}
+});
+router.patch("/ownership-reconciliation/planning-settings",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+ const percent=req.body?.assumed_partner_percent,version=req.body?.version;
+ if(!Number.isInteger(percent)||percent<0||percent>100||typeof version!=="string"||!/^[1-9][0-9]{0,18}$/.test(version))return res.status(400).json({status:"error",message:"Choose a whole percentage from 0 to 100 and reload current settings."});
+ let conn;
+ try{
+   const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+   const verified=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+   if(!verified.ok)return res.status(verified.status).json({status:"error",code:verified.code,message:verified.message});
+   delete req.body.authenticator_code;
+   const {readSettings}=require("../services/managementPlanningService");
+   conn=await pool.getConnection();await conn.beginTransaction();
+   const current=await readSettings(conn,true);
+   if(current.version!==version){await conn.rollback();return res.status(409).json({status:"error",message:"Settings changed. Refresh and retry."});}
+   await conn.query("UPDATE management_planning_settings SET assumed_partner_percent=?,version=version+1,updated_by=? WHERE id=1",[percent,req.user.id]);
+   const {writeAuditEvent}=require("../services/auditTrailService");
+   await writeAuditEvent({connection:conn,req,branchId:req.ownershipBranchId,action:"MANAGEMENT_PLANNING_ASSUMPTION_UPDATED",actionType:"MANAGEMENT_PLANNING_ASSUMPTION_UPDATED",entityType:"management_planning_settings",entityId:1,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{previous_percent:current.assumed_partner_percent,new_percent:percent,scope:"company_wide_planning_only"}});
+   await conn.commit();
+   return res.json({status:"success",message:"Planning assumption saved for all stores. Actual records unchanged."});
+ }catch(error){if(conn)await conn.rollback();console.error("Planning settings failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Planning settings could not be saved."});}
+ finally{if(conn)conn.release();}
 });
 router.get("/ownership-reconciliation/financial-preview.csv",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
   try{

@@ -33,7 +33,7 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
  INSERT INTO sales(branch_id,receipt_number,customer_id,customer_name,total,payment_type,balance) VALUES(1,'CI-INITIAL',7,'Synthetic Customer',23000,'credit',23000);
  INSERT INTO debts(branch_id,sale_id,customer_id,customer_name,customer_phone,amount_owed,balance) VALUES(1,1,7,'Synthetic Customer','0240000000',23000,23000);
  `;
- const migrationNames=["20261125_customer_credit_foundation","20261125_customer_credit_approval_queue","20261125_sale_item_ownership_evidence"];
+ const migrationNames=["20261125_customer_credit_foundation","20261125_customer_credit_approval_queue","20261125_sale_item_ownership_evidence","20261125_management_planning_settings"];
  const args=(key,total)=>({branchId:1,customerId:7,userId:2,requestKey:key,payload:{customer_id:7,total},total,paid:0,businessDate:"2026-01-31"});
  async function transaction(fn){
   const db=await pool.getConnection();
@@ -77,6 +77,10 @@ test("disposable MySQL: real migrations, concurrent credit, reviewer and recover
   const [after]=await pool.query("SELECT COUNT(*) AS n FROM debts");assert.equal(Number(after[0].n),3);
   const {readOwnershipReceiptPreview}=require("../services/ownershipReceiptPreviewService");
   const report=await readOwnershipReceiptPreview(pool,1);assert.equal(report.groups.unresolved.invoice_total,2600000);assert.equal(report.total.outstanding,2600000);
+  const {readScenario}=require("../services/managementPlanningService");
+  const scenario=await readScenario(pool,1);assert.equal(scenario.assumed_partner_percent,40);assert.equal(scenario.estimated_company_amount,1560000);
+  await pool.query("UPDATE management_planning_settings SET assumed_partner_percent=25,version=version+1 WHERE id=1");
+  const changed=await readScenario(pool,1);assert.equal(changed.estimated_company_amount,1950000);assert.equal(changed.actual_invoice_total,2600000);
   for(const name of migrationNames)await pool.query(fs.readFileSync(path.join(root,name+"_verify.sql"),"utf8"));
  }finally{await pool.end();}
 });
