@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import CustomerDebtConsolidationPanel from "../components/CustomerDebtConsolidationPanel";
 import CustomerCreditProfile from "../components/CustomerCreditProfile";
@@ -950,6 +951,7 @@ export default function DebtsPage() {
         </div>
       </section>
 
+      <StaffPlanningPeriods user={user} branchKey={branchId}/>
       <section className="debt-desk__metrics" aria-label="Debt summary">
         <Metric
           label="Outstanding"

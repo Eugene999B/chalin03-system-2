@@ -352,6 +352,21 @@ router.get("/ownership-reconciliation/planning-periods.csv",requireAuth,requireR
    return res.send("\uFEFF"+planningPeriodsCsv(report));
  }catch(e){console.error("Planning export unavailable:",e.code||e.name);return res.status(503).json({status:"error",message:"Planning export unavailable."});}
 });
+router.get("/ownership-reconciliation/shareholder-allocation",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
+ try{
+  const {readShareholderAllocation,parseScenarioPercent}=require("../services/managementPlanningService");
+  return res.json({status:"success",report:await readShareholderAllocation(pool,req.ownershipBranchId,{settingsEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true",percent:parseScenarioPercent(req.query.percent)})});
+ }catch(e){return res.status(e.statusCode||503).json({status:"error",message:e.statusCode?e.message:"Shareholder planning report unavailable."});}
+});
+router.get("/ownership-reconciliation/shareholder-allocation.csv",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
+ try{
+  const {readShareholderAllocation,shareholderAllocationCsv,parseScenarioPercent}=require("../services/managementPlanningService");
+  const report=await readShareholderAllocation(pool,req.ownershipBranchId,{settingsEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true",percent:parseScenarioPercent(req.query.percent)});
+  res.set("Content-Type","text/csv; charset=utf-8");
+  res.set("Content-Disposition","attachment; filename=shareholder-planning-allocation-store-"+req.ownershipBranchId+".csv");
+  return res.send("\uFEFF"+shareholderAllocationCsv(report));
+ }catch(e){return res.status(e.statusCode||503).json({status:"error",message:e.statusCode?e.message:"Shareholder planning export unavailable."});}
+});
 router.patch("/ownership-reconciliation/planning-settings",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
  const percent=req.body?.assumed_partner_percent,version=req.body?.version;
  if(!Number.isInteger(percent)||percent<0||percent>100||typeof version!=="string"||!/^[1-9][0-9]{0,18}$/.test(version))return res.status(400).json({status:"error",message:"Choose a whole percentage from 0 to 100 and reload current settings."});
