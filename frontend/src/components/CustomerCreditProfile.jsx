@@ -32,8 +32,19 @@ export default function CustomerCreditProfile({profile,onChanged}) {
     <div className="ccp-util-label"><span>Credit utilization</span><strong>{utilization===null?"Not applicable":utilization+"%"}</strong></div>
     <div className="ccp-track" role="meter" aria-label="Credit utilization" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,utilization??0)}><div style={{width:`${Math.min(100,utilization??0)}%`,background:profile.at_limit?"#b45309":"#087c72"}}/></div>
     <p className="ccp-status">{status}. {profile.enforcement_active?"Credit approval policy active.":profile.initial_estimate?"Initial score and limit calculated from the existing debt balance; credit approvals and saved score changes are not active.":"Credit approval enforcement is not active."}</p>
+    {profile.risk&&<CreditRiskReview risk={profile.risk}/>}
     {profile.can_adjust_score&&<ScoreAdjustment key={profile.customer_id+":"+profile.version} profile={profile} onChanged={onChanged}/>}
   </section>;
+}
+function CreditRiskReview({risk}){
+ const labels={routine:"Routine review",monitor:"Monitor",elevated:"Elevated attention",urgent:"Urgent review"};
+ return <div className="ccp-risk">
+  <div className="ccp-heading"><div><small>EXPLAINABLE CREDIT RISK</small><h3>{labels[risk.level]||"Review required"}</h3></div><span className="ccp-risk-number" data-level={risk.level}>{risk.review_priority}/100</span></div>
+  <div className="ccp-track" role="meter" aria-label="Advisory review priority" aria-valuemin={0} aria-valuemax={100} aria-valuenow={risk.review_priority}><div data-level={risk.level} className="ccp-risk-fill" style={{width:risk.review_priority+"%"}}/></div>
+  <div className="ccp-metrics"><div><span>Overdue balance</span><strong>{money(risk.overdue_balance)}</strong></div><div><span>Longest overdue</span><strong>{risk.oldest_overdue_days} days</strong></div><div><span>Overdue items</span><strong>{risk.overdue_count} of {risk.open_count}</strong></div><div><span>Missing due dates</span><strong>{risk.undated_count}</strong></div></div>
+  {risk.factors.length>0&&<ul>{risk.factors.map(f=><li key={f}>{f}</li>)}</ul>}
+  <p><strong>Suggested action:</strong> {risk.action}</p><small>As of {risk.as_of}. Advisory review priority, not the customer's credit score or an automated refusal.</small>
+ </div>;
 }
 function ScoreAdjustment({profile,onChanged}){
   const [score,setScore]=useState(String(profile.score)),[reason,setReason]=useState(""),[code,setCode]=useState(""),[error,setError]=useState(""),[busy,setBusy]=useState(false),[open,setOpen]=useState(false);
