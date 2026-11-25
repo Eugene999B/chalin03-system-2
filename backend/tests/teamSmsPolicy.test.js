@@ -1,0 +1,5 @@
+"use strict";
+const test=require("node:test"),assert=require("node:assert/strict");
+const {uniqueRecipients,chooseRecipients,fingerprint,messageText}=require("../services/teamSmsPolicy");
+test("team audience deduplicates phone numbers and skips invalid numbers",()=>{const a=uniqueRecipients([{id:1,name:"A",phone:"0241234567"},{id:2,name:"B",phone:"+233241234567"},{id:3,name:"C",phone:"bad"}]);assert.equal(a.recipients.length,1);assert.equal(a.duplicates,1);assert.equal(a.invalid,1);assert.equal(a.recipients[0].masked_phone,"+23324****567");});
+test("selection cannot add outside audience; preview fingerprint binds message and recipients",()=>{const a=uniqueRecipients([{id:1,phone:"0241234567"},{id:2,phone:"0541234567"}]).recipients;assert.throws(()=>chooseRecipients(a,"selected",[3]));assert.equal(chooseRecipients(a,"selected",[1]).length,1);assert.notEqual(fingerprint(a,"A"),fingerprint(a,"B"));assert.notEqual(fingerprint(a,"A"),fingerprint([a[0]],"A"));assert.throws(()=>messageText("a".repeat(481)));});
