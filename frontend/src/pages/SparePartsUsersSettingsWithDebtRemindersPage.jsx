@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import CustomerFeatureControlsPanel from "../components/CustomerFeatureControlsPanel";
 import ExecutiveBusinessIntelligenceSettingsPanel from "../components/ExecutiveBusinessIntelligenceSettingsPanel";
 import UsersSettingsPage from "./UsersSettingsPage";
@@ -157,6 +158,7 @@ export default function SparePartsUsersSettingsWithDebtRemindersPage() {
         </div>
       )}
 
+      {systemAdministrator ? <StaffPlanningPeriods user={user} branchKey={user?.branch_id || user?.default_branch_id}/> : null}
       {systemAdministrator ? <CustomerCreditSettingsPanel /> : null}
       {systemAdministrator ? <SalesPlanningScenario key={String(user?.branch_id || user?.default_branch_id)} branchId={user?.branch_id || user?.default_branch_id} editable /> : null}
       {systemAdministrator ? <OwnershipReconciliationPanel branchId={user?.branch_id || user?.default_branch_id} /> : null}
