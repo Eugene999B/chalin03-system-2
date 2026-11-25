@@ -337,6 +337,21 @@ router.get("/ownership-reconciliation/planning-scenario",requireAuth,requireRole
     return res.json({status:"success",scenario});
  }catch(error){console.error("Sales planning scenario failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Planning scenario unavailable."});}
 });
+router.get("/ownership-reconciliation/planning-periods",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
+ try{
+   const {readPlanningPeriods}=require("../services/managementPlanningService");
+   return res.json({status:"success",report:await readPlanningPeriods(pool,req.ownershipBranchId,{settingsEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"})});
+ }catch(e){console.error("Planning periods unavailable:",e.code||e.name);return res.status(503).json({status:"error",message:"Planning totals unavailable."});}
+});
+router.get("/ownership-reconciliation/planning-periods.csv",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
+ try{
+   const {readPlanningPeriods,planningPeriodsCsv}=require("../services/managementPlanningService");
+   const report=await readPlanningPeriods(pool,req.ownershipBranchId,{settingsEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"});
+   res.set("Content-Type","text/csv; charset=utf-8");
+   res.set("Content-Disposition","attachment; filename=planning-estimates-store-"+req.ownershipBranchId+".csv");
+   return res.send("\uFEFF"+planningPeriodsCsv(report));
+ }catch(e){console.error("Planning export unavailable:",e.code||e.name);return res.status(503).json({status:"error",message:"Planning export unavailable."});}
+});
 router.patch("/ownership-reconciliation/planning-settings",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
  const percent=req.body?.assumed_partner_percent,version=req.body?.version;
  if(!Number.isInteger(percent)||percent<0||percent>100||typeof version!=="string"||!/^[1-9][0-9]{0,18}$/.test(version))return res.status(400).json({status:"error",message:"Choose a whole percentage from 0 to 100 and reload current settings."});

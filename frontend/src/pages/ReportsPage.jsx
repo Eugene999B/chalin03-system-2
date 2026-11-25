@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import ExecutiveReportingStudio from "../components/ExecutiveReportingStudio";
 import { useAuth } from "../context/AuthContext";
 
@@ -470,6 +471,7 @@ export default function ReportsPage() {
   return (
     <div className="boss-mobile-fix" style={styles.page}>
       <MobilePageFix />
+      <StaffPlanningPeriods user={user} branchKey={branchId}/>
       <ExecutiveReportingStudio context="reports" storeCode={currentStoreCode}
         storeKey={branchId} from={from} to={to} />
 
