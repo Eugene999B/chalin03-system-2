@@ -270,7 +270,7 @@ router.get("/ownership-reconciliation", requireAuth, requireRole("admin"), async
        FROM sale_items si JOIN sales s ON s.id=si.sale_id
        LEFT JOIN sale_item_ownership_classifications o ON o.sale_item_id=si.id
        WHERE s.branch_id=? AND s.sale_status='completed' AND s.is_voided=0
-       GROUP BY owner_code`,[branchId]
+       GROUP BY 1`,[branchId]
     );
     const groups={chalin03:0,partner:0,unclassified:0};
     for(const row of rows){const count=Number(row.line_count);if(!Object.hasOwn(groups,row.owner_code)||!Number.isSafeInteger(count)||count<0)throw Error("Invalid coverage totals");groups[row.owner_code]+=count;}
