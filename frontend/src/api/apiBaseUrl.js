@@ -12,6 +12,7 @@ const OFFICIAL_FRONTEND_HOSTS = new Set([
   "hire.chalin03.com",
   "help.chalin03.com",
   "work.chalin03.com",
+  "staff.chalin03.com",
 ]);
 
 function normalizeHost(value) {

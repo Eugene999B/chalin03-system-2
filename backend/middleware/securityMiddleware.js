@@ -18,6 +18,7 @@ const OFFICIAL_FRONTEND_ORIGINS = new Set([
   "https://hire.chalin03.com",
   "https://help.chalin03.com",
   "https://work.chalin03.com",
+  "https://staff.chalin03.com",
 ]);
 const TRUSTED_BROWSER_METHODS = "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS";
 const INTERNAL_APPROVAL_TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
