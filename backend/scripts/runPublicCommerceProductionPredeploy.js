@@ -8,7 +8,9 @@ const MIGRATIONS=Object.freeze([
  "migratePublicCommerceSchema.js",
 ]);
 function run(){
- for(const filename of MIGRATIONS){
+ const migrations=[...MIGRATIONS];
+ if(process.env.CHALIN03_DEBT_GRACE_RESET==="20261125_debt_grace_reset_30_days")migrations.push("runDebtGraceReset.js");
+ for(const filename of migrations){
   const full=path.resolve(__dirname,filename);
   console.log("Production predeploy: checking "+filename);
   const result=spawnSync(process.execPath,[full],{
