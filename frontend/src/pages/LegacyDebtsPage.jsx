@@ -1229,7 +1229,7 @@ export default function DebtsPage() {
                 </div>
               ) : null}
 
-              <CustomerCreditProfile profile={selected.credit_profile} />
+              <CustomerCreditProfile profile={selected.credit_profile} onChanged={()=>openAccount("customer-"+selected.credit_profile.customer_id)} />
 
               <section className="debt-desk__balance-card">
                 <div>
