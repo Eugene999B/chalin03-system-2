@@ -1,0 +1,48 @@
+name: Customer Credit MySQL Verification
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'database/migrations/20261125*'
+      - '.github/workflows/customer-credit-mysql-verification.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: credit-mysql-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mysql-credit-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: credit_ci_root_fixture
+          MYSQL_DATABASE: credit_ci_fixture
+          MYSQL_USER: credit_ci
+          MYSQL_PASSWORD: credit_ci_fixture
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - working-directory: backend
+        run: npm ci
+      - working-directory: backend
+        run: node --test tests/customerCredit*.test.js tests/ownershipReceiptPreviewService.test.js
+      - working-directory: backend
+        env:
+          CHALIN03_CREDIT_DISPOSABLE_MYSQL: 'true'
+        run: node --test tests/creditMySqlIntegration.test.js
