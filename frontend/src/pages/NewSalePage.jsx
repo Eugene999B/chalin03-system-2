@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import { useAuth } from "../context/AuthContext";
@@ -72,6 +72,9 @@ export default function NewSalePage() {
     custom_due_dates_text: "",
   });
 
+  const creditRequestRef = useRef(null);
+  const saleSubmittingRef = useRef(false);
+  const [creditPending, setCreditPending] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -870,7 +873,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     }
 
     try {
-      const response = await axiosClient.post("/sales", {
+      if (saleSubmittingRef.current) return;
+      saleSubmittingRef.current = true;
+      const salePayload = {
         customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
         customer_name: cleanCustomerName,
         customer_phone: cleanCustomerPhone,
@@ -901,7 +906,24 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
           product_id: item.id,
           quantity: item.quantity,
         })),
-      });
+      };
+      // Keep the same idempotency key for the exact cart while awaiting review.
+      const fingerprint = JSON.stringify({branchId,userId:user?.id,payload:salePayload});
+      if (creditRequestRef.current?.fingerprint !== fingerprint) {
+        creditRequestRef.current = {fingerprint,key:globalThis.crypto.randomUUID(),pending:false};
+        setCreditPending(null);
+      }
+      const response = await axiosClient.post("/sales",salePayload,{headers:{"x-chalin-credit-request-key":creditRequestRef.current.key}});
+      if(response.status===202 && response.data.status==="pending_approval"){
+        creditRequestRef.current.pending=true;
+        setCreditPending(String(response.data.approval_id));
+        setReceipt(null);
+        setMessage(response.data.message+" Request #"+response.data.approval_id+". After approval, submit this same cart again.");
+        return;
+      }
+      if(!response.data.receipt?.sale_id)throw new Error("Sale confirmation did not include a receipt. Check Sales History before retrying.");
+      creditRequestRef.current=null;
+      setCreditPending(null);
 
       const savedReceipt = response.data.receipt || {};
       // The POS has already created the financial receipt, stock movement,
@@ -995,7 +1017,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     } catch (error) {
       rememberLockedPeriodFromError(error);
       setError(getFriendlyApiError(error, "Failed to record sale."));
-    }
+    } finally { saleSubmittingRef.current=false; }
   }
 
   async function downloadReceiptPdf() {
@@ -1376,6 +1398,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       </div>
 
       {message && <div className="success-box">{message}</div>}
+      {creditPending && <div className="warning-box" role="status">Credit request #{creditPending} is pending or awaiting execution. Keep this cart unchanged. <button type="button" onClick={()=>{creditRequestRef.current=null;setCreditPending(null);setMessage("Start a new request only if the previous one is rejected or expired.");}}>Reset request reference</button></div>}
       {error && <div className="error-box">{error}</div>}
 
       {lockedPeriod && (
