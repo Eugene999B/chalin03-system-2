@@ -3,7 +3,7 @@ import axiosClient from "../api/axiosClient";
 import "../styles/customerCreditProfile.css";
 
 const money=pesewas=>new Intl.NumberFormat("en-GH",{style:"currency",currency:"GHS"}).format(Number(pesewas)/100);
-export default function CreditRequestRecoveryPanel({branchId,userId,onPosted}){
+export default function CreditRequestRecoveryPanel({branchId,userId,onPosted,refreshKey}){
   const [rows,setRows]=useState([]),[visible,setVisible]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[reload,setReload]=useState(0);
   const locked=useRef(false);
   useEffect(()=>{
@@ -12,7 +12,7 @@ export default function CreditRequestRecoveryPanel({branchId,userId,onPosted}){
       if(active){setRows((data.requests||[]).filter(r=>Number(r.requested_by)===Number(userId)));setVisible(true);}
     }).catch(e=>{if(active&&e.response?.status!==404){setError(e.response?.data?.message||"Could not load your credit requests.");setVisible(true);}});
     return ()=>{active=false;};
-  },[branchId,userId,reload]);
+  },[branchId,userId,reload,refreshKey]);
   async function act(row,action){
     if(locked.current)return;
     if(action==="post"&&!window.confirm("Post this exact approved purchase now? Confirm the customer and payment are ready. Do not record a second payment."))return;
@@ -24,7 +24,7 @@ export default function CreditRequestRecoveryPanel({branchId,userId,onPosted}){
         setMessage(data.message);
       }else{
         const {data}=await axiosClient.get("/sales/credit-approvals/"+row.id+"/recovery");
-        const posted=await axiosClient.post("/sales",data.sale,{headers:{"x-chalin-credit-request-key":data.request_key}});
+        const posted=await axiosClient.post("/sales",data.sale,{headers:{"x-chalin-credit-request-key":data.request_key,"x-chalin-credit-recovery-id":String(row.id)}});
         if(posted.status!==201||!posted.data.receipt?.sale_id)throw new Error("No final sale confirmation. Check request status before retrying.");
         setMessage("Approved purchase posted as sale #"+posted.data.receipt.sale_id+". Do not collect payment again.");
         onPosted?.(row.id,posted.data.receipt);
