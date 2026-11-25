@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import CustomerDebtConsolidationPanel from "../components/CustomerDebtConsolidationPanel";
+import CustomerCreditProfile from "../components/CustomerCreditProfile";
 import HistoricalDebtPaymentHistory from "../components/DebtPaymentHistory";
 import { useAuth } from "../context/AuthContext";
 import { formatBusinessDate, formatBusinessDateTime } from "../utils/businessDate";
@@ -1227,6 +1228,8 @@ export default function DebtsPage() {
                   remains fully visible and payable; no record has been removed.
                 </div>
               ) : null}
+
+              <CustomerCreditProfile profile={selected.credit_profile} />
 
               <section className="debt-desk__balance-card">
                 <div>
