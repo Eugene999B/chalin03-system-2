@@ -773,8 +773,13 @@ router.get("/customers/:customerKey", requireAuth, async (req, res) => {
         result.credit_profile.can_adjust_score=isOriginalSystemAdministrator(req.user);
         result.credit_profile.customer_id=parsedKey.id;
       }
-      res.set("Cache-Control", "no-store");
+      if(result.credit_profile)result.credit_profile.enforcement_active=process.env.CHALIN03_CREDIT_ENFORCEMENT_PREVIEW==="true";
     }
+    if(!result.credit_profile){
+      const {initialCreditPreview}=require("../services/customerCreditProfileService");
+      result.credit_profile=initialCreditPreview(result.summary.outstanding_balance);
+    }
+    res.set("Cache-Control", "no-store");
     return res.json({ status: "success", branch_id: branchId, ...result });
   } catch (error) {
     console.error("Debt desk account detail error:", error);
