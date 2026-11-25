@@ -38,7 +38,7 @@ test("customer-first navigation retains the proven detail and payment fallbacks"
   assert.match(routes, /legacy-\(\\d\+\)/);
   assert.match(page, /LegacyDebtsPage/);
   assert.match(legacyPage, /Customer Debt Desk/);
-  assert.match(legacyPage, /axiosClient\.get\("\/debts"\)/);
+  assert.match(legacyPage, /axiosClient\.get\("\/debts",\s*\{\s*params:\s*\{\s*credit_profiles:\s*"1"\s*\}\s*\}\)/);
   assert.doesNotMatch(legacyPage, /axiosClient\.get\("\/debts\/customers",\s*\{/);
   assert.match(legacyPage, /buildDebtDeskAccounts/);
   assert.match(legacyPage, /\/debt-customers\/\$\{linkedMatch\[1\]\}/);
