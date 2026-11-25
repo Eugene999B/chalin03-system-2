@@ -52,4 +52,24 @@ async function sumActiveReservations(db,{customerId,excludeId=null}){
   if(!/^\d+$/.test(raw))throw new RangeError("Invalid reservation total");
   return money(Number(raw));
 }
-module.exports={sealSalePayload,verifyPayload,reviewDecision,sumActiveReservations};
+// Reconstruct the whitelisted POS input from the immutable, server-priced request.
+// The normal sale route still recalculates prices, tax and payment before execution.
+function recoverSalePayload(stored,hash){
+  const payload=typeof stored==="string"?JSON.parse(stored):stored;
+  if(!verifyPayload(payload,hash))throw new Error("Credit payload integrity check failed");
+  if(!["credit","mixed"].includes(payload.payment_type)||!Array.isArray(payload.items)||!payload.items.length)throw new Error("Unsupported credit recovery payload");
+  return {
+    customer_id:id(payload.customer_id),
+    customer_name:payload.customer_name,
+    customer_phone:payload.customer_phone,
+    customer_location:payload.customer_location,
+    payment_type:payload.payment_type,
+    discount_amount:payload.discount_amount,
+    amount_tendered:payload.tendered,
+    amount_paid:payload.paid,
+    payment_allocations:payload.allocations,
+    installment_plan:null,
+    items:payload.items.map(item=>({product_id:id(item.product_id),quantity:id(item.quantity)}))
+  };
+}
+module.exports={sealSalePayload,verifyPayload,reviewDecision,sumActiveReservations,recoverSalePayload};
