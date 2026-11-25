@@ -1,6 +1,6 @@
 # Customer Credit Intelligence and staff reporting — integration specification
 
-Status: policy foundation only. Not a live sale authorization gate. Do not deploy or present the UI as enforcing credit until the transaction integration is complete.
+Status: policy, additive schema, authenticated staging read model, Debt Desk preview, and ownership reconciliation calculator. Not a live sale authorization gate. Do not deploy or present the UI as enforcing credit until the transaction integration is complete.
 
 ## Customer credit
 - Every canonical debtor receives score 30, including existing customers, without changing or forgiving any receivable. Backfill idempotently and never overwrite an existing score. Use the canonical customer identity, not a phone/name string. Score history and policy versions are auditable.
@@ -18,3 +18,11 @@ Status: policy foundation only. Not a live sale authorization gate. Do not deplo
 - Exports, API responses, counts, dashboards, caches and search enforce the same server-side scope. Original receipts, official statements, statutory reports and authorized full-ledger views retain actual values.
 - Restricted settings: verified owner/product mappings, effective dates, preview with reconciliation against total ledger, audit log, rollback of mappings, approval workflow, and fresh Authenticator step-up. No live changes until classifications have been verified. No silent alteration of real transactions.
 - Acceptance: scoped plus other plus unclassified reconciles to full ledger; returns, partial payments, mixed sales, tax, discounts, inventory movements and cost allocations reconcile; cross-scope access fails; exports match the selected scope. Validate in staging before DNS or Railway production changes.
+
+## Staging verification
+- Apply the new additive SQL only to a verified staging database. Check that profile count matches customers, existing scores survive reruns, and debt counts/balances/due dates are identical before and after.
+- The new profile and history foreign keys use RESTRICT intentionally to preserve score history. Existing customer merge and deletion workflows MUST be integrated and regression-tested before applying this migration to production; do not bypass the constraints to force a merge.
+- Set CHALIN03_CREDIT_PREVIEW=true only in staging after the migration. The authenticated Debt Desk detail endpoint then includes a credit_profile for canonical customer records. Unlinked legacy debt remains visible but needs identity reconciliation before credit authorization. No enforcement or score changes are implied by the preview.
+- The current implementation reads branch-local outstanding balance, following the existing Debt Desk scope. Company-wide identity and approved reservation aggregation must be implemented and validated before enabling credit enforcement.
+- Run node --test backend/tests/customerCreditPolicy.test.js backend/tests/customerCreditAndOwnershipReporting.test.js from the repository root, plus full backend/frontend CI. No production cutover until transaction, concurrent purchase, approval, merge, and cross-scope reporting tests pass.
+- The ownership calculator accepts explicit, already verified allocations and independent ledger totals; it does not classify historical merchandise itself. Production ownership mappings, authenticated scope, payment/return allocations, settings UI, and host deployment are not implemented.
