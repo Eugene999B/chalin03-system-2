@@ -47,4 +47,21 @@ async function readOwnershipReceiptPreview(db,branchId){
  ) receipts GROUP BY owner_code`,[branchId,branchId,branchId]);
  return summarize(rows);
 }
-module.exports={summarize,readOwnershipReceiptPreview};
+// CSV is an explicitly scoped reconciliation artifact, not a replacement ledger.
+function exportReconciliationCsv(report,branchId){
+ if(!Number.isSafeInteger(branchId)||branchId<=0||report.scope!=="completed_nonvoid_receipts_before_return_adjustments"||report.financial_reporting_ready!==false)throw new Error("Invalid reconciliation export scope");
+ const lines=[
+ ["Report","Receipt ownership reconciliation preview"],
+ ["Scope","Completed non-void receipts in selected store before return adjustments"],
+ ["Store ID",branchId],
+ ["Currency","GHS"],
+ ["Financial statement","No - mixed and unverified receipts remain unresolved"],
+ ["Collections","Recorded debt payments only"],
+ ["Ownership","Receipt count","Invoice total","Tax","Recorded cost","Outstanding","Debt collections"]
+ ];
+ for(const [label,row] of [["CHALIN03",report.groups.chalin03],["Business partner",report.groups.partner],["Mixed or unresolved",report.groups.unresolved],["All included receipts",report.total]]){
+   lines.push([label,row.receipt_count,...FIELDS.map(k=>{const n=row[k];if(!Number.isSafeInteger(n)||n<0)throw new Error("Invalid report amount");return (n/100).toFixed(2);})]);
+ }
+ return lines.map(row=>row.map(value=>'"'+String(value).replace(/"/g,'""')+'"').join(",")).join("\r\n")+"\r\n";
+}
+module.exports={summarize,readOwnershipReceiptPreview,exportReconciliationCsv};

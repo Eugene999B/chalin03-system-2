@@ -9,7 +9,7 @@ const money = value => new Intl.NumberFormat("en-GH", {
 export default function CustomerCreditProfile({profile,onChanged}) {
   if (!profile || !Number.isInteger(profile.score) || profile.score < 0 || profile.score > 100) return null;
   const utilization = profile.utilization_percent;
-  const status = profile.at_limit ? "At credit limit" : "Within credit limit";
+  const status = profile.over_limit ? "Above credit limit" : profile.at_limit ? "At credit limit" : "Within credit limit";
   return <section className="ccp" aria-label="Customer credit intelligence preview">
     <div className="ccp-heading"><div><small>CHALIN03 · CREDIT INTELLIGENCE</small><h3>Customer credit profile</h3></div><span className="ccp-preview">Preview</span></div>
     <div className="ccp-main">
@@ -24,6 +24,7 @@ export default function CustomerCreditProfile({profile,onChanged}) {
       <div className="ccp-metrics">
         <div><span>Approved limit</span><strong>{money(profile.limit)}</strong></div>
         <div><span>Outstanding debt</span><strong>{money(profile.outstanding)}</strong></div>
+        <div><span>Approved reservations</span><strong>{money(profile.reserved??0)}</strong></div>
         <div><span>Available credit</span><strong>{money(profile.available)}</strong></div>
         <div><span>Default term</span><strong>{profile.term_months} {profile.term_months===1?"month":"months"}</strong></div>
       </div>

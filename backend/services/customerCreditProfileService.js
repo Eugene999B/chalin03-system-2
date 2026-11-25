@@ -11,16 +11,20 @@ function toPesewas(value) {
   return result;
 }
 
-function describeCredit({score = INITIAL_SCORE, outstanding, termMonths = DEFAULT_TERM_MONTHS}) {
+function describeCredit({score = INITIAL_SCORE, outstanding, termMonths = DEFAULT_TERM_MONTHS, reserved = 0}) {
   const balance = toPesewas(outstanding);
   const limit = creditLimit(score);
+  const reservedPesewas=toPesewas(reserved), exposure=balance+reservedPesewas;
+  if(!Number.isSafeInteger(exposure))throw new RangeError('Credit exposure out of range');
   return {
     score, limit: limit / 100, outstanding: balance / 100,
-    available: Math.max(0, limit - balance) / 100,
-    utilization_percent: limit ? Math.round(balance / limit * 10000) / 100 : null,
+    reserved: reservedPesewas / 100,
+    exposure: exposure / 100,
+    available: Math.max(0, limit - exposure) / 100,
+    utilization_percent: limit ? Math.round(exposure / limit * 10000) / 100 : null,
     term_months: termMonths,
-    over_limit: balance > limit,
-    at_limit: balance >= limit
+    over_limit: exposure > limit,
+    at_limit: exposure >= limit
   };
 }
 
@@ -37,12 +41,14 @@ async function loadCreditProfile(db, {branchId, customerId}) {
   );
   if (!rows.length) return null;
   const [balances] = await db.query(
-    `SELECT COALESCE(SUM(d.balance),0) AS outstanding
+    `SELECT COALESCE(SUM(d.balance),0) AS outstanding,
+       (SELECT CAST(COALESCE(SUM(a.new_debt_pesewas),0)/100 AS DECIMAL(20,2)) FROM customer_credit_approval_requests a WHERE a.customer_id=? AND a.branch_id=? AND a.status='approved' AND a.expires_at>UTC_TIMESTAMP()) AS reserved
      FROM debts d LEFT JOIN sales s ON s.id=d.sale_id AND s.branch_id=d.branch_id
      WHERE d.branch_id=? AND COALESCE(s.customer_id,d.customer_id)=? AND d.balance>0`,
-    [branchId, customerId]
+    [customerId, branchId, branchId, customerId]
   );
-  return {...describeCredit({score:Number(rows[0].score), outstanding:balances[0].outstanding, termMonths:Number(rows[0].term_months)}),version:String(rows[0].version??1)};
+  const profile=describeCredit({score:Number(rows[0].score), outstanding:balances[0].outstanding, termMonths:Number(rows[0].term_months),reserved:balances[0].reserved??0});
+  return {...profile,version:String(rows[0].version??1)};
 }
 
 // Caller must hold the customer lock and provide fresh authoritative exposure,

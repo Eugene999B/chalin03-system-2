@@ -322,6 +322,16 @@ router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole
     return res.json({status:"success",preview:await readOwnershipReceiptPreview(pool,req.ownershipBranchId)});
   }catch(error){console.error("Ownership receipt preview failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Receipt reconciliation preview unavailable."});}
 });
+router.get("/ownership-reconciliation/financial-preview.csv",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
+  try{
+    const {readOwnershipReceiptPreview,exportReconciliationCsv}=require("../services/ownershipReceiptPreviewService");
+    const report=await readOwnershipReceiptPreview(pool,req.ownershipBranchId);
+    const csv=exportReconciliationCsv(report,req.ownershipBranchId);
+    res.set("Content-Type","text/csv; charset=utf-8");
+    res.set("Content-Disposition","attachment; filename=ownership-reconciliation-preview-store-"+req.ownershipBranchId+".csv");
+    return res.send("\uFEFF"+csv);
+  }catch(error){console.error("Ownership reconciliation export failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Receipt reconciliation export unavailable."});}
+});
 router.get("/ownership-reconciliation/receipt",requireAuth,requireRole("admin"),ownershipPreviewAccess,async(req,res)=>{
   const receipt=typeof req.query.receipt==="string"?req.query.receipt.trim():"";
   if(!receipt||receipt.length>50)return res.status(400).json({status:"error",message:"Enter an exact receipt number."});

@@ -15,7 +15,7 @@ test("canonical credit profile respects authenticated branch",async()=>{
   const calls=[];
   const db={query:async(sql,args)=>{calls.push(args);return calls.length===1?[[{score:30,term_months:1}]]:[[{outstanding:"27000.00"}]];}};
   const p=await loadCreditProfile(db,{branchId:2,customerId:5});
-  assert.deepEqual(calls,[[5,2],[2,5]]);
+  assert.deepEqual(calls,[[5,2],[5,2,2,5]]);
   assert.equal(p.available,0);
   assert.equal(p.over_limit,true);
   assert.equal(await loadCreditProfile({query:async()=>[[]]},{branchId:1,customerId:5}),null);
@@ -39,3 +39,5 @@ test("reject missing evidence, duplicate allocation, and mismatched ledger",()=>
   assert.throws(()=>reconcileOwnershipReport({allocations:[...allocations,allocations[0]],ledgerTotals}));
   assert.throws(()=>reconcileOwnershipReport({allocations,ledgerTotals:{...ledgerTotals,netRevenue:89999}}));
 });
+
+test("available credit includes approved reservations",()=>{const p=describeCredit({outstanding:"23000.00",reserved:"1500.00"});assert.equal(p.available,500);assert.equal(p.exposure,24500);assert.equal(p.utilization_percent,98);});
