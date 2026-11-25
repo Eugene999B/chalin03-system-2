@@ -18,6 +18,6 @@ export default function OwnershipReconciliationPanel({branchId}){
    {error&&<p role="alert">{error}</p>}
    {data&&<><div className="ccp-metrics">{rows.map(([label,n])=><div key={label}><span>{label}</span><strong>{Number(n).toLocaleString()}</strong></div>)}<div><span>All sale lines</span><strong>{Number(data.total).toLocaleString()}</strong></div></div><p>Financial reporting remains unavailable until ownership evidence, returns, discounts, costs, receivables and collections are reconciled.</p></>}
    <button type="button" onClick={()=>setReload(v=>v+1)}>Refresh reconciliation</button>
-   {data&&<OwnershipEvidencePanel branchId={branchId} onSaved={()=>setReload(v=>v+1)} />}
+   {data&&<OwnershipEvidencePanel branchId={branchId} onSaved={(previous,next)=>{if(previous!==next)setData(current=>current?{...current,groups:{...current.groups,[previous]:Math.max(0,current.groups[previous]-1),[next]:current.groups[next]+1}}:current);}} />}
  </section>;
 }
