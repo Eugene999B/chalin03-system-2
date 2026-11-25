@@ -103,7 +103,7 @@ test("Debt page shows only the authoritative top workspace", () => {
   assert.match(page, /LegacyDebtsPage/);
   assert.match(page, /top-only-debt-desk/);
   assert.match(legacyPage, /Customer Debt Desk/);
-  assert.match(legacyPage, /axiosClient\.get\("\/debts"\)/);
+  assert.match(legacyPage, /axiosClient\.get\("\/debts",\s*\{\s*params:\s*\{\s*credit_profiles:\s*"1"\s*\}\s*\}\)/);
   assert.match(legacyPage, /buildDebtDeskAccounts/);
   assert.match(tools, /Single authoritative debt workspace/);
   assert.match(tools, /axiosClient\.get\("\/debts"\)/);
