@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import { useAuth } from "../context/AuthContext";
 
 const DAILY_TARGET = 5000;
@@ -764,6 +765,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      <StaffPlanningPeriods user={user} branchKey={branchId} refreshKey={sales}/>
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 

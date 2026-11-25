@@ -1638,7 +1638,7 @@ function DebtCardCredit({profile}){
      <div><span>Available credit</span><strong>{money(profile.available)}</strong></div>
    </div>
    <div className="debt-card-credit-track" role="meter" aria-label="Credit utilization" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,profile.utilization_percent??0)}><i style={{width:Math.min(100,profile.utilization_percent??0)+"%"}}/></div>
-   <div className="debt-card-credit-foot"><span>{profile.at_limit?"Limit reached or exceeded":"Within credit limit"}</span><span>{profile.term_months} {profile.term_months===1?"month":"months"}</span></div>
+   <div className="debt-card-credit-foot"><span>{profile.at_limit?"Limit reached or exceeded":"Within credit limit"}</span><span>{profile.term_days?profile.term_days+" days":"Check debt settings"}</span></div>
  </div>;
 }
 function AccountOverview({ detail }) {

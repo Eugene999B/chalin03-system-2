@@ -26,13 +26,14 @@ export default function CustomerCreditProfile({profile,onChanged}) {
         <div><span>Outstanding debt</span><strong>{money(profile.outstanding)}</strong></div>
         <div><span>Approved reservations</span><strong>{money(profile.reserved??0)}</strong></div>
         <div><span>{profile.initial_estimate?"Estimated available credit":"Available credit"}</span><strong>{money(profile.available)}</strong></div>
-        <div><span>Default term</span><strong>{profile.term_months} {profile.term_months===1?"month":"months"}</strong></div>
+        <div><span>Default term</span><strong>{profile.term_days?profile.term_days+" days":"Check debt settings"}</strong></div>
       </div>
     </div>
     <div className="ccp-util-label"><span>Credit utilization</span><strong>{utilization===null?"Not applicable":utilization+"%"}</strong></div>
     <div className="ccp-track" role="meter" aria-label="Credit utilization" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,utilization??0)}><div style={{width:`${Math.min(100,utilization??0)}%`,background:profile.at_limit?"#b45309":"#087c72"}}/></div>
     <p className="ccp-status">{status}. {profile.enforcement_active?"Credit approval policy active.":profile.initial_estimate?"Initial score and limit calculated from the existing debt balance; credit approvals and saved score changes are not active.":"Credit approval enforcement is not active."}</p>
     {profile.risk&&<CreditRiskReview risk={profile.risk}/>}
+    {profile.repayment_recommendation&&<RepaymentReview recommendation={profile.repayment_recommendation}/>}
     {profile.can_adjust_score&&<ScoreAdjustment key={profile.customer_id+":"+profile.version} profile={profile} onChanged={onChanged}/>}
   </section>;
 }
@@ -44,6 +45,14 @@ function CreditRiskReview({risk}){
   <div className="ccp-metrics"><div><span>Overdue balance</span><strong>{money(risk.overdue_balance)}</strong></div><div><span>Longest overdue</span><strong>{risk.oldest_overdue_days} days</strong></div><div><span>Overdue items</span><strong>{risk.overdue_count} of {risk.open_count}</strong></div><div><span>Missing due dates</span><strong>{risk.undated_count}</strong></div></div>
   {risk.factors.length>0&&<ul>{risk.factors.map(f=><li key={f}>{f}</li>)}</ul>}
   <p><strong>Suggested action:</strong> {risk.action}</p><small>As of {risk.as_of}. Advisory review priority, not the customer's credit score or an automated refusal.</small>
+ </div>;
+}
+function RepaymentReview({recommendation:r}){
+ return <div className="ccp-risk">
+  <div className="ccp-heading"><div><small>PROSPECTIVE REPAYMENT INTELLIGENCE</small><h3>Payment performance</h3></div><span className="ccp-preview">Advisory</span></div>
+  <div className="ccp-metrics"><div><span>Suggested credit score</span><strong>{r.recommendedScore}/100</strong></div><div><span>Suggested limit</span><strong>{money(r.recommended_limit)}</strong></div><div><span>On-time settlements</span><strong>{r.onTime}</strong></div><div><span>Late settlements</span><strong>{r.late}</strong></div><div><span>Open eligible receipts</span><strong>{r.pending}</strong></div><div><span>Excluded older receipts</span><strong>{r.excluded_before_reset}</strong></div></div>
+  <p>{r.eligible_settlements?"Recommendation uses eligible fully paid receipts with reconciled payment records.":"Awaiting eligible settlements. Baseline remains 30/100."} Tracking starts {r.tracking_start}; pre-reset debts and ambiguous or returned receipts are excluded from score recommendations.</p>
+  <small>Suggested scores are not approved credit limits. {r.excluded_unverified} unverified receipt(s) excluded.</small>
  </div>;
 }
 function ScoreAdjustment({profile,onChanged}){
