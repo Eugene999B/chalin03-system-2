@@ -93,4 +93,10 @@ async function loadDebtListCreditProfiles(db,{branchId,debts,enabled=false,enfor
  }
  return result;
 }
-module.exports = {toPesewas, describeCredit, loadCreditProfile, assessPreparedSale,initialCreditPreview,loadDebtListCreditProfiles};
+async function readGraceDays(db,branchId){
+ if(!Number.isSafeInteger(branchId)||branchId<=0)throw new RangeError("Invalid branch");
+ const [rows]=await db.query("SELECT debt_reminder_days FROM settings WHERE branch_id=? ORDER BY id DESC LIMIT 1",[branchId]);
+ const days=Number(rows[0]?.debt_reminder_days);
+ return Number.isInteger(days)&&days>0&&days<=3650?days:30;
+}
+module.exports = {toPesewas, describeCredit, loadCreditProfile, assessPreparedSale,initialCreditPreview,loadDebtListCreditProfiles,readGraceDays};

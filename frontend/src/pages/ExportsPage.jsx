@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import { useAuth } from "../context/AuthContext";
 import "./ExportsPage.css";
 
@@ -490,6 +491,7 @@ export default function ExportsPage() {
         </div>
       </section>
 
+      <StaffPlanningPeriods user={user} branchKey={branchCode}/>
       <section className="ec-intelligence-intro">
         <div>
           <span className="ec-eyebrow">LIVE / EVIDENCE-BASED ANALYSIS</span>
