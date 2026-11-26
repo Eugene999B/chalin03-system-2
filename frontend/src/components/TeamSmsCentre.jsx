@@ -12,9 +12,10 @@ export default function TeamSmsCentre({scope="spare-parts",contextKey,canManage=
  const api="/team-sms/"+scope;
  const [target,setTarget]=useState("staff"),[directory,setDirectory]=useState(null),[mode,setMode]=useState("selected"),[ids,setIds]=useState([]),[query,setQuery]=useState(""),[category,setCategory]=useState("all"),[message,setMessage]=useState(""),[preview,setPreview]=useState(null),[history,setHistory]=useState([]),[confirmation,setConfirmation]=useState(""),[eligible,setEligible]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState(""),[outcome,setOutcome]=useState(null);
  const [step,setStep]=useState(1),[view,setView]=useState("compose"),[historyBusy,setHistoryBusy]=useState(false);
+ const [manualPhone,setManualPhone]=useState("");
  const batchRef=useRef(null);
  useEffect(()=>{
-  let active=true;setDirectory(null);setStep(1);setIds([]);setCategory("all");setPreview(null);setConfirmation("");setEligible(false);setError("");setOutcome(null);setNotice("");batchRef.current=null;
+  let active=true;setDirectory(null);setStep(1);setIds([]);setManualPhone("");setCategory("all");setPreview(null);setConfirmation("");setEligible(false);setError("");setOutcome(null);setNotice("");batchRef.current=null;
   if(canManage)axiosClient.get(api+"/recipients",{params:{target}}).then(a=>{if(active)setDirectory(a.data);}).catch(e=>{if(active)setError(err(e));});
   return()=>{active=false;};
  },[api,target,contextKey,canManage]);
@@ -27,21 +28,22 @@ export default function TeamSmsCentre({scope="spare-parts",contextKey,canManage=
  function changeSelection(next){setIds(next);resetPreview();}
  async function prepare(){
   if(busy)return;setBusy(true);setError("");setNotice("");setOutcome(null);
-  try{const payload={target,mode,ids,message};const {data}=await axiosClient.post(api+"/preview",payload);setPreview(data);batchRef.current=crypto.randomUUID();setStep(3);}
+  try{const payload={target,mode,ids,message,...(target==="manual"?{phone:manualPhone}:{})};const {data}=await axiosClient.post(api+"/preview",payload);setPreview(data);batchRef.current=crypto.randomUUID();setStep(3);}
   catch(e){setError(err(e));}finally{setBusy(false);}
  }
  async function send(){
   if(busy||!preview||!eligible||confirmation!=="SEND MESSAGES"||!batchRef.current)return;
   setBusy(true);setError("");setNotice("");
   try{
-   const {data}=await axiosClient.post(api+"/send",{target,mode,ids,message,fingerprint:preview.fingerprint,batch_id:batchRef.current,confirmation,contact_eligible:eligible});
+   const {data}=await axiosClient.post(api+"/send",{target,mode,ids,message,...(target==="manual"?{phone:manualPhone}:{}),fingerprint:preview.fingerprint,batch_id:batchRef.current,confirmation,contact_eligible:eligible});
    setOutcome(data);setNotice(data.message);resetPreview();setStep(1);setView("history");
    const h=await axiosClient.get(api+"/history");setHistory(h.data.messages||[]);
   }catch(e){setError(err(e));try{const h=await axiosClient.get(api+"/history");setHistory(h.data.messages||[]);}catch{/* retain last known history */}}
   finally{setBusy(false);}
  }
  if(!canManage)return null;
- const count=mode==="all"?rows.length:ids.length;
+ const manualValid=/^(?:0|\+?233|00233)?[25]\d{8}$/.test(manualPhone.replace(/[\s()-]/g,""));
+ const count=target==="manual"?(manualValid?1:0):mode==="all"?rows.length:ids.length;
  const max=directory?.max_batch||100;
  const ready=!!directory&&count>0&&count<=max&&!(mode==="all"&&directory.truncated);
  return <section className="team-sms-centre">
@@ -50,13 +52,14 @@ export default function TeamSmsCentre({scope="spare-parts",contextKey,canManage=
   {error&&<p role="alert" className="team-sms-error">{error}</p>}{notice&&<p role="status">{notice}</p>}
   <div className="team-sms-body" hidden={view!=="compose"}>
    <ol className="team-sms-steps">{["Recipients","Message","Review"].map((label,i)=><li key={label} aria-current={step===i+1?"step":undefined} className={step===i+1?"active":""}><span>{i+1}</span>{label}</li>)}</ol>
-   <div className="team-sms-panel" hidden={step!==1}><h3>1 · Choose recipients</h3><div className="team-sms-actions">{["staff","customers"].map(t=><button key={t} type="button" aria-pressed={target===t} disabled={busy} onClick={()=>{setTarget(t);setMode("selected");setQuery("");}}>{t==="staff"?"Staff":"Customers"}</button>)}</div>
+   <div className="team-sms-panel" hidden={step!==1}><h3>1 · Choose recipients</h3><div className="team-sms-actions">{["staff","customers","manual"].map(t=><button key={t} type="button" aria-pressed={target===t} disabled={busy} onClick={()=>{setTarget(t);setMode(t==="manual"?"manual":"selected");setQuery("");}}>{t==="staff"?"Staff":t==="customers"?"Customers":"Enter phone number"}</button>)}</div>
+    {target==="manual"?<div><label>Recipient phone number<input type="tel" inputMode="tel" autoComplete="tel" placeholder="024 123 4567 or +233241234567" maxLength={32} value={manualPhone} disabled={busy} onChange={e=>{setManualPhone(e.target.value);resetPreview();}}/></label><p className="team-sms-caption">Enter a Ghana mobile number, even if the recipient is not saved in the system.</p>{manualPhone&&!manualValid&&<p role="alert">Enter a valid Ghana mobile number.</p>}</div>:<>
     <div className="team-sms-metrics"><div><small>Valid unique numbers</small><strong>{rows.length}</strong></div><div><small>Invalid / duplicate</small><strong>{(directory?.invalid||0)+(directory?.duplicates||0)}</strong></div><div><small>Selected</small><strong>{count}</strong></div></div>
     <label>Audience<select value={mode} disabled={busy} onChange={e=>{setMode(e.target.value);resetPreview();}}><option value="selected">Choose individual recipients</option><option value="all">All eligible recipients in this workspace</option></select></label>
     {directory?.truncated&&<p role="status">Directory is capped; select a verified subset.</p>}
     {mode==="selected"&&<><div className="team-sms-filters"><input aria-label="Search recipients" placeholder="Search name or role" value={query} disabled={busy} onChange={e=>setQuery(e.target.value)}/><select aria-label="Filter recipients" value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}><option value="all">All categories</option>{categories.map(c=><option key={c}>{c}</option>)}</select></div><div className="team-sms-actions"><button type="button" disabled={busy} onClick={()=>changeSelection([...new Set([...ids,...visible.map(r=>r.id)])].slice(0,max))}>Select filtered</button><button type="button" disabled={busy} onClick={()=>changeSelection([])}>Clear selection</button></div>
     <div className="team-sms-recipient-list">{visible.map(r=><label key={r.id}><input type="checkbox" disabled={busy||(!ids.includes(r.id)&&ids.length>=max)} checked={ids.includes(r.id)} onChange={e=>changeSelection(e.target.checked?[...ids,r.id]:ids.filter(id=>id!==r.id))}/><span><strong>{r.name}</strong><small>{r.category} · {r.masked_phone}</small></span></label>)}{directory&&!visible.length&&<p>No matching valid recipients.</p>}</div></>}
-    <p className="team-sms-caption">Maximum {directory?.max_batch||100} unique recipients per confirmed submission. Staff are scoped to the selected workspace.</p>
+    <p className="team-sms-caption">Maximum {directory?.max_batch||100} unique recipients per confirmed submission. Staff are scoped to the selected workspace, including the verified company owner.</p></>}
    <button type="button" className="team-sms-primary team-sms-wide" disabled={busy||!ready} onClick={()=>setStep(2)}>Continue to message →</button>
    </div>
    <div className="team-sms-panel" hidden={step===1}><div hidden={step===3}><div className="team-sms-heading"><h3>2 · Compose message</h3><button type="button" disabled={busy} onClick={()=>setStep(1)}>Edit recipients</button></div><p className="team-sms-caption">{count} recipients selected</p><label>Template<select value="" disabled={busy} onChange={e=>{setMessage(e.target.value);resetPreview();}}><option value="">Choose a starting template</option>{templates.map(([label,value])=><option key={label} value={value}>{label}</option>)}</select></label>
