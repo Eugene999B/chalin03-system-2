@@ -990,3 +990,5 @@
   .ec-publications-heading>span{display:none;}
 }
 @media(prefers-reduced-motion:reduce){.ec-publication{transition:none;}}
+
+.ec-comparison-actions{margin-top:12px;padding:12px;border:1px solid #c7d9ec;border-radius:12px;background:#f2f7fc;color:#17365d;display:grid;gap:7px}.ec-comparison-actions small,.ec-comparison-note{font-size:12px;line-height:1.45;color:#526780}.ec-comparison-actions>div{display:flex;flex-wrap:wrap;gap:8px}.ec-comparison-actions button{border:1px solid #b8cce2;background:#fff;color:#17365d;font-weight:700;padding:8px 12px;border-radius:8px;cursor:pointer}.ec-comparison-actions button:disabled{opacity:.5}

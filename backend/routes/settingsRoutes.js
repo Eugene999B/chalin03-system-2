@@ -352,6 +352,19 @@ router.get("/ownership-reconciliation/planning-periods.csv",requireAuth,requireR
    return res.send("\uFEFF"+planningPeriodsCsv(report));
  }catch(e){console.error("Planning export unavailable:",e.code||e.name);return res.status(503).json({status:"error",message:"Planning export unavailable."});}
 });
+router.get("/ownership-reconciliation/shareholder-export",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
+ try{
+  const {readComparison,csv,workbook}=require("../services/shareholderExportComparison");
+  const format=req.query.format||"xlsx";
+  if(!["xlsx","csv"].includes(format))return res.status(400).json({status:"error",message:"Choose Excel or CSV for this comparison."});
+  const report=await readComparison(pool,req.ownershipBranchId,{report:req.query.report,from:req.query.from,to:req.query.to,percent:req.query.percent,settingsEnabled:process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"});
+  const filename="shareholder-planning-"+report.report+"-store-"+report.branch_id+"-"+report.percent+"pct."+format;
+  res.set("Content-Disposition",'attachment; filename="'+filename+'"');
+  if(format==="csv"){res.set("Content-Type","text/csv; charset=utf-8");return res.send("\uFEFF"+csv(report));}
+  const bytes=await workbook(report).xlsx.writeBuffer();
+  res.set("Content-Type","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");return res.send(Buffer.from(bytes));
+ }catch(e){return res.status(e.statusCode||503).json({status:"error",message:e.statusCode?e.message:"Shareholder export unavailable."});}
+});
 router.get("/ownership-reconciliation/shareholder-allocation",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
  try{
   const {readShareholderAllocation,parseScenarioPercent}=require("../services/managementPlanningService");

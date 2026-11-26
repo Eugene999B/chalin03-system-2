@@ -201,6 +201,7 @@ const REPORTS = [
   },
 ];
 
+const COMPARISON_REPORTS = new Set(["business-intelligence","collections-intelligence","stock-intelligence","daily-closings","discount-audit","transaction-history","sales","debts","debt-payments","returns"]);
 const FORMAT_OPTIONS = [
   { key: "xlsx", label: "Excel", icon: "📊", extension: "xlsx" },
   { key: "pdf", label: "PDF", icon: "📄", extension: "pdf" },
@@ -228,6 +229,7 @@ function extractFilename(headers, fallback) {
 export default function ExportsPage() {
   const { user, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
+  const canCompare=typeof window!=="undefined"&&window.location.hostname==="staff.chalin03.com"&&user?.is_original_system_administrator===true;
 
   const currentStoreCode =
     branchCode ||
@@ -356,6 +358,24 @@ export default function ExportsPage() {
     } catch {
       return errorValue?.message || "Export failed.";
     }
+  }
+
+  async function downloadComparison(report,format){
+    if(!validateDates()||busyKey)return;
+    setBusyKey(report.key+"-comparison-"+format);setError("");setNotice("");
+    try{
+      let percent;
+      try{const value=sessionStorage.getItem("chalin03:shareholder-preview:"+String(user?.id||""));if(value!==null&&/^(0|[1-9][0-9]?|100)$/.test(value))percent=value;}catch{/* use configured assumption */}
+      const response=await axiosClient.get("/settings/ownership-reconciliation/shareholder-export",{params:{report:report.key,format,...(percent!==undefined?{percent}:{}),...(from?{from}:{}),...(to?{to}:{})},responseType:"blob"});
+      const url=window.URL.createObjectURL(response.data),link=document.createElement("a");
+      link.href=url;link.download=extractFilename(response.headers,"shareholder-planning-"+report.key+"."+format);document.body.appendChild(link);link.click();link.remove();window.URL.revokeObjectURL(url);
+      setNotice("Shareholder planning comparison downloaded. Original source documents are unchanged.");
+    }catch(e){setError(await readExportError(e));}finally{setBusyKey("");}
+  }
+  function comparisonActions(report){
+    if(!canCompare)return null;
+    if(!COMPARISON_REPORTS.has(report.key))return <p className="ec-comparison-note">No assumed allocation: this report records physical quantities, source evidence or unrelated liabilities and expenses.</p>;
+    return <div className="ec-comparison-actions"><strong>Shareholder planning comparison</strong><small>Actual and estimated shares, using the applied preview percentage. Not a replacement source document.</small><div>{["xlsx","csv"].map(format=><button key={format} type="button" disabled={Boolean(busyKey)} onClick={()=>downloadComparison(report,format)}>{busyKey===report.key+"-comparison-"+format?"Preparing…":format==="xlsx"?"Comparison Excel":"Comparison CSV"}</button>)}</div></div>;
   }
 
   async function downloadReport(report, format) {
@@ -696,6 +716,7 @@ export default function ExportsPage() {
                       </button>;
                     })}
                   </div>
+                  {comparisonActions(report)}
                 </div>
               </article>
             ))}
@@ -777,6 +798,7 @@ export default function ExportsPage() {
                 );
               })}
             </div>
+            {comparisonActions(report)}
           </article>
         ))}
       </div>
