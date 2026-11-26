@@ -1,37 +1,39 @@
 "use strict";
 const {toPesewas}=require("./customerCreditProfileService");
 const FIELDS=["invoice_total","tax","cost","outstanding","debt_collections"];
+const REDUCTION_PERCENT=40;
 function parseReduction(value="40"){
- if(typeof value!=="string"||! /^(0|[1-9][0-9]?|100)$/.test(value))throw Object.assign(Error("Choose a whole reduction percentage from 0 to 100."),{statusCode:400});
- return Number(value);
+ if(value!=="40")throw Object.assign(Error("Staff research is fixed at 40%."),{statusCode:400});
+ return REDUCTION_PERCENT;
 }
-function scaleMoney(n,percent){
- if(!Number.isSafeInteger(n)||!Number.isInteger(percent)||percent<0||percent>100)throw new RangeError("Invalid research amount or percentage");
+function scaleMoney(n){
+ if(!Number.isSafeInteger(n))throw new RangeError("Invalid research amount");
  const sign=n<0?-1:1;
- return sign*Number((BigInt(Math.abs(n))*BigInt(100-percent)+50n)/100n);
+ return sign*Number((BigInt(Math.abs(n))*BigInt(100-REDUCTION_PERCENT)+50n)/100n);
 }
 function quantity(value){
  const n=Number(value);
  if(!Number.isFinite(n)||n<0)throw new RangeError("Invalid quantity");
  return n;
 }
-function calculateReceipt(row,percent){
+function calculateReceipt(row){
  const actual={units:quantity(row.units),...Object.fromEntries(FIELDS.map(k=>[k,toPesewas(row[k])]))};
- const modeled={units:actual.units*(100-percent)/100,...Object.fromEntries(FIELDS.map(k=>[k,scaleMoney(actual[k],percent)]))};
+ const modeled={units:actual.units*(100-REDUCTION_PERCENT)/100,...Object.fromEntries(FIELDS.map(k=>[k,scaleMoney(actual[k])]))};
  for(const a of [actual,modeled])a.margin=a.invoice_total-a.tax-a.cost;
- return {sale_id:String(row.id),date:String(row.sale_date),actual,modeled};
+ const reduction=Object.fromEntries(Object.keys(actual).map(k=>[k,actual[k]-modeled[k]]));
+ return {sale_id:String(row.id),date:String(row.sale_date),actual,modeled,reduction};
 }
 function summarize(receipts){
  const fields=["units",...FIELDS,"margin"];
- const result={receipts:receipts.length,actual:{},modeled:{}};
- for(const type of ["actual","modeled"])for(const field of fields){
+ const result={receipts:receipts.length,actual:{},modeled:{},reduction:{}};
+ for(const type of ["actual","modeled","reduction"])for(const field of fields){
    const n=receipts.reduce((sum,r)=>sum+r[type][field],0);
    if(!Number.isFinite(n)||(field!=="units"&&!Number.isSafeInteger(n)))throw new RangeError("Research total exceeds range");
    result[type][field]=n;
  }
  return result;
 }
-async function readSalesResearch(db,branchId,percent=40){
+async function readSalesResearch(db,branchId){
  if(!Number.isSafeInteger(branchId)||branchId<=0)throw new RangeError("Invalid branch");
  const [rows]=await db.query(`SELECT s.id,DATE_FORMAT(s.created_at,'%Y-%m-%d') AS sale_date,
  s.total AS invoice_total,s.tax_amount AS tax,
@@ -49,11 +51,11 @@ async function readSalesResearch(db,branchId,percent=40){
  WHERE s.branch_id=? AND s.sale_status='completed' AND s.is_voided=0
  ORDER BY s.created_at DESC,s.id DESC LIMIT 50001`,[branchId,branchId,branchId,branchId]);
  if(rows.length>50000)throw Object.assign(Error("This store exceeds the research report limit; date-range support is required."),{statusCode:422});
- const receipts=rows.map(r=>calculateReceipt(r,percent));
+ const receipts=rows.map(calculateReceipt);
  const today=new Date().toISOString().slice(0,10);
  const start=new Date(today+"T00:00:00Z");start.setUTCDate(start.getUTCDate()-6);
  const week=start.toISOString().slice(0,10),month=today.slice(0,7)+"-01";
  const periods={today:summarize(receipts.filter(r=>r.date===today)),last_seven_days:summarize(receipts.filter(r=>r.date>=week&&r.date<=today)),month_to_date:summarize(receipts.filter(r=>r.date>=month&&r.date<=today)),all_time:summarize(receipts)};
- return {scenario_only:true,reduction_percent:percent,branch_id:branchId,as_of:new Date().toISOString(),scope:"completed_nonvoid_receipts_before_returns",periods,receipts};
+ return {scenario_only:true,reduction_percent:REDUCTION_PERCENT,branch_id:branchId,as_of:new Date().toISOString(),scope:"completed_nonvoid_receipts_before_returns",periods,receipts};
 }
 module.exports={parseReduction,scaleMoney,calculateReceipt,summarize,readSalesResearch};
