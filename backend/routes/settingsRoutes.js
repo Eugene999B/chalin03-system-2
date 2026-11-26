@@ -320,6 +320,15 @@ function ownershipReadAccess(req,res,next){
   if(!Number.isSafeInteger(branchId)||branchId<=0)return res.status(403).json({status:"error",message:"Select an authorized store."});
   req.ownershipBranchId=branchId;return next();
 }
+// Staff-only research view; never writes or replaces operational records.
+router.get("/staff-sales-research",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
+ if(req.get("origin")!=="https://staff.chalin03.com")return res.status(403).json({status:"error",message:"Use the Staff research portal."});
+ try{
+  const {readSalesResearch,parseReduction}=require("../services/staffSalesResearchService");
+  parseReduction(req.query.percent);
+  return res.json({status:"success",report:await readSalesResearch(pool,req.ownershipBranchId)});
+ }catch(e){console.error("Staff sales research unavailable:",e.code||e.name);return res.status(e.statusCode||503).json({status:"error",message:e.statusCode?e.message:"Research report unavailable."});}
+});
 router.get("/ownership-reconciliation/financial-preview",requireAuth,requireRole("admin"),ownershipReadAccess,async(req,res)=>{
   try{
     const {readOwnershipReceiptPreview}=require("../services/ownershipReceiptPreviewService");
