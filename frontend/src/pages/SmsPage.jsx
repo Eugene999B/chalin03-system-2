@@ -142,7 +142,7 @@ function MobilePageFix() {
           word-break: normal !important;
         }
 
-        .boss-mobile-fix input,
+        .boss-mobile-fix input:not([type="checkbox"]):not([type="radio"]),
         .boss-mobile-fix select,
         .boss-mobile-fix textarea {
           width: 100% !important;
@@ -236,6 +236,8 @@ const SMS_TEMPLATES = [
 
 export default function SmsPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+  const [smsView,setSmsView]=useState("campaigns");
+  const canManageCampaigns=["admin","manager"].includes(String(user?.role||"").toLowerCase());
 
   const currentBranchCode =
     branchCode ||
@@ -882,7 +884,9 @@ export default function SmsPage() {
   return (
     <div className="boss-mobile-fix sms-centre-v2" style={styles.page}>
       <MobilePageFix />
-      <TeamSmsCentre key={String(branchId)} contextKey={branchId} canManage={["admin","manager"].includes(String(user?.role||"").toLowerCase())}/>
+      {canManageCampaigns&&<nav className="sms-main-tabs" aria-label="SMS Centre navigation"><button type="button" aria-pressed={smsView==="campaigns"} onClick={()=>setSmsView("campaigns")}>Staff &amp; customer messages</button><button type="button" aria-pressed={smsView==="tools"} onClick={()=>setSmsView("tools")}>Provider, reminders &amp; other tools</button></nav>}
+      {canManageCampaigns&&<div className="sms-campaign-workspace" hidden={smsView!=="campaigns"}><TeamSmsCentre key={String(branchId)} contextKey={branchId} canManage={canManageCampaigns}/></div>}
+      <div className="sms-legacy-tools" hidden={canManageCampaigns&&smsView!=="tools"}>
       <DebtReminderSettingsPanel key={"debt-reminders-"+String(branchId)} userRole={user?.role} currentStoreCode={currentBranchCode} currentStoreName={currentBranchName}/>
       <section className="sms-centre-v2__hero" style={styles.hero}>
         <div style={styles.signalOne} />
@@ -1557,6 +1561,7 @@ export default function SmsPage() {
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }
