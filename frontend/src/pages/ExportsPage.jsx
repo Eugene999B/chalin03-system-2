@@ -64,8 +64,8 @@ const REPORTS = [
     icon: "📦",
     endpoint: "/exports/products",
     description:
-      "Product master list with categories, quantities, cost prices, selling prices, barcodes and status.",
-    dateFilter: false,
+      "Historical stock at the selected end date, opening quantities and net changes. Without dates, exports current stock.",
+    dateFilter: true,
   },
   {
     key: "low-stock-restock",
@@ -592,9 +592,7 @@ export default function ExportsPage() {
           </div>
           <p>
             Every download prints the exact selected From and To dates.
-            Date-sensitive reports also filter their rows; products, low stock
-            and open debts remain current snapshots prepared for that selected
-            reporting period.
+            Products and Inventory reconstructs stock as of the selected end date, with opening stock at the start date. Low stock and open debts remain current snapshots.
           </p>
         </div>
 
@@ -749,7 +747,7 @@ export default function ExportsPage() {
 
             <div className="ec-report-meta">
               <span>
-                {report.deepReport
+                {report.key==="products" ? "Historical stock at end date · opening at start date" : report.deepReport
                   ? "Activity by date · open debt & stock now"
                   : report.dateFilter
                     ? "Filters rows by selected dates"

@@ -1500,7 +1500,11 @@ router.get(
     try {
       const branchId = getBranchId(req);
 
-      const [products] = await pool.query(
+      const {reportingPeriod,loadHistoricalProducts}=require("../services/historicalInventoryService");
+      let period;
+      try { period=reportingPeriod(cleanText(req.query.from),cleanText(req.query.to)); }
+      catch(error){return res.status(400).json({status:"error",message:error.message});}
+      const products = period ? await loadHistoricalProducts(pool,branchId,period) : (await pool.query(
         `SELECT
           id,
           branch_id,
@@ -1518,7 +1522,7 @@ router.get(
          WHERE branch_id = ?
          ORDER BY name ASC`,
         [branchId]
-      );
+      ))[0];
 
       const workbook = new ExcelJS.Workbook();
       workbook.creator = "Chalin 03 System";
@@ -1539,6 +1543,7 @@ router.get(
         { header: "Barcode", key: "barcode" },
         { header: "Status", key: "status" },
         { header: "Created At", key: "created_at" },
+        ...(period?[{header:"Opening Quantity",key:"opening_quantity"},{header:"Net Quantity Change",key:"net_change"},{header:"Historical Evidence",key:"history_note"}]:[]),
       ];
 
       products.forEach((product) => {
@@ -1548,16 +1553,31 @@ router.get(
           name: product.name,
           size: product.size || "",
           category: product.category || "",
-          cost_price: Number(product.cost_price || 0),
-          selling_price: Number(product.selling_price || 0),
+          cost_price: period&&product.cost_price==null?"Not evidenced":Number(product.cost_price || 0),
+          selling_price: period&&product.selling_price==null?"Not evidenced":Number(product.selling_price || 0),
           quantity: Number(product.quantity || 0),
           low_stock_threshold: Number(product.low_stock_threshold || 0),
           barcode: product.barcode || "",
-          status: product.is_active ? "Active" : "Inactive",
+          status: period&&product.details_changed?"Historical status not evidenced":product.is_active ? "Active" : "Inactive",
           created_at: formatDateTime(product.created_at),
+          ...(period?{opening_quantity:product.opening_quantity,net_change:product.net_change,history_note:product.history_note}:{}),
         });
       });
 
+      if(period){
+        const notes=workbook.addWorksheet("Historical Basis");
+        notes.columns=[{header:"Item",key:"item"},{header:"Explanation",key:"explanation"}];
+        for(const [item,explanation] of [
+          ["Closing date",period.end+" (end of day, Ghana time; today is provisional)"],
+          ["Opening",period.from?period.from+" (start of day)":"Not selected"],
+          ["Quantity","Reconstructed recorded stock at cutoff; reverses later sales, sale changes, returns, purchases, stock adjustments and transfers by product ID."],
+          ["Product inclusion","Only products created before closing cutoff; includes inactive and zero-stock records."],
+          ["Product details","Name, size, category, barcode and threshold are current identifiers/reference fields; edits after cutoff are flagged. Historical details may be unavailable."],
+          ["Prices","Reverse evidenced later price changes; unavailable values are explicitly marked. Not an original archived inventory snapshot."],
+          ["Limitations","Depends on completeness of retained movement and audit records. Unrecorded changes cannot be reconstructed. Negative stock or missing sale-change evidence blocks export."]
+        ])notes.addRow({item,explanation});
+        styleWorksheet(notes);
+      }
       styleWorksheet(worksheet);
 
       return sendStoreWorkbook(req, res, workbook, "products");
@@ -1567,7 +1587,7 @@ router.get(
       return res.status(500).json({
         status: "error",
         message:
-          error.message || "Something went wrong while exporting products.",
+          "Unable to reconstruct inventory safely. Contact the system administrator to reconcile historical stock evidence.",
       });
     }
   }
