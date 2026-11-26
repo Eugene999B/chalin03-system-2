@@ -20,6 +20,12 @@ function chooseRecipients(audience,mode,ids){
  if(result.length!==chosen.size)throw Error("Recipient selection has changed; refresh");
  return result;
 }
+function manualRecipient(input){
+ if(typeof input!=="string"||input.length>32||!/^\+?[\d\s()-]+$/.test(input.trim()))throw Error("Enter a valid Ghana mobile number.");
+ const phone=validMobile(input);
+ if(!phone)throw Error("Enter a valid Ghana mobile number.");
+ return {id:1,name:"Manual recipient",category:"manual",phone,masked_phone:maskPhone(phone)};
+}
 function messageText(input){const message=typeof input==="string"?input.trim():"";if(!message||message.length>480)throw Error("Message must contain 1 to 480 characters");return message;}
 function classifySubmissionError(error){
  const code=Number(error?.statusCode);
@@ -28,4 +34,4 @@ function classifySubmissionError(error){
  const reason=rejected?(known[code]||"Provider rejected the submission (HTTP "+code+")."):"Provider outcome is uncertain. Check delivery history before retrying.";
  return {status:rejected?"failed":"delivery_unknown",reason,providerMessageId:error?.providerMessageId||null,providerStatus:rejected?String(code):null};
 }
-module.exports={MAX_BATCH,uniqueRecipients,fingerprint,chooseRecipients,messageText,classifySubmissionError};
+module.exports={MAX_BATCH,uniqueRecipients,fingerprint,chooseRecipients,messageText,classifySubmissionError,manualRecipient};
