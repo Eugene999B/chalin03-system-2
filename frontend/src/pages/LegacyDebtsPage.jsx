@@ -951,7 +951,7 @@ export default function DebtsPage() {
         </div>
       </section>
 
-      <StaffPlanningPeriods user={user} branchKey={branchId}/>
+      <StaffPlanningPeriods scope="Current store debt desk; modeled receivables only, not customer balances" metrics={[{label:"Outstanding receivables",value:summary.outstanding_balance}]} />
       <section className="debt-desk__metrics" aria-label="Debt summary">
         <Metric
           label="Outstanding"

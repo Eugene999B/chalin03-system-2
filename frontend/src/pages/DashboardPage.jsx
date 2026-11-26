@@ -765,7 +765,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <StaffPlanningPeriods user={user} branchKey={branchId} refreshKey={sales}/>
+      <StaffPlanningPeriods scope={financialSummary?"Selected store; all-time financial summary; recent receipts for today/week/month":"Selected store; displayed recent receipts (up to 250), not a complete ledger"} metrics={[{label:"Sales revenue",value:financialSummary?.total_sales_amount??dashboardData.totalSalesAmount},{label:"Today’s displayed sales",value:dashboardData.todaySalesAmount},{label:"Last 7 days displayed sales",value:dashboardData.weekSalesAmount},{label:"Month displayed sales",value:dashboardData.monthSalesAmount},{label:"Recorded net profit — company retention",value:financialSummary?.net_profit,profit:true}]} />
       {message && <div className="success-box">{message}</div>}
       {error && <div className="error-box">{error}</div>}
 

@@ -4,6 +4,7 @@ import { getSparePartsPageByPath } from "../security/sparePartsPageAccess";
 import CompactSidebarNavigation from "./CompactSidebarNavigation";
 import SidebarAccountMenu from "./SidebarAccountMenu";
 import DebtorIdentityStaffAnnouncement from "./DebtorIdentityStaffAnnouncement";
+import {isStaffResearchHost} from "../utils/staffResearch";
 import "../styles/sidebarPolish.css";
 import { useAuth } from "../context/AuthContext";
 
@@ -1760,7 +1761,7 @@ export default function Layout({reportingSections=null,children=null} = {}) {
           </div>
         )}
 
-        {reportingSections?children:<><DebtorIdentityStaffAnnouncement /><PageAccessProtectedOutlet /></>}
+        {reportingSections?children:<>{isStaffResearchHost()&&<div role="note" style={{padding:"8px 12px",margin:"0 0 10px",border:"1px solid #b68b44",borderRadius:8}}>STAFF · Internal research (40% reduction) · Operational records and customer documents remain actual.</div>}<DebtorIdentityStaffAnnouncement /><PageAccessProtectedOutlet /></>}
       </main>
 
       {commandOpen && (

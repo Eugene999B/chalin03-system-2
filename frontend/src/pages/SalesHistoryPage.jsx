@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
-import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
+import StaffPlanningPeriods, {StaffReceiptResearch} from "../components/StaffPlanningPeriods";
 import { useAuth } from "../context/AuthContext";
 import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 
@@ -1049,7 +1049,7 @@ export default function SalesHistoryPage() {
         </div>
       </div>
 
-      <StaffPlanningPeriods user={user} branchKey={branchId}/>
+      <StaffPlanningPeriods scope="Current filtered sales list; limited to receipts returned by Sales History" sales={sales} metrics={[{label:"Sales value",value:summary.totalSales},{label:"Amount paid",value:summary.totalPaid},{label:"Sales balance",value:summary.totalBalance},{label:"Discount",value:summary.totalDiscount},{label:"Units in selected product scope",value:summary.productQuantity,units:true},{label:"Product value",value:summary.productValue}]} />
       <div style={{ ...styles.storeNotice, ...compactStoreNotice }}>
         <span style={styles.noticeIcon}>🏬</span>
         <div>
@@ -1253,6 +1253,7 @@ export default function SalesHistoryPage() {
                     <div style={{ ...styles.saleAmountBox, ...compactSaleAmountBox }}>
                       <span>Total</span>
                       <strong>GHS {formatMoney(sale.total)}</strong>
+                      <StaffReceiptResearch sale={sale}/>
                       <small>
                         Tendered: GHS {formatMoney(sale.amount_tendered)} • Paid:
                         GHS {formatMoney(sale.amount_paid)} • Change: GHS{" "}
