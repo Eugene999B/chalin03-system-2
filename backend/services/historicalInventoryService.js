@@ -34,6 +34,7 @@ function reconstruct(data,cutoff){
  const histories=group(data.history,"sale_id"),items=group(data.items,"sale_id"),returns=group(data.returns,"sale_id");
  for(const sale of data.sales){
   const sid=Number(sale.id),currentItems=items.get(sid)||[],ret=returns.get(sid)||[];
+  if(timestamp(sale.created_at)<end&&!(sale.edited_at&&timestamp(sale.edited_at)>=end)&&!(sale.voided_at&&timestamp(sale.voided_at)>=end)&&!(histories.get(sid)||[]).some(h=>timestamp(h.created_at)>=end))continue;
   const changes=(histories.get(sid)||[]).filter(h=>timestamp(h.created_at)>=end).sort((a,b)=>timestamp(a.created_at)-timestamp(b.created_at)||Number(a.id)-Number(b.id));
   let old=sale,oldItems=currentItems;
   if(timestamp(sale.created_at)<end){
@@ -54,8 +55,8 @@ function productRows(data,period){
   const pid=id(p.id),q=closing.get(pid),o=opening&&timestamp(p.created_at)<+period.start?opening.get(pid):opening?0:null;
   if(q<0||(o!==null&&o<0))throw Error("Negative reconstructed stock for product "+pid+"; ledger requires reconciliation.");
   const post=(audit.get(pid)||[]).filter(a=>timestamp(a.created_at)>=+period.cutoff);
-  const detailChanged=post.some(a=>["UPDATE_PRODUCT_DETAILS","DELETE_PRODUCT"].includes(a.action));
-  const priceEvents=[...(costEvents.get(pid)||[]).filter(a=>timestamp(a.at)>=+period.cutoff),...post.filter(a=>/PRICE/.test(a.action)).map(a=>({at:a.created_at,sequence:a.id,kind:"price",metadata:a.metadata_json}))].sort((a,b)=>timestamp(a.at)-timestamp(b.at)||Number(a.sequence||0)-Number(b.sequence||0));
+  const detailChanged=post.some(a=>["UPDATE_PRODUCT_DETAILS","UPDATE_PRODUCT","DELETE_PRODUCT"].includes(a.action));
+  const priceEvents=[...(costEvents.get(pid)||[]).filter(a=>timestamp(a.at)>=+period.cutoff),...post.filter(a=>["DIRECT_PRODUCT_MASTER_PRICE_CHANGE","APPROVED_PRODUCT_MASTER_PRICE_CHANGE"].includes(a.action)).map(a=>({at:a.created_at,sequence:a.id,kind:"price",metadata:a.metadata_json}))].sort((a,b)=>timestamp(a.at)-timestamp(b.at)||Number(a.sequence||0)-Number(b.sequence||0));
   let cost=p.cost_price,selling=p.selling_price,notes=[];
   // A later purchase can change master cost but may not preserve its previous value.
   for(const event of priceEvents.slice().reverse()){
@@ -76,20 +77,22 @@ async function loadHistoricalProducts(pool,branchId,period){
   await connection.query("START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY");
   const query=async(sql,params=[branchId])=>(await connection.query(sql,params))[0];
   const products=await query("SELECT id,branch_id,name,size,category,cost_price,selling_price,quantity,low_stock_threshold,barcode,is_active,created_at FROM products WHERE branch_id=? ORDER BY name,id");
-  const movements=await query(`SELECT product_id, adjusted_at AS at, new_quantity-old_quantity AS delta FROM stock_adjustments WHERE branch_id=?
+  const movementRows=await query(`SELECT product_id, adjusted_at AS event_at, new_quantity-old_quantity AS delta FROM stock_adjustments WHERE branch_id=?
    UNION ALL SELECT pi.product_id,p.created_at,pi.quantity FROM purchase_items pi JOIN purchases p ON p.id=pi.purchase_id WHERE p.branch_id=?
    UNION ALL SELECT i.source_product_id,t.dispatched_at,-i.dispatched_quantity FROM stock_transfer_items i JOIN stock_transfers t ON t.id=i.transfer_id WHERE t.from_branch_id=? AND t.status IN ('dispatched','received')
    UNION ALL SELECT i.destination_product_id,t.received_at,i.received_quantity FROM stock_transfer_items i JOIN stock_transfers t ON t.id=i.transfer_id WHERE t.to_branch_id=? AND t.status='received'`,[branchId,branchId,branchId,branchId]);
+  const movements=movementRows.map(r=>({...r,at:r.event_at}));
   const sales=await query("SELECT id,created_at,edited_at,voided_at,is_voided,sale_status FROM sales WHERE branch_id=?");
   const items=await query("SELECT i.sale_id,i.product_id,i.quantity FROM sale_items i JOIN sales s ON s.id=i.sale_id WHERE s.branch_id=?");
   const returns=await query("SELECT sale_id,product_id,quantity,returned_at FROM returns WHERE branch_id=?");
   const history=await query("SELECT id,sale_id,created_at,before_snapshot_json FROM sale_change_history WHERE branch_id=? AND created_at>=?",[branchId,period.start||period.cutoff]);
   const audit=await query(`SELECT id,CAST(entity_id AS UNSIGNED) AS product_id,action,created_at,metadata_json FROM activity_log WHERE branch_id=? AND entity_type='product' AND created_at>=?`,[branchId,period.cutoff]);
   // Legacy soft-delete audit entries lack entity_id; recover only the explicit ID in the recorded message.
-  const deleted=await query("SELECT id,action,details,created_at FROM activity_log WHERE branch_id=? AND action='DELETE_PRODUCT' AND created_at>=?",[branchId,period.cutoff]);
+  const deleted=await query("SELECT id,action,details,created_at FROM activity_log WHERE branch_id=? AND action='DELETE_PRODUCT' AND (entity_id IS NULL OR entity_id='') AND created_at>=?",[branchId,period.cutoff]);
   for(const r of deleted){const match=String(r.details||"").match(/with ID (\d+)$/);if(!match)throw Error("A historical product deletion has no recoverable product ID");audit.push({...r,product_id:Number(match[1])});}
-  const costEvents=await query(`SELECT product_id,adjusted_at AS at,id AS sequence,'adjustment' AS kind,cost_price_before AS before FROM stock_adjustments WHERE branch_id=? AND adjusted_at>=? AND movement_type='quick_restock'
+  const costRows=await query(`SELECT product_id,adjusted_at AS event_at,id AS event_sequence,'adjustment' AS kind,cost_price_before AS prior_cost FROM stock_adjustments WHERE branch_id=? AND adjusted_at>=? AND movement_type='quick_restock'
    UNION ALL SELECT pi.product_id,p.created_at,pi.id,'purchase',NULL FROM purchase_items pi JOIN purchases p ON p.id=pi.purchase_id WHERE p.branch_id=? AND p.created_at>=?`,[branchId,period.cutoff,branchId,period.cutoff]);
+  const costEvents=costRows.map(r=>({...r,at:r.event_at,sequence:r.event_sequence,before:r.prior_cost}));
   const rows=productRows({products,movements,sales,items,returns,history,audit,costEvents},period);
   await connection.commit();return rows;
  }catch(error){await connection.rollback();throw error;}finally{connection.release();}

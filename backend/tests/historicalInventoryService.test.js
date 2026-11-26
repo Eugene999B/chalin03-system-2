@@ -22,3 +22,5 @@ test("invalid date and missing edit history fail instead of fabricating historic
  assert.throws(()=>reportingPeriod("2026-02-30",date));
  assert.throws(()=>productRows(data({sales:[{id:1,created_at:"2026-11-08T00:00:00Z",edited_at:"2026-11-12T00:00:00Z"}]}),period),/Missing sale change history/);
 });
+
+test("historical prices use recorded before-values and do not invent missing purchase costs",()=>{const after="2026-11-12T12:00:00Z";const rows=productRows(data({products:[prod(1,10),prod(2,10)],audit:[{id:1,product_id:1,created_at:after,action:"DIRECT_PRODUCT_MASTER_PRICE_CHANGE",metadata_json:{before:{cost_price:"8.00",selling_price:"18.00"}}}],costEvents:[{product_id:2,at:after,kind:"purchase"}]}),period);assert.equal(rows[0].cost_price,"8.00");assert.equal(rows[0].selling_price,"18.00");assert.equal(rows[1].cost_price,null);});
