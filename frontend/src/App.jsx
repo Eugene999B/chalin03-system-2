@@ -16,6 +16,7 @@ import PageErrorBoundary from "./components/PageErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import PublicCookiePreferences from "./components/PublicCookiePreferences";
 import StaffAccountSecurityPage from "./pages/StaffAccountSecurityPage";
+import StaffBusinessPortal from "./pages/StaffBusinessPortal";
 import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
 import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
 import IndependentPartsMarket from "./pages/IndependentPartsMarket";
@@ -250,7 +251,7 @@ export default function App() {
       <WorkspaceContextProvider>
         <BrowserRouter>
         <PublicCookiePreferences />
-        <Routes>
+        {typeof window !== "undefined" && window.location.hostname === "staff.chalin03.com" ? <StaffBusinessPortal /> : <Routes>
           <Route path="/shop" element={<IndependentPartsMarket />} />
           <Route path="/enquire" element={<IndependentQuotePage />} />
           <Route path="/excavators" element={<IndependentDivisionWebsite sector="excavators" />} />
@@ -940,7 +941,7 @@ export default function App() {
           />
 
           <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        </Routes>}
         </BrowserRouter>
       </WorkspaceContextProvider>
     </AuthProvider>
