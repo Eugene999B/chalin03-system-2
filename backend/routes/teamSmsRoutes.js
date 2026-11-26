@@ -8,7 +8,7 @@ const {getSmsConfig,sendSms}=require("../services/smsService");
 const {estimateSmsSegments}=require("../services/smsReliabilityService");
 const {listFinanceCustomers}=require("../services/equipmentFinanceCustomerPortfolioService");
 const {maskPhone}=require("../services/financeSmsCampaignService");
-const {MAX_BATCH,uniqueRecipients,fingerprint,chooseRecipients,messageText}=require("../services/teamSmsPolicy");
+const {MAX_BATCH,uniqueRecipients,fingerprint,chooseRecipients,messageText,classifySubmissionError}=require("../services/teamSmsPolicy");
 const handle=fn=>(req,res,next)=>Promise.resolve(fn(req,res)).catch(next);
 const fail=(res,status,message)=>res.status(status).json({status:"error",message});
 const limiter=buildRateLimiter({windowMinutes:15,max:6,message:"Campaign submission limit reached; review delivery history before sending again."});
@@ -81,18 +81,19 @@ function createTeamSmsRouter(scope){
    if(priorBatch.length&&(priorBatch[0].message!==message||!priorBatch[0].source_reference.startsWith(batchPrefix+req.body.fingerprint+":")))return fail(res,409,"This submission identifier was used for a different campaign.");
    for(const r of selected){
     const ref=batchPrefix+req.body.fingerprint+":"+crypto.createHash("sha256").update(r.phone).digest("hex").slice(0,24);
-    const [prior]=await conn.query("SELECT id,status FROM sms_log WHERE source_reference=? LIMIT 1",[ref]);
-    if(prior.length){results.push({id:r.id,name:r.name,masked_phone:r.masked_phone,status:prior[0].status,log_id:prior[0].id,already_processed:true});continue;}
+    const [prior]=await conn.query("SELECT id,status,status_reason FROM sms_log WHERE source_reference=? LIMIT 1",[ref]);
+    if(prior.length){results.push({id:r.id,name:r.name,masked_phone:r.masked_phone,status:prior[0].status,status_reason:prior[0].status_reason,log_id:prior[0].id,already_processed:true});continue;}
     const [claim]=await conn.query("INSERT INTO sms_log (branch_id,recipient_phone,message,sms_type,status,provider,sender_id,segment_count,estimated_credits,source_reference,sent_by,status_reason) VALUES (?,?,?,'other','pending',?,?,?,?,?,?,?)",[branch(scope,req),r.phone,message,config.provider,config.senderId,metrics.segment_count,metrics.estimated_credits,ref,req.user.id,"Provider submission claimed; check delivery history before retrying."]);
-    let result,status,reason;
-    try{result=await sendSms({to:r.phone,message});status=["accepted","delivered","undelivered","expired","failed","delivery_unknown"].includes(result.status)?result.status:"delivery_unknown";reason=status==="accepted"?"Provider accepted; delivery not confirmed.":"Provider status recorded.";}
-    catch(e){status="delivery_unknown";reason="Provider outcome could not be verified. Do not automatically resend.";}
-    try{await conn.query("UPDATE sms_log SET status=?,provider_message_id=?,provider_status=?,status_reason=?,submitted_at=NOW(),last_status_at=NOW(),delivery_confirmed_at=IF(?='delivered',NOW(),NULL) WHERE id=?",[status,result?.providerMessageId||null,result?.providerStatus||null,reason,status,claim.insertId]);}
-    catch(e){status="delivery_unknown";}
-    results.push({id:r.id,name:r.name,masked_phone:r.masked_phone,status,log_id:claim.insertId});
+    let result,status,reason,providerMessageId=null,providerStatus=null;
+    try{result=await sendSms({to:r.phone,message});status=["accepted","delivered","undelivered","expired","failed","delivery_unknown"].includes(result.status)?result.status:"delivery_unknown";providerMessageId=result.providerMessageId||null;providerStatus=result.providerStatus||null;reason=status==="accepted"?"Provider accepted; delivery not confirmed.":status==="delivered"?"Provider confirmed delivery.":status==="failed"||status==="undelivered"||status==="expired"?"Provider reported "+status+".":"Provider outcome not confirmed.";}
+    catch(e){const failure=classifySubmissionError(e);status=failure.status;reason=failure.reason;providerMessageId=failure.providerMessageId;providerStatus=failure.providerStatus;console.warn("Team SMS submission outcome:",status,"HTTP:",Number(e?.statusCode)||"unknown");}
+    try{await conn.query("UPDATE sms_log SET status=?,provider_message_id=?,provider_status=?,status_reason=?,submitted_at=NOW(),last_status_at=NOW(),delivery_confirmed_at=IF(?='delivered',NOW(),NULL) WHERE id=?",[status,providerMessageId,providerStatus,reason,status,claim.insertId]);}
+    catch(e){status="delivery_unknown";reason="Could not save provider outcome. Check delivery history before retrying.";console.warn("Team SMS log update failed:",e?.code||"unknown");}
+    results.push({id:r.id,name:r.name,masked_phone:r.masked_phone,status,status_reason:reason,log_id:claim.insertId});
    }
    const counts={};for(const row of results)counts[row.status]=(counts[row.status]||0)+1;
-   res.status(202).json({status:"accepted",counts,results,message:"Campaign processed. Accepted is not proof of delivery."});
+   const delivered=counts.delivered||0,accepted=counts.accepted||0,failed=(counts.failed||0)+(counts.undelivered||0)+(counts.expired||0),unknown=results.length-delivered-accepted-failed;
+   res.status(202).json({status:"processed",counts,results,message:"Processed "+results.length+": "+delivered+" delivered, "+accepted+" accepted by provider, "+failed+" failed or undelivered, "+unknown+" unverified."});
   }finally{if(held)await conn.query("SELECT RELEASE_LOCK(?)",[lock]).catch(()=>{});conn.release();}
  }));
  return router;
