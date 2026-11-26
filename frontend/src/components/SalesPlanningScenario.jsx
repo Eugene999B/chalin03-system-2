@@ -1,8 +1,14 @@
 import {useEffect,useState} from "react";
+import StaffPlanningPeriods from "./StaffPlanningPeriods";
+import {isStaffResearchHost} from "../utils/staffResearch";
 import axiosClient from "../api/axiosClient";
 import "../styles/customerCreditProfile.css";
 const money=n=>new Intl.NumberFormat("en-GH",{style:"currency",currency:"GHS"}).format(n/100);
-export default function SalesPlanningScenario({branchId,editable=false}){
+export default function SalesPlanningScenario(props){
+ if(isStaffResearchHost())return <StaffPlanningPeriods scope="Fixed research policy; use Dashboard, Sales History, Reports and Exports for calculated amounts."/>;
+ return <LegacySalesPlanningScenario {...props}/>;
+}
+function LegacySalesPlanningScenario({branchId,editable=false}){
  const [scenario,setScenario]=useState(null),[error,setError]=useState(""),[message,setMessage]=useState(""),[revision,setRevision]=useState(0),[percent,setPercent]=useState("40"),[code,setCode]=useState(""),[busy,setBusy]=useState(false),[hidden,setHidden]=useState(false);
  useEffect(()=>{
    let active=true;setScenario(null);setError("");setHidden(false);

@@ -491,7 +491,7 @@ export default function ExportsPage() {
         </div>
       </section>
 
-      <StaffPlanningPeriods user={user} branchKey={branchCode}/>
+      <StaffPlanningPeriods scope={intelligencePreview?.scope?`Loaded export analysis: ${intelligencePreview.scope.branch}, ${intelligencePreview.scope.from} to ${intelligencePreview.scope.to}; debt is current snapshot`:"Select a date range and calculate the export analysis"} onLoad={loadIntelligencePreview} busy={previewBusy} metrics={intelligencePreview?.summary?[{label:"Sales including tax",value:intelligencePreview.summary.invoiceTotal},{label:"At-sale collections",value:intelligencePreview.summary.collectedAtSale},{label:"Later debt payments",value:intelligencePreview.summary.debtCollected},{label:"Open debt",value:intelligencePreview.summary.openDebtTotal},{label:"Refunds",value:intelligencePreview.summary.refundTotal},{label:"Overdue debt",value:intelligencePreview.summary.overdueTotal}]:[]}/>
       <section className="ec-intelligence-intro">
         <div>
           <span className="ec-eyebrow">LIVE / EVIDENCE-BASED ANALYSIS</span>

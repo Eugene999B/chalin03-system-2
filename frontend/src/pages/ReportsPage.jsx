@@ -471,7 +471,7 @@ export default function ReportsPage() {
   return (
     <div className="boss-mobile-fix" style={styles.page}>
       <MobilePageFix />
-      <StaffPlanningPeriods user={user} branchKey={branchId}/>
+      <StaffPlanningPeriods scope="Selected store and loaded report period; actual net profit includes recorded expenses and returns" metrics={summary?[{label:"Sales before discount",value:totalBeforeDiscount},{label:"Discount",value:totalDiscount},{label:"Sales revenue",value:summary.total_sales_amount},{label:"Gross profit — proportional scenario",value:summary.gross_profit},{label:"Recorded refunds — proportional scenario",value:summary.total_refunds},{label:"Sales collections — proportional scenario",value:summary.total_amount_paid},{label:"Receivables — proportional scenario",value:summary.outstanding_debts},{label:"Net profit — company retention",value:summary.net_profit,profit:true}]:[]}/>
       <ExecutiveReportingStudio context="reports" storeCode={currentStoreCode}
         storeKey={branchId} from={from} to={to} />
 
