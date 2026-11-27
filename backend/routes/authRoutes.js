@@ -1,3 +1,4 @@
+const { clearStaffSession } = require("../services/staffCookieSession");
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -17,6 +18,7 @@ const {
   validateUserCategoryAccess,
 } = require("../services/categoryIsolationService");
 const { isOriginalSystemAdministrator } = require("../security/systemAdminIdentity");
+const { canApplySaleDiscount } = require("../services/saleDiscountAuthorizationService");
 const {
   createSession,
   revokeSession,
@@ -865,6 +867,19 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Once an account has a verified Authenticator, password sign-in can no
+    // longer bypass its new security method, including during the pilot.
+    if (process.env.STAFF_PASSWORDLESS_PILOT === "true") {
+      const {legacyStaffLoginRetired}=require("../services/staffRecoveryPolicy");
+      if (await legacyStaffLoginRetired(pool,user.id)) {
+        return res.status(410).json({
+          status: "error",
+          code: "ACCOUNT_PASSWORD_LOGIN_RETIRED",
+          message: "This account now uses Authenticator or a one-time backup code. Return to secure sign-in.",
+        });
+      }
+    }
+
     const passwordMatches = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatches) {
@@ -1002,6 +1017,7 @@ router.post("/logout", requireAuth, async (req, res) => {
       details: "User logged out and the active server session was revoked.",
     });
 
+    clearStaffSession(req, res);
     return res.json({
       status: "success",
       message: "Logged out successfully.",
@@ -1080,6 +1096,10 @@ router.get("/me", requireAuth, async (req, res) => {
       }
     }
 
+    const profile = await buildUserResponse(user, selectedBranch, workspace);
+    if (req.user.login_method === "authenticator") {
+      profile.must_change_password = false;
+    }
     return res.json({
       status: "success",
       workspace: {
@@ -1087,7 +1107,7 @@ router.get("/me", requireAuth, async (req, res) => {
         code: workspace.code,
         name: workspace.name,
       },
-      user: await buildUserResponse(user, selectedBranch, workspace),
+      user: profile,
     });
   } catch (error) {
     console.error("Me route error:", error);
@@ -1326,8 +1346,26 @@ router.post(
   }
 );
 
+// Current authenticated user's discount permission, available in all workspaces.
+router.get("/discount-permission", requireAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const allowed = await canApplySaleDiscount(req.user);
+    return res.json({ status: "success", can_apply_discount: allowed });
+  } catch (error) {
+    console.error("Authenticated discount policy unavailable:", error);
+    return res.status(503).json({
+      status: "error",
+      code: "DISCOUNT_PERMISSION_UNAVAILABLE",
+      message: "Discount authority could not be verified.",
+    });
+  }
+});
+
 router.commandGateAuth = Object.freeze({
   buildUserSelectByWhere,
+  buildUserResponse,
+  findUsersForLogin,
   createToken,
   isLoginLocked,
   loadUserCategoryState,

@@ -10,6 +10,7 @@ import {
 } from "../context/AuthContext";
 
 import WorkerHrLettersPanel from "../components/WorkerHrLettersPanel";
+import WorkerPayrollPanel from "../components/WorkerPayrollPanel";
 
 import "../styles/expandedWorkerProfile.css";
 
@@ -26,6 +27,8 @@ const emptyCreateForm = {
   department: "",
   employment_type: "permanent",
   employment_start_date: today,
+  basic_salary: "",
+  pay_frequency: "monthly",
 };
 
 const profileFields = [
@@ -272,7 +275,7 @@ function ProtectedUnlock({
   token,
   onToken,
 }) {
-  const [password, setPassword] =
+  const [authenticatorCode, setAuthenticatorCode] =
     useState("");
 
   const [loading, setLoading] =
@@ -293,12 +296,10 @@ function ProtectedUnlock({
     try {
       const response = await axiosClient.post(
         "/release2-final/security/unlock",
-        {
-          password,
-        }
+        { authenticator_code: authenticatorCode }
       );
 
-      setPassword("");
+      setAuthenticatorCode("");
 
       onToken({
         value:
@@ -340,13 +341,13 @@ function ProtectedUnlock({
       ) : (
         <form onSubmit={unlock}>
           <input
-            type="password"
-            value={password}
+            type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} aria-label="Authenticator code"
+            value={authenticatorCode}
             onChange={(event) =>
-              setPassword(event.target.value)
+              setAuthenticatorCode(event.target.value)
             }
-            placeholder="Current password"
-            autoComplete="current-password"
+            placeholder="6-digit Authenticator code"
+            autoComplete="one-time-code"
             required
           />
 
@@ -395,6 +396,14 @@ export default function ExpandedWorkerProfilePage() {
 
   const canDeactivate = auth.hasPermission(
     "workers.deactivate"
+  );
+
+  const canPayrollView = auth.hasPermission(
+    "payroll.view"
+  );
+
+  const canPayrollManage = auth.hasPermission(
+    "payroll.manage"
   );
 
   const [workers, setWorkers] =
@@ -813,6 +822,7 @@ export default function ExpandedWorkerProfilePage() {
 
       setCreateForm(emptyCreateForm);
       setCreateOpen(false);
+      setActiveTab("payroll");
       setMessage(
         `${response.data.message} Generated employee number: ${generatedEmployeeNumber}.`
       );
@@ -1471,19 +1481,17 @@ export default function ExpandedWorkerProfilePage() {
     <main className="expanded-worker-page">
       <header className="expanded-worker-hero">
         <div>
-          <p>Release 2D — Expanded Personnel Records</p>
+          <p>People &amp; Payroll</p>
           <h1>Worker Profiles</h1>
           <span>
-            Central employee identity, photographs,
-            national identification, family,
-            emergency contacts, employment,
-            assignments, licences, private documents,
-            employment letters, disciplinary records
-            and company property.
+            Create each worker once, record the starting salary at onboarding,
+            and let Payroll use that salary automatically every month.
+            Personal, employment, document and company-property history stays
+            together in the same worker record.
           </span>
         </div>
 
-        {canManage ? (
+        {canManage && canPayrollManage ? (
           <button
             type="button"
             onClick={() =>
@@ -1517,6 +1525,12 @@ export default function ExpandedWorkerProfilePage() {
         </Notice>
       ) : null}
 
+      {canManage && !canPayrollManage ? (
+        <Notice type="warning">
+          Worker onboarding now includes the worker's starting salary. Ask a System Administrator to grant Payroll Manage permission before creating a new worker.
+        </Notice>
+      ) : null}
+
       {createOpen ? (
         <section className="expanded-worker-card">
           <h2>Create Worker Profile</h2>
@@ -1526,7 +1540,7 @@ export default function ExpandedWorkerProfilePage() {
             onSubmit={createWorker}
           >
             <Notice type="info">
-              Employee number, card serial, issue date and expiry date are generated automatically from Business & ID Settings.
+              Create the worker and starting salary together. Employee number and ID-card dates are generated automatically; the salary becomes active in Payroll from the employment start date.
             </Notice>
 
             <Field label="Employee number">
@@ -1561,10 +1575,44 @@ export default function ExpandedWorkerProfilePage() {
                       [key]: event.target.value,
                     }))
                   }
-                  required={key === "full_name"}
+                  required={["full_name", "employment_start_date"].includes(key)}
                 />
               </Field>
             ))}
+
+            <Field label="Basic salary (GHS)">
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={createForm.basic_salary}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    basic_salary: event.target.value,
+                  }))
+                }
+                placeholder="e.g. 3500.00"
+              />
+              <small>Payroll will use this salary automatically from the employment start date.</small>
+            </Field>
+
+            <Field label="Pay frequency">
+              <select
+                value={createForm.pay_frequency}
+                onChange={(event) =>
+                  setCreateForm((current) => ({
+                    ...current,
+                    pay_frequency: event.target.value,
+                  }))
+                }
+              >
+                <option value="monthly">Monthly</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Every two weeks</option>
+              </select>
+            </Field>
 
             <Field label="Employment type">
               <select
@@ -1601,7 +1649,7 @@ export default function ExpandedWorkerProfilePage() {
             >
               {saving
                 ? "Creating Worker..."
-                : "Create Worker Profile"}
+                : "Create Worker & Activate Salary"}
             </button>
           </form>
         </section>
@@ -1828,7 +1876,10 @@ export default function ExpandedWorkerProfilePage() {
               </article>
 
               <nav className="worker-profile-tabs">
-                {tabItems.map(([key, label]) => (
+                {[
+                  ...tabItems,
+                  ...(canPayrollView ? [["payroll", "Salary & Payroll"]] : []),
+                ].map(([key, label]) => (
                   <button
                     type="button"
                     key={key}
@@ -1956,6 +2007,14 @@ export default function ExpandedWorkerProfilePage() {
                     )}
                   </section>
                 </div>
+              ) : null}
+
+              {activeTab === "payroll" && canPayrollView ? (
+                <WorkerPayrollPanel
+                  workerId={selectedId}
+                  worker={selectedProfile}
+                  workspaceLabel={activeWorkspaceLabel}
+                />
               ) : null}
 
               {activeTab === "personal" ? (

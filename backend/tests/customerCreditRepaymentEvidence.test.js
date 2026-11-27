@@ -1,0 +1,10 @@
+"use strict";
+const test=require("node:test"),assert=require("node:assert/strict");
+const {buildRepaymentRecommendation}=require("../services/customerCreditRepaymentEvidence");
+const {readGraceDays}=require("../services/customerCreditProfileService");
+const base={id:1,sale_date:"2026-11-26",due_date:"2026-12-26",sale_status:"completed",is_voided:0,has_return:0,payment_type:"credit",amount_owed:"1000.00",amount_paid:"1000.00",balance:"0.00",status:"paid",payments:[{id:1,debt_id:1,amount:"400.00",paid_at:"2026-12-01"},{id:2,debt_id:1,amount:"600.00",paid_at:"2026-12-25"}]};
+const assess=items=>buildRepaymentRecommendation(items,{asOf:"2027-01-05"});
+test("reconciled on-time full repayment earns an advisory recommendation only",()=>{const r=assess([base]);assert.equal(r.recommendedScore,32);assert.equal(r.recommended_limit,30000);assert.equal(r.onTime,1);assert.equal(r.advisoryOnly,true);});
+test("late final installment counts once per settled receipt",()=>{const r=assess([{...base,payments:[base.payments[0],{...base.payments[1],paid_at:"2026-12-28"}]}]);assert.equal(r.late,1);assert.equal(r.recommendedScore,27);});
+test("older, returned, unreconciled and open receipts do not earn score adjustments",()=>{const r=assess([{...base,sale_date:"2026-11-25"},{...base,id:2,has_return:1},{...base,id:3,payments:[]},{...base,id:4,balance:500,status:"partial"}]);assert.equal(r.recommendedScore,30);assert.equal(r.excluded_before_reset,1);assert.equal(r.excluded_unverified,2);assert.equal(r.pending,1);});
+test("credit display uses configured day-based term, defaults to 30",async()=>{assert.equal(await readGraceDays({query:async(sql,p)=>{assert.deepEqual(p,[2]);return [[{debt_reminder_days:45}]];}},2),45);assert.equal(await readGraceDays({query:async()=>[[]]},2),30);});

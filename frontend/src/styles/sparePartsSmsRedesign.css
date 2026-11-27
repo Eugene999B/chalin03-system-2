@@ -1,0 +1,166 @@
+.sms-centre-v2 {
+  --sms-forest: #103c4c;
+  --sms-teal: #12637a;
+  --sms-gold: #c9a253;
+  --sms-border: #dee6ed;
+  --sms-muted: #607387;
+  font-family: inherit;
+  color: #1b3547;
+}
+.sms-centre-v2 * { box-sizing: border-box; }
+.sms-centre-v2__hero {
+  background: linear-gradient(125deg, #0c263e 0%, #123f59 60%, #1b5a72 100%) !important;
+  border-radius: 22px !important;
+  border-bottom: 4px solid #d6ae5b;
+  box-shadow: 0 15px 35px rgba(8,40,65,.12) !important;
+  padding: clamp(20px,4vw,36px) !important;
+  position: relative;
+}
+.sms-centre-v2__hero h1 { font-size: clamp(1.9rem,4vw,2.9rem) !important; letter-spacing: -.04em; }
+.sms-centre-v2__hero p { max-width: 70ch; line-height: 1.6 !important; }
+.sms-centre-v2__metrics { gap: 12px !important; }
+.sms-centre-v2__metrics > div {
+  border: 1px solid var(--sms-border) !important;
+  box-shadow: 0 7px 18px rgba(19,58,80,.04) !important;
+  border-radius: 14px !important;
+  padding: 16px !important;
+  background: #fff !important;
+}
+.sms-centre-v2__metrics > div > span {
+  background: #edf5f7;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 1.35rem;
+  align-self: flex-start;
+}
+.sms-centre-v2__metrics p { font-size: .78rem; font-weight: 750; color: #65768a; margin: 0 0 5px; }
+.sms-centre-v2__metrics strong { font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+.sms-centre-v2__coverage {
+  background: #fff;
+  border: 1px solid var(--sms-border);
+  border-radius: 18px;
+  padding: clamp(18px,3vw,26px);
+  margin-bottom: 20px;
+  box-shadow: 0 8px 22px rgba(19,58,80,.04);
+}
+.sms-centre-v2__eyebrow {
+  font-size: .72rem;
+  letter-spacing: .1em;
+  font-weight: 850;
+  color: #a47728;
+  text-transform: uppercase;
+}
+.sms-centre-v2__coverage-intro h2 {
+  font-size: clamp(1.2rem,2vw,1.45rem);
+  color: #183b50;
+  margin: 5px 0 8px;
+}
+.sms-centre-v2__coverage-intro p { margin: 0 0 18px; max-width: 82ch; color: var(--sms-muted); font-size: .88rem; line-height: 1.6; }
+.sms-centre-v2__coverage-items { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.sms-centre-v2__coverage-items article {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: #f6f9fb;
+  border: 1px solid #e5ebf1;
+  border-radius: 12px;
+  min-width: 0;
+}
+.sms-centre-v2__coverage-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  background: #e0ebf0;
+  border-radius: 10px;
+  color: #24627b;
+  font-size: 1rem;
+  font-weight: 900;
+}
+.sms-centre-v2__coverage-items strong { font-size: .84rem; color: #1c4157; }
+.sms-centre-v2__coverage-items p { color: #5f7485; margin: 6px 0 0; font-size: .77rem; line-height: 1.55; }
+.sms-centre-v2__main-grid {
+  grid-template-columns: minmax(0,1.42fr) minmax(290px,.73fr) !important;
+  gap: 16px !important;
+}
+.sms-centre-v2__composer,
+.sms-centre-v2__history,
+.sms-centre-v2__aside > section {
+  border-radius: 16px !important;
+  border: 1px solid #dce6ed !important;
+  box-shadow: 0 10px 30px rgba(19,58,80,.04) !important;
+}
+.sms-centre-v2__composer { padding: clamp(18px,2vw,26px) !important; }
+.sms-centre-v2__composer h2, .sms-centre-v2__history h2 { font-size: 1.4rem !important; letter-spacing: -.025em; }
+.sms-centre-v2__target-tabs button {
+  border-radius: 10px !important;
+  font-size: .88rem;
+  padding: 11px !important;
+  color: #254759;
+}
+.sms-centre-v2__target-tabs button[style*="rgb(15, 118, 110)"] { background: #1a5774 !important; }
+.sms-centre-v2__templates button {
+  border-radius: 11px !important;
+  background: #f8fafc !important;
+  padding: 13px !important;
+}
+.sms-centre-v2__templates button:hover { border-color: #619ab4 !important; background: #eff7fb !important; }
+.sms-centre-v2__composer input:not([type="checkbox"]),
+.sms-centre-v2__composer textarea,
+.sms-centre-v2__aside input:not([type="checkbox"]),
+.sms-centre-v2__aside textarea,
+.sms-centre-v2__history select {
+  max-width: 100%;
+  width: 100%;
+  color: #1d394b !important;
+  background: #fff !important;
+  border: 1px solid #c9d9e3 !important;
+  border-radius: 10px !important;
+  padding: 12px !important;
+  font: inherit;
+}
+.sms-centre-v2 input:focus-visible, .sms-centre-v2 textarea:focus-visible,
+.sms-centre-v2 select:focus-visible {
+  outline: 2px solid #3d83a2;
+  outline-offset: 2px;
+}
+.sms-centre-v2__composer button[type="submit"] {
+  border-radius: 10px !important;
+  background: #175b74 !important;
+  box-shadow: none !important;
+}
+.sms-centre-v2__composer button[type="submit"]:hover:not(:disabled) { background: #0e465d !important; }
+.sms-centre-v2__aside { position: static !important; gap: 16px !important; }
+.sms-centre-v2__aside > section { padding: 20px !important; }
+.sms-centre-v2__aside h2 { font-size: 1.15rem; margin: 3px 0 10px; }
+.sms-centre-v2__aside p { line-height: 1.6; }
+.sms-centre-v2__boss-panel {
+  background: linear-gradient(125deg,#102b40 0%,#194d64 100%) !important;
+  border-bottom: 3px solid #d6ae5b !important;
+}
+.sms-centre-v2__boss-panel > p:first-child { color: #f5ce7a !important; }
+.sms-centre-v2__boss-panel button { border-radius: 10px !important; box-shadow: none !important; }
+.sms-centre-v2__history { padding: clamp(17px,2vw,26px) !important; }
+.sms-centre-v2__history article { border-radius: 12px !important; }
+.sms-centre-v2__history select { min-height: 45px; }
+.sms-centre-v2__history .secondary-button, .sms-centre-v2__history .danger-button {
+  border-radius: 9px;
+  font-weight: 750;
+}
+@media (max-width: 1180px) {
+  .sms-centre-v2__coverage-items { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 900px) {
+  .sms-centre-v2__main-grid { grid-template-columns: minmax(0,1fr) !important; }
+  .sms-centre-v2__aside { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 640px) {
+  .sms-centre-v2__hero { padding: 20px !important; }
+  .sms-centre-v2__coverage-items { grid-template-columns: 1fr; }
+  .sms-centre-v2__aside { grid-template-columns: 1fr; }
+  .sms-centre-v2__metrics { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .sms-centre-v2__metrics > div { min-width: 0; }
+  .sms-centre-v2__history > div { min-width: 0; }
+}

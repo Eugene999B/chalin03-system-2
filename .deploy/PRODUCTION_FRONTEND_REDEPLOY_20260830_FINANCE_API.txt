@@ -1,0 +1,9 @@
+CHALIN 03 PRODUCTION FRONTEND REDEPLOY TRIGGER
+
+Purpose: rebuild the production frontend after the Finance Settings API routing hotfix.
+
+Source of truth: production
+
+No application or database records are changed by this marker.
+
+The frontend hotfix routes production API calls directly to https://api.chalin03.com/api.

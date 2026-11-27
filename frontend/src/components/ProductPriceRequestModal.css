@@ -1,0 +1,22 @@
+.ppr-overlay{position:fixed;inset:0;z-index:4900;background:rgba(7,24,44,.75);display:grid;place-items:center;padding:16px}
+.ppr-dialog{width:min(640px,100%);max-height:min(92dvh,850px);overflow-y:auto;background:#fff;border-radius:22px;box-shadow:0 30px 90px #0006;color:#0f172a}
+.ppr-header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:20px;background:linear-gradient(130deg,#07182c,#164777);color:#fff}
+.ppr-header span{font-size:11px;letter-spacing:.08em;color:#e0ba28;font-weight:800}
+.ppr-header h2{margin:6px 0;font-size:24px;color:#fff}
+.ppr-header p{font-size:13px;color:#e2e8f0;margin:0}
+.ppr-close{border-radius:12px;min-width:44px;min-height:44px;background:#ffffff20;color:#fff;font-size:24px}
+.ppr-body{padding:18px;display:grid;gap:16px}
+.ppr-explainer{margin:0;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;color:#1e3a8a;font-size:13px;line-height:1.5}
+.ppr-prices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ppr-body label{display:grid;gap:7px;margin:0;color:#0f172a;font-weight:800;font-size:14px;min-width:0}
+.ppr-body label small{font-weight:600;color:#64748b}
+.ppr-body label em{font-style:normal;font-size:12px;color:#1d4ed8;font-weight:700}
+.ppr-body :is(input,textarea){width:100%;margin:0;min-height:44px;border:1px solid #cbd5e1;border-radius:10px;padding:10px;font:inherit;color:#0f172a;background:#fff}
+.ppr-body textarea{min-height:90px;resize:vertical}
+.ppr-footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.ppr-footer button,.ppr-success button{min-height:44px;border-radius:11px;padding:10px 15px;background:#0c385e;color:#fff;font-weight:800}
+.ppr-footer .ppr-secondary{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1}
+.ppr-error{color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:11px}
+.ppr-success{margin:18px;display:grid;gap:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:16px}
+.ppr-success p{margin:0;line-height:1.5}
+@media(max-width:620px){.ppr-overlay{padding:0;place-items:end center}.ppr-dialog{border-radius:22px 22px 0 0;max-height:95dvh}.ppr-prices{grid-template-columns:1fr}.ppr-header{padding:16px}.ppr-header h2{font-size:21px}.ppr-body{padding:14px}.ppr-footer{display:grid;grid-template-columns:1fr}.ppr-footer button{width:100%}}

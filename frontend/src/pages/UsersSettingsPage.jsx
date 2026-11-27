@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import "../styles/staffManagement.css";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
 
@@ -41,6 +43,14 @@ const roleCards = {
     tone: "manager",
     description:
       "Can manage stock, reports, expenses, purchases, returns and business operations.",
+  },
+  staff: {
+    title: "Staff",
+    subtitle: "General operational access",
+    badge: "Staff Access",
+    icon: "👤",
+    tone: "default",
+    description: "Staff access for separately assigned workspaces.",
   },
   cashier: {
     title: "Cashier",
@@ -157,6 +167,13 @@ function strongPasswordError(password) {
   return "";
 }
 
+function StaffActionDialog({title,subtitle,onClose,busy,children}){
+ const ref=useRef(null);
+ useEffect(()=>{const dialog=ref.current;if(!dialog)return;dialog.showModal();return()=>{if(dialog.open)dialog.close();};},[]);
+ return createPortal(<dialog ref={ref} className="staff-action-dialog" aria-labelledby="staff-action-title" onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
+ <header className="staff-dialog-head"><div><small>STAFF MANAGEMENT</small><h2 id="staff-action-title">{title}</h2><p>{subtitle}</p></div><button type="button" aria-label="Close dialog" disabled={busy} onClick={onClose}>×</button></header>
+ <div className="staff-dialog-body">{children}</div></dialog>,document.body);
+}
 export default function UsersSettingsPage() {
   const { user: currentUser } = useAuth();
 
@@ -175,24 +192,45 @@ export default function UsersSettingsPage() {
     branch_name: "",
     receipt_prefix: "",
     tax_rate: 0,
-    debt_reminder_days: 7,
+    debt_reminder_days: 30,
     daily_summary_time: "18:00:00",
     receipt_footer: "",
     worker_id_card_validity_months: 24,
     worker_employee_number_prefix: "CH03",
   });
+  const [systemAdminLoginPhone, setSystemAdminLoginPhone] = useState("");
+  const [savingSystemAdminLoginPhone, setSavingSystemAdminLoginPhone] =
+    useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
+  const [authReset, setAuthReset] = useState(null);
+  const [authResetMode,setAuthResetMode]=useState("unlock");
+  const [authFeedback,setAuthFeedback]=useState(null);
+  const [staffSearch,setStaffSearch]=useState("");
+  const [staffFilter,setStaffFilter]=useState("all");
+  const [expandedStaff,setExpandedStaff]=useState(null);
+  const [staffStatusBusy,setStaffStatusBusy]=useState(null);
+  const [passwordlessMode,setPasswordlessMode]=useState(null);
+  const [authResetCode, setAuthResetCode] = useState("");
+  const [authResetReason, setAuthResetReason] = useState("");
+  const [authResetBusy, setAuthResetBusy] = useState(false);
   const [offboardingUserId, setOffboardingUserId] = useState("");
-  const [activePanel, setActivePanel] = useState("create");
+  const [roleDraftByUser, setRoleDraftByUser] = useState({});
+  const [savingRoleUserId, setSavingRoleUserId] = useState(null);
+  const [activePanel, setActivePanel] = useState("users");
 
   const selectedBranchId = Number(
     currentUser?.branch_id || currentUser?.default_branch_id || 0
   );
 
   const selectedRoleCard = getRoleCard(userForm.role);
+ const visibleUsers=useMemo(()=>users.filter(u=>{
+ const query=staffSearch.trim().toLowerCase();
+ return (!query||[u.full_name,u.username,u.role,u.phone].some(v=>String(v||"").toLowerCase().includes(query)))&&(staffFilter==="all"||(staffFilter==="active"&&u.is_active&&!u.is_login_locked)||(staffFilter==="security"&&u.is_active&&(u.is_login_locked||u.authenticator_active===false))||(staffFilter==="disabled"&&!u.is_active));
+ }),[users,staffSearch,staffFilter]);
+ useEffect(()=>{let mounted=true;axiosClient.get("/auth/passwordless/mode").then(({data})=>{if(mounted)setPasswordlessMode(data?.enforced===true?true:data?.enforced===false?false:null);}).catch(()=>{if(mounted)setPasswordlessMode(null);});return()=>{mounted=false;};},[]);
 
   const userStats = useMemo(() => {
     const total = users.length;
@@ -303,6 +341,17 @@ export default function UsersSettingsPage() {
     setSettings(response.data.settings || {});
   }
 
+  async function loadSystemAdminLoginPhone() {
+    if (!isOriginalSystemAdministrator(currentUser)) return;
+
+    const response = await axiosClient.get(
+      "/settings/system-admin-login-phone"
+    );
+    setSystemAdminLoginPhone(
+      response.data.system_admin_login_phone || ""
+    );
+  }
+
   async function loadPageData() {
     setError("");
     setMessage("");
@@ -334,6 +383,17 @@ export default function UsersSettingsPage() {
         error.response?.data?.message ||
           "Failed to load selected-store settings."
       );
+    }
+
+    if (isOriginalSystemAdministrator(currentUser)) {
+      try {
+        await loadSystemAdminLoginPhone();
+      } catch (error) {
+        loadErrors.push(
+          error.response?.data?.message ||
+            "Failed to load the System Administrator login phone."
+        );
+      }
     }
 
     if (loadErrors.length > 0) {
@@ -432,6 +492,26 @@ export default function UsersSettingsPage() {
     });
   }
 
+  function openSecurityRecovery(user,mode="unlock"){
+ setAuthReset(user);setAuthResetMode(mode);setAuthResetCode("");setAuthResetReason("");setAuthFeedback(null);setResetPasswordForm(emptyResetPasswordForm);setError("");setMessage("");
+ }
+ function closeSecurityRecovery(){
+ if(authResetBusy)return;setAuthReset(null);setAuthResetCode("");setAuthResetReason("");setAuthFeedback(null);
+ }
+ async function revokeStaffAuthenticator(event) {
+ event.preventDefault();
+ if(!authReset||authResetBusy||authFeedback?.kind==="success")return;
+ if(!/^\d{6}$/.test(authResetCode)||authResetReason.trim().length<8){setAuthFeedback({kind:"error",text:"Enter a reason of at least eight characters and your current six-digit Authenticator code."});return;}
+ const target=authReset;setAuthResetBusy(true);setAuthFeedback(null);setError("");setMessage("");
+ try{
+ const {data}=await axiosClient.post("/auth/passwordless/administrator/revoke-authenticator",{user_id:target.id,authenticator_code:authResetCode,reason:authResetReason.trim(),mode:authResetMode});
+ if(data?.status!=="success")throw Error("No success confirmation received.");
+ const text=data.message||"Account recovery completed.";setAuthFeedback({kind:"success",text});
+ setUsers(previous=>previous.map(u=>Number(u.id)===Number(target.id)?{...u,is_login_locked:false,failed_login_attempts:0,...(authResetMode==="reenroll"?{authenticator_active:false}:{})}:u));
+ try{await loadUsers();}catch{setAuthFeedback({kind:"success",text:text+" Staff list refresh failed; refresh the page."});}
+ }catch(err){setAuthFeedback({kind:"error",text:err.response?.data?.message||(err.response?"Staff security reset could not be completed.":"No response received. Refresh the account before retrying; the action may have completed.")});}
+ finally{setAuthResetBusy(false);setAuthResetCode("");}
+ }
   function openResetPassword(user) {
     setMessage("");
     setError("");
@@ -527,7 +607,48 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function changeUserRole(user) {
+    const nextRole = String(roleDraftByUser[user.id] || user.role).toLowerCase();
+    const currentRole = String(user.role || "").toLowerCase();
+    if (nextRole === currentRole) return;
+    const originalOwner = isOriginalSystemAdministrator(currentUser);
+    if (Number(user.id) === Number(currentUser?.id) ||
+        isOriginalSystemAdministrator(user) ||
+        (nextRole === "admin" && !originalOwner) ||
+        String(user.primary_workspace_code || "") !== "spare_parts" ||
+        String(user.category_assignment_status || "") !== "assigned") {
+      setError("This account or role requires separate administrator approval.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Change ${user.full_name} (@${user.username}) from ${getRoleLabel(currentRole)} to ${getRoleLabel(nextRole)}?\n\nTheir permissions will change, and they must sign in again.` +
+      (currentRole === "admin" ? "\n\nDemoting an administrator removes their all-store access." : "")
+    );
+    if (!confirmed) return;
+    setSavingRoleUserId(user.id);
+    setError("");
+    setMessage("");
+    try {
+      const result = await axiosClient.patch(`/users/${user.id}/role`, { role: nextRole });
+      setRoleDraftByUser(previous => {
+        const updated = { ...previous };
+        delete updated[user.id];
+        return updated;
+      });
+      await loadUsers();
+      setMessage(result.data?.message || "Role updated. The user must sign in again.");
+    } catch (err) {
+      setError(err.response?.data?.message || "Role update failed. Refresh the account to confirm its role.");
+    } finally {
+      setSavingRoleUserId(null);
+    }
+  }
+
   async function toggleUserStatus(userId) {
+    if(staffStatusBusy!==null)return;
+    const target=users.find(u=>Number(u.id)===Number(userId));
+    if(!target||!window.confirm((target.is_active?"Temporarily disable ":"Reactivate ")+(target.full_name||target.username)+"?"))return;
+    setStaffStatusBusy(userId);
     setMessage("");
     setError("");
 
@@ -537,12 +658,10 @@ export default function UsersSettingsPage() {
       );
 
       setMessage(response.data.message);
-      loadUsers();
+      await loadUsers();
     } catch (error) {
-      setError(
-        error.response?.data?.message || "Failed to change user status."
-      );
-    }
+      setError(error.response?.data?.message || "Failed to change user status.");
+    } finally{setStaffStatusBusy(null);}
   }
 
   async function secureOffboardUser(user) {
@@ -657,6 +776,38 @@ This disables login, revokes all active sessions and assigned access, and preser
     }
   }
 
+  async function saveSystemAdminLoginPhone() {
+    setMessage("");
+    setError("");
+
+    if (!systemAdminLoginPhone.trim()) {
+      setError("Enter the System Administrator login phone.");
+      return;
+    }
+
+    setSavingSystemAdminLoginPhone(true);
+    try {
+      const response = await axiosClient.patch(
+        "/settings/system-admin-login-phone",
+        { system_admin_login_phone: systemAdminLoginPhone.trim() }
+      );
+      setSystemAdminLoginPhone(
+        response.data.system_admin_login_phone || systemAdminLoginPhone.trim()
+      );
+      setMessage(
+        response.data.message ||
+          "System Administrator login phone updated successfully."
+      );
+    } catch (error) {
+      setError(
+        error.response?.data?.message ||
+          "Failed to update the System Administrator login phone."
+      );
+    } finally {
+      setSavingSystemAdminLoginPhone(false);
+    }
+  }
+
   async function saveSettings(event) {
     event.preventDefault();
 
@@ -667,7 +818,7 @@ This disables login, revokes all active sessions and assigned access, and preser
       const response = await axiosClient.put("/settings", {
         ...settings,
         tax_rate: Number(settings.tax_rate || 0),
-        debt_reminder_days: Number(settings.debt_reminder_days || 7),
+        debt_reminder_days: Number(settings.debt_reminder_days || 30),
         worker_id_card_validity_months: Number(
           settings.worker_id_card_validity_months || 24
         ),
@@ -749,6 +900,33 @@ This disables login, revokes all active sessions and assigned access, and preser
           color: rgba(255, 255, 255, 0.74);
           line-height: 1.6;
           font-weight: 750;
+        }
+
+        .users-role-change {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 7px;
+          border: 1px solid #cfdfd9;
+          background: #f3f9f6;
+          border-radius: 10px;
+          padding: 7px;
+        }
+        .users-role-change label { font-size: 11px; font-weight: 800; color: #31584d; }
+        .users-role-change select {
+          min-width: 112px;
+          max-width: 180px;
+          padding: 8px 10px;
+          border: 1px solid #b7cdc4;
+          border-radius: 7px;
+          color: #17392e;
+          background: white;
+          font-size: 13px;
+        }
+        .users-role-change button:disabled { opacity: .5; cursor: not-allowed; }
+        @media (max-width: 700px) {
+          .users-role-change { width: 100%; }
+          .users-role-change select { flex: 1; max-width: none; min-width: 100px; }
         }
 
         .users-hero-actions,
@@ -1421,9 +1599,7 @@ This disables login, revokes all active sessions and assigned access, and preser
             width: 100%;
           }
 
-          .users-table {
-            min-width: 880px;
-          }
+          .users-control-page { min-width:0; max-width:100%; }
         }
       `}</style>
 
@@ -1535,8 +1711,7 @@ This disables login, revokes all active sessions and assigned access, and preser
         </button>
       </div>
 
-      {message && <div className="users-message success">{message}</div>}
-      {error && <div className="users-message error">{error}</div>}
+      {(message||error)&&<div className={"staff-feedback-toast "+(error?"is-error":"is-success")} role={error?"alert":"status"}><div><strong>{error?"Action needs attention":"Action completed"}</strong><p>{error||message}</p></div><button type="button" aria-label="Dismiss message" onClick={()=>{setError("");setMessage("");}}>×</button></div>}
 
       {canCurrentUserSecurelyOffboardAccounts() && (
         <div className="users-warning-banner">
@@ -1621,7 +1796,7 @@ This disables login, revokes all active sessions and assigned access, and preser
                       </select>
 
                       <div className="users-role-grid">
-                        {Object.entries(roleCards).map(([roleKey, roleInfo]) => (
+                        {Object.entries(roleCards).filter(([roleKey]) => roleKey !== "staff").map(([roleKey, roleInfo]) => (
                           <button
                             key={roleKey}
                             type="button"
@@ -1737,6 +1912,54 @@ This disables login, revokes all active sessions and assigned access, and preser
                 </div>
 
                 <div className="users-card-body">
+                  {isOriginalSystemAdministrator(currentUser) && (
+                    <div className="users-settings-section">
+                      <h3>Protected System Administrator Login</h3>
+                      <p
+                        style={{
+                          marginTop: 0,
+                          color: "#64748b",
+                          fontWeight: 750,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        This number is used only to sign in to the protected
+                        System Administrator account. It is separate from the
+                        Owner Security Alert Phone and the Business Phone /
+                        Receipt MoMo Number below.
+                      </p>
+                      <div className="users-form-grid">
+                        <div className="users-field">
+                          <label>System Administrator Login Phone</label>
+                          <input
+                            value={systemAdminLoginPhone}
+                            onChange={(event) =>
+                              setSystemAdminLoginPhone(event.target.value)
+                            }
+                            placeholder="Example: 0240000000"
+                            inputMode="tel"
+                            autoComplete="tel"
+                          />
+                        </div>
+                        <div
+                          className="users-field"
+                          style={{ alignSelf: "end" }}
+                        >
+                          <button
+                            type="button"
+                            className="users-primary-action"
+                            onClick={saveSystemAdminLoginPhone}
+                            disabled={savingSystemAdminLoginPhone}
+                          >
+                            {savingSystemAdminLoginPhone
+                              ? "Saving Login Phone…"
+                              : "Save Login Phone"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="users-settings-section">
                     <h3>Business Information</h3>
                     <div className="users-form-grid">
@@ -1849,7 +2072,7 @@ This disables login, revokes all active sessions and assigned access, and preser
                         <input
                           type="number"
                           name="debt_reminder_days"
-                          value={settings.debt_reminder_days || 7}
+                          value={settings.debt_reminder_days || 30}
                           onChange={handleSettingsChange}
                         />
                       </div>
@@ -1911,10 +2134,24 @@ This disables login, revokes all active sessions and assigned access, and preser
         )}
       </div>
 
+      {authReset && (
+ <StaffActionDialog title="Account security recovery" subtitle={(authReset.full_name||authReset.username)+" · @"+authReset.username} busy={authResetBusy} onClose={closeSecurityRecovery}>
+ {authFeedback?.kind==="success"?<div className="staff-result success" role="status"><h3>✓ Recovery completed</h3><p>{authFeedback.text}</p><button type="button" className="staff-button primary" disabled={authResetBusy} onClick={closeSecurityRecovery}>Done</button></div>:<form className="staff-recovery-form" onSubmit={revokeStaffAuthenticator}>
+ <p className="staff-helper">Confirm the staff member's identity before making security changes.</p>
+ <div className="staff-choice-grid">
+ <button type="button" className={"staff-choice "+(authResetMode==="unlock"?"selected":"")} aria-pressed={authResetMode==="unlock"} disabled={authResetBusy} onClick={()=>{setAuthResetMode("unlock");setAuthFeedback(null);}}><strong>Unlock sign-in</strong><small>Clear lock and temporary attempt limits. Keep existing Authenticator.</small></button>
+ <button type="button" className={"staff-choice "+(authResetMode==="reenroll"?"selected":"")} aria-pressed={authResetMode==="reenroll"} disabled={authResetBusy} onClick={()=>{setAuthResetMode("reenroll");setAuthFeedback(null);}}><strong>Reset Authenticator</strong><small>Revoke old keys, backup codes and sessions. Require fresh phone verification and setup.</small></button>
+ </div>
+ <div className="staff-notice">{authResetMode==="reenroll"?"Confirm the registered phone can receive verification SMS before resetting. The old Authenticator will stop working.":"Previous sessions and pending sign-in requests are revoked. Existing Authenticator and backup codes are retained."} Staff permissions and business records are unchanged.</div>
+ <div className="staff-field"><label htmlFor="staff-recovery-reason">Reason for recovery</label><textarea id="staff-recovery-reason" rows={2} value={authResetReason} onChange={e=>setAuthResetReason(e.target.value)} maxLength={500} disabled={authResetBusy} placeholder="E.g. Staff unable to complete sign-in" required /></div>
+ <div className="staff-field"><label htmlFor="staff-recovery-code">Your System Administrator Authenticator code</label><input id="staff-recovery-code" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={authResetCode} onChange={e=>setAuthResetCode(e.target.value.replace(/\D/g,"").slice(0,6))} disabled={authResetBusy} placeholder="6-digit code" required /><small>Use a fresh code from your own Authenticator, not the staff member's.</small></div>
+ {authFeedback?.kind==="error"&&<div className="staff-result error" role="alert"><strong>Recovery not confirmed</strong><p>{authFeedback.text}</p></div>}
+ <div className="staff-dialog-actions"><button type="button" className="staff-button secondary" disabled={authResetBusy} onClick={closeSecurityRecovery}>Cancel</button><button type="submit" className="staff-button primary" disabled={authResetBusy}>{authResetBusy?"Processing…":authResetMode==="reenroll"?"Confirm Authenticator reset":"Confirm unlock"}</button></div>
+ </form>}</StaffActionDialog>)}
       {resetPasswordForm.userId && (
-        <div className="users-card users-reset-card">
+        <StaffActionDialog title="Legacy password reset" subtitle={resetPasswordForm.fullName+" · @"+resetPasswordForm.username} busy={resettingPassword} onClose={closeResetPassword}>
           <div className="users-card-header">
-            <h2>Unlock and Reset User Account</h2>
+            <h2>Unlock & Reset legacy password</h2>
             <p>
               Resetting the account for{" "}
               <strong>{resetPasswordForm.fullName}</strong> (
@@ -1975,168 +2212,37 @@ This disables login, revokes all active sessions and assigned access, and preser
               and the user must change the temporary password immediately after
               login. Never send the temporary password by SMS.
             </div>
+            {error&&<div className="staff-result error" role="alert">{error}</div>}
           </div>
-        </div>
+        </StaffActionDialog>
       )}
 
-      {(activePanel === "users" || activePanel === "create") && (
-        <section className="users-card">
-          <div className="users-card-header">
-            <h2>Staff Users</h2>
-            <p>
-              Review account status, store access, reset passwords, temporarily
-               disable staff or securely offboard them while preserving historical identity.
-            </p>
-          </div>
-
-          <div className="users-card-body">
-            {users.length === 0 ? (
-              <div className="users-empty-state">No users found.</div>
-            ) : (
-              <div className="users-table-wrap">
-                <table className="users-table">
-                  <thead>
-                    <tr>
-                      <th>Staff</th>
-                      <th>Role</th>
-                      <th>Store Access</th>
-                      <th>Phone</th>
-                      <th>Status</th>
-                      <th>Created</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {users.map((user) => {
-                      const roleInfo = getRoleCard(user.role);
-                      const protectedAdmin = isOriginalSystemAdministrator(user);
-
-                      return (
-                        <tr key={user.id}>
-                          <td>
-                            <div className="users-staff-cell">
-                              <div className="users-avatar">
-                                {getInitials(user.full_name || user.username)}
-                              </div>
-                              <div>
-                                <strong className="users-staff-name">
-                                  {user.full_name}
-                                </strong>
-                                <span className="users-staff-sub">
-                                  @{user.username}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td>
-                            <span className={`users-role-badge ${roleInfo.tone}`}>
-                              {roleInfo.icon} {roleInfo.title}
-                            </span>
-                          </td>
-
-                          <td>
-                            <span className="users-access-badge">
-                              {getAccessTypeText(user)}
-                            </span>
-                            <br />
-                            <span className="users-staff-sub">
-                              {getUserBranchNames(user)}
-                            </span>
-                          </td>
-
-                          <td>{user.phone || "-"}</td>
-
-                          <td>
-                            {user.is_login_locked ? (
-                              <>
-                                <span className="users-status-badge disabled">
-                                  Account Locked
-                                </span>
-                                <br />
-                                <small className="users-protected-note">
-                                  {Number(user.failed_login_attempts || 0)} failed
-                                  attempts
-                                </small>
-                              </>
-                            ) : (
-                              <span
-                                className={`users-status-badge ${
-                                  user.is_active ? "active" : "disabled"
-                                }`}
-                              >
-                                {user.is_active ? "Active" : "Disabled"}
-                              </span>
-                            )}
-                          </td>
-
-                          <td>{formatDate(user.created_at)}</td>
-
-                          <td>
-                            <div className="users-actions-row">
-                              {canCurrentUserResetAccounts() &&
-                                !protectedAdmin && (
-                                  <button
-                                    type="button"
-                                    className="users-small-button neutral"
-                                    onClick={() => openResetPassword(user)}
-                                  >
-                                    {user.is_login_locked
-                                      ? "Unlock & Reset"
-                                      : "Reset Password"}
-                                  </button>
-                                )}
-
-                              <button
-                                type="button"
-                                className={`users-small-button ${
-                                  user.is_active ? "warning" : "success"
-                                }`}
-                                onClick={() => toggleUserStatus(user.id)}
-                                disabled={protectedAdmin}
-                                title={
-                                  protectedAdmin
-                                    ? "Original System Administrator cannot be disabled."
-                                    : ""
-                                }
-                              >
-                                {user.is_active ? "Disable" : "Activate"}
-                              </button>
-
-                              {canSecurelyOffboardUser(user) && (
-                                <button
-                                  type="button"
-                                  className="users-small-button danger"
-                                  onClick={() => secureOffboardUser(user)}
-                                  disabled={
-                                    Number(offboardingUserId) === Number(user.id)
-                                  }
-                                  title="Deactivate the account, revoke every assigned access path and session, and preserve historical attribution."
-                                >
-                                  {Number(offboardingUserId) === Number(user.id)
-                                    ? "Offboarding..."
-                                    : "Secure Offboard"}
-                                </button>
-                              )}
-                            </div>
-
-                            {protectedAdmin && (
-                              <small className="users-protected-note">
-                                Protected original admin account
-                              </small>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      {activePanel==="users"&&<section className="users-card staff-directory">
+ <div className="staff-directory-head"><div><small>PEOPLE & ACCESS</small><h2>Staff directory</h2><p>Review access and manage account security.</p></div><button type="button" className="staff-button secondary" onClick={()=>setActivePanel("create")}>+ Add staff</button></div>
+ <div className="staff-toolbar"><label className="staff-search"><span>Search staff</span><input type="search" placeholder="Name, username, role or phone" value={staffSearch} onChange={e=>setStaffSearch(e.target.value)}/></label><div className="staff-filters" aria-label="Filter staff">{[["all","All staff"],["active","Active"],["security","Needs attention"],["disabled","Disabled"]].map(([key,label])=><button key={key} type="button" aria-pressed={staffFilter===key} onClick={()=>setStaffFilter(key)}>{label}</button>)}</div></div>
+ <p className="staff-count">{visibleUsers.length} of {users.length} accounts</p>
+ <div className="staff-directory-grid">{visibleUsers.length===0&&<div className="users-empty-state">No matching staff accounts.</div>}
+ {visibleUsers.map(user=>{
+ const roleInfo=getRoleCard(user.role),protectedAdmin=isOriginalSystemAdministrator(user),ownAccount=Number(user.id)===Number(currentUser?.id);
+ const canRecover=canCurrentUserResetAccounts()&&!protectedAdmin&&!ownAccount&&String(user.role).toLowerCase()!=="admin"&&user.is_active;
+ const canChangeRole=!protectedAdmin&&!ownAccount&&String(user.primary_workspace_code || "") === "spare_parts"&&String(user.category_assignment_status || "")==="assigned";
+ const nextRole=String(roleDraftByUser[user.id]||user.role).toLowerCase(),roleChanged=nextRole!==String(user.role||"").toLowerCase(),isRoleSaving=Number(savingRoleUserId)===Number(user.id),expanded=expandedStaff===user.id;
+ return <article key={user.id} className="staff-person-card">
+ <div className="staff-person-top"><div className="staff-person-avatar">{getInitials(user.full_name||user.username)}</div><div className="staff-person-name"><h3>{user.full_name||user.username}</h3><span>@{user.username}</span></div><span className={"staff-pill "+(!user.is_active||user.is_login_locked?"attention":"good")}>{!user.is_active?"Disabled":user.is_login_locked?"Account Locked":"Active"}</span></div>
+ <div className="staff-person-tags"><span className="staff-pill neutral">{roleInfo.title}</span><span className={"staff-pill "+(user.authenticator_active===true?"good":user.authenticator_active===false?"attention":"neutral")}>{user.authenticator_active===true?"Authenticator active":user.authenticator_active===false?"Setup required":"Authenticator status unavailable"}</span></div>
+ <dl className="staff-person-info"><div><dt>Phone</dt><dd>{user.phone||"Not registered"}</dd></div><div><dt>Store access</dt><dd>{getAccessTypeText(user)} · {getUserBranchNames(user)}</dd></div><div><dt>Joined</dt><dd>{formatDate(user.created_at)}</dd></div><div><dt>Failed password attempts</dt><dd>{Number(user.failed_login_attempts||0)}</dd></div></dl>
+ <div className="staff-person-actions">{canRecover?<button type="button" className="staff-button primary" onClick={()=>openSecurityRecovery(user)}>Security recovery</button>:protectedAdmin&&isOriginalSystemAdministrator(currentUser)?<a className="staff-button primary" href="/account-security">My Authenticator</a>:null}<button type="button" className="staff-button secondary" aria-expanded={expanded} onClick={()=>setExpandedStaff(expanded?null:user.id)}>{expanded?"Close actions":"Manage account"}</button></div>
+ {expanded&&<div className="staff-expanded"><h4>Account diagnostics</h4><p>{!user.is_active?"Account disabled. Review the reason before restoring access. Secure offboarding revokes access while preserving historical business records.":user.is_login_locked?"Account locked. The System Administrator can review and unlock it.":user.authenticator_active===false?"No active Authenticator. Staff must complete registered-phone verification and setup.":user.authenticator_active===true?"Authenticator is enrolled. Temporary sign-in limits can still apply.":"Authenticator enrollment could not be checked."}</p>
+ {user.security_last_reset_at&&<p>Last security recovery: {formatDate(user.security_last_reset_at)}</p>}
+ {canChangeRole&&<div className="staff-role-editor"><label htmlFor={`role-for-user-${user.id}`}>Change Role</label><select id={`role-for-user-${user.id}`} value={nextRole} disabled={isRoleSaving} onChange={event=>setRoleDraftByUser(previous=>({...previous,[user.id]:event.target.value}))}>{Object.entries(roleCards).filter(([role])=>role!=="admin"||isOriginalSystemAdministrator(currentUser)||String(user.role).toLowerCase()==="admin").map(([role,card])=><option key={role} value={role}>{card.title}</option>)}</select><button type="button" className="staff-button secondary" disabled={!roleChanged||isRoleSaving} onClick={()=>changeUserRole(user)}>{isRoleSaving?"Updating…":"Save Role"}</button></div>}
+ <div className="staff-management-actions">{canRecover&&<><button type="button" className="staff-button secondary" onClick={()=>openSecurityRecovery(user,"unlock")}>Unlock account</button><button type="button" className="staff-button secondary" onClick={()=>openSecurityRecovery(user,"reenroll")}>Reset Authenticator</button></>}
+ {canCurrentUserResetAccounts()&&!protectedAdmin&&passwordlessMode===false&&<button type="button" className="staff-button secondary" onClick={()=>openResetPassword(user)}>Legacy password reset</button>}
+ {!protectedAdmin&&<button type="button" className="staff-button secondary" disabled={staffStatusBusy!==null} onClick={()=>toggleUserStatus(user.id)}>{staffStatusBusy===user.id?"Updating…":user.is_active?"Temporarily disable":"Activate account"}</button>}
+ {canSecurelyOffboardUser(user)&&<button type="button" className="staff-button danger" disabled={Number(offboardingUserId)===Number(user.id)} onClick={()=>secureOffboardUser(user)}>{Number(offboardingUserId)===Number(user.id)?"Offboarding…":"Secure Offboard"}</button>}</div>
+ {protectedAdmin&&<small className="users-protected-note">Protected original administrator. Use personal security settings to replace your Authenticator.</small>}
+ {passwordlessMode!==false&&<small className="staff-helper">Passwordless sign-in uses Authenticator recovery. Legacy password reset is hidden when enforcement is active or cannot be verified.</small>}
+ </div>}</article>;
+ })}</div></section>}
     </div>
   );
 }

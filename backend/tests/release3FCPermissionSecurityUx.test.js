@@ -27,10 +27,13 @@ test("Release 3F-C explicit deny overrides role and explicit allow", () => {
   assert.deepEqual(result, ["installments.view", "workspace.view"]);
 });
 
-test("Release 3F-C permission catalog labels every code and protects owner controls", () => {
+test("Release 3F-C permission catalog labels every code and protects the immutable owner", () => {
   const descriptors = buildPermissionDescriptors("spare_parts");
   const permissionManager = descriptors.find(
     (item) => item.code === "users.permissions.manage"
+  );
+  const sparePartsSale = descriptors.find(
+    (item) => item.code === "spare_parts.sell"
   );
   const securityAdmin = descriptors.find(
     (item) => item.code === "security.admin"
@@ -38,26 +41,31 @@ test("Release 3F-C permission catalog labels every code and protects owner contr
 
   assert.ok(permissionManager);
   assert.equal(permissionManager.category, "Users and Permissions");
+  assert.equal(permissionManager.owner_protected, true);
+  assert.equal(sparePartsSale.owner_protected, true);
   assert.equal(securityAdmin, undefined);
 
   const protectedOwnerResult = validateOverridePolicy({
     targetUser: { id: 1, username: "admin", role: "admin" },
-    permissionCode: "security.admin",
+    permissionCode: "spare_parts.sell",
     effect: "deny",
     workspaceCode: "spare_parts",
   });
-  assert.equal(protectedOwnerResult.code, "OWNER_PERMISSION_PROTECTED");
+  assert.equal(protectedOwnerResult.code, "OWNER_PERMISSION_IMMUTABLE");
 });
 
-test("Release 3F-C blocks owner-security denial for original administrator", () => {
-  const result = validateOverridePolicy({
-    targetUser: { id: 1, username: "admin", role: "admin" },
-    permissionCode: "security.admin",
-    effect: "deny",
-  });
+test("Release 3F-C blocks every override for original administrator", () => {
+  for (const effect of ["allow", "deny"]) {
+    const result = validateOverridePolicy({
+      targetUser: { id: 1, username: "admin", role: "admin" },
+      permissionCode: "spare_parts.sell",
+      effect,
+      workspaceCode: "spare_parts",
+    });
 
-  assert.equal(result.ok, false);
-  assert.equal(result.code, "OWNER_PERMISSION_PROTECTED");
+    assert.equal(result.ok, false);
+    assert.equal(result.code, "OWNER_PERMISSION_IMMUTABLE");
+  }
 });
 
 test("Release 3F-C blocks protected administration grants to non-admin users", () => {

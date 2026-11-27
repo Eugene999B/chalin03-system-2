@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { resolveStaffBearer } = require("../services/staffCookieSession");
 
 const { pool } = require("../config/db");
 const { validateSession } = require("../services/accountSessionService");
@@ -33,9 +34,10 @@ async function hasColumn(tableName, columnName) {
     const exists = rows.length > 0;
     tableColumnCache.set(cacheKey, exists);
     return exists;
-  } catch {
-    tableColumnCache.set(cacheKey, false);
-    return false;
+  } catch (error) {
+    // An unavailable database is NOT proof that a column is absent.
+    // Never permanently cache a false schema result during an outage.
+    throw error;
   }
 }
 
@@ -94,8 +96,21 @@ async function requireAuth(req, res, next) {
       });
     }
 
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const transport = resolveStaffBearer(req, authHeader.split(" ")[1]);
+    const token = transport.token;
+    if (!token) return res.status(401).json({ status: "error", code: "INVALID_TOKEN", message: "Your secure browser session is no longer active. Please login again." });
+    req.staffCookieSession = transport.cookie;
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({
+        status: "error",
+        code: "INVALID_TOKEN",
+        message: "Invalid or expired token.",
+        request_id: req.requestId || null,
+      });
+    }
     const state = await loadUserSecurityState(decoded.id);
 
     if (!state) {
@@ -182,11 +197,15 @@ async function requireAuth(req, res, next) {
     }
 
     return next();
-  } catch {
-    return res.status(401).json({
+  } catch (error) {
+    // Fail closed when session storage, security-state or permission checks
+    // cannot reach MySQL. A database timeout is NOT an invalid JWT, and a
+    // false 401 makes the browser erase a freshly authenticated session.
+    console.error("Authentication verification unavailable:", error?.code || error?.message);
+    return res.status(503).json({
       status: "error",
-      code: "INVALID_TOKEN",
-      message: "Invalid or expired token.",
+      code: "AUTH_VERIFICATION_UNAVAILABLE",
+      message: "Secure session verification is temporarily unavailable. Please retry shortly.",
       request_id: req.requestId || null,
     });
   }

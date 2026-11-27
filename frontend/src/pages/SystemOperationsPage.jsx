@@ -49,7 +49,7 @@ export default function SystemOperationsPage() {
   const [capabilities, setCapabilities] = useState({});
   const [delegationReason, setDelegationReason] = useState("");
   const [delegationExpiry, setDelegationExpiry] = useState("");
-  const [unlockPassword, setUnlockPassword] = useState("");
+  const [unlockCode, setUnlockCode] = useState("");
   const [protectedToken, setProtectedToken] = useState(null);
   const [actionLoading, setActionLoading] = useState("");
 
@@ -146,9 +146,9 @@ export default function SystemOperationsPage() {
     setMessage("");
     try {
       const response = await axiosClient.post("/release2-final/security/unlock", {
-        password: unlockPassword,
+        authenticator_code: unlockCode,
       });
-      setUnlockPassword("");
+      setUnlockCode("");
       setProtectedToken({
         value: response.data.protected_action_token,
         expiresAt:
@@ -158,7 +158,7 @@ export default function SystemOperationsPage() {
     } catch (requestError) {
       setError(
         requestError.response?.data?.message ||
-          "The current Administrator password was not accepted."
+          "Incorrect or expired Authenticator code. Wait for a new code and retry."
       );
     } finally {
       setActionLoading("");
@@ -171,7 +171,7 @@ export default function SystemOperationsPage() {
       return false;
     }
     if (!tokenReady) {
-      setError("Unlock protected actions with your current password first.");
+      setError("Unlock protected actions with a fresh Authenticator code first.");
       return false;
     }
     if (delegationReason.trim().length < 8) {
@@ -307,7 +307,7 @@ export default function SystemOperationsPage() {
       {delegation?.can_manage ? (
         <section className="delegate-panel">
           <div className="delegate-heading"><div><span>RELEASE 3F-D</span><h2>Delegated System Administrator</h2>
-            <p>The original owner remains permanently protected. Delegation requires a reason, optional expiry, password confirmation, audit evidence and immediate session refresh.</p></div>
+            <p>The original owner remains permanently protected. Delegation requires a reason, optional expiry, Authenticator confirmation, audit evidence and immediate session refresh.</p></div>
             <StatusBadge tone="success">Owner controls</StatusBadge>
           </div>
 
@@ -329,8 +329,8 @@ export default function SystemOperationsPage() {
           </div>
 
           <form className="delegate-unlock" onSubmit={unlockProtectedActions} autoComplete="off">
-            <div><strong>Protected action confirmation</strong><small>{tokenReady ? "Unlocked for this page session." : "Enter your current owner password. Passwords are never recorded."}</small></div>
-            {!tokenReady ? <><input type="password" value={unlockPassword} onChange={(event) => setUnlockPassword(event.target.value)} placeholder="Current owner password" autoComplete="new-password" required /><button type="submit" disabled={actionLoading === "unlock"}>{actionLoading === "unlock" ? "Unlocking…" : "Unlock"}</button></> : <StatusBadge tone="success">Unlocked</StatusBadge>}
+            <div><strong>Protected action confirmation</strong><small>{tokenReady ? "Unlocked for this page session." : "Enter a fresh six-digit code from your Authenticator. Codes are never recorded."}</small></div>
+            {!tokenReady ? <><input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} aria-label="Authenticator code" value={unlockCode} onChange={(event) => setUnlockCode(event.target.value)} placeholder="6-digit Authenticator code" autoComplete="one-time-code" required /><button type="submit" disabled={actionLoading === "unlock"}>{actionLoading === "unlock" ? "Unlocking…" : "Unlock"}</button></> : <StatusBadge tone="success">Unlocked</StatusBadge>}
           </form>
 
           <div className="delegate-actions">

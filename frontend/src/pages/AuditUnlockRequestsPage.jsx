@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import { useAuth } from "../context/AuthContext";
+import CustomerCreditApprovalPanel from "../components/CustomerCreditApprovalPanel";
 
 const REQUEST_AREA_OPTIONS = [
   { value: "", label: "All Areas" },
@@ -583,6 +584,8 @@ export default function AuditUnlockRequestsPage() {
           maintenance clear-data events.
         </small>
       </div>
+
+      <CustomerCreditApprovalPanel branchId={branchId} userId={user?.id} />
 
       <div className="warning-box">
         <strong>Review rule:</strong> Approving an unlock request should explain

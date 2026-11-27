@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axiosClient from "../api/axiosClient";
 import AuditUnlockRequestBox from "../components/AuditUnlockRequestBox";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
+import CreditRequestRecoveryPanel from "../components/CreditRequestRecoveryPanel";
 
 export default function NewSalePage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, branchId);
 
   const currentStoreCode =
     branchCode ||
@@ -70,6 +73,9 @@ export default function NewSalePage() {
     custom_due_dates_text: "",
   });
 
+  const creditRequestRef = useRef(null);
+  const saleSubmittingRef = useRef(false);
+  const [creditPending, setCreditPending] = useState(null);
   const [receipt, setReceipt] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -440,6 +446,39 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     setCustomerMatches([]);
   }, [branchId]);
 
+  // A website order is an enquiry until the authorised POS creates the
+  // genuine sale. Prefill only product, contact and quantities — never payment.
+  useEffect(() => {
+    if (!products.length || Number(branchId)!==1) return;
+    const raw=sessionStorage.getItem("chalin03_web_order_prefill");
+    if (!raw) return;
+    let intake;
+    try { intake=JSON.parse(raw); } catch { sessionStorage.removeItem("chalin03_web_order_prefill"); return; }
+    if (!intake?.id || Number(intake.branch_id)!==1 || !Array.isArray(intake.items)) return;
+    const selected=intake.items.map(line=>{
+      const product=products.find(p=>Number(p.id)===Number(line.product_id));
+      const quantity=Number(line.quantity);
+      if (!product || !Number.isSafeInteger(quantity) || quantity<1 || quantity>Number(product.quantity)) return null;
+      return {...product,quantity};
+    });
+    if (selected.some(line=>!line) || !selected.length) {
+      setError("Website order quantities are no longer available. Check stock before making a sale; the customer has not been charged.");
+      sessionStorage.removeItem("chalin03_web_order_prefill");
+      return;
+    }
+    setCart(selected);
+    setCustomerName(intake.customer_name||"");
+    setCustomerPhone(intake.customer_phone||"");
+    setCustomerLocation(intake.customer_location||"");
+    setCustomerSearch(intake.customer_phone||"");
+    setPaymentType("cash");
+    setAmountPaid("");
+    setPaymentAllocations({cash:"",momo:"",bank:"",other:""});
+    setMessage("Website order "+intake.reference+" loaded. Call the customer, verify actual stock, choose the genuine payment method and only then record the sale.");
+    sessionStorage.setItem("chalin03_web_order_checkout",JSON.stringify(intake));
+    sessionStorage.removeItem("chalin03_web_order_prefill");
+  }, [products,branchId]);
+
   useEffect(() => {
     loadProducts();
     // Reload available products when the selected store changes.
@@ -535,7 +574,9 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     }, 0);
   }, [cart]);
 
-  const cleanDiscountAmount = Math.max(Number(discountAmount || 0), 0);
+  const cleanDiscountAmount = canApplyDiscount
+    ? Math.max(Number(discountAmount || 0), 0)
+    : 0;
   const estimatedAmountDue = Math.max(subtotal - cleanDiscountAmount, 0);
   const immediatePayment = ["cash", "momo", "bank"].includes(paymentType);
   const allocationTotal = Object.values(paymentAllocations).reduce(
@@ -699,6 +740,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
 
     if (!confirmed) return;
 
+    sessionStorage.removeItem("chalin03_web_order_checkout");
     setCart([]);
     setSelectedProductId("");
     setProductSearch("");
@@ -753,7 +795,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       return;
     }
 
-    const discount = Number(discountAmount || 0);
+    const discount = canApplyDiscount ? Number(discountAmount || 0) : 0;
 
     if (Number.isNaN(discount) || discount < 0) {
       setError("Discount must be a valid number and cannot be negative.");
@@ -831,8 +873,10 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       return;
     }
 
+    if (saleSubmittingRef.current) return;
+    saleSubmittingRef.current = true;
     try {
-      const response = await axiosClient.post("/sales", {
+      const salePayload = {
         customer_id: selectedCustomerId ? Number(selectedCustomerId) : null,
         customer_name: cleanCustomerName,
         customer_phone: cleanCustomerPhone,
@@ -863,9 +907,49 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
           product_id: item.id,
           quantity: item.quantity,
         })),
-      });
+      };
+      // Keep the same idempotency key for the exact cart while awaiting review.
+      const fingerprint = JSON.stringify({branchId,userId:user?.id,payload:salePayload});
+      if (creditRequestRef.current?.fingerprint !== fingerprint) {
+        creditRequestRef.current = {fingerprint,key:globalThis.crypto.randomUUID(),pending:false};
+        setCreditPending(null);
+      }
+      const response = await axiosClient.post("/sales",salePayload,{headers:{"x-chalin-credit-request-key":creditRequestRef.current.key}});
+      if(response.status===202 && response.data.status==="pending_approval"){
+        creditRequestRef.current.pending=true;
+        setCreditPending(String(response.data.approval_id));
+        setReceipt(null);
+        setMessage(response.data.message+" Request #"+response.data.approval_id+". After approval, submit this same cart again.");
+        return;
+      }
+      if(!response.data.receipt?.sale_id)throw new Error("Sale confirmation did not include a receipt. Check Sales History before retrying.");
+      creditRequestRef.current=null;
+      setCreditPending(null);
 
       const savedReceipt = response.data.receipt || {};
+      // The POS has already created the financial receipt, stock movement,
+      // Daily Sales and Daily Closing entry. Attach that verified receipt
+      // to the website order exactly once; failure must NEVER retry payment.
+      let websiteOrderLinked=false;
+      const websiteCheckout=sessionStorage.getItem("chalin03_web_order_checkout");
+      if (websiteCheckout && savedReceipt.sale_id && Number(branchId)===1) {
+        try {
+          const original=JSON.parse(websiteCheckout);
+          if (original?.id) {
+            await axiosClient.post("/public-commerce/staff/requests/"+original.id+"/fulfill",{
+              sale_id:Number(savedReceipt.sale_id),payment_method:paymentType,
+            });
+            websiteOrderLinked=true;
+            sessionStorage.removeItem("chalin03_web_order_checkout");
+          }
+        } catch(linkError) {
+          sessionStorage.removeItem("chalin03_web_order_checkout");
+          setError("Sale was recorded and stock deducted. Website order linking needs review: "+
+            (linkError.response?.data?.message||"Open Online Orders and enter this POS sale ID.")+
+            " POS sale #"+savedReceipt.sale_id+". Do not record payment again.");
+        }
+      }
+
 
       setReceipt({
         ...savedReceipt,
@@ -896,7 +980,8 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 ? ` — ${response.data.installment.agreement_number}`
                 : ""
             }.`
-          : "Sale recorded successfully."
+          : websiteOrderLinked ? "Paid POS sale recorded; website order confirmed and inventory updated once."
+            : "Sale recorded successfully."
       );
       setLockedPeriod(null);
 
@@ -933,7 +1018,7 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
     } catch (error) {
       rememberLockedPeriodFromError(error);
       setError(getFriendlyApiError(error, "Failed to record sale."));
-    }
+    } finally { saleSubmittingRef.current=false; }
   }
 
   async function downloadReceiptPdf() {
@@ -1314,6 +1399,16 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
       </div>
 
       {message && <div className="success-box">{message}</div>}
+      {creditPending && <div className="warning-box" role="status">Credit request #{creditPending} is pending or awaiting execution. Use My credit requests below to post or cancel it.</div>}
+      <CreditRequestRecoveryPanel key={String(user?.id)+":"+String(branchId)} branchId={branchId} userId={user?.id} refreshKey={creditPending} onCancelled={(requestId)=>{if(String(requestId)===String(creditPending)){creditRequestRef.current=null;setCreditPending(null);setMessage("Credit request cancelled. No sale was recorded.");}}} onPosted={(requestId,confirmedReceipt)=>{
+        if(String(requestId)===String(creditPending)){
+          setCreditPending(null);
+          setReceipt(confirmedReceipt);
+          setCart([]);
+          setMessage("Approved purchase posted. Do not collect payment again.");
+        }
+        loadProducts();
+      }} />
       {error && <div className="error-box">{error}</div>}
 
       {lockedPeriod && (
@@ -1701,15 +1796,19 @@ Note: Your PDF receipt can also be attached manually on WhatsApp.`;
                 ))}
               </div>
 
-              <label>Discount Amount</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={discountAmount}
-                onChange={(event) => setDiscountAmount(event.target.value)}
-                placeholder="Enter discount amount"
-              />
+              {canApplyDiscount && (
+                <>
+                  <label>Discount Amount (Boss / System Administrator)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={discountAmount}
+                    onChange={(event) => setDiscountAmount(event.target.value)}
+                    placeholder="Enter discount amount"
+                  />
+                </>
+              )}
 
               {immediatePayment ? (
                 <>

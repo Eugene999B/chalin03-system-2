@@ -227,6 +227,18 @@ export function AuthProvider({ children }) {
     setUser(normalizedUser);
   }
 
+  function completePasswordlessLogin(data, fallbackWorkspaceCode = DEFAULT_WORKSPACE_CODE) {
+    const rawUser = data?.user;
+    if (!data?.token || !rawUser) throw new Error("Authenticator sign-in response is incomplete.");
+    const normalized = {
+      ...rawUser,
+      workspace_code: rawUser.workspace_code || data.workspace?.code || fallbackWorkspaceCode,
+      active_workspace: rawUser.active_workspace || data.workspace || null,
+    };
+    saveSession(data.token, normalized);
+    return { ...data, user: normalizeUser(normalized) };
+  }
+
   async function logout({ expectedToken = null } = {}) {
     const tokenBeforeLogout = localStorage.getItem(TOKEN_KEY);
 
@@ -362,12 +374,32 @@ export function AuthProvider({ children }) {
       localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
       setToken(refreshToken);
       setUser(freshUser);
-    } catch {
+    } catch (error) {
       const activeToken = localStorage.getItem(TOKEN_KEY);
 
       // This failure belongs to an older desktop session. It may be a 401,
       // 403, 400 or network failure; none may erase a newer successful login.
       if (activeToken && activeToken !== refreshToken) {
+        adoptLatestStoredSession();
+        return;
+      }
+
+      const statusCode = Number(error?.response?.status || 0);
+      const temporaryVerificationFailure =
+        Boolean(activeToken) &&
+        activeToken === refreshToken &&
+        (statusCode === 0 || statusCode === 408 || statusCode === 429 ||
+          statusCode >= 500);
+      if (temporaryVerificationFailure) {
+        // Keep the previously authenticated identity visible during a
+        // temporary DB/API outage. Every protected API still requires fresh
+        // server-side verification, so no authorization is bypassed.
+        try {
+          sessionStorage.setItem(
+            "chalin03_session_warning",
+            "Connection to the server is temporarily unavailable. Your sign-in has been preserved; please retry."
+          );
+        } catch { /* Storage may be unavailable. */ }
         adoptLatestStoredSession();
         return;
       }
@@ -492,6 +524,7 @@ export function AuthProvider({ children }) {
       },
 
       login,
+      completePasswordlessLogin,
       logout,
       refreshUser,
     };

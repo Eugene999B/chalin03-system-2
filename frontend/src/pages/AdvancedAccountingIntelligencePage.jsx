@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import ExecutiveReportingStudio from "../components/ExecutiveReportingStudio";
 import { useAuth } from "../context/AuthContext";
 
 function todayText() {
@@ -210,6 +211,13 @@ export default function AdvancedAccountingIntelligencePage() {
       icon: "💰",
     },
     {
+      title: "Refunds",
+      value: formatMoney(summary.total_refunds),
+      note: "Executed returns/refunds reduce net sales",
+      icon: "↩️",
+      tone: Number(summary.total_refunds || 0) > 0 ? "warning" : "normal",
+    },
+    {
       title: "Balance",
       value: formatMoney(summary.total_balance),
       note: "Unpaid sales balance",
@@ -230,9 +238,9 @@ export default function AdvancedAccountingIntelligencePage() {
       tone: Number(summary.total_debt_balance || 0) > 0 ? "warning" : "normal",
     },
     {
-      title: "Net Before Stock Cost",
+      title: "Net After Refunds Before Stock Cost",
       value: formatMoney(summary.estimated_net_before_stock_cost),
-      note: "Management estimate only",
+      note: "Sales less discounts, refunds and operating expenses",
       icon: "🧮",
     },
   ];
@@ -454,35 +462,9 @@ export default function AdvancedAccountingIntelligencePage() {
           }
         }
       `}</style>
-      <section style={styles.hero}>
-        <div style={styles.orbitOne} />
-        <div style={styles.orbitTwo} />
-
-        <div style={styles.heroContent}>
-          <div>
-            <p style={styles.eyebrow}>
-              Finance Observatory • {displayStoreCode}
-            </p>
-
-            <h1 style={styles.heroTitle}>Advanced Accounting Intelligence</h1>
-
-            <p style={styles.heroSubtitle}>
-              High-level audit, ledger, profit, debt, stock, SMS,
-              system-control and branch intelligence for{" "}
-              <strong>
-                {displayStoreCode} - {displayStoreName}
-              </strong>
-              . This page is designed like a management intelligence observatory.
-            </p>
-          </div>
-
-          <div style={styles.auditRadar}>
-            <span>Audit Score</span>
-            <strong>{summary.audit_score || 0}/100</strong>
-            <small>{summary.audit_status || "needs_review"}</small>
-          </div>
-        </div>
-      </section>
+      <ExecutiveReportingStudio context="accounting" storeCode={displayStoreCode}
+        storeKey={displayStoreCode} from={startDate} to={endDate}
+        allStores={branchMode === "all"} />
 
       <div style={styles.storeNotice}>
         <span style={styles.noticeIcon}>🔭</span>

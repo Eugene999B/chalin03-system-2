@@ -57,7 +57,25 @@ export default function PublicPageMeta({
     const safePath = String(canonicalPath || "/company/").startsWith("/")
       ? String(canonicalPath || "/company/")
       : `/${canonicalPath}`;
-    const canonicalUrl = `https://chalin03.com${safePath}`;
+    // Dedicated public hostnames canonicalize to their own landing page when
+    // the same division is visited at the root. Existing apex paths remain
+    // canonical for direct /excavators, /shop and other internal links.
+    const publicHomeHosts = {
+      "homepage.chalin03.com":"/",
+      "spareparts.chalin03.com":"/shop",
+      "excavators.chalin03.com":"/excavators",
+      "machines.chalin03.com":"/heavy-machines",
+      "motorcycles.chalin03.com":"/motorcycles",
+      "automobiles.chalin03.com":"/automobiles",
+      "gold.chalin03.com":"/gold",
+      "transport.chalin03.com":"/machine-transport",
+      "hire.chalin03.com":"/equipment-hire-services",
+      "help.chalin03.com":"/customer-help",
+    };
+    const hostname = window.location.hostname.toLowerCase();
+    const officialLanding = publicHomeHosts[hostname] === safePath && window.location.pathname === "/";
+    const preferredHost=Object.entries(publicHomeHosts).find(([,path])=>path===safePath)?.[0];
+    const canonicalUrl = officialLanding ? window.location.origin + "/" : preferredHost ? `https://${preferredHost}/` : `https://homepage.chalin03.com${safePath}`;
 
     document.title = pageTitle;
     setMeta("name", "description", pageDescription);
@@ -67,6 +85,7 @@ export default function PublicPageMeta({
     setMeta("property", "og:description", pageDescription);
     setMeta("property", "og:type", "website");
     setMeta("property", "og:url", canonicalUrl);
+    setMeta("property", "og:image", "https://homepage.chalin03.com/chalin03-logo.png");
     setMeta("name", "twitter:card", "summary_large_image");
     setMeta("name", "twitter:title", pageTitle);
     setMeta("name", "twitter:description", pageDescription);

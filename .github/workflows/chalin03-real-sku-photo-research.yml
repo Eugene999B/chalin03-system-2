@@ -1,0 +1,33 @@
+name: CHALIN03 Real SKU Photo Research
+on:
+  pull_request:
+    paths:
+      - 'frontend/scripts/discoverRealSkuReferencePhotos.mjs'
+      - '.github/workflows/chalin03-real-sku-photo-research.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  research-real-pictures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Research actual licensed photograph candidates for every active Main Store product
+        working-directory: frontend
+        env:
+          MAX_PRODUCTS: '459'
+        run: |
+          set -o pipefail
+          node scripts/discoverRealSkuReferencePhotos.mjs | tee "$RUNNER_TEMP/real-sku-photo-research.log"
+      - name: Preserve researched photo candidates for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: licensed-sku-photograph-candidates
+          path: ${{ runner.temp }}/real-sku-photo-research.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,3 @@
+Railway production deployment trigger.
+
+No application or database logic. This file exists only to produce a fresh commit on the production branch so the connected Railway production service can detect a new revision.

@@ -16,6 +16,9 @@ const { createAgreementForSale } = require("../services/installmentService");
 const { sendInstallmentEventSms } = require("../services/installmentReminderService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateSaleCreateRequest } = require("../validation/financialRequestValidators");
+const {requiredIdentityFields} = require("../services/debtorIdentityPolicy");
+const { canApplySaleDiscount, discountApprovalRequired } =
+  require("../services/saleDiscountAuthorizationService");
 
 const router = express.Router();
 
@@ -588,7 +591,7 @@ async function getSettings(connection, branchId) {
 
     return {
       tax_rate: 0,
-      debt_reminder_days: 7,
+      debt_reminder_days: 30,
       business_name: "Chalin 03 Company Limited",
       business_address: fallbackBranch.location || "",
       business_phone: "0249469080 / 0249995510",
@@ -612,13 +615,8 @@ async function getSettings(connection, branchId) {
   };
 }
 
-function calculateDueDate(daysToAdd) {
-  const date = new Date();
-  const parsedDays = Number(daysToAdd);
-  const days = Number.isFinite(parsedDays) ? parsedDays : 7;
-  date.setUTCDate(date.getUTCDate() + days);
-
-  return date.toISOString().slice(0, 10);
+function calculateDueDate(daysToAdd, saleDate = new Date()) {
+  return require("../services/debtGracePeriodService").calculateDebtDueDate(saleDate,daysToAdd);
 }
 
 function toDateOnly(value) {
@@ -901,8 +899,102 @@ async function findOrCreateCustomer(
   };
 }
 
+// GET /api/sales/discount-permission — current authenticated server-side policy.
+// Registered before the /:id lookup so "discount-permission" is never an ID.
+router.get("/discount-permission", requireAuth, async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    const allowed = await canApplySaleDiscount(req.user);
+    return res.json({ status: "success", can_apply_discount: allowed });
+  } catch (error) {
+    console.error("Discount permission lookup failed:", error);
+    return res.status(503).json({
+      status: "error", code: "DISCOUNT_PERMISSION_UNAVAILABLE",
+      message: "Discount authority could not be verified.",
+    });
+  }
+});
+
+// Separate staging credit approvals: no password forwarding or impersonation.
+router.get("/credit-approvals", requireAuth, async (req,res) => {
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  res.set("Cache-Control","no-store");
+  try{
+    const reviewer=["admin","manager"].includes(String(req.user?.role||"").toLowerCase());
+    const [rows]=await pool.query(
+      "SELECT a.id,a.status,a.requested_by,a.reviewed_by,a.new_debt_pesewas,a.score_at_request,a.limit_at_request_pesewas,a.exposure_at_request_pesewas,a.expires_at,a.created_at,a.review_reason,a.executed_sale_id,a.sale_payload,a.expires_at>UTC_TIMESTAMP() AS active,c.name AS customer_name FROM customer_credit_approval_requests a JOIN customers c ON c.id=a.customer_id AND c.branch_id=a.branch_id WHERE a.branch_id=? AND (?=1 OR a.requested_by=?) ORDER BY a.id DESC LIMIT 200",
+      [branchId,reviewer?1:0,req.user.id]
+    );
+    return res.json({status:"success",requests:rows,can_review:reviewer,preview:true});
+  }catch(error){console.error("Credit queue unavailable:",error.code||error.name);return res.status(503).json({status:"error",message:"Credit approval queue unavailable."});}
+});
+router.post("/credit-approvals/:id/review", requireAuth, async (req,res)=>{
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  if(!["admin","manager"].includes(String(req.user?.role||"").toLowerCase()))return res.status(403).json({status:"error",message:"Reviewer permission required."});
+  const id=Number(req.params.id),action=req.body?.action,reason=req.body?.reason;
+  if(!Number.isSafeInteger(id)||id<=0||!["approve","reject"].includes(action)||typeof reason!=="string"||reason.trim().length<3||reason.trim().length>500)return res.status(400).json({status:"error",message:"A valid request, review decision and reason are required."});
+  let conn;
+  try{
+    const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
+    const verified=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
+    if(!verified.ok)return res.status(verified.status).json({status:"error",code:verified.code,message:verified.message});
+    delete req.body.authenticator_code;
+    conn=await pool.getConnection();await conn.beginTransaction();
+    const decision=await credit.reviewCreditRequest(conn,{branchId,reviewerId:Number(req.user.id),requestId:id,action,reason});
+    await writeAuditEvent({connection:conn,req,branchId,action:"CUSTOMER_CREDIT_REVIEW",actionType:"CUSTOMER_CREDIT_REVIEW",entityType:"credit_approval",entityId:id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:decision});
+    await conn.commit();
+    return res.json({status:"success",decision,message:"Credit request "+decision.status+". No sale has been posted."});
+  }catch(error){if(conn)await conn.rollback();console.error("Credit review failed:",error.code||error.name);return res.status(error.statusCode||503).json({status:"error",code:error.code,message:error.statusCode?error.message:"Credit review could not be saved."});}
+  finally{if(conn)conn.release();}
+});
+
+// Recover an approved purchase from the server, even after the POS is reloaded.
+// Only the authenticated original requester may obtain the request key.
+router.get("/credit-approvals/:id/recovery", requireAuth, async (req,res)=>{
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({status:"error",message:"Invalid credit request."});
+  res.set("Cache-Control","no-store");
+  try{
+    const [rows]=await pool.query("SELECT id,request_key,sale_payload,payload_sha256,status,executed_sale_id,expires_at>UTC_TIMESTAMP() AS active FROM customer_credit_approval_requests WHERE id=? AND branch_id=? AND requested_by=?",[id,branchId,req.user.id]);
+    const row=rows[0];
+    if(!row)return res.status(404).json({status:"error",message:"Your credit request was not found in this store."});
+    if(row.status==="executed")return res.status(409).json({status:"error",code:"CREDIT_ALREADY_EXECUTED",sale_id:row.executed_sale_id,message:"This request has already been posted. Check Sales History."});
+    if(row.status!=="approved"||!Number(row.active))return res.status(409).json({status:"error",message:"Only an active approved request can be recovered."});
+    const {recoverSalePayload}=require("../services/customerCreditApprovalPolicy");
+    return res.json({status:"success",request_key:row.request_key,sale:recoverSalePayload(row.sale_payload,row.payload_sha256)});
+  }catch(error){console.error("Credit recovery failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Credit request recovery failed. No sale was posted."});}
+});
+
+router.post("/credit-approvals/:id/cancel", requireAuth, async (req,res)=>{
+  const credit=require("../services/customerCreditTransactionService");
+  if(!credit.enabled())return res.status(404).json({status:"error",code:"CREDIT_PREVIEW_DISABLED"});
+  const branchId=requireSelectedBranch(req,res);if(!branchId)return;
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({status:"error",message:"Invalid credit request."});
+  let conn;
+  try{
+    conn=await pool.getConnection();await conn.beginTransaction();
+    await conn.query("SELECT id FROM branches WHERE id=? FOR UPDATE",[branchId]);
+    const [updated]=await conn.query("UPDATE customer_credit_approval_requests SET status='cancelled' WHERE id=? AND branch_id=? AND requested_by=? AND status IN ('pending','approved') AND expires_at>UTC_TIMESTAMP()",[id,branchId,req.user.id]);
+    if(updated.affectedRows!==1){await conn.rollback();return res.status(409).json({status:"error",message:"This request is not yours, has expired or is already closed."});}
+    await writeAuditEvent({connection:conn,req,branchId,action:"CUSTOMER_CREDIT_CANCELLED",actionType:"CUSTOMER_CREDIT_CANCELLED",entityType:"credit_approval",entityId:id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{request_id:id}});
+    await conn.commit();return res.json({status:"success",message:"Request cancelled. Any credit reservation was released."});
+  }catch(error){if(conn)await conn.rollback();console.error("Credit cancellation failed:",error.code||error.name);return res.status(503).json({status:"error",message:"Cancellation could not be completed."});}
+  finally{if(conn)conn.release();}
+});
+
 // POST /api/sales
 router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async (req, res) => {
+  // Store-authorised Spare Parts auditors may now record sales at the user's
+  // direction. Existing input validation, store isolation, receipt evidence,
+  // independent approvals and financial integrity checks all still apply.
   const connection = await pool.getConnection();
 
   try {
@@ -962,6 +1054,15 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       return res.status(400).json({
         status: "error",
         message: "Discount must be a valid number and cannot be negative.",
+      });
+    }
+
+    if (discountApprovalRequired(discountAmount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "Only Agyapong Charles (Boss) or the original System Administrator may apply discounts.",
       });
     }
 
@@ -1141,6 +1242,18 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       return res.status(400).json({ status: "error", message: allocationResult.error });
     }
 
+    // Do not allow an ordinary credit checkout to replace the selected
+    // canonical customer's phone identity and thereby evade reconciliation.
+    if (require("../services/customerCreditTransactionService").enabled() && payment.balance>0 && payment_type!=="installment" && customer_id) {
+      const {ghPhone}=require("../services/customerCreditIdentityGuard");
+      const [identityRows]=await connection.query("SELECT phone FROM customers WHERE id=? AND branch_id=? FOR UPDATE",[customer_id,branchId]);
+      const stored=ghPhone(identityRows[0]?.phone);
+      if(!stored || (cleanCustomerPhone && ghPhone(cleanCustomerPhone)!==stored)){
+        await connection.rollback();
+        return res.status(409).json({status:"error",code:"CREDIT_IDENTITY_CHANGE_REQUIRES_REVIEW",message:"Use the verified customer identity. Phone corrections must be made through the authorized identity workflow."});
+      }
+    }
+
     const customer = await findOrCreateCustomer(
       connection,
       branchId,
@@ -1154,6 +1267,47 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
       cleanCustomerName || customer?.name || "Walk-in Customer";
 
     const finalCustomerPhone = cleanCustomerPhone || customer?.phone || null;
+
+    // Protect NEW debt creation even when an old linked customer was saved
+    // before mandatory identity fields existed. Do not rewrite old receipts.
+    const createsDebt=payment.balance>0 || ["credit","mixed"].includes(payment_type);
+    if(createsDebt){
+      const missingIdentity=requiredIdentityFields({
+        name:finalCustomerName,phone:finalCustomerPhone
+      });
+      if(missingIdentity.length){
+        await connection.rollback();
+        return res.status(409).json({
+          status:"error",code:"DEBT_CUSTOMER_IDENTITY_REQUIRED",
+          missing_fields:missingIdentity,
+          message:"Before selling on credit, enter the customer's real two-part name and valid Ghana phone number. No sale, stock movement or debt has been saved."
+        });
+      }
+    }
+
+    let stagedCredit = null;
+    const credit = require("../services/customerCreditTransactionService");
+    const recoveryId = req.get("x-chalin-credit-recovery-id") || null;
+    if(recoveryId && (!credit.enabled() || payment.balance <= 0 || payment_type === "installment" || !/^[1-9][0-9]{0,15}$/.test(recoveryId))){
+      await connection.rollback();
+      return res.status(409).json({status:"error",code:"CREDIT_RECOVERY_NOT_AVAILABLE",message:"This request cannot be recovered in the current sale context."});
+    }
+    if (credit.enabled() && payment.balance > 0 && payment_type !== "installment") {
+      if (!customer?.id) {
+        await connection.rollback();
+        return res.status(409).json({status:"error",code:"CREDIT_CUSTOMER_REQUIRED",message:"Select a verified customer before selling on credit."});
+      }
+      // Bind the exact server-priced sale and payment breakdown, not browser totals.
+      const payload = {customer_id:Number(customer.id),customer_name:finalCustomerName,customer_phone:finalCustomerPhone,customer_location:cleanCustomerLocation||customer.location||null,
+        payment_type,total,discount_amount:discountAmount,tax_amount:taxAmount,paid:payment.amount_paid,tendered:payment.amount_tendered,
+        allocations:allocationResult.allocations,items:saleItems.map(({product_id,quantity,unit_price,line_total})=>({product_id,quantity,unit_price,line_total})).sort((a,b)=>a.product_id-b.product_id)};
+      stagedCredit=await credit.prepareCreditSale(connection,{branchId,customerId:Number(customer.id),userId:Number(req.user.id),requestKey:req.get("x-chalin-credit-request-key"),payload,total,paid:payment.amount_paid,businessDate:today,recoveryId});
+      if(stagedCredit.pending){
+        await writeAuditEvent({connection,req,branchId,action:"CUSTOMER_CREDIT_PENDING",actionType:"CUSTOMER_CREDIT_PENDING",entityType:"credit_approval",entityId:stagedCredit.id,workspaceCode:"spare_parts",outcome:"success",severity:"notice",metadata:{customer_id:customer.id,request_id:stagedCredit.id}});
+        await connection.commit();
+        return res.status(202).json({status:"pending_approval",approval_id:stagedCredit.id,message:"Credit request sent to Approval Centre. No sale, stock movement or payment has been recorded. Do not collect payment or release goods yet."});
+      }
+    }
 
     const [saleResult] = await connection.query(
       `INSERT INTO sales (
@@ -1195,6 +1349,7 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
     );
 
     const saleId = saleResult.insertId;
+    if (stagedCredit?.approvalId) await credit.consumeCreditApproval(connection,stagedCredit.approvalId,saleId);
 
     await replaceSalePaymentAllocations(connection, {
       branchId,
@@ -1400,6 +1555,8 @@ router.post("/", requireAuth, validateRequest(validateSaleCreateRequest), async 
 });
 
 // GET /api/sales
+// Includes the auditor's view-only sales register. Both list and detail
+// remain scoped to the store selected in the authenticated session.
 router.get("/", requireAuth, async (req, res) => {
   try {
     const branchId = requireSelectedBranch(req, res);
@@ -1572,7 +1729,9 @@ router.get("/", requireAuth, async (req, res) => {
 
     sql += ` ORDER BY s.created_at DESC LIMIT 250`;
 
-    const [sales] = await pool.query(sql, params);
+    const [originalSales] = await pool.query(sql, params);
+    const {enrichReceipts,loadDashboardNet}=require("../services/salesReturnReportingService");
+    const sales=await enrichReceipts(pool,branchId,originalSales,{to:to||"",productFilter});
 
     const activeSales = sales.filter(
       (sale) =>
@@ -1587,11 +1746,11 @@ router.get("/", requireAuth, async (req, res) => {
           product_search: productFilter.text || String(product_id || ""),
           receipt_count: activeSales.length,
           quantity_sold: activeSales.reduce(
-            (sum, sale) => sum + Number(sale.matched_product_quantity || 0),
+            (sum, sale) => sum + Number(sale.net_matched_product_quantity || 0),
             0
           ),
           sales_value: activeSales.reduce(
-            (sum, sale) => sum + Number(sale.matched_product_total || 0),
+            (sum, sale) => sum + Number(sale.net_matched_product_total || 0),
             0
           ),
         }
@@ -1610,6 +1769,7 @@ router.get("/", requireAuth, async (req, res) => {
         product_id: product_id || "",
       },
       product_summary: productSummary,
+      ...(req.query.dashboard_periods==="1"?{net_periods:await loadDashboardNet(pool,branchId)}:{}),
       sales,
     });
   } catch (error) {
@@ -1797,6 +1957,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
+    if (discountApprovalRequired(discountAmount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "Only Agyapong Charles (Boss) or the original System Administrator may apply discounts.",
+      });
+    }
+
     if (
       (["credit", "mixed", "installment"].includes(payment_type)) &&
       !cleanCustomerName &&
@@ -1844,6 +2013,19 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const sale = sales[0];
+
+    // Prevent unapproved users from quietly removing or altering an existing
+    // discount while editing a historic sale. Both increases and reversals
+    // of a positive discount require the protected boss identity.
+    if (discountApprovalRequired(sale.discount_amount) &&
+        !(await canApplySaleDiscount(req.user))) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        code: "DISCOUNT_BOSS_ONLY",
+        message: "A discounted sale can only be changed by Agyapong Charles (Boss) or the original System Administrator.",
+      });
+    }
 
     if (sale.payment_type === "installment" || payment_type === "installment") {
       await connection.rollback();
@@ -1900,7 +2082,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const [existingDebts] = await connection.query(
-      `SELECT id
+      `SELECT id, due_date
        FROM debts
        WHERE sale_id = ?
        AND branch_id = ?
@@ -2063,6 +2245,15 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       return res.status(400).json({ status: "error", message: allocationResult.error });
     }
 
+    // Until the dedicated credit correction workflow is implemented, do not
+    // permit the legacy editor to originate or change debt in staging.
+    // The preceding inventory operations remain inside this transaction.
+    if (require("../services/customerCreditTransactionService").enabled() &&
+        (payment.balance > 0 || existingDebts.length > 0 || ["credit","mixed"].includes(payment_type))) {
+      await connection.rollback();
+      return res.status(409).json({status:"error",code:"CREDIT_CORRECTION_REVIEW_REQUIRED",message:"Credit-affecting sale edits require the dedicated credit correction workflow. No changes were saved."});
+    }
+
     const customer = await findOrCreateCustomer(
       connection,
       branchId,
@@ -2074,6 +2265,17 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       cleanCustomerName || customer?.name || sale.customer_name || "Walk-in Customer";
     const finalCustomerPhone =
       cleanCustomerPhone || customer?.phone || sale.customer_phone || null;
+
+    // Existing ownership evidence is tied to immutable sale-line IDs.
+    // Replacing classified lines would destroy the link to the evidence.
+    if(process.env.CHALIN03_OWNERSHIP_PREVIEW==="true"){
+      const [ownershipEvidence]=await connection.query(
+        "SELECT o.sale_item_id FROM sale_item_ownership_classifications o JOIN sale_items si ON si.id=o.sale_item_id WHERE si.sale_id=? LIMIT 1 FOR UPDATE",[id]);
+      if(ownershipEvidence.length){
+        await connection.rollback();
+        return res.status(409).json({status:"error",code:"OWNERSHIP_EVIDENCE_CORRECTION_REQUIRED",message:"This sale has recorded ownership evidence. Use an authorized evidence-preserving correction; no sale, stock or financial changes were saved."});
+      }
+    }
 
     await connection.query(`DELETE FROM sale_items WHERE sale_id = ?`, [id]);
 
@@ -2157,7 +2359,7 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
 
     if (payment.balance > 0 || payment_type === "credit" || payment_type === "mixed") {
       const debtStatus = getDebtStatus(payment.balance, payment.amount_paid);
-      const dueDate = calculateDueDate(settings.debt_reminder_days);
+      const dueDate = existingDebts[0]?.due_date ? toDateOnly(existingDebts[0].due_date) : calculateDueDate(settings.debt_reminder_days,sale.created_at);
 
       if (existingDebts.length > 0) {
         await connection.query(

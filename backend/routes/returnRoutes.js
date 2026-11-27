@@ -6,8 +6,10 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const { requireRole } = require("../middleware/roleMiddleware");
 const { writeAuditEvent } = require("../services/auditTrailService");
 const { markClosingStale } = require("../services/dailyClosingSecurityService");
+const { listActiveReturnReservations } = require("../services/operationalApprovalService");
 const { validateRequest } = require("../middleware/requestValidationMiddleware");
 const { validateReturnCreateRequest } = require("../validation/financialRequestValidators");
+const { calculateReturnLimit } = require("../services/sparePartsReturnLimitService");
 
 const router = express.Router();
 
@@ -55,11 +57,16 @@ async function verifyIndependentReturnApprover(
   if (!approver || Number(approver.is_active) !== 1) {
     return { error: "Independent refund approver was not found or is inactive." };
   }
-  if (!["admin", "manager"].includes(String(approver.role || "").toLowerCase())) {
+  const approverRole = String(approver.role || "").toLowerCase();
+  if (!["admin", "manager"].includes(approverRole)) {
     return { error: "Refund approver must be an active administrator or manager." };
   }
-  if (Number(approver.id) === Number(currentUserId)) {
-    return { error: "The person recording the return cannot approve the same financial refund." };
+
+  const samePerson = Number(approver.id) === Number(currentUserId);
+  if (samePerson && approverRole !== "admin") {
+    return {
+      error: "Only a System Administrator can approve their own financial refund.",
+    };
   }
 
   if (
@@ -190,7 +197,13 @@ router.get(
           s.id,
           s.branch_id,
           s.receipt_number,
+          s.subtotal,
+          s.discount_amount,
+          s.tax_amount,
           s.total,
+          s.amount_paid,
+          s.sale_status,
+          s.is_voided,
           s.payment_type,
           s.created_at,
           COALESCE(s.customer_name, c.name) AS customer_name,
@@ -215,9 +228,10 @@ router.get(
       const [items] = await pool.query(
         `SELECT
           si.product_id,
-          si.product_name,
+          MAX(si.product_name) AS product_name,
           SUM(si.quantity) AS quantity_sold,
-          MAX(si.unit_price) AS unit_price,
+          SUM(si.line_total) AS historical_item_gross,
+          ROUND(SUM(si.line_total) / NULLIF(SUM(si.quantity), 0), 2) AS unit_price,
           SUM(si.line_total) AS line_total,
           COALESCE((
             SELECT SUM(r.quantity)
@@ -230,14 +244,33 @@ router.get(
          INNER JOIN sales s ON si.sale_id = s.id
          WHERE si.sale_id = ?
          AND s.branch_id = ?
-         GROUP BY si.sale_id, si.product_id, si.product_name
-         ORDER BY si.product_name ASC`,
+         GROUP BY si.sale_id, si.product_id
+         ORDER BY product_name ASC`,
         [branchId, saleId, branchId]
       );
+
+      const activeReservations = await listActiveReturnReservations(pool, {
+        branchId,
+        saleId: Number(saleId),
+      });
+      const reservationsByProduct = new Map();
+      for (const reservation of activeReservations) {
+        const key = Number(reservation.product_id);
+        const current = reservationsByProduct.get(key) || [];
+        current.push(reservation);
+        reservationsByProduct.set(key, current);
+      }
 
       const cleanItems = items.map((item) => {
         const quantitySold = Number(item.quantity_sold || 0);
         const returnedQuantity = Number(item.returned_quantity || 0);
+        const reservations = reservationsByProduct.get(Number(item.product_id)) || [];
+        const pendingQuantity = reservations.reduce(
+          (sum, reservation) => sum + Number(reservation.quantity || 0),
+          0
+        );
+        const physicalRemaining = Math.max(0, quantitySold - returnedQuantity);
+        const availableQuantity = Math.max(0, physicalRemaining - pendingQuantity);
 
         return {
           product_id: item.product_id,
@@ -246,7 +279,11 @@ router.get(
           unit_price: Number(item.unit_price || 0),
           line_total: Number(item.line_total || 0),
           returned_quantity: returnedQuantity,
-          remaining_quantity: quantitySold - returnedQuantity,
+          pending_return_quantity: pendingQuantity,
+          active_refund_request_count: reservations.length,
+          active_refund_request_codes: reservations.map((reservation) => reservation.request_code),
+          physical_remaining_quantity: physicalRemaining,
+          remaining_quantity: availableQuantity,
         };
       });
 
@@ -262,6 +299,136 @@ router.get(
       return res.status(500).json({
         status: "error",
         message: "Something went wrong while fetching sale items.",
+      });
+    }
+  }
+);
+
+
+// GET /api/returns/sales/:saleId/refund-quote
+// This is a read-only estimate. Submission and approval recalculate the limit.
+router.get(
+  "/sales/:saleId/refund-quote",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res) => {
+    try {
+      const branchId = getBranchId(req);
+      const saleId = Number(req.params.saleId);
+      const productId = Number(req.query.product_id);
+      const quantity = Number(req.query.quantity);
+      if (![saleId, productId, quantity].every((value) =>
+        Number.isSafeInteger(value) && value > 0
+      )) {
+        return res.status(400).json({
+          status: "error",
+          message: "Receipt, product and quantity must be positive whole numbers.",
+        });
+      }
+
+      const [sales] = await pool.query(
+        `SELECT id, branch_id, sale_status, is_voided,
+                subtotal, discount_amount, tax_amount, total, amount_paid
+         FROM sales WHERE id = ? AND branch_id = ? LIMIT 1`,
+        [saleId, branchId]
+      );
+      const sale = sales[0];
+      if (!sale || sale.sale_status !== "completed" || Number(sale.is_voided || 0) === 1) {
+        return res.status(404).json({
+          status: "error",
+          message: "Active completed receipt not found in the selected store.",
+        });
+      }
+
+      const [items] = await pool.query(
+        `SELECT si.product_id, SUM(si.quantity) AS quantity_sold,
+                SUM(si.line_total) AS historical_item_gross
+         FROM sale_items si
+         INNER JOIN sales s ON s.id = si.sale_id
+         WHERE si.sale_id = ? AND si.product_id = ? AND s.branch_id = ?
+         GROUP BY si.product_id`,
+        [saleId, productId, branchId]
+      );
+      if (!items.length) {
+        return res.status(404).json({
+          status: "error",
+          message: "Product not found on this receipt.",
+        });
+      }
+
+      const [previous] = await pool.query(
+        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity,
+                COALESCE(SUM(CASE WHEN return_type = 'refund'
+                   THEN refund_amount ELSE 0 END), 0) AS previously_refunded
+         FROM returns
+         WHERE branch_id = ? AND sale_id = ? AND product_id = ?`,
+        [branchId, saleId, productId]
+      );
+      const reservations = await listActiveReturnReservations(pool, { branchId, saleId });
+      const activeForProduct = reservations.filter(
+        (reservation) => Number(reservation.product_id) === productId
+      );
+      const quantitySold = Number(items[0].quantity_sold || 0);
+      const remaining = quantitySold - Number(previous[0].returned_quantity || 0);
+      if (activeForProduct.length || quantity > remaining) {
+        return res.status(409).json({
+          status: "error",
+          code: "RETURN_QUANTITY_UNAVAILABLE",
+          message: activeForProduct.length
+            ? "This product already has an active financial return request."
+            : "Only " + Math.max(0, remaining) + " unit(s) remain available for return.",
+        });
+      }
+
+      let limit;
+      try {
+        limit = calculateReturnLimit({
+          saleSubtotal: sale.subtotal,
+          saleDiscount: sale.discount_amount,
+          saleTax: sale.tax_amount,
+          saleTotal: sale.total,
+          historicalItemGross: items[0].historical_item_gross,
+          soldQuantity: quantitySold,
+          returnQuantity: quantity,
+          previouslyRefundedForItem: previous[0].previously_refunded,
+        });
+      } catch {
+        return res.status(409).json({
+          status: "error",
+          code: "ORIGINAL_RECEIPT_RECONCILIATION_REQUIRED",
+          message: "The original receipt requires reconciliation before a refund can be quoted.",
+        });
+      }
+
+      const [previousReceiptRefunds] = await pool.query(
+        `SELECT COALESCE(SUM(refund_amount), 0) AS refunded_total
+         FROM returns WHERE branch_id = ? AND sale_id = ? AND return_type = 'refund'`,
+        [branchId, saleId]
+      );
+      const reservedRefunds = reservations.reduce(
+        (sum, reservation) => sum + Number(reservation.refund_amount || 0), 0
+      );
+      const collectedRemaining = Math.max(0, Math.round(
+        (Number(sale.amount_paid || 0) -
+          Number(previousReceiptRefunds[0].refunded_total || 0) -
+          reservedRefunds) * 100
+      ) / 100);
+      return res.json({
+        status: "success",
+        product_id: productId,
+        quantity,
+        remaining_quantity: remaining,
+        unit_value_estimate: limit.unit_value_estimate,
+        estimated_refund_amount: limit.estimated_return_amount,
+        maximum_refund: Math.min(limit.maximum_refund, collectedRemaining),
+        amount_collected_available: collectedRemaining,
+        historical_item_customer_value: limit.original_item_customer_value,
+      });
+    } catch (error) {
+      console.error("Get sale refund quote error:", error);
+      return res.status(500).json({
+        status: "error",
+        message: "Unable to calculate the historical receipt refund estimate.",
       });
     }
   }
@@ -487,6 +654,11 @@ router.post(
           receipt_number,
           sale_status,
           is_voided,
+          amount_paid,
+          subtotal,
+          discount_amount,
+          tax_amount,
+          total,
           created_at
          FROM sales
          WHERE id = ?
@@ -520,15 +692,15 @@ router.post(
       const [saleItems] = await connection.query(
         `SELECT
           si.product_id,
-          si.product_name,
+          MAX(si.product_name) AS product_name,
           SUM(si.quantity) AS quantity_sold,
-          MAX(si.unit_price) AS unit_price
+          SUM(si.line_total) AS historical_item_gross
          FROM sale_items si
          INNER JOIN sales s ON si.sale_id = s.id
          WHERE si.sale_id = ?
          AND s.branch_id = ?
          AND si.product_id = ?
-         GROUP BY si.product_id, si.product_name
+         GROUP BY si.product_id
          LIMIT 1`,
         [cleanSaleId, branchId, cleanProductId]
       );
@@ -564,8 +736,30 @@ router.post(
 
       const saleItem = saleItems[0];
 
+      if (!req.approvalExecution?.request_id) {
+        const activeReservations = await listActiveReturnReservations(connection, {
+          branchId,
+          saleId: cleanSaleId,
+          forUpdate: true,
+        });
+        const activeForProduct = activeReservations.filter(
+          (reservation) => Number(reservation.product_id) === Number(cleanProductId)
+        );
+        if (activeForProduct.length > 0) {
+          await connection.rollback();
+          return res.status(409).json({
+            status: "error",
+            code: "ACTIVE_RETURN_REQUEST_EXISTS",
+            message: `This item already has an active financial return request (${activeForProduct
+              .map((reservation) => reservation.request_code)
+              .join(", ")}). Resolve that request before recording another return for this item.`,
+          });
+        }
+      }
+
       const [previousReturns] = await connection.query(
-        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity
+        `SELECT COALESCE(SUM(quantity), 0) AS returned_quantity,
+                COALESCE(SUM(CASE WHEN return_type = 'refund' THEN refund_amount ELSE 0 END),0) AS previously_refunded
          FROM returns
          WHERE branch_id = ?
          AND sale_id = ?
@@ -588,7 +782,32 @@ router.post(
         });
       }
 
-      const estimatedReturnAmount = Number(saleItem.unit_price || 0) * cleanQuantity;
+      let refundLimit;
+      try {
+        refundLimit = calculateReturnLimit({
+          saleSubtotal: sales[0].subtotal,
+          saleDiscount: sales[0].discount_amount,
+          saleTax: sales[0].tax_amount,
+          saleTotal: sales[0].total,
+          historicalItemGross: saleItem.historical_item_gross,
+          soldQuantity: quantitySold,
+          returnQuantity: cleanQuantity,
+          previouslyRefundedForItem: previousReturns[0].previously_refunded,
+        });
+      } catch (valuationError) {
+        if (cleanReturnType === "refund") {
+          await connection.rollback();
+          return res.status(409).json({
+            status: "error",
+            code: "ORIGINAL_RECEIPT_RECONCILIATION_REQUIRED",
+            message: "The original item price, discount or tax requires reconciliation before paying out a refund.",
+          });
+        }
+        // Unreconciled legacy prices must not prevent physically returning stock.
+        // A stock-only return can never authorise a cash payout.
+        refundLimit = null;
+      }
+      const estimatedReturnAmount = Number(refundLimit?.estimated_return_amount || 0);
       const finalRefundAmount = cleanReturnType === "refund"
         ? Number(cleanRefundAmount.toFixed(2))
         : 0;
@@ -596,12 +815,34 @@ router.post(
         ? requestedRefundMethod
         : "none";
 
-      if (finalRefundAmount - estimatedReturnAmount > 0.009) {
+      if (cleanReturnType === "refund" &&
+          finalRefundAmount - Number(refundLimit?.maximum_refund || 0) > 0.009) {
         await connection.rollback();
         return res.status(400).json({
           status: "error",
-          message: `Refund amount cannot exceed the returned item value of GHS ${estimatedReturnAmount.toFixed(2)}.`,
+          message: `Refund amount cannot exceed the returned item value of GHS ${Number(refundLimit?.maximum_refund || 0).toFixed(2)}.`,
         });
+      }
+
+      if (cleanReturnType === "refund") {
+        const [priorRefundRows] = await connection.query(
+          `SELECT COALESCE(SUM(refund_amount), 0) AS refunded_total
+           FROM returns
+           WHERE branch_id = ? AND sale_id = ? AND return_type = 'refund'`,
+          [branchId, cleanSaleId]
+        );
+        const collectedAvailable = Math.max(
+          0,
+          Number(sales[0].amount_paid || 0) - Number(priorRefundRows[0]?.refunded_total || 0)
+        );
+        if (finalRefundAmount - collectedAvailable > 0.009) {
+          await connection.rollback();
+          return res.status(409).json({
+            status: "error",
+            code: "REFUND_EXCEEDS_COLLECTED_MONEY",
+            message: `Only GHS ${collectedAvailable.toFixed(2)} of collected customer money remains available to refund on this sale.`,
+          });
+        }
       }
 
       let approver = null;
@@ -662,16 +903,31 @@ router.post(
 
       const returnAmount = estimatedReturnAmount;
 
-      await connection.query(
-        `INSERT INTO activity_log (branch_id, user_id, action, details)
-         VALUES (?, ?, ?, ?)`,
-        [
-          branchId,
-          req.user.id,
-          "CREATE_RETURN",
-          `Returned ${cleanQuantity} x ${saleItem.product_name} from receipt ${sales[0].receipt_number}. Type: ${cleanReturnType}. Refund: GHS ${finalRefundAmount.toFixed(2)} by ${finalRefundMethod}${approver ? ` approved by ${approver.full_name}` : ""}`,
-        ]
-      );
+      await writeAuditEvent({
+        connection,
+        req,
+        branchId,
+        userId: req.user.id,
+        action: "CREATE_RETURN",
+        details: `Returned ${cleanQuantity} x ${saleItem.product_name} from receipt ${sales[0].receipt_number}. Type: ${cleanReturnType}. Refund: GHS ${finalRefundAmount.toFixed(2)} by ${finalRefundMethod}${approver ? ` approved by ${approver.full_name}` : ""}`,
+        workspaceCode: "spare_parts",
+        entityType: "return",
+        entityId: returnResult.insertId,
+        actionType: cleanReturnType === "refund" ? "return_refund_executed" : "stock_return_executed",
+        outcome: "success",
+        severity: cleanReturnType === "refund" ? "high" : "notice",
+        metadata: {
+          approval_request_id: req.approvalExecution?.request_id || null,
+          approval_request_code: req.approvalExecution?.request_code || null,
+          sale_id: cleanSaleId,
+          product_id: cleanProductId,
+          quantity: cleanQuantity,
+          refund_amount: finalRefundAmount,
+          refund_method: finalRefundMethod,
+          refund_reference: cleanRefundReference || null,
+          approved_by: approver?.id || null,
+        },
+      });
 
       const affectedClosing = await markClosingStale(connection, {
         branchId,
@@ -682,6 +938,35 @@ router.post(
         changedBy: req.user.id,
         approvedBy: approver?.id || null,
       });
+
+      if (req.approvalExecution?.request_id) {
+        const durableExecutionResult = {
+          return_id: returnResult.insertId,
+          sale_id: cleanSaleId,
+          product_id: cleanProductId,
+          quantity: cleanQuantity,
+          refund_amount: finalRefundAmount,
+          refund_method: finalRefundMethod,
+          affected_closing_id: affectedClosing?.id || null,
+        };
+        const [approvalUpdate] = await connection.query(
+          `UPDATE audit_unlock_requests
+           SET execution_status = 'executed', executed_at = NOW(),
+               execution_result_json = ?, execution_error = NULL,
+               execution_token_hash = NULL
+           WHERE id = ?
+             AND approval_kind = 'return_refund'
+             AND execution_status = 'executing'`,
+          [JSON.stringify(durableExecutionResult), req.approvalExecution.request_id]
+        );
+        if (Number(approvalUpdate.affectedRows || 0) !== 1) {
+          const error = new Error(
+            "The approval request could not be finalized atomically with the return."
+          );
+          error.code = "RETURN_APPROVAL_FINALIZATION_FAILED";
+          throw error;
+        }
+      }
 
       await connection.commit();
 
@@ -701,6 +986,7 @@ router.post(
           refund_method: finalRefundMethod,
           refund_reference: cleanRefundReference || null,
           approved_by: approver?.full_name || null,
+          approval_request_id: req.approvalExecution?.request_id || null,
         },
         affected_closing: affectedClosing,
       });

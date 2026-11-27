@@ -27,6 +27,9 @@ const {
   normalizeCategory,
 } = require("../services/categoryIsolationService");
 
+const { verifyStaffProtectedAction } = require("../services/staffProtectedActionService");
+const { protectedActionHash } = require("../services/protectedActionHash");
+
 const router = express.Router();
 
 const SYSTEM_ADMIN_ID = Number(
@@ -157,9 +160,24 @@ const COMMON_DEPENDENCIES = [
   "installment_reminder_log",
 ];
 
+const PAYROLL_WORKFORCE_TABLES = Object.freeze([
+  "payroll_statutory_rule_versions",
+  "payroll_compensation_profiles",
+  "payroll_recurring_components",
+  "payroll_periods",
+  "payroll_entries",
+  "payroll_entry_lines",
+  "payroll_salary_payments",
+  "payroll_adjustment_requests",
+  "payroll_worker_loans",
+  "payroll_loan_transactions",
+  "payroll_payslips",
+]);
+
 const SCOPE_TABLES = Object.freeze({
   spare_parts: [
     ...COMMON_DEPENDENCIES,
+    ...PAYROLL_WORKFORCE_TABLES,
     "products",
     "stock_adjustments",
     "suppliers",
@@ -188,6 +206,7 @@ const SCOPE_TABLES = Object.freeze({
 
   mining: [
     ...COMMON_DEPENDENCIES,
+    ...PAYROLL_WORKFORCE_TABLES,
     "mining_sites",
     "user_mining_site_access",
     "mining_daily_logs",
@@ -230,6 +249,7 @@ const SCOPE_TABLES = Object.freeze({
 
   equipment_hire: [
     ...COMMON_DEPENDENCIES,
+    ...PAYROLL_WORKFORCE_TABLES,
     "user_hire_location_access",
     "hire_customers",
     "hire_enquiries",
@@ -344,6 +364,7 @@ const CATEGORY_TABLES = Object.freeze({
   ]),
 
   financial: new Set([
+    ...PAYROLL_WORKFORCE_TABLES,
     "suppliers",
     "purchases",
     "purchase_items",
@@ -398,6 +419,7 @@ const CATEGORY_TABLES = Object.freeze({
   ]),
 
   workforce: new Set([
+    ...PAYROLL_WORKFORCE_TABLES,
     "users",
     "user_branch_access",
     "user_business_access",
@@ -892,7 +914,7 @@ async function protectedActionRecord(
     200
   );
 
-  if (!rawToken) {
+  if (!rawToken || !req.user?.session_id) {
     return null;
   }
 
@@ -909,7 +931,7 @@ async function protectedActionRecord(
        AND expires_at > NOW()
      LIMIT 1`,
     [
-      tokenHash(rawToken),
+      protectedActionHash(rawToken, req.user),
       req.user.id,
     ]
   );
@@ -943,7 +965,7 @@ function requireProtectedAction(
             code:
               "PROTECTED_ACTION_REQUIRED",
             message:
-              "Unlock protected actions with your current password before continuing.",
+              "Unlock protected actions with a fresh six-digit Authenticator code before continuing.",
           });
       }
 
@@ -1855,64 +1877,27 @@ router.post(
   ),
   asyncHandler(
     async (req, res) => {
-      const password =
-        req.body?.password;
+      res.set("Cache-Control", "no-store");
+      const result = await verifyStaffProtectedAction({
+        userId: req.user.id,
+        code: req.body?.authenticator_code,
+      });
 
-      if (!password) {
-        return res
-          .status(400)
-          .json({
-            status: "error",
-            message:
-              "Current password is required.",
-          });
-      }
-
-      const [users] =
-        await pool.query(
-          `SELECT
-             id,
-             password_hash,
-             is_active
-           FROM users
-           WHERE id = ?
-           LIMIT 1`,
-          [req.user.id]
-        );
-
-      const user = users[0];
-
-      if (
-        !user ||
-        !booleanValue(
-          user.is_active
-        ) ||
-        !(await bcrypt.compare(
-          password,
-          user.password_hash
-        ))
-      ) {
+      if (!result.ok) {
         await appendLedger({
           req,
-          actorUserId:
-            req.user.id,
-          actionCode:
-            "PROTECTED_ACTION_UNLOCK_FAILED",
+          actorUserId: req.user.id,
+          actionCode: "PROTECTED_ACTION_UNLOCK_FAILED",
           outcome: "failure",
           severity: "warning",
-          payload: {
-            password_recorded:
-              false,
-          },
+          payload: { verification_method: "authenticator", reason: result.code },
         });
-
-        return res
-          .status(403)
-          .json({
-            status: "error",
-            message:
-              "Current password was not accepted.",
-          });
+        if (result.status === 429) res.set("Retry-After", "900");
+        return res.status(result.status).json({
+          status: "error",
+          code: result.code,
+          message: result.message,
+        });
       }
 
       await pool.query(
@@ -1941,7 +1926,7 @@ router.post(
          )`,
         [
           req.user.id,
-          tokenHash(token),
+          protectedActionHash(token, req.user),
           requestIp(req) ||
             null,
           requestUserAgent(req) ||
@@ -1958,8 +1943,8 @@ router.post(
         payload: {
           window_minutes:
             PROTECTED_WINDOW_MINUTES,
-          password_recorded:
-            false,
+          verification_method: "authenticator",
+          code_recorded: false,
         },
       });
 

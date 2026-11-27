@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { WorkspaceContextProvider } from "./context/WorkspaceContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -14,6 +14,20 @@ import GroupExecutiveLayout from "./layouts/GroupExecutiveLayout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
 import LoginPage from "./pages/LoginPage";
+import PublicCookiePreferences from "./components/PublicCookiePreferences";
+import StaffAccountSecurityPage from "./pages/StaffAccountSecurityPage";
+import StaffBusinessPortal from "./pages/StaffBusinessPortal";
+import PublicCompanyHomePage from "./pages/PublicCompanyHomePage";
+import CompanyExperienceV3 from "./pages/CompanyExperienceV3";
+import IndependentPartsMarket from "./pages/IndependentPartsMarket";
+import IndependentDivisionWebsite from "./pages/IndependentDivisionWebsite";
+import IndependentHelpCentre from "./pages/IndependentHelpCentre";
+import IndependentQuotePage from "./pages/IndependentQuotePage";
+import PublicShopPage from "./pages/PublicShopPage";
+import PublicEnquiryPage from "./pages/PublicEnquiryPage";
+import PublicSectorPage from "./pages/PublicSectorPage";
+import PublicHelpPage from "./pages/PublicHelpPage";
+import WebsiteCommerceControlPage from "./pages/WebsiteCommerceControlPage";
 import DashboardPage from "./pages/DashboardPage";
 import ProductsPage from "./pages/ProductsPage";
 import NewSalePage from "./pages/NewSalePage";
@@ -21,12 +35,14 @@ import InstallmentsPage from "./pages/InstallmentsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import DebtsPage from "./pages/DebtsPage";
 import ReportsPage from "./pages/ReportsPage";
-import UsersSettingsPage from "./pages/UsersSettingsPage";
+import BusinessOwnershipReportingPage from "./pages/BusinessOwnershipReportingPage";
+import SparePartsUsersSettingsWithDebtRemindersPage from "./pages/SparePartsUsersSettingsWithDebtRemindersPage";
 import UserPermissionManagerPage from "./pages/UserPermissionManagerPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import PurchasesPage from "./pages/PurchasesPage";
 import ReturnsPage from "./pages/ReturnsPage";
 import ExportsPage from "./pages/ExportsPage";
+import SparePartsBlindCountPage from "./pages/SparePartsBlindCountPage";
 import ActivityLogPage from "./pages/ActivityLogPage";
 import BackupPage from "./pages/BackupPage";
 import SystemOperationsPage from "./pages/SystemOperationsPage";
@@ -65,6 +81,12 @@ const EquipmentSalesWorkspacePage = lazy(() =>
 const EquipmentSalesReportsPage = lazy(() =>
   import("./pages/EquipmentSalesReportsPage")
 );
+const ExcavatorPriceDocumentsPage = lazy(() =>
+  import("./pages/ExcavatorPriceDocumentsPage")
+);
+const EquipmentBusinessWorkforcePage = lazy(() =>
+  import("./pages/EquipmentBusinessWorkforcePage")
+);
 const HireCommercialControlPage = lazy(() =>
   import("./pages/HireCommercialControlPage")
 );
@@ -88,9 +110,13 @@ const EmploymentDocumentsPage = lazy(() => import("./pages/EmploymentDocumentsPa
 const DocumentSignatureSettingsPage = lazy(() =>
   import("./pages/DocumentSignatureSettingsPage")
 );
+const PayrollProcessingCentrePage = lazy(() =>
+  import("./pages/PayrollProcessingCentrePage")
+);
 
-const businessWorkRoles = ["admin", "manager", "cashier"];
+const businessWorkRoles = ["admin", "manager", "cashier", "auditor"];
 const adminManagerRoles = ["admin", "manager"];
+const sparePartsOperatorRoles = ["admin", "manager", "auditor"];
 const auditReadRoles = ["admin", "manager", "auditor"];
 const adminOnlyRoles = ["admin"];
 
@@ -171,6 +197,40 @@ function SparePartsHomePage() {
   return safe(<DashboardPage />);
 }
 
+function RootWorkspaceEntry() {
+  const location = useLocation();
+  const { isLoggedIn, loading } = useAuth();
+
+  // All public hostnames share the existing Cloudflare Pages SPA and API.
+  // Both operational hostnames use the same application, route permissions and API.
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
+  if (location.pathname === "/") {
+    const divisionHosts = {
+      "excavators.chalin03.com": "excavators",
+      "machines.chalin03.com": "heavy-machines",
+      "motorcycles.chalin03.com": "motorcycles",
+      "automobiles.chalin03.com": "automobiles",
+      "gold.chalin03.com": "gold",
+      "transport.chalin03.com": "machine-transport",
+      "hire.chalin03.com": "equipment-hire"
+    };
+    if (["chalin03.com","www.chalin03.com","homepage.chalin03.com"].includes(hostname)) return safe(<CompanyExperienceV3 />);
+    if (hostname === "spareparts.chalin03.com") return safe(<IndependentPartsMarket />);
+    if (hostname === "help.chalin03.com") return safe(<IndependentHelpCentre />);
+    if (divisionHosts[hostname]) return safe(<IndependentDivisionWebsite sector={divisionHosts[hostname]} />);
+    if (["work.chalin03.com", "staff.chalin03.com"].includes(hostname) && !loading && !isLoggedIn) return <LoginPage />;
+  }
+  if (!loading && !isLoggedIn && location.pathname === "/") {
+    return safe(<CompanyExperienceV3 />);
+  }
+
+  return (
+    <WorkspaceShell allowedWorkspaces={SPARE_PARTS_WORKSPACE}>
+      <SparePartsLayout />
+    </WorkspaceShell>
+  );
+}
+
 function LegacyWorkspaceRedirect({ target }) {
   const { workspaceCode } = useAuth();
 
@@ -190,8 +250,20 @@ export default function App() {
     <AuthProvider>
       <WorkspaceContextProvider>
         <BrowserRouter>
-        <Routes>
+        <PublicCookiePreferences />
+        {typeof window !== "undefined" && window.location.hostname === "staff.chalin03.com" ? <StaffBusinessPortal /> : <Routes>
+          <Route path="/shop" element={<IndependentPartsMarket />} />
+          <Route path="/enquire" element={<IndependentQuotePage />} />
+          <Route path="/excavators" element={<IndependentDivisionWebsite sector="excavators" />} />
+          <Route path="/heavy-machines" element={<IndependentDivisionWebsite sector="heavy-machines" />} />
+          <Route path="/motorcycles" element={<IndependentDivisionWebsite sector="motorcycles" />} />
+          <Route path="/automobiles" element={<IndependentDivisionWebsite sector="automobiles" />} />
+          <Route path="/gold" element={<IndependentDivisionWebsite sector="gold" />} />
+          <Route path="/machine-transport" element={<IndependentDivisionWebsite sector="machine-transport" />} />
+          <Route path="/equipment-hire-services" element={<IndependentDivisionWebsite sector="equipment-hire" />} />
+          <Route path="/customer-help" element={<IndependentHelpCentre />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/account-security" element={<ProtectedRoute><StaffAccountSecurityPage /></ProtectedRoute>} />
           <Route path="/owner-recovery" element={<OwnerRecoveryPage />} />
           <Route path="/mining-operations" element={<MiningPortalPage />} />
           <Route path="/equipment-hire" element={<EquipmentHirePortalPage />} />
@@ -199,25 +271,25 @@ export default function App() {
           {/* Spare Parts keeps the original two-store layout and navigation. */}
           <Route
             path="/"
-            element={
-              <WorkspaceShell allowedWorkspaces={SPARE_PARTS_WORKSPACE}>
-                <SparePartsLayout />
-              </WorkspaceShell>
-            }
+            element={<RootWorkspaceEntry />}
           >
             <Route index element={<SparePartsHomePage />} />
 
             <Route
               path="products"
-              element={rolePage(businessWorkRoles, <ProductsPage />)}
+              element={rolePage([...businessWorkRoles, "staff"], <ProductsPage />)}
             />
+            <Route path="online-orders"
+              element={rolePage([...businessWorkRoles, "staff"], <WebsiteCommerceControlPage mode="orders" />)} />
+            <Route path="online-catalogue"
+              element={rolePage(["admin"], <WebsiteCommerceControlPage mode="catalogue" />)} />
             <Route
               path="new-sale"
               element={rolePage(businessWorkRoles, <NewSalePage />)}
             />
             <Route
               path="sales-history"
-              element={rolePage(businessWorkRoles, <SalesHistoryPage />)}
+              element={rolePage([...businessWorkRoles, "auditor"], <SalesHistoryPage />)}
             />
             <Route
               path="installments"
@@ -253,6 +325,7 @@ export default function App() {
               path="reports"
               element={rolePage(auditReadRoles, <ReportsPage />)}
             />
+            <Route path="business-ownership" element={rolePage(adminOnlyRoles, <BusinessOwnershipReportingPage />)} />
             <Route
               path="audit-accounting"
               element={rolePage(auditReadRoles, <AuditAccountingPage />)}
@@ -272,6 +345,10 @@ export default function App() {
               path="exports"
               element={rolePage(auditReadRoles, <ExportsPage />)}
             />
+            <Route
+              path="stock-count"
+              element={rolePage(auditReadRoles, <SparePartsBlindCountPage />)}
+            />
 
             <Route
               path="audit-unlock-requests"
@@ -279,33 +356,33 @@ export default function App() {
             />
             <Route
               path="low-stock"
-              element={rolePage(adminManagerRoles, <LowStockPage />)}
+              element={rolePage(sparePartsOperatorRoles, <LowStockPage />)}
             />
             <Route
               path="stock-transfers"
-              element={rolePage(adminManagerRoles, <StockTransfersPage />)}
+              element={rolePage(sparePartsOperatorRoles, <StockTransfersPage />)}
             />
             <Route
               path="expenses"
-              element={rolePage(adminManagerRoles, <ExpensesPage />)}
+              element={rolePage(sparePartsOperatorRoles, <ExpensesPage />)}
             />
             <Route
               path="purchases"
-              element={rolePage(adminManagerRoles, <PurchasesPage />)}
+              element={rolePage(sparePartsOperatorRoles, <PurchasesPage />)}
             />
             <Route
               path="returns"
-              element={rolePage(adminManagerRoles, <ReturnsPage />)}
+              element={rolePage(sparePartsOperatorRoles, <ReturnsPage />)}
             />
             <Route
               path="daily-closing"
-              element={rolePage(adminManagerRoles, <DailyClosingPage />)}
+              element={rolePage(sparePartsOperatorRoles, <DailyClosingPage />)}
             />
             <Route path="sms" element={rolePage(adminManagerRoles, <SmsPage />)} />
 
             <Route
               path="users-settings"
-              element={rolePage(adminOnlyRoles, <UsersSettingsPage />)}
+              element={rolePage(adminOnlyRoles, <SparePartsUsersSettingsWithDebtRemindersPage />)}
             />
             <Route
               path="user-permissions"
@@ -341,6 +418,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -466,6 +550,13 @@ export default function App() {
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -611,10 +702,24 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -686,6 +791,12 @@ export default function App() {
               )}
             />
             <Route
+              path="price-documents"
+              element={rolePage(adminOnlyRoles,
+                permissionOnlyPage("fleet.assets.view", <ExcavatorPriceDocumentsPage />)
+              )}
+            />
+            <Route
               path="catalogue"
               element={permissionPage(HIRE_SECTION_PERMISSIONS.fleet, <FleetAssetsPage />)}
             />
@@ -711,10 +822,24 @@ export default function App() {
               )}
             />
             <Route
+              path="workforce"
+              element={permissionOnlyPage(
+                "workers.view",
+                <EquipmentBusinessWorkforcePage />
+              )}
+            />
+            <Route
               path="workers"
               element={permissionOnlyPage(
                 "workers.view",
                 <Release2FinalControlPage mode="workers" />
+              )}
+            />
+            <Route
+              path="payroll"
+              element={permissionOnlyPage(
+                "payroll.view",
+                <PayrollProcessingCentrePage />
               )}
             />
             <Route
@@ -816,7 +941,7 @@ export default function App() {
           />
 
           <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+        </Routes>}
         </BrowserRouter>
       </WorkspaceContextProvider>
     </AuthProvider>

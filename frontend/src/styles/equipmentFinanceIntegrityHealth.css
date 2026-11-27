@@ -1,0 +1,222 @@
+.finance-integrity-health {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.finance-integrity-health__banner {
+  align-items: center;
+  background: linear-gradient(135deg, #eef7f1, #fffaf0);
+  border: 1px solid #cbded2;
+  border-radius: 1rem;
+  display: flex;
+  gap: 0.85rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+}
+
+.finance-integrity-health__banner.is-warning {
+  background: #fff7e7;
+  border-color: #e5c77f;
+}
+
+.finance-integrity-health__banner.is-danger {
+  background: #fff0f0;
+  border-color: #e5b3b3;
+}
+
+.finance-integrity-health__banner.is-settled {
+  background: #e9f5ed;
+  border-color: #acd0b8;
+}
+
+.finance-integrity-health__identity {
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.finance-integrity-health__mark {
+  align-items: center;
+  background: #145c38;
+  border-radius: 0.8rem;
+  color: #fff;
+  display: flex;
+  flex: 0 0 2.65rem;
+  font-size: 1.15rem;
+  font-weight: 900;
+  height: 2.65rem;
+  justify-content: center;
+}
+
+.is-warning .finance-integrity-health__mark {
+  background: #96600f;
+}
+
+.is-danger .finance-integrity-health__mark {
+  background: #9a3333;
+}
+
+.is-settled .finance-integrity-health__mark {
+  background: #17613b;
+}
+
+.finance-integrity-health__identity > div {
+  min-width: 0;
+}
+
+.finance-integrity-health__identity small {
+  color: #65736c;
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.finance-integrity-health__identity strong {
+  display: block;
+  font-size: 1rem;
+  margin-top: 0.16rem;
+  overflow-wrap: anywhere;
+}
+
+.finance-integrity-health__identity span {
+  color: #65736c;
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 0.16rem;
+}
+
+.finance-integrity-health__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.finance-integrity-health__chips span {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #d3ddd7;
+  border-radius: 999px;
+  color: #3f4e46;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.38rem 0.62rem;
+}
+
+.finance-integrity-health__timeline {
+  background: #f7f9f8;
+  border: 1px solid #dce4df;
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  padding: 0.9rem;
+}
+
+.finance-integrity-health__step {
+  min-width: 0;
+  position: relative;
+}
+
+.finance-integrity-health__step::before {
+  background: #cad5cf;
+  content: "";
+  height: 2px;
+  left: 1.7rem;
+  position: absolute;
+  right: -0.7rem;
+  top: 0.72rem;
+}
+
+.finance-integrity-health__step:last-child::before {
+  display: none;
+}
+
+.finance-integrity-health__dot {
+  align-items: center;
+  background: #e2e8e4;
+  border: 2px solid #bdc9c2;
+  border-radius: 999px;
+  color: #68766e;
+  display: flex;
+  font-size: 0.7rem;
+  font-weight: 900;
+  height: 1.5rem;
+  justify-content: center;
+  position: relative;
+  width: 1.5rem;
+  z-index: 1;
+}
+
+.finance-integrity-health__step.is-complete .finance-integrity-health__dot {
+  background: #17633c;
+  border-color: #17633c;
+  color: #fff;
+}
+
+.finance-integrity-health__step.is-current .finance-integrity-health__dot {
+  background: #e4b84a;
+  border-color: #be8e18;
+  color: #2f260e;
+}
+
+.finance-integrity-health__step.is-complete::before {
+  background: #72a889;
+}
+
+.finance-integrity-health__step strong,
+.finance-integrity-health__step span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.finance-integrity-health__step strong {
+  font-size: 0.78rem;
+  margin-top: 0.48rem;
+}
+
+.finance-integrity-health__step span {
+  color: #6a776f;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  margin-top: 0.18rem;
+}
+
+@media (max-width: 760px) {
+  .finance-integrity-health__banner {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .finance-integrity-health__chips {
+    justify-content: flex-start;
+  }
+
+  .finance-integrity-health__timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-integrity-health__step {
+    display: grid;
+    gap: 0.15rem 0.65rem;
+    grid-template-columns: 1.5rem 1fr;
+  }
+
+  .finance-integrity-health__step::before {
+    bottom: -0.7rem;
+    height: auto;
+    left: 0.72rem;
+    right: auto;
+    top: 1.5rem;
+    width: 2px;
+  }
+
+  .finance-integrity-health__step strong,
+  .finance-integrity-health__step span {
+    grid-column: 2;
+    margin-top: 0;
+  }
+}

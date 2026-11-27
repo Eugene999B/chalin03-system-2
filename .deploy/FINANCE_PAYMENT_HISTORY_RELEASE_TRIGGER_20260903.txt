@@ -1,0 +1,3 @@
+Chalin 03 Finance payment history release trigger.
+Source of truth: production.
+No application behavior is defined by this marker.

@@ -1,5 +1,9 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto=require("node:crypto");
+const {enforced:passwordlessEnforced,pilotEnabled:passwordlessPilotEnabled}=require("../services/staffPasswordlessCrypto");
+const {sendSmsAlertToPhone}=require("../services/smsAlertService");
+const {getSmsConfig}=require("../services/smsService");
 
 const { pool } = require("../config/db");
 const { requireAuth } = require("../middleware/authMiddleware");
@@ -530,6 +534,8 @@ function normalizeUserRow(user) {
     category_assignment_status: user.category_assignment_status || "assigned",
     category_conflict_reason: user.category_conflict_reason || null,
     branches: user.branches || [],
+    authenticator_active: user.authenticator_active ?? null,
+    security_last_reset_at: user.security_last_reset_at || null,
   };
 }
 
@@ -561,6 +567,10 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
         updated_at
        FROM users
        WHERE primary_workspace_code = 'spare_parts'
+          OR (
+            role = 'admin'
+            AND category_assignment_status = 'system_admin'
+          )
           OR (id = ? AND username = ? AND role = 'admin')
        ORDER BY created_at DESC`,
       [SYSTEM_ADMIN_ID, SYSTEM_ADMIN_USERNAME]
@@ -630,9 +640,24 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
       }
     }
 
+    const authByUserId=new Map(),resetByUserId=new Map();
+    if(userIds.length&&isOriginalSystemAdministrator(req.user)){
+      try{
+        if(await tableExists(pool,"staff_passwordless_identities")){
+          const placeholders=userIds.map(()=>"?").join(",");
+          const [enrolled]=await pool.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id IN ("+placeholders+")",userIds);
+          for(const id of userIds)authByUserId.set(Number(id),false);
+          for(const row of enrolled)authByUserId.set(Number(row.user_id),true);
+          const [resets]=await pool.query("SELECT entity_id,MAX(created_at) AS last_reset FROM activity_log WHERE entity_type='user' AND action='STAFF_ACCOUNT_SECURITY_RESET' AND outcome='success' AND entity_id IN ("+placeholders+") GROUP BY entity_id",userIds.map(String));
+          for(const row of resets)resetByUserId.set(Number(row.entity_id),row.last_reset);
+        }
+      }catch(error){console.warn("Staff security status query unavailable:",error.code||error.name);}
+    }
     const usersWithBranches = users.map((user) =>
       normalizeUserRow({
         ...user,
+        authenticator_active: authByUserId.get(Number(user.id)) ?? null,
+        security_last_reset_at: resetByUserId.get(Number(user.id)) || null,
         branches: branchesByUserId.get(user.id) || [],
       })
     );
@@ -689,10 +714,13 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    if (!cleanFullName || !cleanUsername || !password || !cleanRole) {
+    const passwordlessOnly=passwordlessEnforced();
+    if (!cleanFullName || !cleanUsername || (!password && !passwordlessOnly) || !cleanRole || (passwordlessOnly && !normalizedLoginPhone)) {
       return res.status(400).json({
         status: "error",
-        message: "Full name, username, password and role are required.",
+        message: passwordlessOnly
+          ? "Full name, username, role and a unique Ghana phone are required."
+          : "Full name, username, password and role are required.",
       });
     }
 
@@ -703,7 +731,7 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (!passwordlessOnly && password.length < 6) {
       return res.status(400).json({
         status: "error",
         message: "Password must be at least 6 characters.",
@@ -711,7 +739,10 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     }
 
     const selectedBranchIds = normalizeBranchIds(branch_ids, branchId);
-    const passwordHash = await bcrypt.hash(password, 10);
+    // Preserve the required DB column, but do not create a usable password for
+    // users invited after the verified passwordless-only cutover.
+    const credential=passwordlessOnly?crypto.randomBytes(48).toString("hex"):password;
+    const passwordHash = await bcrypt.hash(credential, 10);
 
     await connection.beginTransaction();
 
@@ -773,9 +804,21 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
       accessAllBranches,
     });
 
+    let invitationState="not_enabled";
+    if(passwordlessPilotEnabled()&&normalizedLoginPhone){
+      const config=getSmsConfig();
+      if(config.enabled&&config.provider!=="mock"){
+        const sent=await sendSmsAlertToPhone({branchId,phone:normalizedLoginPhone,
+          message:"CHALIN03: Your staff account is ready. Install Google Authenticator. Open work.chalin03.com, enter your username, verify the first SMS code and save your backup codes. Never share codes.",
+          smsType:"security_alert",sentBy:req.user.id,sourceReference:"staff-passwordless-new-account-invite"});
+        invitationState=sent.ok?sent.status:"failed";
+      }else invitationState="sms_unavailable";
+    }
+
     return res.status(201).json({
       status: "success",
       message: "User created successfully.",
+      invitation_status: invitationState,
       user: normalizeUserRow(createdUser),
     });
   } catch (error) {
@@ -799,6 +842,167 @@ router.post("/", requireAuth, requireRole("admin"), async (req, res) => {
     return res.status(500).json({
       status: "error",
       message: "Something went wrong while creating user.",
+    });
+  } finally {
+    connection.release();
+  }
+});
+
+// PATCH /api/users/:id/role
+// Change only the staff role. Identity, password, stock history and existing
+// branch assignments are preserved; a role change revokes stale sessions.
+router.patch("/:id/role", requireAuth, requireRole("admin"), async (req, res) => {
+  const targetUserId = Number(req.params.id);
+  const newRole = cleanText(req.body?.role).toLowerCase();
+  const assignableRoles = new Set(["admin", "manager", "cashier", "auditor", "staff"]);
+  if (!Number.isSafeInteger(targetUserId) || targetUserId < 1 ||
+      !assignableRoles.has(newRole)) {
+    return res.status(400).json({
+      status: "error",
+      message: "Select a valid user and role: Admin, Manager, Cashier, Auditor or Staff.",
+    });
+  }
+  // Role changes on yourself can accidentally remove the ability to manage
+  // the system. The original owner cannot be demoted through this feature.
+  if (targetUserId === Number(req.user?.id)) {
+    return res.status(403).json({
+      status: "error",
+      message: "You cannot change your own role. Ask another authorised administrator.",
+    });
+  }
+
+  const connection = await pool.getConnection();
+  let committed = false;
+  try {
+    await connection.beginTransaction();
+    const [users] = await connection.query(
+      `SELECT id, username, full_name, role, default_branch_id,
+              can_access_all_branches, primary_workspace_code,
+              category_assignment_status, is_active
+       FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [targetUserId]
+    );
+    const target = users[0];
+    if (!target) {
+      await connection.rollback();
+      return res.status(404).json({ status: "error", message: "User not found." });
+    }
+    if (isOriginalSystemAdministrator(target) ||
+        (targetUserId === SYSTEM_ADMIN_ID &&
+         String(target.username || "").toLowerCase() === SYSTEM_ADMIN_USERNAME)) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        message: "The original System Administrator role is protected.",
+      });
+    }
+    if (String(target.primary_workspace_code || "") !== "spare_parts" ||
+        String(target.category_assignment_status || "") !== "assigned") {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "This account belongs to a separate or protected workspace. Use its dedicated staff management page.",
+      });
+    }
+    const [requesters] = await connection.query(
+      "SELECT id, username, role, is_active FROM users WHERE id = ? LIMIT 1",
+      [req.user.id]
+    );
+    const requester = requesters[0];
+    if (!requester || !Number(requester.is_active) ||
+        String(requester.role).toLowerCase() !== "admin") {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error", message: "An active authorised administrator is required.",
+      });
+    }
+    const originalOwner = isOriginalSystemAdministrator(requester);
+    // Privilege escalation to Administrator is reserved for the owner, even if
+    // another administrator can manage ordinary staff roles.
+    if (newRole === "admin" && !originalOwner) {
+      await connection.rollback();
+      return res.status(403).json({
+        status: "error",
+        message: "Only the original System Administrator may assign the Admin role.",
+      });
+    }
+    const previousRole = String(target.role || "").toLowerCase();
+    if (previousRole === newRole) {
+      await connection.rollback();
+      return res.json({
+        status: "success", changed: false,
+        message: "The user already has that role.",
+        user: normalizeUserRow(await getUserById(targetUserId)),
+      });
+    }
+    if (previousRole === "admin" &&
+        Number(target.is_active) === 1 &&
+        (await activeAdminCountExcluding(connection, targetUserId)) < 1) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error", message: "At least one active Administrator must remain.",
+      });
+    }
+
+    // When demoting an administrator, remove its all-store grant and limit
+    // legacy branch rows to the existing default store. Otherwise keep all
+    // branch assignments unchanged: role editing must not silently move staff.
+    const demotingAdmin = previousRole === "admin" && newRole !== "admin";
+    if (demotingAdmin && (!Number.isSafeInteger(Number(target.default_branch_id)) ||
+                           Number(target.default_branch_id) < 1)) {
+      await connection.rollback();
+      return res.status(409).json({
+        status: "error",
+        message: "Assign a default store to this Administrator before changing the role.",
+      });
+    }
+    await connection.query(
+      `UPDATE users SET role = ?,
+              can_access_all_branches = CASE WHEN ? THEN FALSE ELSE can_access_all_branches END,
+              token_version = token_version + 1
+       WHERE id = ?`,
+      [newRole, demotingAdmin ? 1 : 0, targetUserId]
+    );
+    if (demotingAdmin) {
+      await connection.query(
+        `DELETE FROM user_branch_access
+         WHERE user_id = ? AND branch_id <> ?`,
+        [targetUserId, target.default_branch_id]
+      );
+    }
+    await connection.query(
+      `INSERT INTO activity_log (branch_id, user_id, action, details)
+       VALUES (?, ?, 'CHANGE_USER_ROLE', ?)`,
+      [getBranchId(req), req.user.id,
+       `Role changed for user ${target.username} (ID ${targetUserId}): ${previousRole} -> ${newRole}`]
+    );
+    await connection.commit();
+    committed = true;
+
+    // token_version was incremented transactionally, so old tokens cannot
+    // retain permissions even if secondary session cleanup has a problem.
+    try {
+      await revokeAllUserSessions(targetUserId, "role_changed");
+    } catch (cleanupError) {
+      console.error("Role updated; session cleanup warning:", cleanupError);
+    }
+    const updatedUser = await getUserById(targetUserId);
+    return res.json({
+      status: "success",
+      changed: true,
+      message: `Role changed from ${previousRole} to ${newRole}. The user must sign in again.`,
+      user: normalizeUserRow(updatedUser),
+    });
+  } catch (error) {
+    if (!committed) {
+      try { await connection.rollback(); } catch (_rollbackError) {}
+    }
+    console.error("Change user role error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: committed
+        ? "Role was saved, but confirmation could not be loaded. Refresh the user list to verify."
+        : "Could not change the role. No user changes were saved.",
     });
   } finally {
     connection.release();
@@ -865,14 +1069,31 @@ router.put("/:id", requireAuth, requireRole("admin"), async (req, res) => {
       });
     }
 
+    const isDelegatedSystemAdmin =
+      String(existingUser.role || "").toLowerCase() === "admin" &&
+      String(existingUser.category_assignment_status || "").toLowerCase() ===
+        "system_admin";
+
     if (
       !isOriginalSystemAdministrator(existingUser) &&
+      !isDelegatedSystemAdmin &&
       String(existingUser.primary_workspace_code || "") !== "spare_parts"
     ) {
       return res.status(409).json({
         status: "error",
         message: "This user belongs to another independent business category.",
       });
+    }
+
+    if (isDelegatedSystemAdmin) {
+      const requester = await getUserById(req.user.id);
+      if (!isOriginalSystemAdministrator(requester)) {
+        return res.status(403).json({
+          status: "error",
+          message:
+            "Only the original System Administrator can edit a Delegated System Administrator account.",
+        });
+      }
     }
 
     if (isOriginalSystemAdministrator(existingUser)) {

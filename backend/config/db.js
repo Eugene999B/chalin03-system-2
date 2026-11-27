@@ -48,6 +48,20 @@ function queryText(statement) {
   return String(statement?.sql || "");
 }
 
+function normalizeEquipmentAssetSaleLockStatement(statement) {
+  const sql = queryText(statement);
+  if (
+    !/\bequipment_asset_sale_locks\s+sale_lock\b/i.test(sql) ||
+    !/\bsale_lock\.id\b/i.test(sql)
+  ) {
+    return statement;
+  }
+
+  const normalizedSql = sql.replace(/\bsale_lock\.id\b/gi, "sale_lock.asset_id");
+  if (typeof statement === "string") return normalizedSql;
+  return { ...statement, sql: normalizedSql };
+}
+
 function stripSqlComments(statement) {
   return String(statement || "")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
@@ -108,7 +122,8 @@ function runtimeDdlBlockedError(decision) {
 
 function guardedExecutor(original, receiver) {
   return async function executeWithRuntimeDdlGuard(statement, values) {
-    const decision = runtimeDdlDecision(statement);
+    const normalizedStatement = normalizeEquipmentAssetSaleLockStatement(statement);
+    const decision = runtimeDdlDecision(normalizedStatement);
 
     if (decision.action === "block") {
       throw runtimeDdlBlockedError(decision);
@@ -126,7 +141,7 @@ function guardedExecutor(original, receiver) {
       ];
     }
 
-    return original.call(receiver, statement, values);
+    return original.call(receiver, normalizedStatement, values);
   };
 }
 
@@ -149,6 +164,21 @@ function protectConnection(connection) {
   return connection;
 }
 
+// Keep the steady-state connection footprint small. A bounded queue also prevents
+// an unusual request burst from accumulating unbounded waiting work in process memory.
+const DB_CONNECTION_LIMIT = Math.max(
+  1,
+  Math.min(Number(process.env.DB_CONNECTION_LIMIT || 5), 5)
+);
+const DB_QUEUE_LIMIT = Math.max(
+  0,
+  Math.min(Number(process.env.DB_QUEUE_LIMIT || 50), 50)
+);
+const DB_IDLE_TIMEOUT_MS = Math.max(
+  60000,
+  Math.min(Number(process.env.DB_IDLE_TIMEOUT_MS || 60000), 300000)
+);
+
 const pool = mysql.createPool({
   host: getEnvValue("DB_HOST", "MYSQLHOST"),
   port: Number(getEnvValue("DB_PORT", "MYSQLPORT", 3306)),
@@ -157,9 +187,15 @@ const pool = mysql.createPool({
   database: getEnvValue("DB_NAME", "MYSQLDATABASE"),
 
   waitForConnections: true,
-  connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
-  queueLimit: 0,
+  connectionLimit: DB_CONNECTION_LIMIT,
+  // mysql2 only enables idle eviction when maxIdle is below connectionLimit.
+  // Keep burst capacity, but release unused production connections after a minute.
+  maxIdle: isProduction() ? Math.min(1, DB_CONNECTION_LIMIT - 1) : DB_CONNECTION_LIMIT,
+  queueLimit: DB_QUEUE_LIMIT,
+  idleTimeout: DB_IDLE_TIMEOUT_MS,
 
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
   timezone: "Z",
   ssl: getSslConfig(),
 });
@@ -210,9 +246,13 @@ async function testDatabaseConnection() {
 }
 
 module.exports = {
+  DB_CONNECTION_LIMIT,
+  DB_IDLE_TIMEOUT_MS,
+  DB_QUEUE_LIMIT,
   RUNTIME_DDL_PATTERN,
   getSslConfig,
   isProduction,
+  normalizeEquipmentAssetSaleLockStatement,
   pool,
   protectConnection,
   runtimeDdlDecision,

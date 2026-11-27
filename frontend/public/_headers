@@ -7,13 +7,189 @@
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
   X-Permitted-Cross-Domain-Policies: none
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.chalin03.com https://cloudflareinsights.com https://static.cloudflareinsights.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src 'none'; img-src 'self' data: blob:; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; script-src-elem 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.chalin03.com https://cloudflareinsights.com https://static.cloudflareinsights.com; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; frame-src https://challenges.cloudflare.com; img-src 'self' data: blob: https://api.chalin03.com https://commons.wikimedia.org https://upload.wikimedia.org; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://challenges.cloudflare.com; script-src-elem 'self' 'unsafe-inline' https://static.cloudflareinsights.com https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; upgrade-insecure-requests
   X-Robots-Tag: noindex, nofollow, noarchive
 
-/company
+https://chalin03.com/company
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
 
-/company/*
+https://chalin03.com/company/*
   ! X-Robots-Tag
   X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://homepage.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/shop
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/enquire
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/excavators
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/heavy-machines
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/motorcycles
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/automobiles
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/gold
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/machine-transport
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/equipment-hire-services
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://chalin03.com/customer-help
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://homepage.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://spareparts.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://excavators.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://machines.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://motorcycles.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://automobiles.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://gold.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://transport.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://hire.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+https://help.chalin03.com/
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow, max-image-preview:large
+
+/sw.js
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/browser-cache-recovery.js
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/404.html
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/login
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/company
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/company/*
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/mining-operations
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/equipment-hire
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/site.webmanifest
+  Cache-Control: no-cache, max-age=0, must-revalidate
+
+/favicon.ico
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-16x16.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-32x32.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-48x48.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-192x192.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/favicon-512x512.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/equipment-installment-finance/*
+  Cache-Control: no-store, max-age=0, must-revalidate
+
+/images/home/v1/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+/images/catalogue/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
+  X-Content-Type-Options: nosniff
+
+/favicon*
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow
+  Cache-Control: public, max-age=86400
+/apple-touch-icon.png
+  ! X-Robots-Tag
+  X-Robots-Tag: index, follow
+/robots.txt
+  ! X-Robots-Tag
+  Cache-Control: public, max-age=3600
+/sitemap.xml
+  ! X-Robots-Tag
+  Cache-Control: public, max-age=3600
+
+/staff-theme-bootstrap.js
+  Cache-Control: no-store, max-age=0, must-revalidate
+/staff-recovery-bootstrap.js
+  Cache-Control: no-store, max-age=0, must-revalidate

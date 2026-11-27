@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Outlet, useNavigate } from "react-router";
+import { Outlet, useLocation, useNavigate } from "react-router";
+import { getSparePartsPageByPath } from "../security/sparePartsPageAccess";
 import CompactSidebarNavigation from "./CompactSidebarNavigation";
 import SidebarAccountMenu from "./SidebarAccountMenu";
+import DebtorIdentityStaffAnnouncement from "./DebtorIdentityStaffAnnouncement";
 import "../styles/sidebarPolish.css";
 import { useAuth } from "../context/AuthContext";
 
@@ -30,7 +32,27 @@ function getUserInitials(name) {
     .toUpperCase();
 }
 
-export default function Layout() {
+// Page permission checks are shared by desktop/mobile navigation and direct URLs.
+// Existing RoleRoute/PermissionRoute and all backend action checks remain in force.
+function PageAccessProtectedOutlet() {
+  const location = useLocation();
+  const { hasPermission, user } = useAuth();
+  const page = getSparePartsPageByPath(location.pathname);
+  // Auditor home intentionally redirects to Audit & Accounting. Preserve the
+  // redirect even though the Dashboard itself is not an auditor page.
+  if (page?.path === "/" && user?.role === "auditor") return <Outlet />;
+  if (page && !hasPermission(page.permission)) {
+    return (
+      <section className="page-access-denied" role="alert" style={{margin:"1rem",padding:"1.5rem",borderRadius:"16px",background:"#fff",border:"1px solid #fecaca"}}>
+        <h1 style={{marginTop:0}}>Page access blocked</h1>
+        <p>Your account cannot open <strong>{page.label}</strong>. Ask the administrator to review this page under User Permissions.</p>
+      </section>
+    );
+  }
+  return <Outlet />;
+}
+
+export default function Layout({reportingSections=null,children=null} = {}) {
   const {
     user,
     logout,
@@ -40,6 +62,7 @@ export default function Layout() {
     branchName,
     branchLocation,
     canAccessAllBranches,
+    hasPermission,
   } = useAuth();
 
   const navigate = useNavigate();
@@ -91,8 +114,22 @@ export default function Layout() {
     : "No store ID";
 
   const navigationSections = useMemo(() => {
+    if(reportingSections)return reportingSections;
     const mainWorkItems = isAuditor
       ? [
+          { title: "Dashboard", description: "Store performance and operational summary", path: "/", icon: "🏠", keywords: "dashboard summary" },
+          { title: "Products", description: "Search, manage and review spare-part stock", path: "/products", icon: "📦", keywords: "products inventory stock" },
+          { title: "Online Orders & Messages", description: "Review website customer orders and enquiries", path: "/online-orders", icon: "🛍️", keywords: "online website enquiries messages orders sales" },
+          { title: "New Sale", description: "Record an authorised Spare Parts transaction", path: "/new-sale", icon: "🛒", keywords: "record sale receipt" },
+          { title: "Installment Sales", description: "Review and manage Spare Parts installment records", path: "/installments", icon: "📅", keywords: "installments finance collections" },
+          { title: "Debts", description: "Review and manage customer debt records", path: "/debts", icon: "📒", keywords: "debts collection" },
+          {
+            title: "Sales History",
+            description: "Read-only review of store sales, receipts, voids and corrections",
+            path: "/sales-history",
+            icon: "🧾",
+            keywords: "audit sales history receipts voided corrected transactions date filters",
+          },
           {
             title: "Change Password",
             description: "Update your auditor login password",
@@ -132,6 +169,13 @@ export default function Layout() {
               "products inventory stock spare parts excavator barcode quantity ledger adjustment",
           },
           {
+            title: "Online Orders & Messages",
+            description: "Receive and follow up public website orders, quotes and messages",
+            path: "/online-orders",
+            icon: "🛍️",
+            keywords: "website online shop customer orders enquiries messages payment POS",
+          },
+          {
             title: "New Sale",
             description: "Record cash, MoMo, bank, mixed, credit or installment sale",
             path: "/new-sale",
@@ -160,6 +204,17 @@ export default function Layout() {
             icon: "📞",
             keywords: "debt debts credit balance payment reminder whatsapp owing",
           },
+          ...(hasPermission("payroll.view")
+            ? [
+                {
+                  title: "Payroll Processing",
+                  description: "Validate, approve, pay and reconcile protected salary cycles",
+                  path: "/payroll",
+                  icon: "💵",
+                  keywords: "payroll salary wages approval payment reconciliation workforce",
+                },
+              ]
+            : []),
           {
             title: "Change Password",
             description: "Update your staff login password",
@@ -240,6 +295,13 @@ export default function Layout() {
             "audit signoff sign-off approval history approved period accountant certificate management",
         },
         {
+          title: "Blind Stock Count",
+          description: "Independent physical counting, variance risk and downloadable audit evidence",
+          path: "/stock-count",
+          icon: "📋",
+          keywords: "blind stock count physical quantity theft variance missing inventory",
+        },
+        {
           title: "Exports",
           description: "Export audit and management records",
           path: "/exports",
@@ -258,6 +320,19 @@ export default function Layout() {
           keywords:
             "group executive boss control centre dashboard spare parts mining equipment hire fleet revenue expenses debt alerts",
         });
+      }
+
+      if (isAuditor) {
+        auditItems.push(
+          { title: "Activity Log", description: "Review staff activities and system evidence", path: "/activity-log", icon: "🕵️", keywords: "audit activity log" },
+          { title: "Worker Profiles", description: "View permitted workforce profiles and records", path: "/workers", icon: "👷", keywords: "worker people staff profiles" },
+          { title: "Stock Transfers", description: "Manage the store-to-store movement evidence", path: "/stock-transfers", icon: "🔁", keywords: "stock transfer dispatch receive" },
+          { title: "Low Stock / Restock", description: "Review stock shortages and replenishment", path: "/low-stock", icon: "🚨", keywords: "restock inventory shortage" },
+          { title: "Purchases", description: "Record and inspect supplier purchases", path: "/purchases", icon: "🚚", keywords: "supplier buying purchases" },
+          { title: "Returns", description: "Review and record customer returns", path: "/returns", icon: "↩️", keywords: "return refund" },
+          { title: "Expenses", description: "Review and record approved store expenses", path: "/expenses", icon: "🧾", keywords: "expenses" },
+          { title: "Daily Closing", description: "Close and reconcile store transactions", path: "/daily-closing", icon: "🌙", keywords: "closing cash reconciliation" }
+        );
       }
 
       if (canManage) {
@@ -343,6 +418,13 @@ export default function Layout() {
     if (isAdmin) {
       const adminItems = [
         {
+          title: "Online Catalogue Control",
+          description: "Publish, hide and feature live store products and photos",
+          path: "/online-catalogue",
+          icon: "🖼️",
+          keywords: "website catalogue photos products online visibility pricing",
+        },
+        {
           title: "Users & Settings",
           description: "Manage staff, roles and business settings",
           path: "/users-settings",
@@ -427,8 +509,16 @@ export default function Layout() {
       });
     }
 
-    return sections;
-  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator]);
+    // A page deny must disappear from BOTH desktop and mobile menus and search.
+    // A direct URL is independently checked by PageAccessProtectedOutlet.
+    return sections.map(section => ({
+      ...section,
+      items: section.items.filter(item => {
+        const page = getSparePartsPageByPath(item.path);
+        return !page || hasPermission(page.permission);
+      }),
+    })).filter(section => section.items.length);
+  }, [canManage, canAudit, isAuditor, isAdmin, isSystemAdministrator, hasPermission, reportingSections]);
 
   const commandItems = useMemo(() => {
     return navigationSections.flatMap((section) =>
@@ -507,9 +597,9 @@ export default function Layout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleLogout() {
-    logout();
-    navigate("/login");
+  async function handleLogout() {
+    const cleared = await logout();
+    if (cleared) navigate("/", { replace: true });
   }
 
   function closeMobileMenu() {
@@ -520,7 +610,7 @@ export default function Layout() {
 
   function goToChangePassword() {
     closeMobileMenu();
-    navigate("/change-password");
+    navigate(reportingSections?"/account-security":"/change-password");
   }
 
   function openCommandCenter() {
@@ -1670,7 +1760,7 @@ export default function Layout() {
           </div>
         )}
 
-        <Outlet />
+        {reportingSections?children:<><DebtorIdentityStaffAnnouncement /><PageAccessProtectedOutlet /></>}
       </main>
 
       {commandOpen && (

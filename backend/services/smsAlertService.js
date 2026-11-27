@@ -320,6 +320,7 @@ async function sendOwnerSmsAlert({
   smsType = "security_alert",
   sentBy = null,
   sourceReference = null,
+  ownerOnly = false,
 }) {
   try {
     const settings = await getSmsSettingsForBranch(branchId);
@@ -327,7 +328,7 @@ async function sendOwnerSmsAlert({
 
     const alertPhone = firstValidGhanaPhone(
       settings.owner_phone,
-      settings.business_phone
+      ownerOnly ? null : settings.business_phone
     );
 
     if (!alertPhone) {

@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import axiosClient from "../api/axiosClient";
+import StaffPlanningPeriods from "../components/StaffPlanningPeriods";
 import { useAuth } from "../context/AuthContext";
+import useSaleDiscountPermission from "../hooks/useSaleDiscountPermission";
 
 export default function SalesHistoryPage() {
   const { user, branchId, branchCode, branchName, branchLocation } = useAuth();
   const role = String(user?.role || "").toLowerCase();
   const isAdmin = role === "admin";
+  const isAuditor = role === "auditor";
+  const canApplyDiscount = useSaleDiscountPermission(user?.id, branchId);
 
   const currentStoreCode =
     branchCode ||
@@ -323,6 +327,10 @@ export default function SalesHistoryPage() {
         setError("Deleted or voided sales cannot be edited.");
         return;
       }
+      if (!canApplyDiscount && Number(sale.discount_amount || 0) > 0) {
+        setError("Only the Boss or original System Administrator may modify a discounted sale.");
+        return;
+      }
 
       const availableProducts = productsResponse.data.products || [];
 
@@ -427,6 +435,10 @@ export default function SalesHistoryPage() {
     setError("");
 
     if (!editingSale) return;
+    if (!canApplyDiscount && Number(editingSale.discount_amount || 0) > 0) {
+      setError("Only the Boss or original System Administrator may modify a discounted sale.");
+      return;
+    }
 
     if (!editForm.edit_reason.trim()) {
       setError("Edit reason is required.");
@@ -458,7 +470,7 @@ export default function SalesHistoryPage() {
         customer_name: editForm.customer_name,
         customer_phone: editForm.customer_phone,
         payment_type: editForm.payment_type,
-        discount_amount: Number(editForm.discount_amount || 0),
+        discount_amount: canApplyDiscount ? Number(editForm.discount_amount || 0) : 0,
         amount_tendered: effectivePaid,
         amount_paid: effectivePaid,
         payment_allocations: editForm.payment_allocations,
@@ -870,7 +882,7 @@ export default function SalesHistoryPage() {
     const voidedSales = sales.filter(isSaleVoided);
 
     const totalSales = activeSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
+      (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
@@ -896,19 +908,20 @@ export default function SalesHistoryPage() {
         sum +
         Number(
           productFilterActive
-            ? sale.matched_product_quantity || 0
-            : sale.total_items_sold || 0
+            ? sale.net_matched_product_quantity ?? sale.matched_product_quantity ?? 0
+            : sale.net_items_sold ?? sale.total_items_sold ?? 0
         ),
       0
     );
 
+    const productValueUnavailable=activeSales.some(s=>Number(s.unvalued_return_count||0)>0);
     const productValue = activeSales.reduce(
       (sum, sale) =>
         sum +
         Number(
           productFilterActive
-            ? sale.matched_product_total || 0
-            : sale.total_items_value || 0
+            ? sale.net_matched_product_total ?? 0
+            : sale.net_items_value ?? 0
         ),
       0
     );
@@ -922,7 +935,7 @@ export default function SalesHistoryPage() {
       totalDiscount,
       productFilterActive,
       productQuantity,
-      productValue,
+      productValue:productValueUnavailable?null:productValue,
     };
   }, [sales, productSearch]);
 
@@ -1014,8 +1027,10 @@ export default function SalesHistoryPage() {
               </h1>
 
               <p style={styles.heroSubtitle}>
-                View past sales, reprint receipts, download PDF receipts and
-                void wrong sales for <strong>{currentStoreName}</strong>
+                {isAuditor
+                  ? "Read-only access to past sales, sale corrections, void history and downloadable receipts for "
+                  : "View past sales, reprint receipts, download PDF receipts and void wrong sales for "}
+                <strong>{currentStoreName}</strong>
                 {currentStoreLocation ? ` - ${currentStoreLocation}` : ""}.
                 Every record shown here belongs to the selected store.
               </p>
@@ -1028,13 +1043,14 @@ export default function SalesHistoryPage() {
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
             <HeroMetric label="Valid Sales : " value={summary.activeCount} />
-            <HeroMetric label="Sales Value : " value={formatCompactMoney(summary.totalSales)} />
+            <HeroMetric label="Net after refunds : " value={formatCompactMoney(summary.totalSales)} />
             <HeroMetric label="Paid : " value={formatCompactMoney(summary.totalPaid)} />
             <HeroMetric label="Balance : " value={formatCompactMoney(summary.totalBalance)} />
           </div>
         </div>
       </div>
 
+      <StaffPlanningPeriods user={user} branchKey={branchId}/>
       <div style={{ ...styles.storeNotice, ...compactStoreNotice }}>
         <span style={styles.noticeIcon}>🏬</span>
         <div>
@@ -1042,8 +1058,9 @@ export default function SalesHistoryPage() {
             {currentStoreCode} — {currentStoreName}
           </strong>
           <p>
-            Sales history, receipt preview, PDF download and void actions are
-            filtered to this selected store only.
+            {isAuditor
+              ? "Auditor workspace: inspect and download store receipts, and record authorised sales from New Sale. Voiding remains administrator-controlled and all records remain branch-scoped."
+              : "Sales history, receipt preview, PDF download and void actions are filtered to this selected store only."}
           </p>
         </div>
       </div>
@@ -1062,7 +1079,7 @@ export default function SalesHistoryPage() {
 
         <SummaryCard
           icon="💰"
-          title="Total Sales"
+          title="Net Sales After Refunds"
           value={`GHS ${formatMoney(summary.totalSales)}`}
           note="Voided sales excluded"
           tone="gold"
@@ -1081,7 +1098,7 @@ export default function SalesHistoryPage() {
             icon="🔎"
             title="Product Found"
             value={`${summary.productQuantity} unit(s)`}
-            note={`Matched value: GHS ${formatMoney(summary.productValue)}`}
+            note={summary.productValue==null?"Retained value not fully evidenced":`Retained value: GHS ${formatMoney(summary.productValue)}`}
             tone="blue"
           />
         )}
@@ -1227,8 +1244,8 @@ export default function SalesHistoryPage() {
                           {sale.matched_products}
                           <br />
                           <span>
-                            Qty: {Number(sale.matched_product_quantity || 0)} •
-                            Value: GHS {formatMoney(sale.matched_product_total)}
+                            Net qty: {Number(sale.net_matched_product_quantity ?? sale.matched_product_quantity ?? 0)} •
+                            Retained item value: {sale.net_matched_product_total==null?"Not evidenced":"GHS "+formatMoney(sale.net_matched_product_total)}
                           </span>
                         </div>
                       )}
@@ -1236,7 +1253,8 @@ export default function SalesHistoryPage() {
 
                     <div style={{ ...styles.saleAmountBox, ...compactSaleAmountBox }}>
                       <span>Total</span>
-                      <strong>GHS {formatMoney(sale.total)}</strong>
+                      <strong>GHS {formatMoney(sale.net_sales_after_refunds ?? sale.total)}</strong>
+                      {Number(sale.returned_quantity||0)>0&&<small style={{display:"block"}}>Returned: {sale.returned_quantity} unit(s) · Original GHS {formatMoney(sale.total)} · Refund GHS {formatMoney(sale.recorded_refunds)} · Retained merchandise {sale.net_merchandise_sales==null?"not evidenced":"GHS "+formatMoney(sale.net_merchandise_sales)}</small>}
                       <small>
                         Tendered: GHS {formatMoney(sale.amount_tendered)} • Paid:
                         GHS {formatMoney(sale.amount_paid)} • Change: GHS{" "}
@@ -1278,13 +1296,15 @@ export default function SalesHistoryPage() {
 
                     {isAdmin && !voided && (
                       <>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => startEditSale(sale.id)}
-                        >
-                          Edit Sale
-                        </button>
+                        {(canApplyDiscount || Number(sale.discount_amount || 0) === 0) && (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => startEditSale(sale.id)}
+                          >
+                            Edit Sale
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="small-danger"
@@ -1673,21 +1693,23 @@ export default function SalesHistoryPage() {
                   </select>
                 </label>
 
-                <label>
-                  Discount
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={editForm.discount_amount}
-                    onChange={(event) =>
-                      setEditForm((current) => ({
-                        ...current,
-                        discount_amount: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                {canApplyDiscount && (
+                  <label>
+                    Discount (Boss / System Administrator)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.discount_amount}
+                      onChange={(event) =>
+                        setEditForm((current) => ({
+                          ...current,
+                          discount_amount: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                )}
 
                 {["cash", "momo", "bank"].includes(editForm.payment_type) ? (
                   <label>

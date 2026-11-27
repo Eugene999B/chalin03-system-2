@@ -10,18 +10,24 @@ function read(...parts) {
   return fs.readFileSync(path.join(root, ...parts), "utf8");
 }
 
-test("debt dates are labelled separately and use Ghana business time", () => {
-  const source = read("frontend", "src", "pages", "DebtsPage.jsx");
+test("Debt Desk separates credit and due dates using Ghana business time", () => {
+  const source = read("frontend", "src", "pages", "LegacyDebtsPage.jsx");
+  const wrapper = read("frontend", "src", "pages", "DebtsPage.jsx");
   const saleRoutes = read("backend", "routes", "saleRoutes.js");
 
+  assert.match(wrapper, /LegacyDebtsPage/);
   assert.match(source, /formatBusinessDate/);
-  assert.match(source, /Debt Date:/);
-  assert.match(source, /label="Debt Date"/);
-  assert.match(source, /label="Due Date"/);
-  assert.match(source, /selectedDebt\.created_at \|\| selectedDebt\.sale_date/);
+  assert.match(source, /function dateLabel\(value\)/);
+  assert.match(source, /dateLabel\(debt\.sale_date \|\| debt\.created_at\)/);
+  assert.match(source, /dateLabel\(debt\.due_date\)/);
+  assert.match(source, />Due</);
+  assert.match(source, /Credit receipts/);
   assert.doesNotMatch(source, /date\.toLocaleDateString\(\)/);
   assert.doesNotMatch(source, /date\.toLocaleString\(\)/);
-  assert.match(saleRoutes, /setUTCDate\(date\.getUTCDate\(\) \+ days\)/);
+  assert.match(saleRoutes, /debtGracePeriodService/);
+  const { calculateDebtDueDate } = require("../services/debtGracePeriodService");
+  assert.equal(calculateDebtDueDate("2026-07-27T23:59:59Z", 30), "2026-08-26");
+  assert.equal(calculateDebtDueDate("2026-07-27T00:00:00Z", 30), "2026-08-26");
 });
 
 test("business date helper preserves Ghana calendar dates", async () => {

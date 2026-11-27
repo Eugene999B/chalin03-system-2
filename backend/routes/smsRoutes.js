@@ -2208,4 +2208,6 @@ router.post(
   })
 );
 
+router.use("/finance-campaign", require("./financeCampaignSmsRoutes"));
+
 module.exports = router;

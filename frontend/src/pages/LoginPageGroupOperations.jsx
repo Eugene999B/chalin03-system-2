@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router";
 import axiosClient from "../api/axiosClient";
+import StaffPasswordlessLogin from "./StaffPasswordlessLogin.jsx";
 import { useAuth } from "../context/AuthContext";
 import { businessWorkspaces, getBusinessWorkspace } from "../data/businessWorkspaces";
 import { collectDeviceEvidence } from "../utils/deviceEvidence";
@@ -17,6 +18,8 @@ import "../styles/commandGateV4.css";
 import "../styles/commandGateBankPolish.css";
 import "../styles/biometricBankLogin.css";
 import "../styles/groupOperationsLogin.css";
+import "../styles/chalin03PublicRefresh.css";
+import "../styles/chalin03PublicRebuild.css";
 
 const DEFAULT_WORKSPACE = "spare_parts";
 const TOKEN_KEY = "chalin03_token";
@@ -131,7 +134,7 @@ function GroupOperationsMap() {
   );
 }
 
-export default function LoginPageGroupOperations() {
+function LegacyLoginPageGroupOperations() {
   const {
     isLoggedIn,
     login,
@@ -548,7 +551,7 @@ export default function LoginPageGroupOperations() {
       <section className="gate4__shell">
         <header className="gate4__topbar">
           <div className="gate4__brand">
-            <div className="gate4__logo"><span>C03</span></div>
+            <div className="gate4__logo"><img src="/chalin03-logo.png" width="48" height="48" alt=""/></div>
             <div>
               <small>Chalin 03 Company Limited</small>
               <strong>Business Operating System</strong>
@@ -904,4 +907,26 @@ export default function LoginPageGroupOperations() {
       )}
     </main>
   );
+}
+
+// Keep one CHALIN03 visual identity across every sign-in step.
+// A temporary API outage must never expose the old password form as a fallback.
+export default function LoginPageGroupOperations({ allowSignedInSetup = false }) {
+  const [mode, setMode] = useState("loading");
+  const [turnstileSiteKey,setTurnstileSiteKey]=useState("");
+  useEffect(() => {
+    let mounted = true;
+    axiosClient.get("/auth/passwordless/mode", { timeout: 5000 })
+      .then((response) => { if (mounted) { setTurnstileSiteKey(response.data?.turnstile_site_key||""); setMode(response.data?.pilot ? "passwordless" : "legacy"); } })
+      .catch(() => { if (mounted) setMode("passwordless"); });
+    return () => { mounted = false; };
+  }, []);
+  if (mode === "loading") return (
+    <main className="gate4" style={{minHeight:"100vh",display:"grid",placeItems:"center",background:"#f3f5f8",color:"#0b2343"}}>
+      <p>Preparing secure access…</p>
+    </main>
+  );
+  // No query parameter can switch the Authenticator flow to a password form.
+  if (mode === "legacy") return <LegacyLoginPageGroupOperations />;
+  return <StaffPasswordlessLogin allowSignedInSetup={allowSignedInSetup} turnstileSiteKey={turnstileSiteKey} />;
 }
