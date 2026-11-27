@@ -534,6 +534,8 @@ function normalizeUserRow(user) {
     category_assignment_status: user.category_assignment_status || "assigned",
     category_conflict_reason: user.category_conflict_reason || null,
     branches: user.branches || [],
+    authenticator_active: user.authenticator_active ?? null,
+    security_last_reset_at: user.security_last_reset_at || null,
   };
 }
 
@@ -638,9 +640,24 @@ router.get("/", requireAuth, requireRole("admin"), async (req, res) => {
       }
     }
 
+    const authByUserId=new Map(),resetByUserId=new Map();
+    if(userIds.length&&isOriginalSystemAdministrator(req.user)){
+      try{
+        if(await tableExists(pool,"staff_passwordless_identities")){
+          const placeholders=userIds.map(()=>"?").join(",");
+          const [enrolled]=await pool.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id IN ("+placeholders+")",userIds);
+          for(const id of userIds)authByUserId.set(Number(id),false);
+          for(const row of enrolled)authByUserId.set(Number(row.user_id),true);
+          const [resets]=await pool.query("SELECT entity_id,MAX(created_at) AS last_reset FROM activity_log WHERE entity_type='user' AND action='STAFF_ACCOUNT_SECURITY_RESET' AND outcome='success' AND entity_id IN ("+placeholders+") GROUP BY entity_id",userIds.map(String));
+          for(const row of resets)resetByUserId.set(Number(row.entity_id),row.last_reset);
+        }
+      }catch(error){console.warn("Staff security status query unavailable:",error.code||error.name);}
+    }
     const usersWithBranches = users.map((user) =>
       normalizeUserRow({
         ...user,
+        authenticator_active: authByUserId.get(Number(user.id)) ?? null,
+        security_last_reset_at: resetByUserId.get(Number(user.id)) || null,
         branches: branchesByUserId.get(user.id) || [],
       })
     );
