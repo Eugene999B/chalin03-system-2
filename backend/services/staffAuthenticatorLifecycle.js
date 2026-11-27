@@ -20,4 +20,11 @@ async function retireAuthenticatorAccess(conn,userId,reason){
  await conn.query("UPDATE staff_passwordless_google_links SET consumed_at=UTC_TIMESTAMP() WHERE user_id=? AND consumed_at IS NULL",[userId]);
  await conn.query("DELETE FROM staff_passwordless_backup_codes WHERE user_id=?",[userId]);
 }
-module.exports={rotationBinding,liveRotationRow,retireAuthenticatorAccess};
+async function unlockStaffAccess(conn,userId){
+ await conn.query("UPDATE users SET token_version=COALESCE(token_version,0)+1 WHERE id=?",[userId]);
+ await conn.query("UPDATE auth_sessions SET revoked_at=UTC_TIMESTAMP(),revocation_reason='administrator_unlock' WHERE user_id=? AND revoked_at IS NULL",[userId]);
+ await conn.query("UPDATE protected_action_sessions SET revoked_at=NOW() WHERE user_id=? AND revoked_at IS NULL",[userId]);
+ await conn.query("UPDATE staff_passwordless_challenges SET consumed_at=COALESCE(consumed_at,UTC_TIMESTAMP()),pending_ciphertext=NULL,pending_iv=NULL,pending_tag=NULL WHERE user_id=?",[userId]);
+ await conn.query("UPDATE staff_passwordless_google_links SET consumed_at=UTC_TIMESTAMP() WHERE user_id=? AND consumed_at IS NULL",[userId]);
+}
+module.exports={rotationBinding,liveRotationRow,retireAuthenticatorAccess,unlockStaffAccess};
