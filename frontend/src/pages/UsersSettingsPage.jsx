@@ -197,6 +197,7 @@ export default function UsersSettingsPage() {
   const [error, setError] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   const [authReset, setAuthReset] = useState(null);
+  const [authResetMode,setAuthResetMode]=useState("unlock");
   const [authResetCode, setAuthResetCode] = useState("");
   const [authResetReason, setAuthResetReason] = useState("");
   const [authResetBusy, setAuthResetBusy] = useState(false);
@@ -477,11 +478,11 @@ export default function UsersSettingsPage() {
     setAuthResetBusy(true);setError("");setMessage("");
     try {
       const {data}=await axiosClient.post("/auth/passwordless/administrator/revoke-authenticator",{
-        user_id:authReset.id,authenticator_code:authResetCode,reason:authResetReason.trim()
+        user_id:authReset.id,authenticator_code:authResetCode,reason:authResetReason.trim(),mode:authResetMode
       });
       setAuthReset(null);setAuthResetCode("");setAuthResetReason("");setMessage(data.message);
       await loadUsers();
-    } catch(err){setError(err.response?.data?.message || "Authenticator revocation could not be completed.");}
+    } catch(err){setError(err.response?.data?.message || "Staff security reset could not be completed.");}
     finally{setAuthResetBusy(false);setAuthResetCode("");}
   }
   function openResetPassword(user) {
@@ -2109,14 +2110,15 @@ This disables login, revokes all active sessions and assigned access, and preser
 
       {authReset && (
         <section className="users-card users-reset-card">
-          <div className="users-card-header"><h2>Revoke staff Authenticator</h2><p>Selected account: <strong>{authReset.full_name || authReset.username}</strong>. Confirm the person's identity and registered phone before continuing.</p></div>
+          <div className="users-card-header"><h2>Staff Account Recovery</h2><p>Selected account: <strong>{authReset.full_name || authReset.username}</strong>. Confirm the person's identity and registered phone before continuing.</p></div>
           <form className="users-card-body" onSubmit={revokeStaffAuthenticator}>
-            <div className="users-reset-warning">Existing Authenticator, backup codes, linked Google account and sessions will be revoked. The user must verify their registered phone and enroll again. Role and business permissions are unchanged.</div>
+            <div className="users-field"><label>Recovery action</label><select value={authResetMode} disabled={authResetBusy} onChange={e=>setAuthResetMode(e.target.value)}><option value="unlock">Unlock account / clear login limits</option><option value="reenroll">Reset Authenticator and require new setup</option></select></div>
+            <div className="users-reset-warning">{authResetMode==="reenroll"?"Existing Authenticator, backup codes, linked Google access and sessions will be revoked. Verify the staff member’s registered phone and SMS availability first. They must complete new phone verification and setup.":"Clears account lock and previous temporary attempt limits; keeps the existing Authenticator and backup codes. All existing sessions and pending login requests are revoked."} Roles, store access and business records remain unchanged.</div>
             <div className="users-form-grid">
-              <div className="users-field"><label>Reason for revocation</label><input value={authResetReason} onChange={e=>setAuthResetReason(e.target.value)} minLength={8} maxLength={500} required /></div>
+              <div className="users-field"><label>Reason for recovery</label><input value={authResetReason} onChange={e=>setAuthResetReason(e.target.value)} minLength={8} maxLength={500} required /></div>
               <div className="users-field"><label>Your six-digit Authenticator code</label><input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={authResetCode} onChange={e=>setAuthResetCode(e.target.value.replace(/\D/g,"").slice(0,6))} required /></div>
             </div>
-            <div className="users-actions-row"><button type="submit" className="users-primary-action" disabled={authResetBusy || authResetCode.length!==6 || authResetReason.trim().length<8}>Confirm revocation</button>
+            <div className="users-actions-row"><button type="submit" className="users-primary-action" disabled={authResetBusy || authResetCode.length!==6 || authResetReason.trim().length<8}>{authResetBusy?"Processing…":authResetMode==="reenroll"?"Confirm full reset":"Confirm unlock"}</button>
               <button type="button" className="users-secondary-action" disabled={authResetBusy} onClick={()=>{setAuthReset(null);setAuthResetCode("");setAuthResetReason("");}}>Cancel</button></div>
           </form>
         </section>
@@ -2325,8 +2327,8 @@ This disables login, revokes all active sessions and assigned access, and preser
                                   </button>
                                 </div>
                               )}
-                              {canCurrentUserResetAccounts() && !protectedAdmin && String(user.role).toLowerCase() !== "admin" && user.is_active && !user.is_login_locked && (
-                                <button type="button" className="users-small-button warning" onClick={()=>{setAuthReset(user);setAuthResetReason("");setAuthResetCode("");setResetPasswordForm(emptyResetPasswordForm);}}>Revoke Authenticator</button>
+                              {canCurrentUserResetAccounts() && !protectedAdmin && String(user.role).toLowerCase() !== "admin" && user.is_active && (
+                                <button type="button" className="users-small-button warning" onClick={()=>{setAuthReset(user);setAuthResetMode("unlock");setAuthResetReason("");setAuthResetCode("");setResetPasswordForm(emptyResetPasswordForm);}}>Account Security Reset</button>
                               )}
                               {protectedAdmin && isOriginalSystemAdministrator(currentUser) && (
                                 <a className="users-small-button neutral" href="/account-security">Replace Authenticator</a>

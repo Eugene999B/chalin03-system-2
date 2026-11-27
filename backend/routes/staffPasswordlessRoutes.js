@@ -16,7 +16,8 @@ const s=require("../services/staffPasswordlessCrypto");
 const router=express.Router();
 const {issueStaffSession}=require("../services/staffCookieSession");
 const {verifyStaffProtectedAction}=require("../services/staffProtectedActionService");
-const {rotationBinding,liveRotationRow,retireAuthenticatorAccess}=require("../services/staffAuthenticatorLifecycle");
+const {rotationBinding,liveRotationRow,retireAuthenticatorAccess,unlockStaffAccess}=require("../services/staffAuthenticatorLifecycle");
+const {RECOVERY_WINDOW_SQL,recoveryAllowed,recoveryMode}=require("../services/staffRecoveryPolicy");
 const {turnstileConfig,verifyStaffTurnstile}=require("../services/staffTurnstile");
 s.assertConfigured();
 const GENERIC="The account or security code could not be verified. Check your details or contact the administrator.";
@@ -41,7 +42,7 @@ const unavailableChallenge=(res)=>res.status(410).json({
 });
 async function tooManyCodeFailures(userId,conn=pool){
  const [rows]=await conn.query(
-  "SELECT COALESCE(SUM(attempts),0) AS n FROM staff_passwordless_challenges WHERE user_id=? AND purpose='totp_login' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)",
+  "SELECT COALESCE(SUM(attempts),0) AS n FROM staff_passwordless_challenges WHERE user_id=? AND purpose='totp_login' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)"+RECOVERY_WINDOW_SQL,
   [userId,OTP_WINDOW_MINUTES]
  );
  return Number(rows[0]?.n||0)>=OTP_MAX_FAILURES;
@@ -108,7 +109,7 @@ async function createSetup(token,id){
  return {stage:"setup",secret:totp.secret,otpauth_url:totp.uri,qr_data_url:await QRCode.toDataURL(totp.uri,{width:260,margin:2})};
 }
 async function belowLimit(id,purpose,cap,mins){
- const [rows]=await pool.query("SELECT COUNT(*) n FROM staff_passwordless_challenges WHERE user_id=? AND purpose=? AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)",[id,purpose,mins]);
+ const [rows]=await pool.query("SELECT COUNT(*) n FROM staff_passwordless_challenges WHERE user_id=? AND (purpose=? OR (?='sms_enroll' AND sms_sent_at IS NOT NULL)) AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)"+RECOVERY_WINDOW_SQL,[id,purpose,purpose,mins]);
  return Number(rows[0]?.n||0)<cap;
 }
 router.get("/mode",(req,res)=>{res.set("Cache-Control","no-store");return res.json({status:"success",pilot:true,enforced:s.enforced(),turnstile_site_key:turnstileConfig().siteKey});});
@@ -146,9 +147,9 @@ router.post("/start",action(async(req,res)=>{
  const [matchingPhones]=await pool.query("SELECT COUNT(*) AS n FROM users WHERE login_phone_normalized=? AND is_active=1",[phone]);
  if(Number(matchingPhones[0]?.n||0)!==1)return deny(res);
  if(!config.enabled||config.provider==="mock")return res.status(503).json({status:"error",message:"Phone verification is not available. Contact the administrator."});
- if(!(await belowLimit(user.id,"sms_enroll",s.MAX_SMS_PER_HOUR,60)))return deny(res,429);
- const [sentEarlier]=await pool.query("SELECT sms_sent_at FROM staff_passwordless_challenges WHERE user_id=? AND sms_sent_at IS NOT NULL ORDER BY created_at DESC LIMIT 1",[user.id]);
- if(sentEarlier.length&&Date.now()-new Date(sentEarlier[0].sms_sent_at).getTime()<s.SMS_COOLDOWN_SECONDS*1000)return deny(res,429);
+ if(!(await belowLimit(user.id,"sms_enroll",s.MAX_SMS_PER_HOUR,60))){res.set("Retry-After","3600");return res.status(429).json({status:"error",code:"RATE_LIMITED",message:"Too many verification SMS requests. Retry after the hourly limit expires or contact the System Administrator."});}
+ const [sentEarlier]=await pool.query("SELECT sms_sent_at FROM staff_passwordless_challenges WHERE user_id=? AND sms_sent_at IS NOT NULL"+RECOVERY_WINDOW_SQL+" ORDER BY created_at DESC LIMIT 1",[user.id]);
+ if(sentEarlier.length&&Date.now()-new Date(sentEarlier[0].sms_sent_at).getTime()<s.SMS_COOLDOWN_SECONDS*1000){res.set("Retry-After","60");return res.status(429).json({status:"error",code:"RATE_LIMITED",message:"A verification SMS was recently requested. Allow at least one minute before requesting another."});}
  const code=s.newSmsCode(),challenge=await createChallenge({id:user.id,purpose:"sms_enroll",workspace,branch,smsCode:code});
  const sent=await sendSmsAlertToPhone({branchId:branch||user.default_branch_id||1,phone,
   message:"CHALIN03 verification: "+code+". Expires in 5 minutes. Do not share this code.",
@@ -354,32 +355,43 @@ router.post("/administrator/revoke-authenticator",requireAuth,action(async(req,r
  res.set("Cache-Control","no-store");
  if(!isOriginalSystemAdministrator(req.user))return deny(res,403);
  if(!s.enforced())return res.status(409).json({status:"error",code:"PASSWORDLESS_ENFORCEMENT_REQUIRED",message:"Staff revocation requires enforced Authenticator sign-in before it can be used safely."});
- const target=number(req.body?.user_id),reason=String(req.body?.reason||"").trim().slice(0,500);
- if(!target||target===Number(req.user.id)||reason.length<8)return res.status(400).json({status:"error",message:"Select another staff account and enter a reason of at least eight characters."});
+ const target=number(req.body?.user_id),reason=String(req.body?.reason||"").trim().slice(0,500),mode=recoveryMode(req.body?.mode);
+ if(!target||!mode||target===Number(req.user.id)||reason.length<8)return res.status(400).json({status:"error",message:"Select another staff account and enter a reason of at least eight characters."});
  const checked=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
  if(!checked.ok){if(checked.status===429)res.set("Retry-After","900");return res.status(checked.status).json({status:"error",code:checked.code,message:checked.message});}
  const config=getSmsConfig();
- if(!config.enabled||config.provider==="mock")return res.status(409).json({status:"error",message:"Verified phone enrollment is unavailable. Do not revoke this Authenticator yet."});
+ if(mode==="reenroll"&&(!config.enabled||config.provider==="mock"))return res.status(409).json({status:"error",message:"Verified phone enrollment is unavailable. Do not revoke this Authenticator yet."});
  const conn=await pool.getConnection();
  try{
   await conn.beginTransaction();
   if(!(await liveRotationRow(conn,req.user))){await conn.rollback();return deny(res,403);}
   const [rows]=await conn.query("SELECT id,username,role,is_active,is_login_locked,login_phone_normalized FROM users WHERE id=? FOR UPDATE",[target]);
   const user=rows[0];
-  if(!user||isOriginalSystemAdministrator(user)||String(user.role).toLowerCase()==="admin"||!Number(user.is_active)||Number(user.is_login_locked)){
+  if(!recoveryAllowed(req.user,user)){
    await conn.rollback();return res.status(409).json({status:"error",message:"This account requires verified self-rotation or separate administrator recovery."});
   }
-  const phone=normalizeGhanaPhone(user.login_phone_normalized);
-  const [matching]=await conn.query("SELECT COUNT(*) n FROM users WHERE login_phone_normalized=? AND is_active=1",[phone||""]);
-  if(!phone||Number(matching[0]?.n||0)!==1){await conn.rollback();return res.status(409).json({status:"error",message:"A unique registered phone is required for safe staff re-enrollment."});}
   const [identity]=await conn.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[target]);
-  if(!identity.length){await conn.rollback();return res.status(409).json({status:"error",message:"This account does not have an active Authenticator."});}
-  await retireAuthenticatorAccess(conn,target,"authenticator_revoked");
-  await conn.query("DELETE FROM staff_passwordless_identities WHERE user_id=?",[target]);
-  await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_REVOKED",actionType:"security.staff_authenticator.revoked",severity:"critical",entityType:"user",entityId:target,details:"Owner approved staff Authenticator revocation. Re-enrollment requires registered phone verification.",metadata:{reason}});
+  if(mode==="reenroll"||!identity.length){
+   if(!config.enabled||config.provider==="mock"){await conn.rollback();return res.status(409).json({status:"error",message:"Verified phone enrollment is unavailable. Contact support before resetting."});}
+   const phone=normalizeGhanaPhone(user.login_phone_normalized);
+   const [matching]=await conn.query("SELECT COUNT(*) n FROM users WHERE login_phone_normalized=? AND is_active=1",[phone||""]);
+   if(!phone||Number(matching[0]?.n||0)!==1){await conn.rollback();return res.status(409).json({status:"error",message:"A unique registered phone is required for safe staff re-enrollment."});}
+  }
+  if(mode==="reenroll"){
+   await retireAuthenticatorAccess(conn,target,"authenticator_revoked");
+   await conn.query("DELETE FROM staff_passwordless_identities WHERE user_id=?",[target]);
+  }else await unlockStaffAccess(conn,target);
+  await conn.query("UPDATE users SET failed_login_attempts=0,locked_until=NULL,is_login_locked=FALSE,login_locked_at=NULL,login_lock_reason=NULL,last_failed_login_at=NULL,last_failed_login_ip=NULL WHERE id=?",[target]);
+  await conn.query("UPDATE password_recovery_otps SET invalidated_at=NOW(),invalidation_reason='administrator_reset' WHERE user_id=? AND consumed_at IS NULL AND invalidated_at IS NULL",[target]);
+  const auditId=await writeAuditEvent({connection:conn,req,action:"STAFF_ACCOUNT_SECURITY_RESET",actionType:"security.staff_authenticator.reset",severity:"critical",entityType:"user",entityId:target,details:mode==="reenroll"?"Owner reset staff Authenticator and login restrictions. Registered phone verification required.":"Owner cleared staff login restrictions; existing Authenticator retained.",metadata:{reason,mode,previously_locked:Boolean(Number(user.is_login_locked)),previously_enrolled:identity.length===1}});
+  if(!auditId)throw new Error("Required recovery audit was not recorded");
+  if(mode==="reenroll"){
+   const revokeAudit=await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_REVOKED",actionType:"security.staff_authenticator.revoked",severity:"critical",entityType:"user",entityId:target,details:"Existing staff Authenticator and backup credentials revoked.",metadata:{reason}});
+   if(!revokeAudit)throw new Error("Required revocation audit was not recorded");
+  }
   await conn.commit();
  }catch(e){await conn.rollback();throw e;}finally{conn.release();}
- return res.json({status:"success",message:"Staff Authenticator revoked. The user must verify their registered phone and enroll again. Their permissions are unchanged."});
+ return res.json({status:"success",message:mode==="reenroll"?"Staff account reset. Previous Authenticator and sessions revoked. The user must verify their registered phone and enroll again. Permissions are unchanged.":"Staff login restrictions cleared. Existing Authenticator is retained; previous sessions and pending sign-in challenges revoked."});
 }));
 
 router.get("/account/status",requireAuth,action(async(req,res)=>{
