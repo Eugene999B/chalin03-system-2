@@ -3265,7 +3265,7 @@ router.get(
       const params = [branchId];
       const dateFilter = buildDateFilter("s", "created_at", from, to, params);
 
-      const [sales] = await pool.query(
+      const [originalSales] = await pool.query(
         `SELECT
           s.id,
           s.branch_id,
@@ -3299,6 +3299,9 @@ router.get(
         params
       );
 
+      const {enrichReceipts,loadReturnRows,periodNet}=require("../services/salesReturnReportingService");
+      const sales=await enrichReceipts(pool,branchId,originalSales,{to});
+      const periodReturns=await loadReturnRows(pool,branchId,{from,to});
       const workbook = new ExcelJS.Workbook();
       workbook.creator = "Chalin 03 System";
       workbook.created = new Date();
@@ -3313,7 +3316,12 @@ router.get(
         { header: "Subtotal / Before Discount", key: "subtotal" },
         { header: "Discount", key: "discount_amount" },
         { header: "VAT", key: "tax_amount" },
-        { header: "Amount Due", key: "total" },
+        { header: "Original Invoice Total", key: "total" },
+        {header:"Returned Units (through end date)",key:"returned_quantity"},
+        {header:"Recorded Refunds (through end date)",key:"recorded_refunds"},
+        {header:"Estimated Returned Merchandise Value",key:"estimated_return_value"},
+        {header:"Net Invoice After Refunds",key:"net_sales_after_refunds"},
+        {header:"Estimated Retained Merchandise Value",key:"net_merchandise_sales"},
         { header: "Payment Type", key: "payment_type" },
         { header: "Amount Paid", key: "amount_paid" },
         { header: "Cash Received", key: "cash_received" },
@@ -3323,7 +3331,7 @@ router.get(
         { header: "Balance", key: "balance" },
         { header: "Sale Status", key: "sale_status" },
         { header: "Voided?", key: "voided_text" },
-        { header: "Valid Sales Total", key: "valid_total" },
+        { header: "Original Non-voided Invoice Total", key: "valid_total" },
         { header: "Valid Discount", key: "valid_discount" },
         { header: "Valid Amount Paid", key: "valid_amount_paid" },
         { header: "Valid Balance", key: "valid_balance" },
@@ -3354,6 +3362,11 @@ router.get(
           balance: Number(sale.balance || 0),
           sale_status: sale.sale_status,
           voided_text: voided ? "Yes" : "No",
+          returned_quantity:sale.returned_quantity,
+          recorded_refunds:sale.recorded_refunds,
+          estimated_return_value:sale.unvalued_return_count?"Not evidenced":sale.estimated_return_value,
+          net_sales_after_refunds:sale.net_sales_after_refunds,
+          net_merchandise_sales:sale.net_merchandise_sales??"Not evidenced",
           valid_total: voided ? 0 : Number(sale.total || 0),
           valid_discount: voided ? 0 : Number(sale.discount_amount || 0),
           valid_amount_paid: voided ? 0 : Number(sale.amount_paid || 0),
@@ -3436,9 +3449,11 @@ router.get(
       });
 
       summaryWorksheet.addRow({
-        metric: "Valid sales total",
+        metric: "Original non-voided invoice total in period",
         value: validTotal,
       });
+      const net=periodNet(validTotal,periodReturns);
+      for(const [metric,value] of [["Returned units in period",net.returned_quantity],["Recorded refunds in period",net.recorded_refunds],["Net sales after recorded refunds",net.net_sales_after_refunds],["Estimated returned merchandise value in period",net.unvalued_return_count?"Not evidenced":net.estimated_return_value],["Estimated net merchandise sales in period",net.net_merchandise_sales??"Not evidenced"],["Stock-only returned units (no automatic credit)",net.stock_only_quantity],["Return date basis","Summary reverses returns on their recorded return date, including returns of earlier invoices. Receipt rows show cumulative returns through report end. Original receipts, tax and debt remain unchanged."]])summaryWorksheet.addRow({metric,value});
 
       summaryWorksheet.addRow({
         metric: "Valid amount paid",

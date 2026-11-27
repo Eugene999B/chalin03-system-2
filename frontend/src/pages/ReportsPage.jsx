@@ -419,9 +419,14 @@ export default function ReportsPage() {
       note: "Total discount given",
     },
     {
-      label: "Total Sales",
-      value: summary?.total_sales_amount,
-      note: "Sales after discount",
+      label: "Net Sales After Refunds",
+      value: summary?.net_sales_after_refunds ?? summary?.total_sales_amount,
+      note: "Original invoices less recorded refunds on return date",
+    },
+    {
+      label: "Estimated Retained Merchandise Value",
+      value: summary?.net_merchandise_sales,
+      note: "All returned items deducted; stock-only returns do not automatically create a refund or debt credit",
     },
     {
       label: "Gross Profit",
@@ -596,7 +601,7 @@ export default function ReportsPage() {
           <KpiCard
             key={item.label}
             label={item.label}
-            value={formatMoney(item.value)}
+            value={item.value==null?"Not available":formatMoney(item.value)}
             note={item.note}
             icon={item.label === "Outstanding Debts" ? "⚠️" : "💵"}
           />
