@@ -354,7 +354,8 @@ router.post("/account/rotate/confirm",requireAuth,action(async(req,res)=>{
 router.post("/administrator/revoke-authenticator",requireAuth,action(async(req,res)=>{
  res.set("Cache-Control","no-store");
  if(!isOriginalSystemAdministrator(req.user))return deny(res,403);
- if(!s.enforced())return res.status(409).json({status:"error",code:"PASSWORDLESS_ENFORCEMENT_REQUIRED",message:"Staff revocation requires enforced Authenticator sign-in before it can be used safely."});
+ // Pilot recovery is safe because legacy password access remains retired for the selected account after a full reset.
+ if(!s.pilotEnabled()||!s.assertConfigured())return res.status(503).json({status:"error",code:"AUTHENTICATOR_UNAVAILABLE",message:"Secure Authenticator recovery is temporarily unavailable."});
  const target=number(req.body?.user_id),reason=String(req.body?.reason||"").trim().slice(0,500),mode=recoveryMode(req.body?.mode);
  if(!target||!mode||target===Number(req.user.id)||reason.length<8)return res.status(400).json({status:"error",message:"Select another staff account and enter a reason of at least eight characters."});
  const checked=await verifyStaffProtectedAction({userId:req.user.id,code:req.body?.authenticator_code});
@@ -371,7 +372,7 @@ router.post("/administrator/revoke-authenticator",requireAuth,action(async(req,r
    await conn.rollback();return res.status(409).json({status:"error",message:"This account requires verified self-rotation or separate administrator recovery."});
   }
   const [identity]=await conn.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id=? FOR UPDATE",[target]);
-  if(mode==="reenroll"||!identity.length){
+  if(mode==="reenroll"){
    if(!config.enabled||config.provider==="mock"){await conn.rollback();return res.status(409).json({status:"error",message:"Verified phone enrollment is unavailable. Contact support before resetting."});}
    const phone=normalizeGhanaPhone(user.login_phone_normalized);
    const [matching]=await conn.query("SELECT COUNT(*) n FROM users WHERE login_phone_normalized=? AND is_active=1",[phone||""]);
@@ -386,7 +387,7 @@ router.post("/administrator/revoke-authenticator",requireAuth,action(async(req,r
   const auditId=await writeAuditEvent({connection:conn,req,action:"STAFF_ACCOUNT_SECURITY_RESET",actionType:"security.staff_authenticator.reset",severity:"critical",entityType:"user",entityId:target,details:mode==="reenroll"?"Owner reset staff Authenticator and login restrictions. Registered phone verification required.":"Owner cleared staff login restrictions; existing Authenticator retained.",metadata:{reason,mode,previously_locked:Boolean(Number(user.is_login_locked)),previously_enrolled:identity.length===1}});
   if(!auditId)throw new Error("Required recovery audit was not recorded");
   if(mode==="reenroll"){
-   const revokeAudit=await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_REVOKED",actionType:"security.staff_authenticator.revoked",severity:"critical",entityType:"user",entityId:target,details:"Existing staff Authenticator and backup credentials revoked.",metadata:{reason}});
+   const revokeAudit=await writeAuditEvent({connection:conn,req,action:"STAFF_AUTHENTICATOR_REVOKED",actionType:"security.staff_authenticator.revoked",severity:"critical",entityType:"user",entityId:target,details:"Existing staff Authenticator and backup credentials revoked.",metadata:{reason,legacy_signin_retired:true}});
    if(!revokeAudit)throw new Error("Required revocation audit was not recorded");
   }
   await conn.commit();

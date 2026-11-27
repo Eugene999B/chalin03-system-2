@@ -7,4 +7,13 @@ function recoveryAllowed(actor,target){
  return !!actor&&!!target&&Number(target.id)!==Number(actor.id)&&Number(target.id)!==SYSTEM_ADMIN_ID&&String(target.username||"").trim().toLowerCase()!==SYSTEM_ADMIN_USERNAME&&String(target.role||"").toLowerCase()!=="admin"&&Number(target.is_active)===1;
 }
 function recoveryMode(value){return value===undefined?"reenroll":(["unlock","reenroll"].includes(value)?value:null);}
-module.exports={RECOVERY_WINDOW_SQL,recoveryAllowed,recoveryMode};
+// An audited full reset permanently retires legacy access for the target, even
+// before global enforcement. Retain the marker in the immutable audit history.
+// Existing enrollment also retires the password path. Fail closed on DB errors.
+async function legacyStaffLoginRetired(db,userId){
+ const [rows]=await db.query("SELECT user_id FROM staff_passwordless_identities WHERE user_id = ? LIMIT 1",[userId]);
+ if(rows.length)return true;
+ const [resets]=await db.query("SELECT id FROM activity_log WHERE entity_type='user' AND entity_id=? AND action='STAFF_AUTHENTICATOR_REVOKED' AND outcome='success' LIMIT 1",[String(userId)]);
+ return resets.length>0;
+}
+module.exports={RECOVERY_WINDOW_SQL,recoveryAllowed,recoveryMode,legacyStaffLoginRetired};
