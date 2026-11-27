@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [sales, setSales] = useState([]);
   const [debtSummary, setDebtSummary] = useState(null);
   const [financialSummary, setFinancialSummary] = useState(null);
+  const [netPeriods,setNetPeriods]=useState(null);
   const [financialSummaryError, setFinancialSummaryError] = useState(false);
 
   const [message, setMessage] = useState("");
@@ -165,13 +166,14 @@ export default function DashboardPage() {
       const [productsResponse, salesResponse, debtsResponse, finance] =
         await Promise.all([
           axiosClient.get("/products"),
-          axiosClient.get("/sales"),
+          axiosClient.get("/sales",{params:{dashboard_periods:"1"}}),
           axiosClient.get("/debts/summary"),
           financialResult,
         ]);
 
       setProducts(productsResponse.data.products || []);
       setSales(salesResponse.data.sales || []);
+      setNetPeriods(salesResponse.data.net_periods||null);
       setDebtSummary(debtsResponse.data.summary || debtsResponse.data || null);
       setFinancialSummary(finance.summary);
       setFinancialSummaryError(finance.failed || (canManage && !finance.summary));
@@ -237,24 +239,24 @@ export default function DashboardPage() {
       0
     );
 
-    const totalSalesAmount = financialSummary
+    const totalSalesAmount = netPeriods ? netPeriods.all : financialSummary
       ? Number(financialSummary.net_sales_after_refunds ?? financialSummary.total_sales_amount ?? 0)
       : activeSales.reduce(
           (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
           0
         );
 
-    const todaySalesAmount = todaySales.reduce(
+    const todaySalesAmount = netPeriods ? netPeriods.today : todaySales.reduce(
       (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
-    const monthSalesAmount = monthSales.reduce(
+    const monthSalesAmount = netPeriods ? netPeriods.month : monthSales.reduce(
       (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
-    const weekSalesAmount = weekSales.reduce(
+    const weekSalesAmount = netPeriods ? netPeriods.week : weekSales.reduce(
       (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
@@ -331,7 +333,8 @@ export default function DashboardPage() {
       date.setDate(date.getDate() - (6 - index));
       date.setHours(0, 0, 0, 0);
 
-      const amount = activeSales.reduce((sum, sale) => {
+      const dateKey=date.toISOString().slice(0,10);
+      const amount = netPeriods ? (netPeriods.by_day?.[dateKey]||0) : activeSales.reduce((sum, sale) => {
         const saleDate = getSaleDate(sale);
 
         if (Number.isNaN(saleDate.getTime())) {
@@ -600,10 +603,11 @@ export default function DashboardPage() {
     };
     // Pure display helpers are intentionally stable for the lifetime of this component.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, sales, debtSummary, financialSummary]);
+  }, [products, sales, debtSummary, financialSummary, netPeriods]);
 
   const recentSales = [...sales].slice(0, 8);
 
+  const chartMin = Math.min(0,...dashboardData.lastSevenDays.map(item=>item.amount));
   const chartMax = Math.max(
     ...dashboardData.lastSevenDays.map((item) => item.amount),
     1
@@ -614,7 +618,7 @@ export default function DashboardPage() {
       const width = 620;
       const height = 210;
       const x = index * (width / 6);
-      const y = height - 24 - (item.amount / chartMax) * 150;
+      const y = height - 24 - ((item.amount-chartMin)/(chartMax-chartMin))*150;
       return `${x},${y}`;
     })
     .join(" ");
@@ -633,7 +637,7 @@ export default function DashboardPage() {
 
   const kpiCards = [
     {
-      label: "Today’s Sales",
+      label: "Today’s Net Sales",
       value: `GHS ${formatMoney(dashboardData.todaySalesAmount)}`,
       note: `${dashboardData.todaySales.length} transaction(s) today`,
       icon: "⚡",
@@ -641,7 +645,7 @@ export default function DashboardPage() {
       tone: "gold",
     },
     {
-      label: "Monthly Revenue",
+      label: "Monthly Net Sales",
       value: `GHS ${formatMoney(dashboardData.monthSalesAmount)}`,
       note: `${dashboardData.monthSales.length} completed sale(s) this month`,
       icon: "📈",
@@ -748,7 +752,7 @@ export default function DashboardPage() {
             />
 
             <HeroMetric
-              label="This Week : "
+              label="This Week Net : "
               value={`GHS ${formatMoney(dashboardData.weekSalesAmount)}`}
             />
 
@@ -1051,7 +1055,7 @@ export default function DashboardPage() {
 
               {dashboardData.lastSevenDays.map((item, index) => {
                 const x = index * (620 / 6);
-                const y = 210 - 24 - (item.amount / chartMax) * 150;
+                const y = 210 - 24 - ((item.amount-chartMin)/(chartMax-chartMin))*150;
 
                 return (
                   <g key={item.label}>

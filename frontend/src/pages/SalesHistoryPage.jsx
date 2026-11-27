@@ -914,6 +914,7 @@ export default function SalesHistoryPage() {
       0
     );
 
+    const productValueUnavailable=activeSales.some(s=>Number(s.unvalued_return_count||0)>0);
     const productValue = activeSales.reduce(
       (sum, sale) =>
         sum +
@@ -934,7 +935,7 @@ export default function SalesHistoryPage() {
       totalDiscount,
       productFilterActive,
       productQuantity,
-      productValue,
+      productValue:productValueUnavailable?null:productValue,
     };
   }, [sales, productSearch]);
 
@@ -1097,7 +1098,7 @@ export default function SalesHistoryPage() {
             icon="🔎"
             title="Product Found"
             value={`${summary.productQuantity} unit(s)`}
-            note={`Matched value: GHS ${formatMoney(summary.productValue)}`}
+            note={summary.productValue==null?"Retained value not fully evidenced":`Retained value: GHS ${formatMoney(summary.productValue)}`}
             tone="blue"
           />
         )}

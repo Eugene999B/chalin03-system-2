@@ -1730,7 +1730,7 @@ router.get("/", requireAuth, async (req, res) => {
     sql += ` ORDER BY s.created_at DESC LIMIT 250`;
 
     const [originalSales] = await pool.query(sql, params);
-    const {enrichReceipts}=require("../services/salesReturnReportingService");
+    const {enrichReceipts,loadDashboardNet}=require("../services/salesReturnReportingService");
     const sales=await enrichReceipts(pool,branchId,originalSales,{to:to||"",productFilter});
 
     const activeSales = sales.filter(
@@ -1769,6 +1769,7 @@ router.get("/", requireAuth, async (req, res) => {
         product_id: product_id || "",
       },
       product_summary: productSummary,
+      ...(req.query.dashboard_periods==="1"?{net_periods:await loadDashboardNet(pool,branchId)}:{}),
       sales,
     });
   } catch (error) {

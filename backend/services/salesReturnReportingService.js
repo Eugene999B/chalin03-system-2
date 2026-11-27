@@ -44,4 +44,17 @@ async function enrichReceipts(db,branchId,sales,{to="",productFilter=null}={}){
  return sales.map(s=>receiptWithReturns(s,grouped.get(Number(s.id))||[],productFilter));
 }
 function periodNet(gross,rows){const r=summarizeReturnRows(rows);return {...r,gross_sales_amount:money(gross),net_sales_after_refunds:money(Number(gross||0)-r.recorded_refunds),net_merchandise_sales:r.unvalued_return_count?null:money(Number(gross||0)-r.estimated_return_value)};}
-module.exports={summarizeReturnRows,receiptWithReturns,loadReturnRows,enrichReceipts,periodNet};
+function dashboardNetFromDays(rows,now=new Date()){
+ const today=now.toISOString().slice(0,10),month=today.slice(0,7)+"-01";
+ const week=new Date(Date.parse(today+"T00:00:00Z")-6*86400000).toISOString().slice(0,10);
+ const byDay={};let all=0;
+ for(const r of rows){const key=String(r.day);if(key>today)continue;const net=money(Number(r.gross||0)-Number(r.refunds||0));byDay[key]=money((byDay[key]||0)+net);all+=net;}
+ const sum=from=>money(Object.entries(byDay).reduce((n,[day,value])=>n+(day>=from?value:0),0));
+ return {all:money(all),today:byDay[today]||0,month:sum(month),week:sum(week),by_day:Object.fromEntries(Object.entries(byDay).filter(([key])=>key>=week))};
+}
+async function loadDashboardNet(db,branchId){
+ const [rows]=await db.query(`SELECT DATE_FORMAT(s.created_at,'%Y-%m-%d') AS day,SUM(s.total) AS gross,0 AS refunds FROM sales s WHERE s.branch_id=? AND COALESCE(s.is_voided,0)=0 AND LOWER(COALESCE(s.sale_status,'')) NOT IN ('cancelled','voided','canceled') GROUP BY DATE_FORMAT(s.created_at,'%Y-%m-%d')
+ UNION ALL SELECT DATE_FORMAT(r.returned_at,'%Y-%m-%d'),0,SUM(r.refund_amount) FROM returns r JOIN sales s ON s.id=r.sale_id AND s.branch_id=r.branch_id WHERE r.branch_id=? AND r.return_type='refund' AND COALESCE(s.is_voided,0)=0 AND LOWER(COALESCE(s.sale_status,'')) NOT IN ('cancelled','voided','canceled') GROUP BY DATE_FORMAT(r.returned_at,'%Y-%m-%d')`,[branchId,branchId]);
+ return dashboardNetFromDays(rows);
+}
+module.exports={summarizeReturnRows,receiptWithReturns,loadReturnRows,enrichReceipts,periodNet,dashboardNetFromDays,loadDashboardNet};
