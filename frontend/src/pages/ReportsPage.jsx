@@ -419,8 +419,8 @@ export default function ReportsPage() {
       note: "Total discount given",
     },
     {
-      label: "Total Sales",
-      value: summary?.total_sales_amount,
+      label: "Net Sales After Refunds",
+      value: summary?.net_sales_after_refunds ?? summary?.total_sales_amount,
       note: "Sales after discount",
     },
     {
@@ -434,7 +434,7 @@ export default function ReportsPage() {
       note: "Store costs",
     },
     {
-      label: "Refunds",
+      label: "Recorded Refunds",
       value: summary?.total_refunds,
       note: "Deducted from profit; date of return",
     },

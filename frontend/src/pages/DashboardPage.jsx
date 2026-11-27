@@ -238,24 +238,24 @@ export default function DashboardPage() {
     );
 
     const totalSalesAmount = financialSummary
-      ? Number(financialSummary.total_sales_amount || 0)
+      ? Number(financialSummary.net_sales_after_refunds ?? financialSummary.total_sales_amount ?? 0)
       : activeSales.reduce(
-          (sum, sale) => sum + Number(sale.total || 0),
+          (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
           0
         );
 
     const todaySalesAmount = todaySales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
+      (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
     const monthSalesAmount = monthSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
+      (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
     const weekSalesAmount = weekSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
+      (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
@@ -338,7 +338,7 @@ export default function DashboardPage() {
           return sum;
         }
 
-        return isSameDay(saleDate, date) ? sum + Number(sale.total || 0) : sum;
+        return isSameDay(saleDate, date) ? sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0) : sum;
       }, 0);
 
       return {
@@ -1282,7 +1282,7 @@ export default function DashboardPage() {
                         <td>GHS {formatMoney(sale.discount_amount)}</td>
 
                         <td>
-                          <strong>GHS {formatMoney(sale.total)}</strong>
+                          <strong>GHS {formatMoney(sale.net_sales_after_refunds ?? sale.total)}</strong>
                         </td>
 
                         <td>
@@ -1352,8 +1352,8 @@ export default function DashboardPage() {
               <div style={{ ...styles.darkMiniGrid, ...(isMobile ? oneColumn : {}),
                 rowGap: 18, columnGap: 16 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <span>Completed Sales Revenue</span>
-                  <strong>{financialSummary ? `GHS ${formatMoney(financialSummary.total_sales_amount)}` : "Unavailable"}</strong>
+                  <span>Net Sales After Recorded Refunds</span>
+                  <strong>{financialSummary ? `GHS ${formatMoney(financialSummary.net_sales_after_refunds ?? financialSummary.total_sales_amount)}` : "Unavailable"}</strong>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   <span>Recorded Discounts Given</span>

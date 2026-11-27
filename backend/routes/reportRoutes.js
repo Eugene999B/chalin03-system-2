@@ -427,6 +427,8 @@ router.get(
       );
 
       const salesSummary = salesSummaryRows[0] || {};
+      const {loadReturnRows,periodNet}=require("../services/salesReturnReportingService");
+      const returnNet=periodNet(salesSummary.total_sales_amount,await loadReturnRows(pool,branchId,{from,to}));
       const profitSummary = profitRows[0] || {};
       const expenseSummary = expenseRows[0] || {};
       const debtSummary = debtRows[0] || {};
@@ -471,6 +473,7 @@ router.get(
           total_tax_amount: Number(salesSummary.total_tax_amount || 0),
 
           total_sales_amount: Number(salesSummary.total_sales_amount || 0),
+          ...returnNet,
           total_amount_paid: Number(salesSummary.total_amount_paid || 0),
           total_sales_balance: Number(salesSummary.total_sales_balance || 0),
 

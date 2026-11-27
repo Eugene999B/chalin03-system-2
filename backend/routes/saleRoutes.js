@@ -1729,7 +1729,9 @@ router.get("/", requireAuth, async (req, res) => {
 
     sql += ` ORDER BY s.created_at DESC LIMIT 250`;
 
-    const [sales] = await pool.query(sql, params);
+    const [originalSales] = await pool.query(sql, params);
+    const {enrichReceipts}=require("../services/salesReturnReportingService");
+    const sales=await enrichReceipts(pool,branchId,originalSales,{to:to||"",productFilter});
 
     const activeSales = sales.filter(
       (sale) =>
@@ -1744,11 +1746,11 @@ router.get("/", requireAuth, async (req, res) => {
           product_search: productFilter.text || String(product_id || ""),
           receipt_count: activeSales.length,
           quantity_sold: activeSales.reduce(
-            (sum, sale) => sum + Number(sale.matched_product_quantity || 0),
+            (sum, sale) => sum + Number(sale.net_matched_product_quantity || 0),
             0
           ),
           sales_value: activeSales.reduce(
-            (sum, sale) => sum + Number(sale.matched_product_total || 0),
+            (sum, sale) => sum + Number(sale.net_matched_product_total || 0),
             0
           ),
         }
