@@ -637,7 +637,10 @@ export default function OperationalApprovalLauncher() {
         .approval-review-overlay { position:fixed; inset:0; z-index:4300; display:grid; place-items:center; background:rgba(2,6,23,.68); padding:18px; }
         .approval-review-modal { width:min(620px,100%); max-height:90dvh; overflow:auto; background:white; border-radius:22px; padding:18px; box-shadow:0 30px 90px rgba(0,0,0,.4); }
         @media (max-width: 720px) {
-          .approval-launcher-button { right:10px; bottom:10px; padding:10px 13px; }
+          .approval-launcher-button { right:10px; bottom:calc(10px + env(safe-area-inset-bottom,0px)); padding:0; width:48px; height:48px; justify-content:center; font-size:0; }
+          .approval-launcher-button .approval-launcher-label{display:none;}
+          .approval-launcher-button .approval-launcher-icon{font-size:21px;}
+          .approval-launcher-button .approval-launcher-count{position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;font-size:10px;}
           .approval-overlay { padding:0; align-items:end; }
           .approval-modal { max-height:96dvh; border-radius:22px 22px 0 0; }
           .approval-header { padding:15px; }
@@ -652,9 +655,9 @@ export default function OperationalApprovalLauncher() {
         type="button"
         className="approval-launcher-button"
         onClick={() => showCentre("requests")}
-        title="Open protected pricing and financial approvals"
+        aria-label="Open Approval Centre" title="Open protected pricing and financial approvals"
       >
-        <span>🔐 Approval Centre</span>
+        <span className="approval-launcher-icon" aria-hidden="true">🔐</span><span className="approval-launcher-label">Approval Centre</span>
         {pendingCount > 0 ? (
           <span className="approval-launcher-count">{pendingCount}</span>
         ) : null}
