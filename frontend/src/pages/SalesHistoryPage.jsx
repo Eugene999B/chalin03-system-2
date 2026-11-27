@@ -882,7 +882,7 @@ export default function SalesHistoryPage() {
     const voidedSales = sales.filter(isSaleVoided);
 
     const totalSales = activeSales.reduce(
-      (sum, sale) => sum + Number(sale.total || 0),
+      (sum, sale) => sum + Number(sale.net_sales_after_refunds ?? sale.total ?? 0),
       0
     );
 
@@ -908,19 +908,20 @@ export default function SalesHistoryPage() {
         sum +
         Number(
           productFilterActive
-            ? sale.matched_product_quantity || 0
-            : sale.total_items_sold || 0
+            ? sale.net_matched_product_quantity ?? sale.matched_product_quantity ?? 0
+            : sale.net_items_sold ?? sale.total_items_sold ?? 0
         ),
       0
     );
 
+    const productValueUnavailable=activeSales.some(s=>Number(s.unvalued_return_count||0)>0);
     const productValue = activeSales.reduce(
       (sum, sale) =>
         sum +
         Number(
           productFilterActive
-            ? sale.matched_product_total || 0
-            : sale.total_items_value || 0
+            ? sale.net_matched_product_total ?? 0
+            : sale.net_items_value ?? 0
         ),
       0
     );
@@ -934,7 +935,7 @@ export default function SalesHistoryPage() {
       totalDiscount,
       productFilterActive,
       productQuantity,
-      productValue,
+      productValue:productValueUnavailable?null:productValue,
     };
   }, [sales, productSearch]);
 
@@ -1042,7 +1043,7 @@ export default function SalesHistoryPage() {
 
           <div style={{ ...styles.heroMetrics, ...oneColumn }}>
             <HeroMetric label="Valid Sales : " value={summary.activeCount} />
-            <HeroMetric label="Sales Value : " value={formatCompactMoney(summary.totalSales)} />
+            <HeroMetric label="Net after refunds : " value={formatCompactMoney(summary.totalSales)} />
             <HeroMetric label="Paid : " value={formatCompactMoney(summary.totalPaid)} />
             <HeroMetric label="Balance : " value={formatCompactMoney(summary.totalBalance)} />
           </div>
@@ -1078,7 +1079,7 @@ export default function SalesHistoryPage() {
 
         <SummaryCard
           icon="💰"
-          title="Total Sales"
+          title="Net Sales After Refunds"
           value={`GHS ${formatMoney(summary.totalSales)}`}
           note="Voided sales excluded"
           tone="gold"
@@ -1097,7 +1098,7 @@ export default function SalesHistoryPage() {
             icon="🔎"
             title="Product Found"
             value={`${summary.productQuantity} unit(s)`}
-            note={`Matched value: GHS ${formatMoney(summary.productValue)}`}
+            note={summary.productValue==null?"Retained value not fully evidenced":`Retained value: GHS ${formatMoney(summary.productValue)}`}
             tone="blue"
           />
         )}
@@ -1243,8 +1244,8 @@ export default function SalesHistoryPage() {
                           {sale.matched_products}
                           <br />
                           <span>
-                            Qty: {Number(sale.matched_product_quantity || 0)} •
-                            Value: GHS {formatMoney(sale.matched_product_total)}
+                            Net qty: {Number(sale.net_matched_product_quantity ?? sale.matched_product_quantity ?? 0)} •
+                            Retained item value: {sale.net_matched_product_total==null?"Not evidenced":"GHS "+formatMoney(sale.net_matched_product_total)}
                           </span>
                         </div>
                       )}
@@ -1252,7 +1253,8 @@ export default function SalesHistoryPage() {
 
                     <div style={{ ...styles.saleAmountBox, ...compactSaleAmountBox }}>
                       <span>Total</span>
-                      <strong>GHS {formatMoney(sale.total)}</strong>
+                      <strong>GHS {formatMoney(sale.net_sales_after_refunds ?? sale.total)}</strong>
+                      {Number(sale.returned_quantity||0)>0&&<small style={{display:"block"}}>Returned: {sale.returned_quantity} unit(s) · Original GHS {formatMoney(sale.total)} · Refund GHS {formatMoney(sale.recorded_refunds)} · Retained merchandise {sale.net_merchandise_sales==null?"not evidenced":"GHS "+formatMoney(sale.net_merchandise_sales)}</small>}
                       <small>
                         Tendered: GHS {formatMoney(sale.amount_tendered)} • Paid:
                         GHS {formatMoney(sale.amount_paid)} • Change: GHS{" "}
