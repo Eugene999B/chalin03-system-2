@@ -439,7 +439,7 @@ export default function ReportsPage() {
       note: "Store costs",
     },
     {
-      label: "Recorded Refunds",
+      label: "Refunds",
       value: summary?.total_refunds,
       note: "Deducted from profit; date of return",
     },
