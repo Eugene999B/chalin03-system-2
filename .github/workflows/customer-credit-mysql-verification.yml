@@ -56,4 +56,4 @@ jobs:
         env:
           CHALIN03_CREDIT_DISPOSABLE_MYSQL: 'true'
           CHALIN03_CREDIT_FULL_SCHEMA: ${{ matrix.schema == 'full' && 'true' || 'false' }}
-        run: node --test tests/creditMySqlIntegration.test.js
+        run: node --test tests/creditMySqlIntegration.test.js tests/staffRecoveryCollationMysql.test.js
