@@ -12,6 +12,7 @@ const {
 } = require("./smsAlertService");
 const { normalizeGhanaPhone } = require("./smsService");
 const { writeAuditEvent } = require("./auditTrailService");
+const { legacyStaffLoginRetired } = require("./staffRecoveryPolicy");
 
 const SYSTEM_ADMIN_ID = Number(process.env.SYSTEM_ADMIN_USER_ID || 1);
 const SYSTEM_ADMIN_USERNAME = String(
@@ -460,6 +461,10 @@ async function requestRecoveryOtp({ req, username, identifier }) {
       };
     }
 
+    if(process.env.STAFF_PASSWORDLESS_PILOT==="true"&&await legacyStaffLoginRetired(connection,user.id)){
+      await connection.commit();
+      return {message:GENERIC_RECOVERY_REQUEST_MESSAGE,sent:false};
+    }
     const ipAddress = requestIp(req);
 
     const [accountCounts] = await connection.query(
@@ -800,6 +805,9 @@ async function recoverAccountWithOtp({
       );
     }
 
+    if(process.env.STAFF_PASSWORDLESS_PILOT==="true"&&await legacyStaffLoginRetired(connection,user.id)){
+      throw createServiceError(410,"ACCOUNT_PASSWORD_LOGIN_RETIRED","This account uses Authenticator. Contact the System Administrator for secure recovery.");
+    }
     const [otpRows] = await connection.query(
       `SELECT
          id,
