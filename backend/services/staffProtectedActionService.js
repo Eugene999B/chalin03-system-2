@@ -5,6 +5,7 @@
 // No permission, user identity, enrollment or recovery state is changed.
 const { pool } = require("../config/db");
 const crypto = require("./staffPasswordlessCrypto");
+const {RECOVERY_WINDOW_SQL}=require("./staffRecoveryPolicy");
 const WINDOW_MINUTES = 15;
 const MAX_FAILURES = 10;
 function failure(status, code, message) { return { ok: false, status, code, message }; }
@@ -28,7 +29,7 @@ async function verifyStaffProtectedAction({ userId, code, db = pool, now = Date.
       return failure(403, "AUTHENTICATOR_ENROLLMENT_REQUIRED", "An active enrolled Authenticator is required. Contact your administrator.");
     }
     const [attempts] = await conn.query(
-      "SELECT COALESCE(SUM(attempts),0) AS n FROM staff_passwordless_challenges WHERE user_id=? AND purpose='totp_login' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)",
+      "SELECT COALESCE(SUM(attempts),0) AS n FROM staff_passwordless_challenges WHERE user_id=? AND purpose='totp_login' AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? MINUTE)"+RECOVERY_WINDOW_SQL,
       [userId, WINDOW_MINUTES]
     );
     if (Number(attempts[0]?.n || 0) >= MAX_FAILURES) {

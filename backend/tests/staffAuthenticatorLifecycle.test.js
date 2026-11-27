@@ -44,3 +44,8 @@ test("Google callback may only attach to an active original initiating session",
  const source=fs.readFileSync(path.join(__dirname,"../routes/staffGoogleLinkRoutes.js"),"utf8");
  assert.match(source,/UPDATE staff_passwordless_identities i INNER JOIN auth_sessions a ON a.user_id=i.user_id AND a.session_id=\? AND a.revoked_at IS NULL/);
 });
+
+const {unlockStaffAccess}=require("../services/staffAuthenticatorLifecycle");
+const {recoveryAllowed,recoveryMode,RECOVERY_WINDOW_SQL}=require("../services/staffRecoveryPolicy");
+test("owner recovery permits locked and unenrolled active ordinary staff but not protected or inactive accounts",()=>{const actor={id:1};const target={id:700,username:"staff",role:"manager",is_active:1,is_login_locked:1};assert.equal(recoveryAllowed(actor,target),true);assert.equal(recoveryAllowed(actor,{...target,is_active:0}),false);assert.equal(recoveryAllowed(actor,{...target,role:"admin"}),false);assert.equal(recoveryAllowed(actor,{...target,id:1}),false);assert.equal(recoveryMode("unknown"),null);assert.equal(recoveryMode("unlock"),"unlock");});
+test("unlock revokes only selected staff sessions and outstanding challenges, retaining enrolled credentials",async()=>{const calls=[];await unlockStaffAccess({query:async(sql,params)=>calls.push({sql,params})},700);assert.equal(calls.length,5);assert.ok(calls.every(c=>c.params.at(-1)===700));assert.ok(calls.every(c=>!c.sql.includes("DELETE")&&!c.sql.includes("role")&&!c.sql.includes("permission")));assert.match(RECOVERY_WINDOW_SQL,/STAFF_ACCOUNT_SECURITY_RESET/);assert.match(RECOVERY_WINDOW_SQL,/outcome='success'/);});
